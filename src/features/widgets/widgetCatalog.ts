@@ -20,6 +20,12 @@ export const WIDGET_CATALOG: WidgetMeta[] = [
     defaultSize: { w: 3, h: 3, minW: 2, minH: 2 },
   },
   {
+    type: 'roundClock',
+    title: 'Round Clock',
+    description: 'Analog clock with an orbiting Claude',
+    defaultSize: { w: 3, h: 4, minW: 3, minH: 4 },
+  },
+  {
     type: 'counter',
     title: 'Counter',
     description: 'A persisted click counter',
