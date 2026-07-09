@@ -72,9 +72,13 @@ export default function RoundClockWidget() {
     <Box
       sx={{
         height: '100%',
+        width: '100%',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
+        // The orbiting cartoon must never spill past the widget: any overflow
+        // makes the card's scrollable body flash a scrollbar as it spins.
+        overflow: 'hidden',
       }}
     >
       {/* Sizing box: the clock face plus room for the orbit. */}
@@ -97,7 +101,10 @@ export default function RoundClockWidget() {
           <Box
             sx={{
               position: 'absolute',
-              top: '-6%',
+              // Keep the cartoon's full orbit inside the sizing box so it never
+              // overflows the card. Its centre rides a circle just inside the
+              // box edge; a small top offset leaves margin for sub-pixel drift.
+              top: '3%',
               left: '50%',
               transform: 'translateX(-50%)',
               // Counter-spin keeps Claude upright-ish while spinning too.
