@@ -6,6 +6,7 @@ import CounterWidget from '../components/widgets/CounterWidget'
 import NotesWidget from '../components/widgets/NotesWidget'
 import ImageToggleWidget from '../components/widgets/ImageToggleWidget'
 import SixSevenWidget from '../components/widgets/SixSevenWidget'
+import SwordNinjaWidget from '../components/widgets/SwordNinjaWidget'
 
 /** Props every widget component receives. */
 export interface WidgetProps {
@@ -20,4 +21,5 @@ export const widgetComponents: Record<WidgetType, ComponentType<WidgetProps>> = 
   notes: NotesWidget,
   imageToggle: ImageToggleWidget,
   sixSeven: SixSevenWidget,
+  swordNinja: SwordNinjaWidget,
 }
