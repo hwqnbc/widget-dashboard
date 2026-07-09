@@ -30,10 +30,13 @@ export default function WidgetCard({ title, onRemove, children }: WidgetCardProp
         action={
           <Tooltip title="Remove widget">
             <IconButton
-              size="small"
+              // `widget-no-drag` tells react-grid-layout not to start a drag
+              // from this element, so taps reach the button on touch devices.
+              className="widget-no-drag"
               aria-label={`remove ${title} widget`}
-              // Stop the drag handler from swallowing the click.
+              // Stop the drag handler from swallowing the press (mouse + touch).
               onMouseDown={(e) => e.stopPropagation()}
+              onTouchStart={(e) => e.stopPropagation()}
               onClick={onRemove}
             >
               <CloseIcon fontSize="small" />
