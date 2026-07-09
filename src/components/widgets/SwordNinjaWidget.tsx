@@ -62,25 +62,27 @@ function Hand({ cx, cy }: { cx: number; cy: number }) {
 const drawSword = keyframes`
   0%   { transform: translate(0px, 0px) rotate(0deg); }
   24%  { transform: translate(-20px, -30px) rotate(6deg); }
-  68%  { transform: translate(38px, 96px) rotate(-175deg); }
-  100% { transform: translate(42px, 105px) rotate(-157deg); }
+  68%  { transform: translate(47px, 102px) rotate(-175deg); }
+  100% { transform: translate(51px, 111px) rotate(-157deg); }
 `
 const sheatheSword = keyframes`
-  0%   { transform: translate(42px, 105px) rotate(-157deg); }
+  0%   { transform: translate(51px, 111px) rotate(-157deg); }
   44%  { transform: translate(-20px, -30px) rotate(6deg); }
   100% { transform: translate(0px, 0px) rotate(0deg); }
 `
 // Sword arm reaches ACROSS the body up to the opposite (left) shoulder hilt,
-// then draws the blade across into a raised guard held in front of the chest.
+// then draws the blade across into a guard in front of the chest. Rotation
+// ONLY, about the shoulder, so the shoulder joint stays anchored (no slide).
 const drawArm = keyframes`
-  0%   { transform: translate(0px, 0px) rotate(0deg); }
-  32%  { transform: translate(-52px, -8px) rotate(78deg); }
-  100% { transform: translate(-46px, -7px) rotate(-6deg); }
+  0%   { transform: rotate(0deg); }
+  32%  { transform: rotate(133deg); }
+  70%  { transform: rotate(44deg); }
+  100% { transform: rotate(30deg); }
 `
 const sheatheArm = keyframes`
-  0%   { transform: translate(-46px, -7px) rotate(-6deg); }
-  32%  { transform: translate(-52px, -8px) rotate(78deg); }
-  100% { transform: translate(0px, 0px) rotate(0deg); }
+  0%   { transform: rotate(30deg); }
+  56%  { transform: rotate(133deg); }
+  100% { transform: rotate(0deg); }
 `
 
 const DUR = '0.85s'
