@@ -4,6 +4,7 @@ export type WidgetType =
   | 'counter'
   | 'notes'
   | 'imageToggle'
+  | 'sixSeven'
 
 /** A widget placed on the board. `data` holds per-widget persisted state. */
 export interface WidgetInstance {

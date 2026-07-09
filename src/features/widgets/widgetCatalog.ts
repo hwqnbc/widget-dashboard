@@ -43,6 +43,12 @@ export const WIDGET_CATALOG: WidgetMeta[] = [
     description: 'Tap to switch between two cartoon characters',
     defaultSize: { w: 3, h: 5, minW: 2, minH: 4 },
   },
+  {
+    type: 'sixSeven',
+    title: 'Six Seven',
+    description: 'Tap the toy to do the 6 7',
+    defaultSize: { w: 3, h: 5, minW: 2, minH: 4 },
+  },
 ]
 
 export const widgetMetaByType = Object.fromEntries(
