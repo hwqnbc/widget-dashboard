@@ -24,7 +24,9 @@ export default function WidgetCard({ title, onRemove, children }: WidgetCardProp
         className="widget-drag-handle"
         avatar={<DragIndicatorIcon fontSize="small" color="action" />}
         title={title}
-        titleTypographyProps={{ variant: 'subtitle1', fontWeight: 600 }}
+        // MUI v9 replaced `titleTypographyProps` with the `slotProps` API;
+        // the old prop leaks onto the DOM and React warns about it.
+        slotProps={{ title: { variant: 'subtitle1', sx: { fontWeight: 600 } } }}
         action={
           <Tooltip title="Remove widget">
             <IconButton
