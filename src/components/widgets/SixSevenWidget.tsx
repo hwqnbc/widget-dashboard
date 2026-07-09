@@ -32,9 +32,9 @@ function Hand({ cx, cy }: { cx: number; cy: number }) {
 // stays put. The two forearms share this cycle, and mirror geometry makes the
 // hands alternate (one up while the other drops) — the "six… seven" weigh.
 const flex = keyframes`
-  0%   { transform: rotate(-22deg); }
-  50%  { transform: rotate(22deg); }
-  100% { transform: rotate(-22deg); }
+  0%   { transform: rotate(-38deg); }
+  50%  { transform: rotate(38deg); }
+  100% { transform: rotate(-38deg); }
 `
 // The flanking numbers pop in and gently bob while playing.
 const popL = keyframes`
@@ -105,15 +105,15 @@ export default function SixSevenWidget() {
         <path d="M84 200 C76 216 70 232 66 246" stroke={T.teal} strokeWidth={18} strokeLinecap="round" fill="none" />
         {/* left forearm + hand: hinges about the elbow so the hand bobs */}
         <Box component="g" sx={forearmSx(66)}>
-          <path d="M66 246 C58 252 52 256 48 260" stroke={T.teal} strokeWidth={18} strokeLinecap="round" fill="none" />
-          <Hand cx={46} cy={266} />
+          <path d="M66 246 C56 256 48 266 42 274" stroke={T.teal} strokeWidth={18} strokeLinecap="round" fill="none" />
+          <Hand cx={40} cy={280} />
         </Box>
         {/* right upper arm: shoulder (156,200) -> elbow (174,246), static */}
         <path d="M156 200 C164 216 170 232 174 246" stroke={T.teal} strokeWidth={18} strokeLinecap="round" fill="none" />
         {/* right forearm + hand: hinges about the elbow (mirror -> alternates) */}
         <Box component="g" sx={forearmSx(174)}>
-          <path d="M174 246 C182 252 188 256 192 260" stroke={T.teal} strokeWidth={18} strokeLinecap="round" fill="none" />
-          <Hand cx={194} cy={266} />
+          <path d="M174 246 C184 256 192 266 198 274" stroke={T.teal} strokeWidth={18} strokeLinecap="round" fill="none" />
+          <Hand cx={200} cy={280} />
         </Box>
 
         {/* ---- neck ---- */}
@@ -161,7 +161,7 @@ export default function SixSevenWidget() {
         <Box
           component="text"
           x={30}
-          y={262}
+          y={276}
           sx={numberSx(popL)}
           textAnchor="middle"
           fontSize={54}
@@ -177,7 +177,7 @@ export default function SixSevenWidget() {
         <Box
           component="text"
           x={210}
-          y={262}
+          y={276}
           sx={numberSx(popR)}
           textAnchor="middle"
           fontSize={54}
