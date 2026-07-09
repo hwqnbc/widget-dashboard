@@ -4,6 +4,7 @@ import ClockWidget from '../components/widgets/ClockWidget'
 import RoundClockWidget from '../components/widgets/RoundClockWidget'
 import CounterWidget from '../components/widgets/CounterWidget'
 import NotesWidget from '../components/widgets/NotesWidget'
+import ImageToggleWidget from '../components/widgets/ImageToggleWidget'
 
 /** Props every widget component receives. */
 export interface WidgetProps {
@@ -16,4 +17,5 @@ export const widgetComponents: Record<WidgetType, ComponentType<WidgetProps>> = 
   roundClock: RoundClockWidget,
   counter: CounterWidget,
   notes: NotesWidget,
+  imageToggle: ImageToggleWidget,
 }

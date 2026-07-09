@@ -37,6 +37,12 @@ export const WIDGET_CATALOG: WidgetMeta[] = [
     description: 'A scratchpad that saves as you type',
     defaultSize: { w: 4, h: 4, minW: 2, minH: 2 },
   },
+  {
+    type: 'imageToggle',
+    title: 'Character Toggle',
+    description: 'Tap to switch between two cartoon characters',
+    defaultSize: { w: 3, h: 5, minW: 2, minH: 4 },
+  },
 ]
 
 export const widgetMetaByType = Object.fromEntries(
@@ -50,6 +56,8 @@ export function defaultWidgetData(type: WidgetType): Record<string, unknown> {
       return { count: 0 }
     case 'notes':
       return { text: '' }
+    case 'imageToggle':
+      return { character: 'toy' }
     case 'clock':
     default:
       return {}
