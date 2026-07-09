@@ -1,4 +1,9 @@
-export type WidgetType = 'clock' | 'roundClock' | 'counter' | 'notes'
+export type WidgetType =
+  | 'clock'
+  | 'roundClock'
+  | 'counter'
+  | 'notes'
+  | 'imageToggle'
 
 /** A widget placed on the board. `data` holds per-widget persisted state. */
 export interface WidgetInstance {
