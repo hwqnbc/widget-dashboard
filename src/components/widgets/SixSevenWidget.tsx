@@ -28,12 +28,13 @@ function Hand({ cx, cy }: { cx: number; cy: number }) {
   )
 }
 
-// One arm bounces up then down about its shoulder pivot; the two arms run this
-// same cycle half a period apart so they alternate (the "six… seven" weigh).
-const wave = keyframes`
-  0%   { transform: rotate(-15deg); }
-  50%  { transform: rotate(15deg); }
-  100% { transform: rotate(-15deg); }
+// The forearm hinges at the elbow so the hand bobs up and down; the upper arm
+// stays put. The two forearms share this cycle, and mirror geometry makes the
+// hands alternate (one up while the other drops) — the "six… seven" weigh.
+const flex = keyframes`
+  0%   { transform: rotate(-22deg); }
+  50%  { transform: rotate(22deg); }
+  100% { transform: rotate(-22deg); }
 `
 // The flanking numbers pop in and gently bob while playing.
 const popL = keyframes`
@@ -57,11 +58,11 @@ const CYCLE = '0.5s'
 export default function SixSevenWidget() {
   const [playing, setPlaying] = useState(false)
 
-  // Applied to an arm group; `delay` offsets the second arm into antiphase.
-  const armSx = (originX: number, delay: string) => ({
+  // Applied to a forearm+hand group; it hinges about the elbow (originX, 246).
+  const forearmSx = (originX: number) => ({
     transformBox: 'view-box' as const,
-    transformOrigin: `${originX}px 200px`,
-    animation: playing ? `${wave} ${CYCLE} ease-in-out ${delay} infinite` : 'none',
+    transformOrigin: `${originX}px 246px`,
+    animation: playing ? `${flex} ${CYCLE} ease-in-out infinite` : 'none',
   })
 
   const numberSx = (kf: string) => ({
@@ -99,16 +100,20 @@ export default function SixSevenWidget() {
         <path d="M96 308 L94 352" stroke="#ffffff" strokeWidth={3} opacity={0.35} strokeLinecap="round" />
         <path d="M134 308 L133 352" stroke="#ffffff" strokeWidth={3} opacity={0.3} strokeLinecap="round" />
 
-        {/* ---- arms (behind torso at the shoulder), independently animated ---- */}
-        {/* left arm: shoulder (84,200) out to a hand at the side */}
-        <Box component="g" sx={armSx(84, `-${CYCLE}`)}>
-          <path d="M84 200 C64 212 50 236 46 262" stroke={T.teal} strokeWidth={18} strokeLinecap="round" fill="none" />
-          <Hand cx={46} cy={268} />
+        {/* ---- arms (behind torso): fixed upper arm + elbow-hinged forearm ---- */}
+        {/* left upper arm: shoulder (84,200) -> elbow (66,246), static */}
+        <path d="M84 200 C76 216 70 232 66 246" stroke={T.teal} strokeWidth={18} strokeLinecap="round" fill="none" />
+        {/* left forearm + hand: hinges about the elbow so the hand bobs */}
+        <Box component="g" sx={forearmSx(66)}>
+          <path d="M66 246 C58 252 52 256 48 260" stroke={T.teal} strokeWidth={18} strokeLinecap="round" fill="none" />
+          <Hand cx={46} cy={266} />
         </Box>
-        {/* right arm: shoulder (156,200) out to a hand at the side (antiphase) */}
-        <Box component="g" sx={armSx(156, '0s')}>
-          <path d="M156 200 C176 212 190 236 194 262" stroke={T.teal} strokeWidth={18} strokeLinecap="round" fill="none" />
-          <Hand cx={194} cy={268} />
+        {/* right upper arm: shoulder (156,200) -> elbow (174,246), static */}
+        <path d="M156 200 C164 216 170 232 174 246" stroke={T.teal} strokeWidth={18} strokeLinecap="round" fill="none" />
+        {/* right forearm + hand: hinges about the elbow (mirror -> alternates) */}
+        <Box component="g" sx={forearmSx(174)}>
+          <path d="M174 246 C182 252 188 256 192 260" stroke={T.teal} strokeWidth={18} strokeLinecap="round" fill="none" />
+          <Hand cx={194} cy={266} />
         </Box>
 
         {/* ---- neck ---- */}
@@ -156,7 +161,7 @@ export default function SixSevenWidget() {
         <Box
           component="text"
           x={30}
-          y={250}
+          y={262}
           sx={numberSx(popL)}
           textAnchor="middle"
           fontSize={54}
@@ -172,7 +177,7 @@ export default function SixSevenWidget() {
         <Box
           component="text"
           x={210}
-          y={250}
+          y={262}
           sx={numberSx(popR)}
           textAnchor="middle"
           fontSize={54}
