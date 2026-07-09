@@ -1,6 +1,6 @@
 import { useCallback, useMemo } from 'react'
 import { Responsive, WidthProvider, type Layout } from 'react-grid-layout/legacy'
-import { Box } from '@mui/material'
+import { Box, Typography } from '@mui/material'
 import { useAppDispatch, useAppSelector } from '../app/hooks'
 import {
   GRID_COLS,
@@ -49,6 +49,28 @@ export default function WidgetBoard() {
     },
     [dispatch],
   )
+
+  if (instances.length === 0) {
+    return (
+      <Box
+        sx={{
+          py: 10,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          textAlign: 'center',
+          color: 'text.secondary',
+        }}
+      >
+        <Typography variant="h6" sx={{ fontWeight: 600, mb: 0.5 }}>
+          No widgets yet
+        </Typography>
+        <Typography variant="body2">
+          Use “Add widget” above to build your dashboard.
+        </Typography>
+      </Box>
+    )
+  }
 
   return (
     <Box sx={{ '& .react-grid-item.react-grid-placeholder': { bgcolor: 'primary.main', borderRadius: 2 } }}>
