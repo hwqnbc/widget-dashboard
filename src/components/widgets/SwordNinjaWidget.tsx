@@ -21,34 +21,23 @@ const N = {
   line: '#232a31',
 }
 
-/** A katana in local coords: hilt at (0,0), blade pointing up (−y). */
+/** A katana in local coords: hilt at (0,0), blade pointing up (−y). Hard edges. */
 function Katana() {
   return (
-    <g>
-      {/* blade body */}
-      <path
-        d="M-3.6 -4 L-3.6 -92 L0 -101 L3.6 -92 L3.6 -4 Z"
-        fill={N.blade}
-        stroke={N.bladeShade}
-        strokeWidth={1}
-        strokeLinejoin="round"
-      />
-      {/* fuller groove + edge highlight */}
-      <path d="M0 -10 L0 -93" stroke={N.bladeShade} strokeWidth={0.9} opacity={0.7} />
-      <path d="M-1.8 -10 L-1.8 -90 L0 -96" stroke={N.bladeHi} strokeWidth={1.3} opacity={0.9} strokeLinecap="round" fill="none" />
+    <g strokeLinejoin="miter">
+      {/* blade body — straight edges, sharp point */}
+      <path d="M-3.4 -4 L-3.4 -94 L0 -102 L3.4 -94 L3.4 -4 Z" fill={N.blade} stroke={N.bladeShade} strokeWidth={1} />
+      {/* fuller groove + lit edge */}
+      <path d="M0 -8 L0 -94" stroke={N.bladeShade} strokeWidth={0.9} opacity={0.7} />
+      <path d="M-1.7 -8 L-1.7 -92" stroke={N.bladeHi} strokeWidth={1.3} opacity={0.9} />
       {/* diamond tsuba (guard) */}
-      <path d="M0 -9 L11 -3 L0 3 L-11 -3 Z" fill={N.guard} stroke={N.line} strokeWidth={1} strokeLinejoin="round" />
-      <circle cx={0} cy={-3} r={2} fill={N.hiltWrap} />
+      <path d="M0 -10 L12 -3 L0 4 L-12 -3 Z" fill={N.guard} stroke={N.line} strokeWidth={1} />
+      <rect x={-2} y={-5} width={4} height={4} fill={N.hiltWrap} />
       {/* wrapped handle (ito criss-cross) */}
-      <rect x={-3.4} y={2} width={6.8} height={22} rx={2.5} fill={N.hilt} stroke={N.line} strokeWidth={1} />
-      <path
-        d="M-3.4 5 L3.4 9 M3.4 5 L-3.4 9 M-3.4 12 L3.4 16 M3.4 12 L-3.4 16 M-3.4 19 L3.4 22 M3.4 19 L-3.4 22"
-        stroke={N.hiltWrap}
-        strokeWidth={0.9}
-        opacity={0.8}
-      />
+      <path d="M-3.4 4 L3.4 4 L3.4 24 L-3.4 24 Z" fill={N.hilt} stroke={N.line} strokeWidth={1} />
+      <path d="M-3.4 6 L3.4 10 M3.4 6 L-3.4 10 M-3.4 13 L3.4 17 M3.4 13 L-3.4 17 M-3.4 20 L3.4 24 M3.4 20 L-3.4 24" stroke={N.hiltWrap} strokeWidth={0.9} opacity={0.85} />
       {/* pommel cap */}
-      <rect x={-4} y={23} width={8} height={4} rx={1.5} fill={N.guard} stroke={N.line} strokeWidth={0.8} />
+      <path d="M-4.2 24 L4.2 24 L3.4 28 L-3.4 28 Z" fill={N.guard} stroke={N.line} strokeWidth={0.8} />
     </g>
   )
 }
@@ -56,23 +45,13 @@ function Katana() {
 /** Open C-grip hand centred at (cx, cy). */
 function Hand({ cx, cy }: { cx: number; cy: number }) {
   return (
-    <>
-      <path
-        d={`M${cx - 7} ${cy + 5} A 8 8 0 1 1 ${cx + 7} ${cy + 5}`}
-        fill="none"
-        stroke={N.robe}
-        strokeWidth={7}
-        strokeLinecap="round"
-      />
-      <path
-        d={`M${cx - 7} ${cy + 5} A 8 8 0 1 1 ${cx + 7} ${cy + 5}`}
-        fill="none"
-        stroke={N.robeShade2}
-        strokeWidth={1.2}
-        strokeLinecap="round"
-        opacity={0.6}
-      />
-    </>
+    <path
+      d={`M${cx - 7} ${cy + 5} A 8 8 0 1 1 ${cx + 7} ${cy + 5}`}
+      fill="none"
+      stroke={N.robe}
+      strokeWidth={7}
+      strokeLinecap="round"
+    />
   )
 }
 
@@ -143,7 +122,13 @@ export default function SwordNinjaWidget() {
         '& svg': { maxHeight: '100%', width: 'auto' },
       }}
     >
-      <svg viewBox="0 0 240 380" width="100%" height="100%" style={{ overflow: 'visible' }}>
+      <svg
+        viewBox="0 0 240 380"
+        width="100%"
+        height="100%"
+        style={{ overflow: 'visible' }}
+        strokeLinejoin="miter"
+      >
         {/* ===== crossed katanas on the back (behind the body) ===== */}
         <g transform="translate(90 222) rotate(46)">
           <Katana />
@@ -152,94 +137,84 @@ export default function SwordNinjaWidget() {
           <Katana />
         </g>
 
-        {/* ===== legs ===== */}
-        <path d="M100 296 L98 356 C98 361 104 362 108 362 L108 296 Z" fill={N.robe} stroke={N.robeShade2} strokeWidth={2.5} strokeLinejoin="round" />
-        <path d="M110 296 L110 362 C114 362 118 361 118 356 L118 296 Z" fill={N.robe} stroke={N.robeShade2} strokeWidth={2.5} strokeLinejoin="round" />
-        <path d="M132 296 L132 362 C136 362 140 361 140 356 L140 296 Z" fill={N.robe} stroke={N.robeShade2} strokeWidth={2.5} strokeLinejoin="round" />
-        <path d="M122 296 L122 356 C122 361 128 362 132 362 L132 296 Z" fill={N.robe} stroke={N.robeShade2} strokeWidth={2.5} strokeLinejoin="round" />
-        {/* knee seams + ice cuffs + feet */}
-        <path d="M100 326 H118 M122 326 H140" stroke={N.robeShade} strokeWidth={2} opacity={0.7} />
-        <path d="M98 348 H118 M122 348 H142" stroke={N.iceMid} strokeWidth={5} strokeLinecap="round" opacity={0.9} />
-        <path d="M96 360 q8 6 24 0 M124 360 q8 6 24 0" stroke={N.robeShade2} strokeWidth={4} strokeLinecap="round" fill="none" />
+        {/* ===== legs (crisp) ===== */}
+        <path d="M99 296 L118 296 L118 358 L99 358 Z" fill={N.robe} stroke={N.robeShade2} strokeWidth={2} />
+        <path d="M122 296 L141 296 L141 358 L122 358 Z" fill={N.robe} stroke={N.robeShade2} strokeWidth={2} />
+        {/* inner shade */}
+        <path d="M113 298 L118 298 L118 356 L113 356 Z" fill={N.robeShade} opacity={0.6} />
+        <path d="M136 298 L141 298 L141 356 L136 356 Z" fill={N.robeShade} opacity={0.6} />
+        {/* knee seams */}
+        <path d="M99 328 L118 328 M122 328 L141 328" stroke={N.robeShade2} strokeWidth={1.5} opacity={0.8} />
+        {/* ice cuffs */}
+        <path d="M99 346 L118 346 M122 346 L141 346" stroke={N.iceMid} strokeWidth={5} />
+        {/* feet */}
+        <path d="M95 358 L120 358 L120 368 L95 368 Z" fill={N.robeShade} stroke={N.robeShade2} strokeWidth={2} />
+        <path d="M120 358 L145 358 L145 368 L120 368 Z" fill={N.robeShade} stroke={N.robeShade2} strokeWidth={2} />
 
         {/* ===== left arm (static) ===== */}
-        <path d="M95 198 C80 212 76 240 82 262" stroke={N.robe} strokeWidth={17} strokeLinecap="round" fill="none" />
-        <path d="M92 206 C82 220 80 240 84 256" stroke={N.robeShade} strokeWidth={2} strokeLinecap="round" fill="none" opacity={0.7} />
-        <path d="M78 250 l10 4" stroke={N.iceMid} strokeWidth={4} strokeLinecap="round" />
+        <path d="M95 198 C80 212 76 240 82 262" stroke={N.robe} strokeWidth={16} strokeLinecap="round" fill="none" />
+        <path d="M74 250 L86 254" stroke={N.iceMid} strokeWidth={4} />
         <Hand cx={84} cy={266} />
 
-        {/* ===== torso ===== */}
-        <path
-          d="M88 190 C86 186 86 190 86 194 L80 286 C79 294 84 298 92 298 L148 298 C156 298 161 294 160 286 L154 194 C154 190 154 186 152 190 C140 188 130 193 120 193 C110 193 100 188 88 190 Z"
-          fill={N.ice}
-          stroke={N.iceDeep}
-          strokeWidth={2.5}
-          strokeLinejoin="round"
-        />
-        {/* layered gi crossover + collar V */}
-        <path d="M120 193 L92 262 L108 280 L120 214 Z" fill={N.robe} opacity={0.96} />
-        <path d="M120 193 L150 260 L134 282 L120 214 Z" fill={N.robe} stroke={N.robeShade} strokeWidth={1} opacity={0.9} />
-        <path d="M108 196 L120 210 L132 196" fill="none" stroke={N.iceDeep} strokeWidth={2.5} strokeLinecap="round" />
-        <path d="M120 210 L120 262" stroke={N.iceLine} strokeWidth={1.5} opacity={0.6} />
+        {/* ===== torso (crisp trapezoid) ===== */}
+        <path d="M90 190 L150 190 L160 296 L80 296 Z" fill={N.ice} stroke={N.iceDeep} strokeWidth={2.5} />
+        {/* layered gi crossover — straight panels */}
+        <path d="M120 192 L92 260 L110 286 L120 214 Z" fill={N.robe} />
+        <path d="M120 192 L150 260 L132 286 L120 214 Z" fill={N.robe} stroke={N.robeShade} strokeWidth={1} />
+        {/* collar V + center seam */}
+        <path d="M106 195 L120 212 L134 195" fill="none" stroke={N.iceDeep} strokeWidth={2.5} />
+        <path d="M120 212 L120 260" stroke={N.iceLine} strokeWidth={1.4} opacity={0.6} />
         {/* geometric ice-crystal accents */}
-        <path d="M96 232 l4 -6 l4 6 l-4 6 Z M140 238 l4 -6 l4 6 l-4 6 Z" fill={N.iceMid} opacity={0.75} />
+        <path d="M95 234 L99 227 L103 234 L99 241 Z M141 240 L145 233 L149 240 L145 247 Z" fill={N.iceMid} opacity={0.8} />
         {/* side shading */}
-        <path d="M150 200 C156 236 156 264 150 288" stroke={N.iceDeep} strokeWidth={6} opacity={0.3} strokeLinecap="round" fill="none" />
-        <path d="M88 200 C84 232 84 262 90 286" stroke={N.bladeHi} strokeWidth={3} opacity={0.4} strokeLinecap="round" fill="none" />
+        <path d="M150 192 L160 296" stroke={N.iceDeep} strokeWidth={5} opacity={0.3} />
+        <path d="M90 192 L80 296" stroke={N.bladeHi} strokeWidth={3} opacity={0.4} />
 
-        {/* obi belt + knot + hanging sash */}
-        <rect x={90} y={262} width={60} height={11} rx={2.5} fill={N.gold} stroke={N.goldShade} strokeWidth={1} />
-        <path d="M90 264 H150" stroke={N.bladeHi} strokeWidth={1.2} opacity={0.5} />
-        <rect x={112} y={260} width={16} height={15} rx={2} fill={N.gold} stroke={N.goldShade} strokeWidth={1} />
-        <path d="M116 275 l-3 12 l6 -3 l6 3 l-3 -12 Z" fill={N.gold} stroke={N.goldShade} strokeWidth={1} strokeLinejoin="round" />
+        {/* obi belt + knot + hanging sash (crisp) */}
+        <path d="M89 262 L151 262 L153 274 L87 274 Z" fill={N.gold} stroke={N.goldShade} strokeWidth={1} />
+        <path d="M88 264 L152 264" stroke={N.bladeHi} strokeWidth={1.1} opacity={0.5} />
+        <path d="M112 260 L128 260 L128 276 L112 276 Z" fill={N.gold} stroke={N.goldShade} strokeWidth={1} />
+        <path d="M114 276 L126 276 L122 290 L120 285 L118 290 Z" fill={N.gold} stroke={N.goldShade} strokeWidth={1} />
 
-        {/* generic medallion (concentric rings + 6-point motif, not a real logo) */}
-        <circle cx={120} cy={228} r={11} fill={N.robe} stroke={N.gold} strokeWidth={2.5} />
-        <circle cx={120} cy={228} r={6} fill="none" stroke={N.iceDeep} strokeWidth={1.5} />
-        <path
-          d="M120 219 L120 237 M112 223.5 L128 232.5 M128 223.5 L112 232.5"
-          stroke={N.iceDeep}
-          strokeWidth={1.4}
-          strokeLinecap="round"
-        />
+        {/* generic hexagonal medallion (not a real logo) */}
+        <path d="M120 217 L129.5 222.5 L129.5 233.5 L120 239 L110.5 233.5 L110.5 222.5 Z" fill={N.robe} stroke={N.gold} strokeWidth={2.5} />
+        <path d="M120 222 L125 224.8 L125 231.2 L120 234 L115 231.2 L115 224.8 Z" fill="none" stroke={N.iceDeep} strokeWidth={1.3} />
+        <path d="M120 217 L120 239 M110.5 222.5 L129.5 233.5 M129.5 222.5 L110.5 233.5" stroke={N.iceDeep} strokeWidth={1.1} opacity={0.85} />
 
-        {/* ===== shoulder armor (right) — stacked plates + strap + rivets ===== */}
-        <path d="M136 200 L110 250" stroke={N.robeShade} strokeWidth={6} strokeLinecap="round" opacity={0.85} />
-        <path d="M136 186 C150 176 170 180 172 196 C172 205 156 208 145 203 Z" fill={N.robe} stroke={N.robeShade2} strokeWidth={2} strokeLinejoin="round" />
-        <path d="M138 192 C150 185 166 188 169 198" fill="none" stroke={N.bladeHi} strokeWidth={2} strokeLinecap="round" opacity={0.7} />
-        <circle cx={150} cy={192} r={1.5} fill={N.robeShade2} />
-        <circle cx={160} cy={194} r={1.5} fill={N.robeShade2} />
+        {/* ===== shoulder armor (right) — angular plate ===== */}
+        <path d="M134 202 L112 248" stroke={N.robeShade} strokeWidth={5} strokeLinecap="round" opacity={0.85} />
+        <path d="M135 184 L172 179 L177 197 L151 206 L137 200 Z" fill={N.robe} stroke={N.robeShade2} strokeWidth={2} />
+        <path d="M139 190 L169 186" stroke={N.bladeHi} strokeWidth={2} opacity={0.7} />
+        <rect x={149} y={190} width={3} height={3} fill={N.robeShade2} />
+        <rect x={160} y={191} width={3} height={3} fill={N.robeShade2} />
 
         {/* ===== neck ===== */}
-        <rect x={110} y={172} width={20} height={16} fill={N.robeShade2} />
+        <path d="M110 170 L130 170 L130 188 L110 188 Z" fill={N.robeShade2} />
 
-        {/* ===== hooded head (faceted) ===== */}
-        {/* back / shade panel */}
-        <path d="M84 120 C82 86 100 66 120 66 C140 66 158 86 156 120 C156 150 146 172 120 174 C94 172 84 150 84 120 Z" fill={N.robeShade} stroke={N.robeShade2} strokeWidth={2.5} strokeLinejoin="round" />
-        {/* front lit facet */}
-        <path d="M88 116 C88 88 102 70 120 69 C132 70 140 82 138 104 C138 140 132 166 118 172 C98 168 90 146 88 116 Z" fill={N.robe} />
-        {/* crown facet + rim light */}
-        <path d="M104 74 C114 70 128 72 134 82 C124 78 112 78 104 88 Z" fill={N.bladeHi} opacity={0.7} />
-        <path d="M90 108 C90 90 100 78 112 74" fill="none" stroke={N.bladeHi} strokeWidth={2} opacity={0.5} strokeLinecap="round" />
-        {/* hood side wrap fold */}
-        <path d="M96 150 C104 162 112 168 120 170" fill="none" stroke={N.robeShade2} strokeWidth={2} opacity={0.7} />
-        {/* back knot */}
-        <path d="M150 106 C168 100 172 120 158 128 C150 125 148 114 150 106 Z" fill={N.robe} stroke={N.robeShade2} strokeWidth={2} strokeLinejoin="round" />
-        <path d="M156 112 C162 112 164 120 159 124" fill="none" stroke={N.robeShade2} strokeWidth={1.4} opacity={0.7} />
+        {/* ===== hooded head (faceted, hard edges) ===== */}
+        {/* base */}
+        <path d="M120 64 L149 78 L157 112 L150 150 L120 178 L90 150 L83 112 L91 78 Z" fill={N.robe} stroke={N.robeShade2} strokeWidth={2.5} />
+        {/* right shade facet */}
+        <path d="M120 64 L149 78 L157 112 L150 150 L120 178 Z" fill={N.robeShade} opacity={0.9} />
+        {/* crown lit facet */}
+        <path d="M120 64 L91 78 L110 88 L120 74 Z" fill={N.bladeHi} opacity={0.75} />
+        {/* facet seams */}
+        <path d="M91 78 L108 118 L90 150 M149 78 L132 118 L150 150 M120 74 L120 110" stroke={N.robeShade2} strokeWidth={1.4} opacity={0.7} fill="none" />
+        {/* angular back knot */}
+        <path d="M150 98 L169 94 L167 120 L151 126 Z" fill={N.robe} stroke={N.robeShade2} strokeWidth={2} />
+        <path d="M155 104 L163 104 L162 118 L156 120 Z" fill={N.robeShade} opacity={0.7} />
 
-        {/* face: visor recess + brow + robotic ice eyes + breather */}
-        <path d="M90 116 C104 109 136 109 150 116 C149 135 139 148 120 149 C101 148 91 135 90 116 Z" fill={N.line} />
-        <path d="M92 114 C106 108 134 108 148 114" fill="none" stroke={N.robeShade2} strokeWidth={2} opacity={0.5} />
+        {/* face: angular visor recess + brows + ice eyes + breather */}
+        <path d="M92 114 L120 108 L148 114 L146 140 L120 150 L94 140 Z" fill={N.line} />
         {/* brows */}
-        <path d="M99 120 L116 122 M124 122 L141 120" stroke={N.iceDeep} strokeWidth={2} strokeLinecap="round" opacity={0.9} />
-        {/* glowing ice eye slits */}
-        <path d="M100 128 L117 125" stroke={N.iceMid} strokeWidth={4.5} strokeLinecap="round" />
-        <path d="M123 125 L140 128" stroke={N.iceMid} strokeWidth={4.5} strokeLinecap="round" />
-        <circle cx={109} cy={126.5} r={2} fill={N.bladeHi} />
-        <circle cx={131} cy={126.5} r={2} fill={N.bladeHi} />
+        <path d="M99 121 L117 124 M123 124 L141 121" stroke={N.iceDeep} strokeWidth={2} />
+        {/* angular glowing ice eye slits */}
+        <path d="M100 132 L118 127 L118 131 L100 136 Z" fill={N.iceMid} />
+        <path d="M140 132 L122 127 L122 131 L140 136 Z" fill={N.iceMid} />
+        <rect x={107} y={129} width={3} height={3} fill={N.bladeHi} />
+        <rect x={130} y={129} width={3} height={3} fill={N.bladeHi} />
         {/* breather / mouth guard */}
-        <path d="M112 140 H128" stroke={N.iceDeep} strokeWidth={2} strokeLinecap="round" opacity={0.7} />
-        <path d="M116 137 V143 M120 137 V143 M124 137 V143" stroke={N.iceDeep} strokeWidth={1} opacity={0.6} />
+        <path d="M112 143 L128 143 M116 140 L116 146 M120 140 L120 146 M124 140 L124 146" stroke={N.iceDeep} strokeWidth={1.4} opacity={0.75} />
 
         {/* ===== active (drawable) katana — in front ===== */}
         <Box
@@ -268,9 +243,8 @@ export default function SwordNinjaWidget() {
             animation: armAnim,
           }}
         >
-          <path d="M150 198 C166 210 172 236 166 258" stroke={N.robe} strokeWidth={17} strokeLinecap="round" fill="none" />
-          <path d="M154 206 C166 218 170 238 165 254" stroke={N.robeShade} strokeWidth={2} strokeLinecap="round" fill="none" opacity={0.7} />
-          <path d="M170 248 l-10 4" stroke={N.iceMid} strokeWidth={4} strokeLinecap="round" />
+          <path d="M150 198 C166 210 172 236 166 258" stroke={N.robe} strokeWidth={16} strokeLinecap="round" fill="none" />
+          <path d="M172 248 L160 252" stroke={N.iceMid} strokeWidth={4} />
           <Hand cx={166} cy={262} />
         </Box>
       </svg>
