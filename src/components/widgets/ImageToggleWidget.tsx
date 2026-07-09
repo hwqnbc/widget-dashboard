@@ -1,4 +1,3 @@
-import type { ComponentType } from 'react'
 import { Box, Button } from '@mui/material'
 import SwapHorizIcon from '@mui/icons-material/SwapHoriz'
 import { useAppDispatch, useAppSelector } from '../../app/hooks'
@@ -9,20 +8,28 @@ import ToyFigure from './characters/ToyFigure'
 
 type Character = 'toy' | 'boy'
 
-/** Both characters share this prop signature. */
-type CharacterComponent = ComponentType<{
-  pose?: 'idle' | 'brace'
-  facing?: 1 | -1
-}>
-
-const CHARACTERS: Record<Character, { label: string; Component: CharacterComponent }> = {
-  toy: { label: 'Toy Figure', Component: ToyFigure },
-  boy: { label: 'Boy', Component: Boy },
+const LABELS: Record<Character, string> = {
+  toy: 'Toy Figure',
+  boy: 'Boy',
 }
 
+/** Shared styling for each side of the flip card. */
+const faceSx = {
+  position: 'absolute',
+  inset: 0,
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  // Hide whichever side is facing away mid-flip.
+  backfaceVisibility: 'hidden',
+  WebkitBackfaceVisibility: 'hidden',
+  '& > div': { height: '100%' },
+  '& svg': { maxHeight: '100%', width: 'auto' },
+} as const
+
 /**
- * Shows one of two cartoon SVG characters and toggles between them on tap.
- * The current choice persists in the widget's redux `data`.
+ * Shows one of two cartoon SVG characters and morphs between them with a
+ * 3D flip on tap. The current choice persists in the widget's redux `data`.
  */
 export default function ImageToggleWidget({ id }: WidgetProps) {
   const dispatch = useAppDispatch()
@@ -31,8 +38,9 @@ export default function ImageToggleWidget({ id }: WidgetProps) {
     return inst?.data.character === 'boy' ? 'boy' : 'toy'
   }) as Character
 
-  const { label, Component } = CHARACTERS[character]
   const other = character === 'toy' ? 'boy' : 'toy'
+  // Toy is the front face (0°); Boy is the back face (180°).
+  const flipped = character === 'boy'
 
   const toggle = () =>
     dispatch(updateWidgetData({ id, data: { character: other } }))
@@ -47,12 +55,12 @@ export default function ImageToggleWidget({ id }: WidgetProps) {
         gap: 1,
       }}
     >
-      {/* Tappable image area — toggles the character. */}
+      {/* Tappable flip card — morphs between the two characters. */}
       <Box
         component="button"
         type="button"
         onClick={toggle}
-        aria-label={`Switch character (showing ${label})`}
+        aria-label={`Switch character (showing ${LABELS[character]})`}
         sx={{
           flexGrow: 1,
           width: '100%',
@@ -61,17 +69,28 @@ export default function ImageToggleWidget({ id }: WidgetProps) {
           border: 'none',
           background: 'none',
           cursor: 'pointer',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          // Keep the tall character within the widget instead of overflowing.
-          '& > div': { height: '100%' },
-          '& svg': { maxHeight: '100%', width: 'auto' },
-          transition: 'transform .1s ease',
-          '&:active': { transform: 'scale(0.96)' },
+          perspective: '900px',
         }}
       >
-        <Component pose="idle" />
+        <Box
+          sx={{
+            position: 'relative',
+            width: '100%',
+            height: '100%',
+            transformStyle: 'preserve-3d',
+            transition: 'transform .55s cubic-bezier(.4, 0, .2, 1)',
+            transform: flipped ? 'rotateY(180deg)' : 'rotateY(0deg)',
+          }}
+        >
+          {/* front face — Toy Figure */}
+          <Box sx={faceSx}>
+            <ToyFigure pose="idle" />
+          </Box>
+          {/* back face — Boy (pre-rotated so it reads correctly once flipped) */}
+          <Box sx={{ ...faceSx, transform: 'rotateY(180deg)' }}>
+            <Boy pose="idle" />
+          </Box>
+        </Box>
       </Box>
 
       <Button
@@ -80,7 +99,7 @@ export default function ImageToggleWidget({ id }: WidgetProps) {
         onClick={toggle}
         startIcon={<SwapHorizIcon />}
       >
-        {label}
+        {LABELS[character]}
       </Button>
     </Box>
   )
