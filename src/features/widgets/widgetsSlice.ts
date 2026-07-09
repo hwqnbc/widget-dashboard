@@ -9,21 +9,12 @@ export interface WidgetsState {
   layout: GridLayoutItem[]
 }
 
-function seedState(): WidgetsState {
-  const instances: WidgetInstance[] = [
-    { id: 'seed-clock', type: 'clock', data: defaultWidgetData('clock') },
-    { id: 'seed-counter', type: 'counter', data: defaultWidgetData('counter') },
-    { id: 'seed-notes', type: 'notes', data: defaultWidgetData('notes') },
-  ]
-  const layout: GridLayoutItem[] = [
-    { i: 'seed-clock', x: 0, y: 0, w: 3, h: 3, minW: 2, minH: 2 },
-    { i: 'seed-counter', x: 3, y: 0, w: 3, h: 3, minW: 2, minH: 2 },
-    { i: 'seed-notes', x: 6, y: 0, w: 4, h: 4, minW: 2, minH: 2 },
-  ]
-  return { instances, layout }
+/** The dashboard starts empty; widgets are added by the user. */
+function emptyState(): WidgetsState {
+  return { instances: [], layout: [] }
 }
 
-const initialState: WidgetsState = seedState()
+const initialState: WidgetsState = emptyState()
 
 /** Lowest free row so a newly added widget lands at the bottom. */
 function nextRow(layout: GridLayoutItem[]): number {
@@ -73,7 +64,7 @@ const widgetsSlice = createSlice({
       if (inst) inst.data = { ...inst.data, ...action.payload.data }
     },
     resetLayout() {
-      return seedState()
+      return emptyState()
     },
   },
 })

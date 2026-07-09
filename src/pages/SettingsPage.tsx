@@ -45,7 +45,8 @@ export default function SettingsPage() {
             Layout
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-            Restore the default widgets and positions. This clears your saved layout.
+            Remove all widgets and clear your saved layout, returning to an empty
+            dashboard.
           </Typography>
           <Stack direction="row">
             <Button
