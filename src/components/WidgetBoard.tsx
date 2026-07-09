@@ -60,6 +60,11 @@ export default function WidgetBoard() {
         rowHeight={80}
         margin={[16, 16]}
         draggableHandle=".widget-drag-handle"
+        // Elements matching this selector never start a drag — needed so the
+        // remove button (and other header controls) receive taps on touch
+        // devices, where onMouseDown never fires and the drag handler would
+        // otherwise swallow the tap.
+        draggableCancel=".widget-no-drag"
         onLayoutChange={handleLayoutChange}
         compactType="vertical"
       >
