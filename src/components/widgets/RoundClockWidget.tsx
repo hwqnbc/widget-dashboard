@@ -14,44 +14,76 @@ const spin = keyframes`
   to { transform: rotate(-360deg); }
 `
 
-/** A little cartoon Claude: rounded body, face, and a friendly wave. */
-function ClaudeCartoon({ size }: { size: number }) {
+/** Toy-figure palette (matches components/widgets/characters/ToyFigure). */
+const TOY = {
+  teal: '#16b3a3',
+  tealShade: '#0d897c',
+  tealHi: '#67dccf',
+  skin: '#efb188',
+  skinShade: '#d4895f',
+  line: '#1f3f3b',
+}
+
+/**
+ * The head of the toy minifigure (capped head, face) lifted from ToyFigure,
+ * cropped to a tight square viewBox so it can orbit the clock.
+ */
+function ToyHead({ size }: { size: number }) {
   return (
     <svg
       width={size}
       height={size}
-      viewBox="0 0 48 48"
+      viewBox="28 39 144 144"
       role="img"
-      aria-label="Claude"
+      aria-label="Toy figure"
+      style={{ overflow: 'visible' }}
     >
-      {/* body */}
-      <ellipse cx="24" cy="26" rx="15" ry="16" fill={CLAUDE_ORANGE} />
-      {/* lighter belly */}
-      <ellipse cx="24" cy="29" rx="9" ry="10" fill="#F3C9B8" />
-      {/* ears / tufts */}
-      <circle cx="12" cy="13" r="4.5" fill={CLAUDE_ORANGE} />
-      <circle cx="36" cy="13" r="4.5" fill={CLAUDE_ORANGE} />
-      {/* eyes */}
-      <circle cx="19" cy="23" r="2.4" fill="#2A1B14" />
-      <circle cx="29" cy="23" r="2.4" fill="#2A1B14" />
-      <circle cx="19.8" cy="22.2" r="0.8" fill="#fff" />
-      <circle cx="29.8" cy="22.2" r="0.8" fill="#fff" />
-      {/* smile */}
+      {/* head */}
       <path
-        d="M19 29 Q24 33 29 29"
-        fill="none"
-        stroke="#2A1B14"
-        strokeWidth="1.8"
-        strokeLinecap="round"
+        d="M80 110 C78 150 84 174 120 176 C156 174 162 150 160 110 Z"
+        fill={TOY.skin}
+        stroke={TOY.skinShade}
+        strokeWidth={2}
       />
-      {/* cheeks */}
-      <circle cx="15" cy="28" r="1.8" fill="#EFA98F" opacity="0.8" />
-      <circle cx="33" cy="28" r="1.8" fill="#EFA98F" opacity="0.8" />
+      {/* cap dome */}
+      <path
+        d="M72 108 C70 62 94 46 120 46 C146 46 170 62 168 108 Z"
+        fill={TOY.teal}
+        stroke={TOY.tealShade}
+        strokeWidth={2.5}
+        strokeLinejoin="round"
+      />
+      <path
+        d="M92 60 C84 70 80 86 82 100"
+        stroke={TOY.tealHi}
+        strokeWidth={6}
+        opacity={0.6}
+        strokeLinecap="round"
+        fill="none"
+      />
+      {/* cap brim */}
+      <path
+        d="M64 104 C40 104 30 114 42 120 C76 130 150 126 170 114 C176 110 172 104 164 104 C150 110 86 112 64 104 Z"
+        fill={TOY.tealHi}
+        stroke={TOY.tealShade}
+        strokeWidth={2}
+        strokeLinejoin="round"
+      />
+      {/* eyebrows */}
+      <path d="M100 142 q7 -3 13 0" stroke={TOY.skinShade} strokeWidth={3} strokeLinecap="round" fill="none" />
+      <path d="M127 142 q6 -3 13 0" stroke={TOY.skinShade} strokeWidth={3} strokeLinecap="round" fill="none" />
+      {/* eyes */}
+      <ellipse cx={107} cy={151} rx={3.4} ry={4.6} fill={TOY.line} />
+      <ellipse cx={133} cy={151} rx={3.4} ry={4.6} fill={TOY.line} />
+      <circle cx={108} cy={149} r={1.1} fill="#fff" />
+      <circle cx={134} cy={149} r={1.1} fill="#fff" />
+      {/* mouth */}
+      <path d="M108 162 Q120 173 132 162" stroke={TOY.line} strokeWidth={2.2} strokeLinecap="round" fill="none" />
     </svg>
   )
 }
 
-/** An analog "round" clock with a cartoon Claude orbiting the face. */
+/** An analog "round" clock with the toy figure's head orbiting the face. */
 export default function RoundClockWidget() {
   const [now, setNow] = useState(() => new Date())
 
@@ -90,7 +122,7 @@ export default function RoundClockWidget() {
           maxHeight: '100%',
         }}
       >
-        {/* Orbiting Claude — rotates around the clock's centre. */}
+        {/* Orbiting toy-figure head — rotates around the clock's centre. */}
         <Box
           sx={{
             position: 'absolute',
@@ -107,12 +139,12 @@ export default function RoundClockWidget() {
               top: '3%',
               left: '50%',
               transform: 'translateX(-50%)',
-              // Counter-spin keeps Claude upright-ish while spinning too.
+              // Counter-spin keeps the head upright-ish while spinning too.
               animation: `${spin} 6s linear infinite`,
               lineHeight: 0,
             }}
           >
-            <ClaudeCartoon size={30} />
+            <ToyHead size={34} />
           </Box>
         </Box>
 
