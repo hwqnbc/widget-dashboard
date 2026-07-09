@@ -1,5 +1,7 @@
 # TestSite — Widget Dashboard SPA
 
+**🔗 Live demo: https://hwqnbc.github.io/widget-dashboard/**
+
 A single-page app for a widget-based website where widgets are **draggable**
 and **resizable** on a responsive grid. Layout and widget state persist to
 `localStorage`.
