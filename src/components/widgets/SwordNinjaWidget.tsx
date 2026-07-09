@@ -55,24 +55,32 @@ function Hand({ cx, cy }: { cx: number; cy: number }) {
   )
 }
 
-// Active katana: swing off the back, parry across, settle into a raised guard.
+// Active katana (base pose = sheathed hilt-up over the LEFT shoulder, blade
+// down the back). Cross-body draw: pull the blade up/out to the upper-left,
+// then sweep it across the front and down into a raised guard on the right.
+// Rotation is about the hilt.
 const drawSword = keyframes`
   0%   { transform: translate(0px, 0px) rotate(0deg); }
-  60%  { transform: translate(0px, 44px) rotate(101deg); }
-  100% { transform: translate(0px, 40px) rotate(74deg); }
+  24%  { transform: translate(-20px, -30px) rotate(6deg); }
+  68%  { transform: translate(38px, 96px) rotate(-175deg); }
+  100% { transform: translate(42px, 105px) rotate(-157deg); }
 `
 const sheatheSword = keyframes`
-  0%   { transform: translate(0px, 40px) rotate(74deg); }
+  0%   { transform: translate(42px, 105px) rotate(-157deg); }
+  44%  { transform: translate(-20px, -30px) rotate(6deg); }
   100% { transform: translate(0px, 0px) rotate(0deg); }
 `
+// Sword arm reaches ACROSS the body up to the opposite (left) shoulder hilt,
+// then draws the blade across into a raised guard held in front of the chest.
 const drawArm = keyframes`
-  0%   { transform: rotate(0deg); }
-  60%  { transform: rotate(18deg); }
-  100% { transform: rotate(14deg); }
+  0%   { transform: translate(0px, 0px) rotate(0deg); }
+  32%  { transform: translate(-52px, -8px) rotate(78deg); }
+  100% { transform: translate(-46px, -7px) rotate(-6deg); }
 `
 const sheatheArm = keyframes`
-  0%   { transform: rotate(14deg); }
-  100% { transform: rotate(0deg); }
+  0%   { transform: translate(-46px, -7px) rotate(-6deg); }
+  32%  { transform: translate(-52px, -8px) rotate(78deg); }
+  100% { transform: translate(0px, 0px) rotate(0deg); }
 `
 
 const DUR = '0.85s'
@@ -129,11 +137,15 @@ export default function SwordNinjaWidget() {
         style={{ overflow: 'visible' }}
         strokeLinejoin="miter"
       >
-        {/* ===== crossed katanas on the back (behind the body) ===== */}
-        <g transform="translate(90 222) rotate(46)">
+        {/* ===== crossed katanas on the back — hilts up over the shoulders,
+             blades angled down the back (real back-scabbard) ===== */}
+        {/* right-shoulder katana stays sheathed */}
+        <g transform="translate(162 150) rotate(215)">
           <Katana />
         </g>
-        <g transform="translate(150 222) rotate(-46)" opacity={backTwin ? 1 : 0}>
+        {/* left-shoulder katana is the one drawn (cross-body) — its sheathed
+            twin hides once drawn */}
+        <g transform="translate(78 150) rotate(145)" opacity={backTwin ? 1 : 0}>
           <Katana />
         </g>
 
@@ -224,12 +236,12 @@ export default function SwordNinjaWidget() {
           }}
           sx={{
             transformBox: 'view-box',
-            transformOrigin: '150px 222px',
+            transformOrigin: '78px 150px',
             animation: swordAnim,
             opacity: activeVisible ? 1 : 0,
           }}
         >
-          <g transform="translate(150 222) rotate(-46)">
+          <g transform="translate(78 150) rotate(145)">
             <Katana />
           </g>
         </Box>
