@@ -186,10 +186,16 @@ function bestMove(board: Cell[]): number {
   return move
 }
 
-/** A soft pulsing glow used on the three marks that make the winning line. */
+/** Pulsing glow on the three marks that make the winning line. */
 const winGlow = keyframes`
-  0%, 100% { filter: drop-shadow(0 0 2px currentColor); transform: scale(1); }
-  50%      { filter: drop-shadow(0 0 10px currentColor); transform: scale(1.12); }
+  0%, 100% { filter: drop-shadow(0 0 4px currentColor); transform: scale(1); }
+  50%      { filter: drop-shadow(0 0 16px currentColor) drop-shadow(0 0 6px currentColor); transform: scale(1.14); }
+`
+
+/** Pulsing ring + tint on the winning cells, so the whole line lights up. */
+const cellGlow = keyframes`
+  0%, 100% { box-shadow: 0 0 0 0 currentColor, 0 0 6px 0 currentColor; }
+  50%      { box-shadow: inset 0 0 0 2px currentColor, 0 0 16px 3px currentColor; }
 `
 
 export default function TicTacToeWidget({ id }: WidgetProps) {
@@ -278,15 +284,15 @@ export default function TicTacToeWidget({ id }: WidgetProps) {
         sx={{
           flex: 1,
           minHeight: 0,
+          containerType: 'size',
           display: 'grid',
           placeItems: 'center',
         }}
       >
         <Box
           sx={{
-            width: '100%',
-            maxWidth: (theme) => `min(100%, ${theme.spacing(30)})`,
-            aspectRatio: '1 / 1',
+            width: 'min(100cqmin, 340px)',
+            height: 'min(100cqmin, 340px)',
             display: 'grid',
             gridTemplateColumns: 'repeat(3, 1fr)',
             gridTemplateRows: 'repeat(3, 1fr)',
@@ -299,12 +305,16 @@ export default function TicTacToeWidget({ id }: WidgetProps) {
         >
           {board.map((cell, i) => {
             const isWin = result?.line.includes(i) ?? false
+            const winColor = winner === 'toy' ? TOY.teal : N.iceDeep
             return (
               <Box
                 key={i}
                 data-testid={`ttt-cell-${i}`}
                 onClick={() => play(i)}
                 sx={{
+                  minWidth: 0,
+                  minHeight: 0,
+                  overflow: 'hidden',
                   bgcolor: 'background.paper',
                   borderRadius: 0.5,
                   display: 'grid',
@@ -316,6 +326,11 @@ export default function TicTacToeWidget({ id }: WidgetProps) {
                     !cell && !winner && !isDraw
                       ? { bgcolor: 'action.hover' }
                       : undefined,
+                  ...(isWin && {
+                    color: winColor,
+                    bgcolor: `${winColor}22`,
+                    animation: `${cellGlow} 1s ease-in-out infinite`,
+                  }),
                 }}
               >
                 {cell && (
