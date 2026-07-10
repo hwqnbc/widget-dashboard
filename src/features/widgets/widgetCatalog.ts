@@ -77,7 +77,7 @@ export function defaultWidgetData(type: WidgetType): Record<string, unknown> {
     case 'imageToggle':
       return { character: 'toy' }
     case 'ticTacToe':
-      return { board: Array(9).fill(null), mode: 'pvp' }
+      return { board: Array(9).fill(null), mode: 'pvp', difficulty: 'easy' }
     case 'clock':
     default:
       return {}
