@@ -37,6 +37,11 @@ holes become white discs carrying a character head.
   draw = board full. Helpers: `landingRow`, `legalCols`, `dropInto`, precomputed
   `WINDOWS` (all 69 four-in-a-row index sets, shared by `calcWin` + `evaluate`).
 
+## Turn indicator & win celebration
+Same as Tic-Tac-Toe: a `PlayerBadge` (head icon + "to move" / "thinking…" /
+"wins!" / "Draw!") in the footer, and on a win a looping `WinnerCelebration`
+(Toy "6 7" / Ninja sword loop) overlays the dimmed board.
+
 ## Reused conveniences (same as TTT)
 - **Thinking latency** — the ninja drops after a random `THINK_MIN`–`THINK_MAX`
   (~0.4–1.2s) inside a `setTimeout`, cleared on cleanup.

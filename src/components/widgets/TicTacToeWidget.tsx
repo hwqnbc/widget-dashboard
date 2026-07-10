@@ -16,6 +16,8 @@ import ToyHead from './characters/ToyHead'
 import { TOY } from './characters/toyPalette'
 import NinjaHead from './characters/NinjaHead'
 import { N } from './characters/ninjaPalette'
+import WinnerCelebration from './WinnerCelebration'
+import PlayerBadge from './PlayerBadge'
 
 /** The two players are the toy head and the ninja head instead of X / O. */
 type Mark = 'toy' | 'ninja'
@@ -220,14 +222,6 @@ export default function TicTacToeWidget({ id }: WidgetProps) {
   // Hand the opening move to the ninja; the AI effect then plays it.
   const passTurn = () => setGame({ first: 'ninja' })
 
-  const status = winner
-    ? `${winner === 'toy' ? 'Toy' : 'Ninja'} wins!`
-    : isDraw
-      ? 'Draw!'
-      : mode === 'ai' && turn === 'ninja'
-        ? 'Ninja thinking…'
-        : `${turn === 'toy' ? 'Toy' : 'Ninja'} to move`
-
   return (
     <Box
       className="widget-no-drag"
@@ -272,6 +266,7 @@ export default function TicTacToeWidget({ id }: WidgetProps) {
         sx={{
           flex: 1,
           minHeight: 0,
+          position: 'relative',
           containerType: 'size',
           display: 'grid',
           placeItems: 'center',
@@ -339,6 +334,23 @@ export default function TicTacToeWidget({ id }: WidgetProps) {
             )
           })}
         </Box>
+
+        {winner && (
+          <Box
+            sx={{
+              position: 'absolute',
+              inset: 0,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderRadius: 1,
+              bgcolor: 'rgba(0,0,0,0.38)',
+              pointerEvents: 'none',
+            }}
+          >
+            <WinnerCelebration winner={winner} />
+          </Box>
+        )}
       </Box>
 
       <Stack
@@ -346,7 +358,13 @@ export default function TicTacToeWidget({ id }: WidgetProps) {
         spacing={1}
         sx={{ alignItems: 'center', justifyContent: 'space-between', px: 0.5 }}
       >
-        {canPass ? (
+        {winner ? (
+          <PlayerBadge mark={winner} label="wins!" />
+        ) : isDraw ? (
+          <Typography variant="body2" sx={{ fontWeight: 600 }}>
+            Draw!
+          </Typography>
+        ) : canPass ? (
           <Button
             className="widget-no-drag"
             size="small"
@@ -356,9 +374,11 @@ export default function TicTacToeWidget({ id }: WidgetProps) {
             Pass — let Ninja start
           </Button>
         ) : (
-          <Typography variant="body2" sx={{ fontWeight: 600 }}>
-            {status}
-          </Typography>
+          <PlayerBadge
+            mark={turn}
+            label={mode === 'ai' && turn === 'ninja' ? 'thinking…' : 'to move'}
+            pulse={mode === 'ai' && turn === 'ninja'}
+          />
         )}
         <Button size="small" onClick={newGame}>
           New game

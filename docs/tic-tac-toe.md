@@ -82,11 +82,15 @@ with the widget in both dimensions:
   `min-height: auto`, so without `min-*: 0` a placed SVG could push its `1fr`
   track and expand the board. Do not remove these.
 
-## Win animation
-When `calcWin` returns a line, the three winning **marks** pulse (`winGlow`
-keyframes) and the three winning **cells** pulse a ring + tint (`cellGlow`),
-tinted to the winner's color (teal `TOY.teal` for Toy, ice-blue `N.iceDeep` for
-Ninja).
+## Turn indicator & win celebration
+- The footer shows a **`PlayerBadge`** (head icon + short label) for the current
+  turn — "to move", or "thinking…" (with a pulse) on the computer's turn — plus
+  "wins!" beside the winner's head, or "Draw!".
+- On a win the three winning cells/marks still glow (`winGlow` / `cellGlow`,
+  tinted to the winner), and a looping **`WinnerCelebration`** overlays the
+  dimmed board: the Toy does the "6 7" (`SixSevenFigure`), the Ninja draws &
+  sheathes his sword on a loop (`SwordNinjaFigure`, `drawn` toggled on an
+  interval). The overlay is `pointerEvents:'none'`; New game clears it.
 
 ## Mobile / touch
 The root and the interactive cells use `className="widget-no-drag"` plus
