@@ -55,6 +55,12 @@ export const WIDGET_CATALOG: WidgetMeta[] = [
     description: 'Tap to draw the katana and defend',
     defaultSize: { w: 3, h: 5, minW: 3, minH: 4 },
   },
+  {
+    type: 'ticTacToe',
+    title: 'Tic-Tac-Toe',
+    description: 'Toy vs Ninja — tap to play',
+    defaultSize: { w: 3, h: 5, minW: 3, minH: 5 },
+  },
 ]
 
 export const widgetMetaByType = Object.fromEntries(
@@ -70,6 +76,8 @@ export function defaultWidgetData(type: WidgetType): Record<string, unknown> {
       return { text: '' }
     case 'imageToggle':
       return { character: 'toy' }
+    case 'ticTacToe':
+      return { board: Array(9).fill(null), mode: 'pvp' }
     case 'clock':
     default:
       return {}
