@@ -18,11 +18,6 @@ type Cell = Mark | null
 type Mode = 'pvp' | 'ai'
 type Difficulty = 'easy' | 'hard'
 
-/** On Easy, the fraction of ninja turns played as a random (imperfect) move
- * rather than the optimal one — enough to give the human real openings while
- * the AI can still win by chance. */
-const EASY_RANDOM = 0.6
-
 /** Stable references so the AI effect doesn't loop on a fresh fallback array. */
 const EMPTY_BOARD: Cell[] = Array(9).fill(null)
 
@@ -200,10 +195,26 @@ function randomMove(board: Cell[]): number {
   return avail[Math.floor(Math.random() * avail.length)]
 }
 
-/** Easy: mostly random (imperfect) play, sometimes optimal — beatable but the
- * AI never deliberately loses and can still win by chance. */
+/** An empty cell that immediately makes `mark` win, or -1 if none. */
+function winningMove(board: Cell[], mark: Mark): number {
+  for (let i = 0; i < board.length; i++) {
+    if (board[i]) continue
+    const b = board.slice()
+    b[i] = mark
+    if (calcWin(b)?.winner === mark) return i
+  }
+  return -1
+}
+
+/** Easy: a casual-but-sane player — take an immediate win, else block the
+ * human's immediate win, else play randomly. No lookahead, so it can still be
+ * beaten with a fork, but it never ignores an obvious win/block. */
 function easyMove(board: Cell[]): number {
-  return Math.random() < EASY_RANDOM ? randomMove(board) : bestMove(board)
+  const win = winningMove(board, 'ninja')
+  if (win >= 0) return win
+  const block = winningMove(board, 'toy')
+  if (block >= 0) return block
+  return randomMove(board)
 }
 
 /** Pulsing glow on the three marks that make the winning line. */
