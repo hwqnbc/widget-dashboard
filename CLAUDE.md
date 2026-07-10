@@ -68,3 +68,16 @@ Provider order (`main.tsx`): `Provider` → `PersistGate` → `AppThemeProvider`
    `features/widgets/widgetCatalog.ts` (incl. `defaultWidgetData`).
 3. Build the component in `components/widgets/` and register it in
    `registry/widgetRegistry.ts`.
+
+Reusable primitives for new widgets: `hooks/useNow` (ticking clock),
+`features/widgets/useWidgetField` (typed persisted-`data` selector),
+`components/widgets/TapStage` (tap-to-animate button), and the shared character
+pieces under `components/widgets/characters/` (`ToyHead`, `NinjaHead`, `Hand`,
+`toyParts`, and the `toyPalette` / `ninjaPalette` colour modules).
+
+## Docs
+
+Per-feature design notes live in `docs/`. See `docs/tic-tac-toe.md` for the
+Tic-Tac-Toe widget's considerations (difficulty levels incl. the "sane player"
+Easy AI, 2-player vs vs-computer, the pass-opening-move button, board
+responsiveness, and the persisted state model).
