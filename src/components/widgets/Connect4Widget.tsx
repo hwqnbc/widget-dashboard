@@ -18,6 +18,7 @@ import { TOY } from './characters/toyPalette'
 import { N } from './characters/ninjaPalette'
 import WinnerCelebration from './WinnerCelebration'
 import PlayerBadge from './PlayerBadge'
+import ConfirmDialog from './ConfirmDialog'
 
 /** The two players are the Toy and Ninja heads instead of red / yellow discs. */
 type Mark = 'toy' | 'ninja'
@@ -241,6 +242,9 @@ function Disc({ mark }: { mark: Mark }) {
 export default function Connect4Widget({ id }: WidgetProps) {
   const dispatch = useAppDispatch()
   const [lastDrop, setLastDrop] = useState<number | null>(null)
+  const [pending, setPending] = useState<
+    { mode?: Mode; difficulty?: Difficulty } | null
+  >(null)
 
   const board = useWidgetField<Cell[]>(id, 'board', EMPTY_BOARD, (b) =>
     Array.isArray(b) && b.length === SIZE ? (b as Cell[]) : undefined,
@@ -300,12 +304,19 @@ export default function Connect4Widget({ id }: WidgetProps) {
     setLastDrop(null)
     setGame({ board: Array(SIZE).fill(null), first: 'toy', ...extra })
   }
+  // A move has been made and the game isn't over — a restart would lose it.
+  const inProgress = !boardEmpty && !winner && !isDraw
+  const requestReset = (extra: { mode?: Mode; difficulty?: Difficulty }) => {
+    if (inProgress) setPending(extra)
+    else reset(extra)
+  }
+
   const newGame = () => reset()
   const changeMode = (next: Mode | null) => {
-    if (next && next !== mode) reset({ mode: next })
+    if (next && next !== mode) requestReset({ mode: next })
   }
   const changeDifficulty = (next: Difficulty | null) => {
-    if (next && next !== difficulty) reset({ difficulty: next })
+    if (next && next !== difficulty) requestReset({ difficulty: next })
   }
   const passTurn = () => {
     setLastDrop(null)
@@ -488,6 +499,17 @@ export default function Connect4Widget({ id }: WidgetProps) {
           New game
         </Button>
       </Stack>
+
+      <ConfirmDialog
+        open={pending !== null}
+        title="Restart game?"
+        message="Changing this starts a new game and clears the current board."
+        onConfirm={() => {
+          if (pending) reset(pending)
+          setPending(null)
+        }}
+        onCancel={() => setPending(null)}
+      />
     </Box>
   )
 }

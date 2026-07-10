@@ -15,7 +15,9 @@ holes become white discs carrying a character head.
 ## Modes & difficulty
 - **2-Player** (`pvp`) and **vs Computer** (`ai`); human plays Toy.
 - Three difficulties (Computer mode), a `ToggleButtonGroup`: **Easy / Medium /
-  Hard**. Switching mode or difficulty reinitializes the game.
+  Hard**. Switching mode or difficulty reinitializes the game — but if a game is
+  in progress it first pops a shared `ConfirmDialog` ("Restart game?"), so an
+  accidental tap can't wipe the board (New game is not guarded).
 
 ## AI — depth-based (`aiMove`)
 - **Easy** — the "sane player": take an immediate win → block the opponent's

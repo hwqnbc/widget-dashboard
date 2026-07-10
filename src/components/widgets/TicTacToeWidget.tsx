@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import {
   Box,
   Button,
@@ -18,6 +18,7 @@ import NinjaHead from './characters/NinjaHead'
 import { N } from './characters/ninjaPalette'
 import WinnerCelebration from './WinnerCelebration'
 import PlayerBadge from './PlayerBadge'
+import ConfirmDialog from './ConfirmDialog'
 
 /** The two players are the toy head and the ninja head instead of X / O. */
 type Mark = 'toy' | 'ninja'
@@ -152,6 +153,9 @@ const cellGlow = keyframes`
 
 export default function TicTacToeWidget({ id }: WidgetProps) {
   const dispatch = useAppDispatch()
+  const [pending, setPending] = useState<
+    { mode?: Mode; difficulty?: Difficulty } | null
+  >(null)
 
   const board = useWidgetField<Cell[]>(id, 'board', EMPTY_BOARD, (b) =>
     Array.isArray(b) && b.length === 9 ? (b as Cell[]) : undefined,
@@ -208,17 +212,22 @@ export default function TicTacToeWidget({ id }: WidgetProps) {
     setGame({ board: b })
   }
 
-  const newGame = () => setGame({ board: Array(9).fill(null), first: 'toy' })
+  const reset = (extra: Partial<{ mode: Mode; difficulty: Difficulty }> = {}) =>
+    setGame({ board: Array(9).fill(null), first: 'toy', ...extra })
+
+  // A move has been made and the game isn't over — a restart would lose it.
+  const inProgress = !boardEmpty && !winner && !isDraw
+  const requestReset = (extra: { mode?: Mode; difficulty?: Difficulty }) => {
+    if (inProgress) setPending(extra)
+    else reset(extra)
+  }
+
+  const newGame = () => reset()
   const changeMode = (next: Mode | null) => {
-    if (!next || next === mode) return
-    setGame({ mode: next, board: Array(9).fill(null), first: 'toy' })
+    if (next && next !== mode) requestReset({ mode: next })
   }
   const changeDifficulty = () =>
-    setGame({
-      difficulty: difficulty === 'easy' ? 'hard' : 'easy',
-      board: Array(9).fill(null),
-      first: 'toy',
-    })
+    requestReset({ difficulty: difficulty === 'easy' ? 'hard' : 'easy' })
   // Hand the opening move to the ninja; the AI effect then plays it.
   const passTurn = () => setGame({ first: 'ninja' })
 
@@ -384,6 +393,17 @@ export default function TicTacToeWidget({ id }: WidgetProps) {
           New game
         </Button>
       </Stack>
+
+      <ConfirmDialog
+        open={pending !== null}
+        title="Restart game?"
+        message="Changing this starts a new game and clears the current board."
+        onConfirm={() => {
+          if (pending) reset(pending)
+          setPending(null)
+        }}
+        onCancel={() => setPending(null)}
+      />
     </Box>
   )
 }

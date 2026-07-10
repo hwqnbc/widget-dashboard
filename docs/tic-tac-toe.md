@@ -20,7 +20,9 @@ A `ToggleButtonGroup` switches between:
 - **vs Computer** (`mode: 'ai'`) — human plays Toy, the computer plays Ninja.
 
 Switching mode **reinitializes** the game (clears the board, resets `first` to
-`toy`).
+`toy`). If a game is **in progress** (a move made, not yet won/drawn), changing
+mode **or** difficulty first pops a shared `ConfirmDialog` ("Restart game?") so
+an accidental tap can't wipe the board; the New game button is not guarded.
 
 ## Difficulty (vs Computer only)
 A single button labelled `Difficulty: Easy` / `Difficulty: Hard` (shown only in
