@@ -143,10 +143,11 @@ function calcWin(board: Cell[]): { winner: Mark; line: [number, number, number] 
   return null
 }
 
-/** toy always moves first, so parity of filled cells gives the current turn. */
-function turnOf(board: Cell[]): Mark {
+/** `first` opens the game; parity of filled cells then gives the current turn. */
+function turnOf(board: Cell[], first: Mark): Mark {
   const filled = board.filter(Boolean).length
-  return filled % 2 === 0 ? 'toy' : 'ninja'
+  const other: Mark = first === 'toy' ? 'ninja' : 'toy'
+  return filled % 2 === 0 ? first : other
 }
 
 /** Minimax value of `board` with `next` to move; ninja maximizes. Depth
@@ -233,14 +234,26 @@ export default function TicTacToeWidget({ id }: WidgetProps) {
     const inst = state.widgets.instances.find((w) => w.id === id)
     return inst?.data.difficulty === 'hard' ? 'hard' : 'easy'
   }) as Difficulty
+  const first = useAppSelector((state) => {
+    const inst = state.widgets.instances.find((w) => w.id === id)
+    return inst?.data.first === 'ninja' ? 'ninja' : 'toy'
+  }) as Mark
 
   const result = calcWin(board)
   const winner = result?.winner ?? null
   const isDraw = !winner && board.every(Boolean)
-  const turn = turnOf(board)
+  const turn = turnOf(board, first)
+  const boardEmpty = board.every((c) => !c)
+  // In Computer mode, before any move, the human may pass so the ninja opens.
+  const canPass = mode === 'ai' && boardEmpty && !winner && turn === 'toy'
 
   const setGame = (
-    next: Partial<{ board: Cell[]; mode: Mode; difficulty: Difficulty }>,
+    next: Partial<{
+      board: Cell[]
+      mode: Mode
+      difficulty: Difficulty
+      first: Mark
+    }>,
   ) => dispatch(updateWidgetData({ id, data: next }))
 
   // Vs-computer: let the ninja (AI) answer once it's its turn.
@@ -262,16 +275,19 @@ export default function TicTacToeWidget({ id }: WidgetProps) {
     setGame({ board: b })
   }
 
-  const newGame = () => setGame({ board: Array(9).fill(null) })
+  const newGame = () => setGame({ board: Array(9).fill(null), first: 'toy' })
   const changeMode = (next: Mode | null) => {
     if (!next || next === mode) return
-    setGame({ mode: next, board: Array(9).fill(null) })
+    setGame({ mode: next, board: Array(9).fill(null), first: 'toy' })
   }
   const changeDifficulty = () =>
     setGame({
       difficulty: difficulty === 'easy' ? 'hard' : 'easy',
       board: Array(9).fill(null),
+      first: 'toy',
     })
+  // Hand the opening move to the ninja; the AI effect then plays it.
+  const passTurn = () => setGame({ first: 'ninja' })
 
   const status = winner
     ? `${winner === 'toy' ? 'Toy' : 'Ninja'} wins!`
@@ -399,9 +415,20 @@ export default function TicTacToeWidget({ id }: WidgetProps) {
         spacing={1}
         sx={{ alignItems: 'center', justifyContent: 'space-between', px: 0.5 }}
       >
-        <Typography variant="body2" sx={{ fontWeight: 600 }}>
-          {status}
-        </Typography>
+        {canPass ? (
+          <Button
+            className="widget-no-drag"
+            size="small"
+            onClick={passTurn}
+            sx={{ textTransform: 'none' }}
+          >
+            Pass — let Ninja start
+          </Button>
+        ) : (
+          <Typography variant="body2" sx={{ fontWeight: 600 }}>
+            {status}
+          </Typography>
+        )}
         <Button size="small" onClick={newGame}>
           New game
         </Button>
