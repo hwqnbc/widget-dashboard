@@ -8,6 +8,7 @@ import ImageToggleWidget from '../components/widgets/ImageToggleWidget'
 import SixSevenWidget from '../components/widgets/SixSevenWidget'
 import SwordNinjaWidget from '../components/widgets/SwordNinjaWidget'
 import TicTacToeWidget from '../components/widgets/TicTacToeWidget'
+import Connect4Widget from '../components/widgets/Connect4Widget'
 
 /** Props every widget component receives. */
 export interface WidgetProps {
@@ -24,4 +25,5 @@ export const widgetComponents: Record<WidgetType, ComponentType<WidgetProps>> = 
   sixSeven: SixSevenWidget,
   swordNinja: SwordNinjaWidget,
   ticTacToe: TicTacToeWidget,
+  connect4: Connect4Widget,
 }

@@ -80,4 +80,6 @@ pieces under `components/widgets/characters/` (`ToyHead`, `NinjaHead`, `Hand`,
 Per-feature design notes live in `docs/`. See `docs/tic-tac-toe.md` for the
 Tic-Tac-Toe widget's considerations (difficulty levels incl. the "sane player"
 Easy AI, 2-player vs vs-computer, the pass-opening-move button, board
-responsiveness, and the persisted state model).
+responsiveness, and the persisted state model). See `docs/connect-4.md` for the
+Connect 4 widget (7×6 board, depth-based Easy/Medium/Hard alpha-beta AI,
+animated disc drop; reuses the same modes, latency, pass button and glow).

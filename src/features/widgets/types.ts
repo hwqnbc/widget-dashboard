@@ -7,6 +7,7 @@ export type WidgetType =
   | 'sixSeven'
   | 'swordNinja'
   | 'ticTacToe'
+  | 'connect4'
 
 /** A widget placed on the board. `data` holds per-widget persisted state. */
 export interface WidgetInstance {

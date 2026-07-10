@@ -61,6 +61,12 @@ export const WIDGET_CATALOG: WidgetMeta[] = [
     description: 'Toy vs Ninja — tap to play',
     defaultSize: { w: 3, h: 5, minW: 3, minH: 5 },
   },
+  {
+    type: 'connect4',
+    title: 'Connect 4',
+    description: 'Drop discs — Toy vs Ninja',
+    defaultSize: { w: 5, h: 5, minW: 4, minH: 5 },
+  },
 ]
 
 export const widgetMetaByType = Object.fromEntries(
@@ -81,6 +87,13 @@ export function defaultWidgetData(type: WidgetType): Record<string, unknown> {
         board: Array(9).fill(null),
         mode: 'pvp',
         difficulty: 'easy',
+        first: 'toy',
+      }
+    case 'connect4':
+      return {
+        board: Array(42).fill(null),
+        mode: 'pvp',
+        difficulty: 'medium',
         first: 'toy',
       }
     case 'clock':
