@@ -11,6 +11,8 @@ import {
 import { useAppDispatch, useAppSelector } from '../../app/hooks'
 import { updateWidgetData } from '../../features/widgets/widgetsSlice'
 import type { WidgetProps } from '../../registry/widgetRegistry'
+import ToyHead from './characters/ToyHead'
+import { TOY } from './characters/toyPalette'
 
 /** The two players are the toy head and the ninja head instead of X / O. */
 type Mark = 'toy' | 'ninja'
@@ -32,16 +34,6 @@ const LINES: [number, number, number][] = [
   [2, 4, 6],
 ]
 
-/** Toy-figure palette (matches ToyFigure / RoundClock). */
-const TOY = {
-  teal: '#16b3a3',
-  tealShade: '#0d897c',
-  tealHi: '#67dccf',
-  skin: '#efb188',
-  skinShade: '#d4895f',
-  line: '#1f3f3b',
-}
-
 /** White ice-ninja palette (subset used by the head, from SwordNinjaWidget). */
 const N = {
   robe: '#f4f6f8',
@@ -51,38 +43,6 @@ const N = {
   iceMid: '#7fc9e8',
   iceDeep: '#4aa6d0',
   line: '#232a31',
-}
-
-/** The toy minifigure's capped head, cropped square — reused as one mark. */
-function ToyHead() {
-  return (
-    <svg
-      width="100%"
-      height="100%"
-      viewBox="28 39 144 144"
-      role="img"
-      aria-label="Toy"
-      style={{ display: 'block' }}
-    >
-      {/* head */}
-      <path d="M80 110 C78 150 84 174 120 176 C156 174 162 150 160 110 Z" fill={TOY.skin} stroke={TOY.skinShade} strokeWidth={2} />
-      {/* cap dome */}
-      <path d="M72 108 C70 62 94 46 120 46 C146 46 170 62 168 108 Z" fill={TOY.teal} stroke={TOY.tealShade} strokeWidth={2.5} strokeLinejoin="round" />
-      <path d="M92 60 C84 70 80 86 82 100" stroke={TOY.tealHi} strokeWidth={6} opacity={0.6} strokeLinecap="round" fill="none" />
-      {/* cap brim */}
-      <path d="M64 104 C40 104 30 114 42 120 C76 130 150 126 170 114 C176 110 172 104 164 104 C150 110 86 112 64 104 Z" fill={TOY.tealHi} stroke={TOY.tealShade} strokeWidth={2} strokeLinejoin="round" />
-      {/* eyebrows */}
-      <path d="M100 142 q7 -3 13 0" stroke={TOY.skinShade} strokeWidth={3} strokeLinecap="round" fill="none" />
-      <path d="M127 142 q6 -3 13 0" stroke={TOY.skinShade} strokeWidth={3} strokeLinecap="round" fill="none" />
-      {/* eyes */}
-      <ellipse cx={107} cy={151} rx={3.4} ry={4.6} fill={TOY.line} />
-      <ellipse cx={133} cy={151} rx={3.4} ry={4.6} fill={TOY.line} />
-      <circle cx={108} cy={149} r={1.1} fill="#fff" />
-      <circle cx={134} cy={149} r={1.1} fill="#fff" />
-      {/* mouth */}
-      <path d="M108 162 Q120 173 132 162" stroke={TOY.line} strokeWidth={2.2} strokeLinecap="round" fill="none" />
-    </svg>
-  )
 }
 
 /**
