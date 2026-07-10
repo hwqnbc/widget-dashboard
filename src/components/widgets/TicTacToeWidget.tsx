@@ -11,6 +11,10 @@ import {
 import { useAppDispatch, useAppSelector } from '../../app/hooks'
 import { updateWidgetData } from '../../features/widgets/widgetsSlice'
 import type { WidgetProps } from '../../registry/widgetRegistry'
+import ToyHead from './characters/ToyHead'
+import { TOY } from './characters/toyPalette'
+import NinjaHead from './characters/NinjaHead'
+import { N } from './characters/ninjaPalette'
 
 /** The two players are the toy head and the ninja head instead of X / O. */
 type Mark = 'toy' | 'ninja'
@@ -31,97 +35,6 @@ const LINES: [number, number, number][] = [
   [0, 4, 8],
   [2, 4, 6],
 ]
-
-/** Toy-figure palette (matches ToyFigure / RoundClock). */
-const TOY = {
-  teal: '#16b3a3',
-  tealShade: '#0d897c',
-  tealHi: '#67dccf',
-  skin: '#efb188',
-  skinShade: '#d4895f',
-  line: '#1f3f3b',
-}
-
-/** White ice-ninja palette (subset used by the head, from SwordNinjaWidget). */
-const N = {
-  robe: '#f4f6f8',
-  robeShade: '#dbe3ea',
-  robeShade2: '#c2cdd8',
-  bladeHi: '#f2f6fa',
-  iceMid: '#7fc9e8',
-  iceDeep: '#4aa6d0',
-  line: '#232a31',
-}
-
-/** The toy minifigure's capped head, cropped square — reused as one mark. */
-function ToyHead() {
-  return (
-    <svg
-      width="100%"
-      height="100%"
-      viewBox="28 39 144 144"
-      role="img"
-      aria-label="Toy"
-      style={{ display: 'block' }}
-    >
-      {/* head */}
-      <path d="M80 110 C78 150 84 174 120 176 C156 174 162 150 160 110 Z" fill={TOY.skin} stroke={TOY.skinShade} strokeWidth={2} />
-      {/* cap dome */}
-      <path d="M72 108 C70 62 94 46 120 46 C146 46 170 62 168 108 Z" fill={TOY.teal} stroke={TOY.tealShade} strokeWidth={2.5} strokeLinejoin="round" />
-      <path d="M92 60 C84 70 80 86 82 100" stroke={TOY.tealHi} strokeWidth={6} opacity={0.6} strokeLinecap="round" fill="none" />
-      {/* cap brim */}
-      <path d="M64 104 C40 104 30 114 42 120 C76 130 150 126 170 114 C176 110 172 104 164 104 C150 110 86 112 64 104 Z" fill={TOY.tealHi} stroke={TOY.tealShade} strokeWidth={2} strokeLinejoin="round" />
-      {/* eyebrows */}
-      <path d="M100 142 q7 -3 13 0" stroke={TOY.skinShade} strokeWidth={3} strokeLinecap="round" fill="none" />
-      <path d="M127 142 q6 -3 13 0" stroke={TOY.skinShade} strokeWidth={3} strokeLinecap="round" fill="none" />
-      {/* eyes */}
-      <ellipse cx={107} cy={151} rx={3.4} ry={4.6} fill={TOY.line} />
-      <ellipse cx={133} cy={151} rx={3.4} ry={4.6} fill={TOY.line} />
-      <circle cx={108} cy={149} r={1.1} fill="#fff" />
-      <circle cx={134} cy={149} r={1.1} fill="#fff" />
-      {/* mouth */}
-      <path d="M108 162 Q120 173 132 162" stroke={TOY.line} strokeWidth={2.2} strokeLinecap="round" fill="none" />
-    </svg>
-  )
-}
-
-/**
- * The Sword Ninja's hooded head, cropped square. The asymmetric back-knot is
- * dropped for a symmetric mark and the thin face strokes are thickened so they
- * still read at cell size.
- */
-function NinjaHead() {
-  return (
-    <svg
-      width="100%"
-      height="100%"
-      viewBox="80 58 82 124"
-      role="img"
-      aria-label="Ninja"
-      style={{ display: 'block' }}
-    >
-      {/* hood base */}
-      <path d="M120 64 L149 78 L157 112 L150 150 L120 178 L90 150 L83 112 L91 78 Z" fill={N.robe} stroke={N.robeShade2} strokeWidth={2.5} />
-      {/* right shade facet */}
-      <path d="M120 64 L149 78 L157 112 L150 150 L120 178 Z" fill={N.robeShade} opacity={0.9} />
-      {/* crown lit facet */}
-      <path d="M120 64 L91 78 L110 88 L120 74 Z" fill={N.bladeHi} opacity={0.75} />
-      {/* facet seams */}
-      <path d="M91 78 L108 118 L90 150 M149 78 L132 118 L150 150 M120 74 L120 110" stroke={N.robeShade2} strokeWidth={2} opacity={0.7} fill="none" />
-      {/* visor recess */}
-      <path d="M92 114 L120 108 L148 114 L146 140 L120 150 L94 140 Z" fill={N.line} />
-      {/* brows */}
-      <path d="M99 121 L117 124 M123 124 L141 121" stroke={N.iceDeep} strokeWidth={3} />
-      {/* glowing ice eye slits */}
-      <path d="M100 132 L118 127 L118 131 L100 136 Z" fill={N.iceMid} />
-      <path d="M140 132 L122 127 L122 131 L140 136 Z" fill={N.iceMid} />
-      <rect x={107} y={129} width={3} height={3} fill={N.bladeHi} />
-      <rect x={130} y={129} width={3} height={3} fill={N.bladeHi} />
-      {/* breather / mouth guard */}
-      <path d="M112 143 L128 143 M116 140 L116 146 M120 140 L120 146 M124 140 L124 146" stroke={N.iceDeep} strokeWidth={2.2} opacity={0.8} />
-    </svg>
-  )
-}
 
 function Mark({ mark }: { mark: Mark }) {
   return mark === 'toy' ? <ToyHead /> : <NinjaHead />
