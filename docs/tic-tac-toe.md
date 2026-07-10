@@ -64,6 +64,13 @@ filled cells from `first`), the winner + winning line (`calcWin`), and draw
 (`board` full with no winner). The AI plays via a `useEffect` that fires when
 it's Ninja's turn in `ai` mode.
 
+## Thinking latency
+The computer does not reply instantly — the AI `useEffect` waits a random
+`THINK_MIN`–`THINK_MAX` (≈0.4–1.2s) via `setTimeout` before committing its
+move, so it reads as "thinking" (the "Ninja thinking…" status shows meanwhile).
+The timer is cleared on cleanup so a queued move never lands on a board that was
+reset / had its mode or difficulty changed mid-think.
+
 ## Responsiveness (important — regression-prone)
 The board must **not resize the card while marks are placed**, and must scale
 with the widget in both dimensions:

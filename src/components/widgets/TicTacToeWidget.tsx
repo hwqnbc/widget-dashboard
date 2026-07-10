@@ -26,6 +26,11 @@ type Difficulty = 'easy' | 'hard'
 /** Stable references so the AI effect doesn't loop on a fresh fallback array. */
 const EMPTY_BOARD: Cell[] = Array(9).fill(null)
 
+/** Random delay (ms) before the computer commits its move, to simulate
+ * thinking rather than replying instantly. */
+const THINK_MIN = 400
+const THINK_MAX = 1200
+
 const LINES: [number, number, number][] = [
   [0, 1, 2],
   [3, 4, 5],
@@ -176,14 +181,20 @@ export default function TicTacToeWidget({ id }: WidgetProps) {
     }>,
   ) => dispatch(updateWidgetData({ id, data: next }))
 
-  // Vs-computer: let the ninja (AI) answer once it's its turn.
+  // Vs-computer: let the ninja (AI) answer once it's its turn, after a short
+  // random "thinking" pause. The timer is cleared if the game state changes
+  // (New game, mode/difficulty toggle, Pass) so no stale move lands.
   useEffect(() => {
     if (mode !== 'ai' || winner || isDraw || turn !== 'ninja') return
-    const move = difficulty === 'hard' ? bestMove(board) : easyMove(board)
-    if (move < 0) return
-    const b = board.slice()
-    b[move] = 'ninja'
-    setGame({ board: b })
+    const delay = THINK_MIN + Math.random() * (THINK_MAX - THINK_MIN)
+    const timer = setTimeout(() => {
+      const move = difficulty === 'hard' ? bestMove(board) : easyMove(board)
+      if (move < 0) return
+      const b = board.slice()
+      b[move] = 'ninja'
+      setGame({ board: b })
+    }, delay)
+    return () => clearTimeout(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [board, mode, difficulty, winner, isDraw, turn])
 
