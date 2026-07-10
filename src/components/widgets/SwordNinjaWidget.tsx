@@ -1,6 +1,8 @@
 import { useRef, useState } from 'react'
 import { Box, keyframes } from '@mui/material'
 import { N } from './characters/ninjaPalette'
+import Hand from './characters/Hand'
+import TapStage from './TapStage'
 
 /** A katana in local coords: hilt at (0,0), blade pointing up (−y). Hard edges. */
 function Katana() {
@@ -20,19 +22,6 @@ function Katana() {
       {/* pommel cap */}
       <path d="M-4.2 24 L4.2 24 L3.4 28 L-3.4 28 Z" fill={N.guard} stroke={N.line} strokeWidth={0.8} />
     </g>
-  )
-}
-
-/** Open C-grip hand centred at (cx, cy). */
-function Hand({ cx, cy }: { cx: number; cy: number }) {
-  return (
-    <path
-      d={`M${cx - 7} ${cy + 5} A 8 8 0 1 1 ${cx + 7} ${cy + 5}`}
-      fill="none"
-      stroke={N.robe}
-      strokeWidth={7}
-      strokeLinecap="round"
-    />
   )
 }
 
@@ -95,23 +84,9 @@ export default function SwordNinjaWidget() {
     : `${drawn ? drawArm : sheatheArm} ${DUR} ${EASE} forwards`
 
   return (
-    <Box
-      component="button"
-      type="button"
+    <TapStage
       onClick={toggle}
-      aria-label={drawn ? 'Sheathe the sword' : 'Draw the sword'}
-      sx={{
-        height: '100%',
-        width: '100%',
-        p: 0,
-        border: 'none',
-        background: 'none',
-        cursor: 'pointer',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        '& svg': { maxHeight: '100%', width: 'auto' },
-      }}
+      ariaLabel={drawn ? 'Sheathe the sword' : 'Draw the sword'}
     >
       <svg
         viewBox="0 0 240 380"
@@ -149,7 +124,7 @@ export default function SwordNinjaWidget() {
         {/* ===== left arm (static) ===== */}
         <path d="M95 198 C80 212 76 240 82 262" stroke={N.robe} strokeWidth={16} strokeLinecap="round" fill="none" />
         <path d="M74 250 L86 254" stroke={N.iceMid} strokeWidth={4} />
-        <Hand cx={84} cy={266} />
+        <Hand cx={84} cy={266} stroke={N.robe} r={8} />
 
         {/* ===== torso (crisp trapezoid) ===== */}
         <path d="M90 190 L150 190 L160 296 L80 296 Z" fill={N.ice} stroke={N.iceDeep} strokeWidth={2.5} />
@@ -240,9 +215,9 @@ export default function SwordNinjaWidget() {
         >
           <path d="M150 198 C166 210 172 236 166 258" stroke={N.robe} strokeWidth={16} strokeLinecap="round" fill="none" />
           <path d="M172 248 L160 252" stroke={N.iceMid} strokeWidth={4} />
-          <Hand cx={166} cy={262} />
+          <Hand cx={166} cy={262} stroke={N.robe} r={8} />
         </Box>
       </svg>
-    </Box>
+    </TapStage>
   )
 }

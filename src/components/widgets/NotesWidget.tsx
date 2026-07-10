@@ -1,15 +1,13 @@
 import { TextField } from '@mui/material'
-import { useAppDispatch, useAppSelector } from '../../app/hooks'
+import { useAppDispatch } from '../../app/hooks'
 import { updateWidgetData } from '../../features/widgets/widgetsSlice'
+import { useWidgetField } from '../../features/widgets/useWidgetField'
 import type { WidgetProps } from '../../registry/widgetRegistry'
 
 /** A scratchpad whose text is persisted in the widget's redux data. */
 export default function NotesWidget({ id }: WidgetProps) {
   const dispatch = useAppDispatch()
-  const text = useAppSelector((state) => {
-    const inst = state.widgets.instances.find((w) => w.id === id)
-    return typeof inst?.data.text === 'string' ? inst.data.text : ''
-  })
+  const text = useWidgetField(id, 'text', '')
 
   return (
     <TextField

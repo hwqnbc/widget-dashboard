@@ -1,14 +1,9 @@
-import { useEffect, useState } from 'react'
 import { Box, Typography } from '@mui/material'
+import { useNow } from '../../hooks/useNow'
 
 /** Displays the live local time, updating once per second. */
 export default function ClockWidget() {
-  const [now, setNow] = useState(() => new Date())
-
-  useEffect(() => {
-    const id = setInterval(() => setNow(new Date()), 1000)
-    return () => clearInterval(id)
-  }, [])
+  const now = useNow()
 
   return (
     <Box

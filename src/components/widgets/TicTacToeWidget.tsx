@@ -8,8 +8,9 @@ import {
   Typography,
   keyframes,
 } from '@mui/material'
-import { useAppDispatch, useAppSelector } from '../../app/hooks'
+import { useAppDispatch } from '../../app/hooks'
 import { updateWidgetData } from '../../features/widgets/widgetsSlice'
+import { useWidgetField } from '../../features/widgets/useWidgetField'
 import type { WidgetProps } from '../../registry/widgetRegistry'
 import ToyHead from './characters/ToyHead'
 import { TOY } from './characters/toyPalette'
@@ -145,23 +146,18 @@ const cellGlow = keyframes`
 export default function TicTacToeWidget({ id }: WidgetProps) {
   const dispatch = useAppDispatch()
 
-  const board = useAppSelector((state) => {
-    const inst = state.widgets.instances.find((w) => w.id === id)
-    const b = inst?.data.board
-    return Array.isArray(b) && b.length === 9 ? (b as Cell[]) : EMPTY_BOARD
-  })
-  const mode = useAppSelector((state) => {
-    const inst = state.widgets.instances.find((w) => w.id === id)
-    return inst?.data.mode === 'ai' ? 'ai' : 'pvp'
-  }) as Mode
-  const difficulty = useAppSelector((state) => {
-    const inst = state.widgets.instances.find((w) => w.id === id)
-    return inst?.data.difficulty === 'hard' ? 'hard' : 'easy'
-  }) as Difficulty
-  const first = useAppSelector((state) => {
-    const inst = state.widgets.instances.find((w) => w.id === id)
-    return inst?.data.first === 'ninja' ? 'ninja' : 'toy'
-  }) as Mark
+  const board = useWidgetField<Cell[]>(id, 'board', EMPTY_BOARD, (b) =>
+    Array.isArray(b) && b.length === 9 ? (b as Cell[]) : undefined,
+  )
+  const mode = useWidgetField<Mode>(id, 'mode', 'pvp', (v) =>
+    v === 'ai' ? 'ai' : 'pvp',
+  )
+  const difficulty = useWidgetField<Difficulty>(id, 'difficulty', 'easy', (v) =>
+    v === 'hard' ? 'hard' : 'easy',
+  )
+  const first = useWidgetField<Mark>(id, 'first', 'toy', (v) =>
+    v === 'ninja' ? 'ninja' : 'toy',
+  )
 
   const result = calcWin(board)
   const winner = result?.winner ?? null

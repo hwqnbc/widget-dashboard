@@ -1,32 +1,9 @@
 import { useState } from 'react'
 import { Box, keyframes } from '@mui/material'
-
-/** Toy-figure palette (copied from characters/ToyFigure). */
-const T = {
-  teal: '#16b3a3',
-  tealShade: '#0d897c',
-  tealHi: '#67dccf',
-  skin: '#efb188',
-  skinShade: '#d4895f',
-  leg: '#bcdb9e',
-  legShade: '#95b675',
-  badge: '#d4322a',
-  shell: '#f3c20b',
-  line: '#1f3f3b',
-}
-
-/** An open "C"-shaped gripper hand centred at (cx, cy). */
-function Hand({ cx, cy }: { cx: number; cy: number }) {
-  return (
-    <path
-      d={`M${cx - 8} ${cy + 6} A 9 9 0 1 1 ${cx + 8} ${cy + 6}`}
-      fill="none"
-      stroke={T.teal}
-      strokeWidth={7}
-      strokeLinecap="round"
-    />
-  )
-}
+import { TOY as T } from './characters/toyPalette'
+import Hand from './characters/Hand'
+import { ToyLegs, ToyNeck, ToyTorso, ToyCapAndFace } from './characters/toyParts'
+import TapStage from './TapStage'
 
 // The forearm hinges at the elbow so the hand bobs up and down; the upper arm
 // stays put. The two forearms share this cycle, and mirror geometry makes the
@@ -53,7 +30,8 @@ const CYCLE = '0.5s'
 /**
  * The toy minifigure doing the "6 7" meme: tap to make its hands bounce up and
  * down in alternation while a big 6 and 7 pop in at its sides. Tap again to
- * stop. Reuses ToyFigure's static body with independently animatable arms.
+ * stop. Reuses ToyFigure's static body (via toyParts) with independently
+ * animatable arms.
  */
 export default function SixSevenWidget() {
   const [playing, setPlaying] = useState(false)
@@ -75,30 +53,12 @@ export default function SixSevenWidget() {
   })
 
   return (
-    <Box
-      component="button"
-      type="button"
+    <TapStage
       onClick={() => setPlaying((p) => !p)}
-      aria-label={playing ? 'Stop the 6 7' : 'Start the 6 7'}
-      sx={{
-        height: '100%',
-        width: '100%',
-        p: 0,
-        border: 'none',
-        background: 'none',
-        cursor: 'pointer',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        '& svg': { maxHeight: '100%', width: 'auto' },
-      }}
+      ariaLabel={playing ? 'Stop the 6 7' : 'Start the 6 7'}
     >
       <svg viewBox="0 0 240 380" width="100%" height="100%" style={{ overflow: 'visible' }}>
-        {/* ---- legs ---- */}
-        <path d="M90 300 L88 358 C88 365 110 365 110 358 L112 300 Z" fill={T.leg} stroke={T.legShade} strokeWidth={2.5} strokeLinejoin="round" />
-        <path d="M128 300 L130 358 C130 365 152 365 152 358 L150 300 Z" fill={T.leg} stroke={T.legShade} strokeWidth={2.5} strokeLinejoin="round" />
-        <path d="M96 308 L94 352" stroke="#ffffff" strokeWidth={3} opacity={0.35} strokeLinecap="round" />
-        <path d="M134 308 L133 352" stroke="#ffffff" strokeWidth={3} opacity={0.3} strokeLinecap="round" />
+        <ToyLegs />
 
         {/* ---- arms (behind torso): fixed upper arm + elbow-hinged forearm ---- */}
         {/* left upper arm: shoulder (84,200) -> elbow (66,246), static */}
@@ -106,54 +66,19 @@ export default function SixSevenWidget() {
         {/* left forearm + hand: hinges about the elbow so the hand bobs */}
         <Box component="g" sx={forearmSx(66)}>
           <path d="M66 246 C56 256 48 266 42 274" stroke={T.teal} strokeWidth={18} strokeLinecap="round" fill="none" />
-          <Hand cx={40} cy={280} />
+          <Hand cx={40} cy={280} stroke={T.teal} />
         </Box>
         {/* right upper arm: shoulder (156,200) -> elbow (174,246), static */}
         <path d="M156 200 C164 216 170 232 174 246" stroke={T.teal} strokeWidth={18} strokeLinecap="round" fill="none" />
         {/* right forearm + hand: hinges about the elbow (mirror -> alternates) */}
         <Box component="g" sx={forearmSx(174)}>
           <path d="M174 246 C184 256 192 266 198 274" stroke={T.teal} strokeWidth={18} strokeLinecap="round" fill="none" />
-          <Hand cx={200} cy={280} />
+          <Hand cx={200} cy={280} stroke={T.teal} />
         </Box>
 
-        {/* ---- neck ---- */}
-        <rect x={106} y={170} width={28} height={18} fill={T.skin} stroke={T.skinShade} strokeWidth={1.5} />
-
-        {/* ---- torso (flared) ---- */}
-        <path
-          d="M82 184 C80 182 80 186 80 190 L70 288 C69 296 73 301 82 301 L158 301 C167 301 171 296 170 288 L160 190 C160 186 160 182 158 184 C145 182 132 187 120 187 C108 187 95 182 82 184 Z"
-          fill={T.teal}
-          stroke={T.tealShade}
-          strokeWidth={2.5}
-          strokeLinejoin="round"
-        />
-        {/* gloss + shade */}
-        <path d="M94 196 C89 230 89 262 96 292" stroke="#ffffff" strokeWidth={6} opacity={0.22} strokeLinecap="round" fill="none" />
-        <path d="M150 196 C156 230 156 262 150 292" stroke={T.tealShade} strokeWidth={8} opacity={0.3} strokeLinecap="round" fill="none" />
-
-        {/* ---- chest badge (generic scallop emblem, not a real logo) ---- */}
-        <rect x={104} y={250} width={32} height={13} rx={2} fill={T.badge} stroke="#9a1f19" strokeWidth={1} />
-        <path d="M104 256 H136 M110 256 V263 M116 256 V263 M122 256 V263 M128 256 V263" stroke="#ffd9c0" strokeWidth={0.8} opacity={0.7} />
-        <path d="M120 232 C107 232 102 244 105 250 L135 250 C138 244 133 232 120 232 Z" fill={T.shell} stroke="#b8910a" strokeWidth={1.2} strokeLinejoin="round" />
-        <path d="M120 250 L113 234 M120 250 L120 232 M120 250 L127 234" stroke="#b8910a" strokeWidth={1} />
-
-        {/* ---- head ---- */}
-        <path d="M80 110 C78 150 84 174 120 176 C156 174 162 150 160 110 Z" fill={T.skin} stroke={T.skinShade} strokeWidth={2} />
-
-        {/* cap dome */}
-        <path d="M72 108 C70 62 94 46 120 46 C146 46 170 62 168 108 Z" fill={T.teal} stroke={T.tealShade} strokeWidth={2.5} strokeLinejoin="round" />
-        <path d="M92 60 C84 70 80 86 82 100" stroke={T.tealHi} strokeWidth={6} opacity={0.6} strokeLinecap="round" fill="none" />
-        {/* cap brim */}
-        <path d="M64 104 C40 104 30 114 42 120 C76 130 150 126 170 114 C176 110 172 104 164 104 C150 110 86 112 64 104 Z" fill={T.tealHi} stroke={T.tealShade} strokeWidth={2} strokeLinejoin="round" />
-
-        {/* eyebrows */}
-        <path d="M100 142 q7 -3 13 0" stroke={T.skinShade} strokeWidth={3} strokeLinecap="round" fill="none" />
-        <path d="M127 142 q6 -3 13 0" stroke={T.skinShade} strokeWidth={3} strokeLinecap="round" fill="none" />
-        {/* eyes */}
-        <ellipse cx={107} cy={151} rx={3.4} ry={4.6} fill={T.line} />
-        <ellipse cx={133} cy={151} rx={3.4} ry={4.6} fill={T.line} />
-        <circle cx={108} cy={149} r={1.1} fill="#fff" />
-        <circle cx={134} cy={149} r={1.1} fill="#fff" />
+        <ToyNeck />
+        <ToyTorso />
+        <ToyCapAndFace />
         {/* mouth (open, hyped) */}
         <ellipse cx={120} cy={165} rx={6} ry={5} fill="#7a3b34" stroke={T.line} strokeWidth={1.2} />
 
@@ -191,6 +116,6 @@ export default function SixSevenWidget() {
           7
         </Box>
       </svg>
-    </Box>
+    </TapStage>
   )
 }

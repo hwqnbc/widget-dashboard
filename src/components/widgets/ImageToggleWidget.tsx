@@ -1,10 +1,12 @@
 import { Box, Button } from '@mui/material'
 import SwapHorizIcon from '@mui/icons-material/SwapHoriz'
-import { useAppDispatch, useAppSelector } from '../../app/hooks'
+import { useAppDispatch } from '../../app/hooks'
 import { updateWidgetData } from '../../features/widgets/widgetsSlice'
+import { useWidgetField } from '../../features/widgets/useWidgetField'
 import type { WidgetProps } from '../../registry/widgetRegistry'
 import Boy from './characters/Boy'
 import ToyFigure from './characters/ToyFigure'
+import TapStage from './TapStage'
 
 type Character = 'toy' | 'boy'
 
@@ -33,10 +35,9 @@ const faceSx = {
  */
 export default function ImageToggleWidget({ id }: WidgetProps) {
   const dispatch = useAppDispatch()
-  const character = useAppSelector((state) => {
-    const inst = state.widgets.instances.find((w) => w.id === id)
-    return inst?.data.character === 'boy' ? 'boy' : 'toy'
-  }) as Character
+  const character = useWidgetField<Character>(id, 'character', 'toy', (v) =>
+    v === 'boy' ? 'boy' : 'toy',
+  )
 
   const other = character === 'toy' ? 'boy' : 'toy'
   // Toy is the front face (0°); Boy is the back face (180°).
@@ -56,21 +57,10 @@ export default function ImageToggleWidget({ id }: WidgetProps) {
       }}
     >
       {/* Tappable flip card — morphs between the two characters. */}
-      <Box
-        component="button"
-        type="button"
+      <TapStage
         onClick={toggle}
-        aria-label={`Switch character (showing ${LABELS[character]})`}
-        sx={{
-          flexGrow: 1,
-          width: '100%',
-          minHeight: 0,
-          p: 0,
-          border: 'none',
-          background: 'none',
-          cursor: 'pointer',
-          perspective: '900px',
-        }}
+        ariaLabel={`Switch character (showing ${LABELS[character]})`}
+        sx={{ flexGrow: 1, height: 'auto', minHeight: 0, perspective: '900px' }}
       >
         <Box
           sx={{
@@ -91,7 +81,7 @@ export default function ImageToggleWidget({ id }: WidgetProps) {
             <Boy pose="idle" />
           </Box>
         </Box>
-      </Box>
+      </TapStage>
 
       <Button
         variant="outlined"

@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
 import { Box, keyframes } from '@mui/material'
 import ToyHead from './characters/ToyHead'
+import { useNow } from '../../hooks/useNow'
 
 /** Claude's signature warm terracotta. */
 const CLAUDE_ORANGE = '#D97757'
@@ -17,12 +17,7 @@ const spin = keyframes`
 
 /** An analog "round" clock with the toy figure's head orbiting the face. */
 export default function RoundClockWidget() {
-  const [now, setNow] = useState(() => new Date())
-
-  useEffect(() => {
-    const id = setInterval(() => setNow(new Date()), 1000)
-    return () => clearInterval(id)
-  }, [])
+  const now = useNow()
 
   const seconds = now.getSeconds()
   const minutes = now.getMinutes()
