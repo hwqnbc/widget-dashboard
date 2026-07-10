@@ -57,5 +57,7 @@ holes become white discs carrying a character head.
 
 ## Verifying
 `npm run build` + `npm run lint`, then drive it headless (Chromium at
-`/opt/pw-browsers/chromium`). Columns expose `data-testid="c4-col-<0-6>"` and
-slots `c4-slot-<index>` (0–41).
+`/opt/pw-browsers/chromium`). The board is a 7×6 CSS grid of cells, each
+`data-testid="c4-slot-<index>"` (0–41) with a `data-col`; clicking any cell
+drops into that column. Each cell centres a true circular disc (sized off the
+cell's smaller dimension) so the head SVGs always sit centred.

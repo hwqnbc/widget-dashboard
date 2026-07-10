@@ -372,82 +372,73 @@ export default function Connect4Widget({ id }: WidgetProps) {
             width: 'min(100cqw, calc(100cqh * 7 / 6))',
             maxWidth: '100%',
             aspectRatio: '7 / 6',
-            display: 'flex',
-            gap: '3%',
-            p: '2.4%',
+            display: 'grid',
+            gridTemplateColumns: `repeat(${COLS}, 1fr)`,
+            gridTemplateRows: `repeat(${ROWS}, 1fr)`,
+            gap: '2%',
+            p: '2%',
             bgcolor: C4_FRAME,
             borderRadius: 2,
           }}
         >
-          {Array.from({ length: COLS }, (_, c) => {
-            const colPlayable = !locked && !board[c]
+          {board.map((cell, i) => {
+            const col = i % COLS
+            const isWin = result?.line.includes(i) ?? false
+            const playable = !locked && !board[col]
             return (
               <Box
-                key={c}
-                component="button"
-                type="button"
-                data-testid={`c4-col-${c}`}
-                className="widget-no-drag"
-                onClick={() => playCol(c)}
-                disabled={locked || !!board[c]}
+                key={i}
+                data-testid={`c4-slot-${i}`}
+                data-col={col}
+                onClick={() => playCol(col)}
                 sx={{
-                  flex: 1,
                   minWidth: 0,
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: '8%',
-                  p: 0,
-                  border: 'none',
-                  background: 'none',
-                  cursor: colPlayable ? 'pointer' : 'default',
-                  '&:not(:disabled):hover': { filter: 'brightness(1.12)' },
+                  minHeight: 0,
+                  display: 'grid',
+                  placeItems: 'center',
+                  cursor: playable ? 'pointer' : 'default',
                 }}
               >
-                {Array.from({ length: ROWS }, (_, r) => {
-                  const i = r * COLS + c
-                  const cell = board[i]
-                  const isWin = result?.line.includes(i) ?? false
-                  return (
+                {/* The hole / disc — a true circle sized off the cell's smaller
+                    dimension so heads always sit centred. */}
+                <Box
+                  sx={{
+                    width: '86%',
+                    aspectRatio: '1 / 1',
+                    maxHeight: '86%',
+                    borderRadius: '50%',
+                    overflow: 'hidden',
+                    display: 'grid',
+                    placeItems: 'center',
+                    bgcolor: cell ? 'background.paper' : 'rgba(0,0,0,0.28)',
+                    boxShadow: cell ? 'none' : 'inset 0 2px 4px rgba(0,0,0,0.35)',
+                    ...(isWin && {
+                      color: winColor,
+                      animation: `${cellGlow} 1s ease-in-out infinite`,
+                    }),
+                  }}
+                >
+                  {cell && (
                     <Box
-                      key={r}
-                      data-testid={`c4-slot-${i}`}
                       sx={{
-                        flex: 1,
-                        minWidth: 0,
-                        minHeight: 0,
-                        aspectRatio: '1 / 1',
-                        borderRadius: '50%',
-                        overflow: 'hidden',
+                        width: '80%',
+                        height: '80%',
                         display: 'grid',
                         placeItems: 'center',
-                        bgcolor: cell ? 'background.paper' : 'rgba(0,0,0,0.28)',
-                        boxShadow: cell ? 'none' : 'inset 0 2px 4px rgba(0,0,0,0.35)',
-                        ...(isWin && {
-                          color: winColor,
-                          animation: `${cellGlow} 1s ease-in-out infinite`,
-                        }),
+                        color: cell === 'toy' ? TOY.teal : N.iceDeep,
+                        animation:
+                          [
+                            i === lastDrop ? `${dropAnim} 0.45s cubic-bezier(.3,.1,.3,1)` : '',
+                            isWin ? `${winGlow} 1s ease-in-out infinite` : '',
+                          ]
+                            .filter(Boolean)
+                            .join(', ') || undefined,
                       }}
                     >
-                      {cell && (
-                        <Box
-                          sx={{
-                            width: '86%',
-                            height: '86%',
-                            color: cell === 'toy' ? TOY.teal : N.iceDeep,
-                            animation: [
-                              i === lastDrop ? `${dropAnim} 0.45s cubic-bezier(.3,.1,.3,1)` : '',
-                              isWin ? `${winGlow} 1s ease-in-out infinite` : '',
-                            ]
-                              .filter(Boolean)
-                              .join(', ') || undefined,
-                          }}
-                        >
-                          <Disc mark={cell} />
-                        </Box>
-                      )}
+                      <Disc mark={cell} />
                     </Box>
-                  )
-                })}
+                  )}
+                </Box>
               </Box>
             )
           })}
