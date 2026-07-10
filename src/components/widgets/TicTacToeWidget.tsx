@@ -16,6 +16,12 @@ import type { WidgetProps } from '../../registry/widgetRegistry'
 type Mark = 'toy' | 'ninja'
 type Cell = Mark | null
 type Mode = 'pvp' | 'ai'
+type Difficulty = 'easy' | 'hard'
+
+/** On Easy, the fraction of ninja turns played as a random (imperfect) move
+ * rather than the optimal one — enough to give the human real openings while
+ * the AI can still win by chance. */
+const EASY_RANDOM = 0.6
 
 /** Stable references so the AI effect doesn't loop on a fresh fallback array. */
 const EMPTY_BOARD: Cell[] = Array(9).fill(null)
@@ -186,6 +192,19 @@ function bestMove(board: Cell[]): number {
   return move
 }
 
+/** A uniformly random empty cell, or -1 if the board is full. */
+function randomMove(board: Cell[]): number {
+  const avail = board.map((c, i) => (c ? -1 : i)).filter((i) => i >= 0)
+  if (avail.length === 0) return -1
+  return avail[Math.floor(Math.random() * avail.length)]
+}
+
+/** Easy: mostly random (imperfect) play, sometimes optimal — beatable but the
+ * AI never deliberately loses and can still win by chance. */
+function easyMove(board: Cell[]): number {
+  return Math.random() < EASY_RANDOM ? randomMove(board) : bestMove(board)
+}
+
 /** Pulsing glow on the three marks that make the winning line. */
 const winGlow = keyframes`
   0%, 100% { filter: drop-shadow(0 0 4px currentColor); transform: scale(1); }
@@ -210,25 +229,30 @@ export default function TicTacToeWidget({ id }: WidgetProps) {
     const inst = state.widgets.instances.find((w) => w.id === id)
     return inst?.data.mode === 'ai' ? 'ai' : 'pvp'
   }) as Mode
+  const difficulty = useAppSelector((state) => {
+    const inst = state.widgets.instances.find((w) => w.id === id)
+    return inst?.data.difficulty === 'hard' ? 'hard' : 'easy'
+  }) as Difficulty
 
   const result = calcWin(board)
   const winner = result?.winner ?? null
   const isDraw = !winner && board.every(Boolean)
   const turn = turnOf(board)
 
-  const setGame = (next: Partial<{ board: Cell[]; mode: Mode }>) =>
-    dispatch(updateWidgetData({ id, data: next }))
+  const setGame = (
+    next: Partial<{ board: Cell[]; mode: Mode; difficulty: Difficulty }>,
+  ) => dispatch(updateWidgetData({ id, data: next }))
 
   // Vs-computer: let the ninja (AI) answer once it's its turn.
   useEffect(() => {
     if (mode !== 'ai' || winner || isDraw || turn !== 'ninja') return
-    const move = bestMove(board)
+    const move = difficulty === 'hard' ? bestMove(board) : easyMove(board)
     if (move < 0) return
     const b = board.slice()
     b[move] = 'ninja'
     setGame({ board: b })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [board, mode, winner, isDraw, turn])
+  }, [board, mode, difficulty, winner, isDraw, turn])
 
   const play = (i: number) => {
     if (board[i] || winner || isDraw) return
@@ -243,6 +267,11 @@ export default function TicTacToeWidget({ id }: WidgetProps) {
     if (!next || next === mode) return
     setGame({ mode: next, board: Array(9).fill(null) })
   }
+  const changeDifficulty = () =>
+    setGame({
+      difficulty: difficulty === 'easy' ? 'hard' : 'easy',
+      board: Array(9).fill(null),
+    })
 
   const status = winner
     ? `${winner === 'toy' ? 'Toy' : 'Ninja'} wins!`
@@ -279,6 +308,18 @@ export default function TicTacToeWidget({ id }: WidgetProps) {
           vs Computer
         </ToggleButton>
       </ToggleButtonGroup>
+
+      {mode === 'ai' && (
+        <Button
+          className="widget-no-drag"
+          size="small"
+          variant="outlined"
+          onClick={changeDifficulty}
+          sx={{ textTransform: 'none', alignSelf: 'center', py: 0.25 }}
+        >
+          Difficulty: {difficulty === 'easy' ? 'Easy' : 'Hard'}
+        </Button>
+      )}
 
       <Box
         sx={{
