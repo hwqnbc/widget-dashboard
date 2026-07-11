@@ -19,6 +19,8 @@ import { N } from './characters/ninjaPalette'
 import WinnerCelebration from './WinnerCelebration'
 import PlayerBadge from './PlayerBadge'
 import ConfirmDialog from './ConfirmDialog'
+import TurnBanner from './TurnBanner'
+import { useHandoff } from '../../hooks/useHandoff'
 
 /** The two players are the Toy and Ninja heads instead of red / yellow discs. */
 type Mark = 'toy' | 'ninja'
@@ -245,6 +247,7 @@ export default function Connect4Widget({ id }: WidgetProps) {
   const [pending, setPending] = useState<
     { mode?: Mode; difficulty?: Difficulty } | null
   >(null)
+  const hand = useHandoff()
 
   const board = useWidgetField<Cell[]>(id, 'board', EMPTY_BOARD, (b) =>
     Array.isArray(b) && b.length === SIZE ? (b as Cell[]) : undefined,
@@ -292,15 +295,20 @@ export default function Connect4Widget({ id }: WidgetProps) {
   }, [board, mode, difficulty, winner, isDraw, turn])
 
   const playCol = (col: number) => {
-    if (winner || isDraw) return
+    if (winner || isDraw || hand.player) return
     if (mode === 'ai' && turn === 'ninja') return // AI's move
     const res = dropInto(board, col, turn)
     if (!res) return // column full
     setLastDrop(res.index)
     setGame({ board: res.board })
+    // 2-player hand-off: announce the next player unless this move ended it.
+    if (mode === 'pvp' && !calcWin(res.board) && legalCols(res.board).length > 0) {
+      hand.announce(turn === 'toy' ? 'ninja' : 'toy')
+    }
   }
 
   const reset = (extra: Partial<{ mode: Mode; difficulty: Difficulty }> = {}) => {
+    hand.clear()
     setLastDrop(null)
     setGame({ board: Array(SIZE).fill(null), first: 'toy', ...extra })
   }
@@ -465,6 +473,10 @@ export default function Connect4Widget({ id }: WidgetProps) {
           >
             <WinnerCelebration winner={winner} />
           </Box>
+        )}
+
+        {hand.player && !winner && !isDraw && (
+          <TurnBanner player={hand.player} onSkip={hand.clear} />
         )}
       </Box>
 

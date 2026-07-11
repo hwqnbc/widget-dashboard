@@ -66,6 +66,13 @@ filled cells from `first`), the winner + winning line (`calcWin`), and draw
 (`board` full with no winner). The AI plays via a `useEffect` that fires when
 it's Ninja's turn in `ai` mode.
 
+## Turn hand-off (2-Player)
+In `pvp` mode a non-winning move shows a brief `TurnBanner` overlay ("Ninja's
+turn", tinted to `PLAYER_COLOR`) that locks the board, auto-dismisses after ~1s
+(`useHandoff`), and can be tapped to skip — preventing mis-clicks into the next
+player's move. A winning move shows the celebration instead; vs-Computer has no
+banner (the thinking delay covers it).
+
 ## Thinking latency
 The computer does not reply instantly — the AI `useEffect` waits a random
 `THINK_MIN`–`THINK_MAX` (≈0.4–1.2s) via `setTimeout` before committing its

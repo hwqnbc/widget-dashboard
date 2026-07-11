@@ -99,9 +99,19 @@ reported and asked to fix, captured so they don't recur.
     than "Toy to move"; on game end the winner's looping `WinnerCelebration`
     overlays the dimmed board (the winning-line glow stays visible behind).
 
+18. **Gate human→human hand-offs.** In pass-and-play, a turn pass with no pause
+    invites mis-clicks into the next player's move. A brief `TurnBanner` overlay
+    ("X's turn", tinted to `PLAYER_COLOR`) that locks the board, auto-dismisses
+    (~1s via `useHandoff`) and is tap-to-skip fixes it. Announce **only** on a
+    genuine pass — never on reset, never when the move ended the game, and never
+    on the computer's turn (its thinking delay already gates). Colour-code the
+    players (`PLAYER_COLOR`: toy teal / ninja ice-blue) so the active one is
+    obvious. The banner's overlay sits on top and intercepts taps, which is a
+    second guard on top of the handler's `if (hand.player) return`.
+
 ## Reuse
 
-18. Extract shared pieces rather than inlining: character heads (`ToyHead`,
+19. Extract shared pieces rather than inlining: character heads (`ToyHead`,
     `NinjaHead`) and their palettes (`toyPalette`, `ninjaPalette`) as **their own
     modules** — a component file that also exports a constant trips the
     `react-refresh/only-export-components` lint. Also shared: `PlayerBadge`,
@@ -111,15 +121,15 @@ reported and asked to fix, captured so they don't recur.
 
 ## Verification & ops
 
-19. Every change: `npm run build` (tsc + vite) **and** `npm run lint`, then drive it
+20. Every change: `npm run build` (tsc + vite) **and** `npm run lint`, then drive it
     in headless Chromium (`/opt/pw-browsers/chromium`) via `data-testid` hooks.
     Watch for assertions polluted by new UI — counting `svg[aria-label="Toy figure"]`
     globally once included the new footer `PlayerBadge` head, not just board marks.
 
-20. Environment quirks: `pkill -f vite` returns exit 144 and aborts a compound
+21. Environment quirks: `pkill -f vite` returns exit 144 and aborts a compound
     bash command — run commit/push separately. The Pages green check can't be
     confirmed from this environment (cached Actions API, `github.io` blocked) —
     hand the user the URL instead.
 
-21. Branch hygiene: when the working branch is fully merged, reset it from
+22. Branch hygiene: when the working branch is fully merged, reset it from
     `origin/main` before new work; fast-forward merges keep history linear.

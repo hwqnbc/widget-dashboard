@@ -52,6 +52,11 @@ Same as Tic-Tac-Toe: a `PlayerBadge` (head icon + "to move" / "thinking…" /
 - **Winning-line glow** — the four winning slots + discs pulse, tinted to the
   winner (`winGlow` / `cellGlow`).
 
+## Turn hand-off (2-Player)
+Same as Tic-Tac-Toe: in `pvp` a non-winning drop shows a brief `TurnBanner`
+overlay (tinted `TurnBanner`/`useHandoff`, ~1s, tap-to-skip) that locks the
+board so you can't mis-click into the next player's move; vs-Computer has none.
+
 ## Connect-4-specific bits
 - **Animated drop:** a component `useState lastDrop` holds the just-filled index
   (set in the human handler and the AI effect); that disc gets the `dropAnim`

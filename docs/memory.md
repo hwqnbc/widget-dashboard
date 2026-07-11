@@ -39,6 +39,15 @@ Card faces are **motif × background colour**; a pair = same `"motif:colour"`.
 in an effect when `cards.length !== size*size` (first mount / size change / New
 game) — keeps the reducer pure. Derived: `gameOver` (all matched), `winner`.
 
+## Turn hand-off & player colours
+On a turn pass (mismatch, or a non-final match under "always pass") a
+`TurnBanner` overlay announces the next player ("Ninja's turn", tinted to
+`PLAYER_COLOR`), locks the board, auto-dismisses after ~1s (`useHandoff`), and
+can be tapped to skip — so you can't mis-click into the next player's move. The
+two score badges are tinted to each player's colour (`PLAYER_COLOR`: toy teal,
+ninja ice-blue), the active one bordered/filled, so whose turn it is reads at a
+glance.
+
 ## Resolve timing
 A `useEffect` on `flipped` resolves a two-card flip after a reveal delay
 (match ~600ms, mismatch ~1100ms) — mark matched + score (+ keep/pass turn per

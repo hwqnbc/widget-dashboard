@@ -16,6 +16,9 @@ import NinjaHead from './characters/NinjaHead'
 import PlayerBadge from './PlayerBadge'
 import WinnerCelebration from './WinnerCelebration'
 import ConfirmDialog from './ConfirmDialog'
+import TurnBanner from './TurnBanner'
+import { PLAYER_COLOR } from './playerColors'
+import { useHandoff } from '../../hooks/useHandoff'
 
 type Player = 'toy' | 'ninja'
 type Size = 4 | 6
@@ -161,6 +164,7 @@ function MemoryCard({
 export default function MemoryWidget({ id }: WidgetProps) {
   const dispatch = useAppDispatch()
   const [pending, setPending] = useState<{ size?: Size; rule?: Rule } | null>(null)
+  const hand = useHandoff()
 
   const size = useWidgetField<Size>(id, 'size', 4, (v) => (v === 6 ? 6 : 4))
   const cards = useWidgetField<string[]>(id, 'cards', NO_STR, (v) =>
@@ -208,6 +212,7 @@ export default function MemoryWidget({ id }: WidgetProps) {
   ) => dispatch(updateWidgetData({ id, data: next }))
 
   const reset = (opts: { size?: Size; rule?: Rule } = {}) => {
+    hand.clear()
     const nextSize = opts.size ?? size
     setGame({
       size: nextSize,
@@ -243,8 +248,11 @@ export default function MemoryWidget({ id }: WidgetProps) {
             flipped: [],
             turn: rule === 'again' ? turn : other,
           })
+          // "always pass" hands over — unless that match ended the game.
+          if (rule === 'pass' && !m.every(Boolean)) hand.announce(other)
         } else {
           setGame({ flipped: [], turn: other })
+          hand.announce(other)
         }
       },
       isMatch ? 600 : 1100,
@@ -254,7 +262,7 @@ export default function MemoryWidget({ id }: WidgetProps) {
   }, [flipped, cards, matched, scores, turn, rule])
 
   const flip = (i: number) => {
-    if (gameOver || flipped.length >= 2) return
+    if (gameOver || flipped.length >= 2 || hand.player) return
     if (matched[i] || flipped.includes(i)) return
     setGame({ flipped: [...flipped, i] })
   }
@@ -312,19 +320,24 @@ export default function MemoryWidget({ id }: WidgetProps) {
       </Stack>
 
       <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'center', px: 0.5 }}>
-        {(['toy', 'ninja'] as const).map((p) => (
-          <Box
-            key={p}
-            sx={{
-              px: 0.75,
-              py: 0.25,
-              borderRadius: 1,
-              bgcolor: !gameOver && turn === p ? 'action.selected' : 'transparent',
-            }}
-          >
-            <PlayerBadge mark={p} label={`${scores[p]}`} pulse={!gameOver && turn === p} />
-          </Box>
-        ))}
+        {(['toy', 'ninja'] as const).map((p) => {
+          const active = !gameOver && turn === p
+          return (
+            <Box
+              key={p}
+              sx={{
+                px: 0.75,
+                py: 0.25,
+                borderRadius: 1,
+                border: '2px solid',
+                borderColor: active ? PLAYER_COLOR[p] : 'transparent',
+                bgcolor: active ? `${PLAYER_COLOR[p]}22` : 'transparent',
+              }}
+            >
+              <PlayerBadge mark={p} label={`${scores[p]}`} pulse={active} />
+            </Box>
+          )
+        })}
       </Stack>
 
       <Box
@@ -365,6 +378,10 @@ export default function MemoryWidget({ id }: WidgetProps) {
             </Box>
           ))}
         </Box>
+
+        {hand.player && !gameOver && (
+          <TurnBanner player={hand.player} onSkip={hand.clear} />
+        )}
 
         {gameOver && (
           <Box

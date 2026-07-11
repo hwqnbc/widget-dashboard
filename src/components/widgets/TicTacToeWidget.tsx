@@ -19,6 +19,8 @@ import { N } from './characters/ninjaPalette'
 import WinnerCelebration from './WinnerCelebration'
 import PlayerBadge from './PlayerBadge'
 import ConfirmDialog from './ConfirmDialog'
+import TurnBanner from './TurnBanner'
+import { useHandoff } from '../../hooks/useHandoff'
 
 /** The two players are the toy head and the ninja head instead of X / O. */
 type Mark = 'toy' | 'ninja'
@@ -156,6 +158,7 @@ export default function TicTacToeWidget({ id }: WidgetProps) {
   const [pending, setPending] = useState<
     { mode?: Mode; difficulty?: Difficulty } | null
   >(null)
+  const hand = useHandoff()
 
   const board = useWidgetField<Cell[]>(id, 'board', EMPTY_BOARD, (b) =>
     Array.isArray(b) && b.length === 9 ? (b as Cell[]) : undefined,
@@ -205,15 +208,21 @@ export default function TicTacToeWidget({ id }: WidgetProps) {
   }, [board, mode, difficulty, winner, isDraw, turn])
 
   const play = (i: number) => {
-    if (board[i] || winner || isDraw) return
+    if (board[i] || winner || isDraw || hand.player) return
     if (mode === 'ai' && turn === 'ninja') return // AI's move — ignore taps
     const b = board.slice()
     b[i] = turn
     setGame({ board: b })
+    // 2-player hand-off: announce the next player unless this move ended it.
+    if (mode === 'pvp' && !calcWin(b) && !b.every(Boolean)) {
+      hand.announce(turn === 'toy' ? 'ninja' : 'toy')
+    }
   }
 
-  const reset = (extra: Partial<{ mode: Mode; difficulty: Difficulty }> = {}) =>
+  const reset = (extra: Partial<{ mode: Mode; difficulty: Difficulty }> = {}) => {
+    hand.clear()
     setGame({ board: Array(9).fill(null), first: 'toy', ...extra })
+  }
 
   // A move has been made and the game isn't over — a restart would lose it.
   const inProgress = !boardEmpty && !winner && !isDraw
@@ -359,6 +368,10 @@ export default function TicTacToeWidget({ id }: WidgetProps) {
           >
             <WinnerCelebration winner={winner} />
           </Box>
+        )}
+
+        {hand.player && !winner && !isDraw && (
+          <TurnBanner player={hand.player} onSkip={hand.clear} />
         )}
       </Box>
 
