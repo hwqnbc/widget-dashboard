@@ -8,6 +8,7 @@ export type WidgetType =
   | 'swordNinja'
   | 'ticTacToe'
   | 'connect4'
+  | 'memory'
 
 /** A widget placed on the board. `data` holds per-widget persisted state. */
 export interface WidgetInstance {

@@ -67,6 +67,12 @@ export const WIDGET_CATALOG: WidgetMeta[] = [
     description: 'Drop discs — Toy vs Ninja',
     defaultSize: { w: 5, h: 5, minW: 4, minH: 5 },
   },
+  {
+    type: 'memory',
+    title: 'Memory',
+    description: '2-player pairs — Toy vs Ninja',
+    defaultSize: { w: 5, h: 6, minW: 4, minH: 5 },
+  },
 ]
 
 export const widgetMetaByType = Object.fromEntries(
@@ -95,6 +101,16 @@ export function defaultWidgetData(type: WidgetType): Record<string, unknown> {
         mode: 'pvp',
         difficulty: 'medium',
         first: 'toy',
+      }
+    case 'memory':
+      return {
+        size: 4,
+        cards: [],
+        matched: [],
+        flipped: [],
+        turn: 'toy',
+        scores: { toy: 0, ninja: 0 },
+        rule: 'again',
       }
     case 'clock':
     default:
