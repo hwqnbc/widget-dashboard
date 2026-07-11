@@ -85,7 +85,9 @@ Connect 4 widget (7×6 board, depth-based Easy/Medium/Hard alpha-beta AI,
 animated disc drop; reuses the same modes, latency, pass button and glow). See
 `docs/memory.md` for the Memory widget (2-player pairs, 4×4/6×6, extensible
 motif×colour face registry, flip animation; reuses PlayerBadge, ConfirmDialog
-and WinnerCelebration).
+and WinnerCelebration). See `docs/archery.md` for the Archery widget (2-player
+projectile game, drag-to-aim slingshot under gravity, random archer heights,
+first to 5 hits; reuses the heads, PlayerBadge, TurnBanner and WinnerCelebration).
 
 **Read `docs/lessons.md` before building or tweaking a board / character /
 animation widget** — it collects the recurring refinements (grid cells that

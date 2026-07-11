@@ -73,6 +73,12 @@ export const WIDGET_CATALOG: WidgetMeta[] = [
     description: '2-player pairs — Toy vs Ninja',
     defaultSize: { w: 5, h: 6, minW: 4, minH: 5 },
   },
+  {
+    type: 'archery',
+    title: 'Archery',
+    description: 'Toy vs Ninja — drag to aim, first to 5 hits',
+    defaultSize: { w: 6, h: 5, minW: 5, minH: 5 },
+  },
 ]
 
 export const widgetMetaByType = Object.fromEntries(
@@ -111,6 +117,14 @@ export function defaultWidgetData(type: WidgetType): Record<string, unknown> {
         turn: 'toy',
         scores: { toy: 0, ninja: 0 },
         rule: 'again',
+      }
+    case 'archery':
+      return {
+        p1y: 0,
+        p2y: 0,
+        scores: { toy: 0, ninja: 0 },
+        turn: 'toy',
+        first: 'toy',
       }
     case 'clock':
     default:

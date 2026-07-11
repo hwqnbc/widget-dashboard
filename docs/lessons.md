@@ -133,3 +133,18 @@ reported and asked to fix, captured so they don't recur.
 
 22. Branch hygiene: when the working branch is fully merged, reset it from
     `origin/main` before new work; fast-forward merges keep history linear.
+
+## Physics / pointer interaction (Archery)
+
+23. **Projectile + drag aiming.** Keep world = SVG viewBox units and size the
+    container to the viewBox aspect ratio, so pointer→world is a straight scale
+    off `getBoundingClientRect` (no letterbox maths). Run the flight in
+    `requestAnimationFrame` (timestamp delta → `t`) and **`cancelAnimationFrame`
+    on unmount/reset**. Only the *outcome* (score, turn) is persisted — aiming
+    and the in-flight arrow are transient, so a mid-flight reload just returns to
+    the shooter's turn. Use unified **pointer events** (`onPointerDown/Move/Up` +
+    `setPointerCapture`, `touchAction:'none'`) so mouse and touch share one path.
+    Embed reused character `<svg>` heads inside the scene with `<foreignObject>`
+    so they scale with the viewBox. For deterministic tests, mirror the physics
+    constants, solve a launch that lands in the target hitbox, and invert the
+    slingshot mapping (`dragΔ = −v/K`) to synthesise the pointer drag.

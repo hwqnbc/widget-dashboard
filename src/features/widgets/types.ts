@@ -9,6 +9,7 @@ export type WidgetType =
   | 'ticTacToe'
   | 'connect4'
   | 'memory'
+  | 'archery'
 
 /** A widget placed on the board. `data` holds per-widget persisted state. */
 export interface WidgetInstance {
