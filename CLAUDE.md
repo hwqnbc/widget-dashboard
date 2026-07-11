@@ -86,3 +86,9 @@ animated disc drop; reuses the same modes, latency, pass button and glow). See
 `docs/memory.md` for the Memory widget (2-player pairs, 4×4/6×6, extensible
 motif×colour face registry, flip animation; reuses PlayerBadge, ConfirmDialog
 and WinnerCelebration).
+
+**Read `docs/lessons.md` before building or tweaking a board / character /
+animation widget** — it collects the recurring refinements (grid cells that
+resize the board, true-circle alignment, container-query board sizing, mobile
+tap handling, animation mount-flash, stable `useWidgetField` fallbacks, the
+"sane" Easy AI, confirm-guarding restarts, and verification/ops gotchas).

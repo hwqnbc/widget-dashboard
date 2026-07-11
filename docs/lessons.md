@@ -1,0 +1,125 @@
+# Widget lessons & refinements
+
+Hard-won fixes from building the game/character widgets (Round Clock, Six Seven,
+Sword Ninja, Tic-Tac-Toe, Connect 4, Memory). **Read this before building or
+tweaking a board / character / animation widget** — most entries are bugs a user
+reported and asked to fix, captured so they don't recur.
+
+## Layout & alignment (the ones that bit us most)
+
+1. **A grid board grew as pieces were placed.** CSS grid tracks default to
+   `min-*: auto`, so a placed SVG can push its `1fr` track past its share and
+   expand the board (which then spills into the scrollable card). **Fix:** every
+   grid cell gets `minWidth: 0; minHeight: 0` (and `overflow: 'hidden'` as a
+   safety net). Applied in Tic-Tac-Toe, Connect 4, Memory.
+
+2. **"Circles" rendered as ellipses and the SVG sat off-centre.** Connect 4's
+   first cut used flex columns with *mismatched* row/column gaps and
+   `aspectRatio` fighting `flex`, so holes were oval and heads weren't centred.
+   **Fix:** lay the board out as a real CSS grid (`repeat(n, 1fr)` both axes,
+   uniform `gap`) so cells are square, and render each disc as an inner circle
+   sized off one axis — `width: '86%'; aspectRatio: '1 / 1'` — centred with
+   `display:'grid'; placeItems:'center'`. A circle sized this way is always
+   round regardless of tiny cell non-squareness.
+
+3. **Board must fit the card in *both* dimensions and never overflow.** Sizing
+   off width alone overflowed vertically. Put the board in a
+   `containerType: 'size'` wrapper and size it with container-query units:
+   - square board: `width/height: 'min(100cqmin, <cap>px)'`
+   - non-square (Connect 4 is 7:6): `width: 'min(100cqw, calc(100cqh * 7 / 6))'`
+     plus `aspectRatio: '7 / 6'`.
+
+4. **`CardContent` is `overflow: 'auto'`.** Anything that spills past the widget
+   body flashes a scrollbar (the Round Clock's orbiting head did this; so did the
+   growing board). Keep content bounded — rules 1–3 prevent it; for decorative
+   overflow use `overflow: 'hidden'` on the widget root.
+
+5. **Centring an SVG with a non-square / asymmetric viewBox:** wrap it in a fixed
+   box with `placeItems:'center'`; if it must read on arbitrary background
+   colours, put it on a white disc (Memory cards, Connect 4 discs).
+
+## Touch / drag
+
+6. **react-grid-layout swallows taps.** Interactive controls inside a widget need
+   `className="widget-no-drag"` **and** `onMouseDown`+`onTouchStart`
+   `stopPropagation` — `onMouseDown` alone never fires on touch, which is why a
+   button felt dead on mobile. `WidgetBoard` sets `draggableCancel=".widget-no-drag"`.
+
+## SVG animation
+
+7. **One-shot `animation … forwards` plays on mount → a flash.** Gate it behind an
+   `animate`/`interacted` flag that is false until the first real interaction
+   (Sword Ninja draw; the looping-ninja win celebration flashed a sheathe on
+   mount until we deferred `animate` to the first loop tick).
+
+8. **To loop a toggle-based animation, toggle the state on an interval** and reuse
+   the existing one-shot keyframes — no keyframe rewrite (the winner celebration
+   loops the sword draw/sheathe this way).
+
+9. **Verifying animations:** pause `document.getAnimations()` and set
+   `currentTime`, or screenshot at the true extremes. Mid-cycle frames look
+   identical — an early "the two screenshots look the same" report came from
+   sampling both near the mid-swing.
+
+## State / redux
+
+10. **`useWidgetField` fallbacks must be stable module constants** (never an inline
+    `Array(n).fill(...)`), or the selector returns a fresh reference every render
+    and loops effects. Use the `coerce` callback to validate arrays/enums.
+
+11. **Keep reducers pure.** Shuffle/deal with `Math.random` in an effect, not in
+    `defaultWidgetData`/the reducer (Memory deals its deck in an effect when
+    `cards.length !== size*size`).
+
+12. **redux-persist writes are debounced.** Assert game state via the **DOM**, not
+    an immediate `localStorage` read — a verification script mis-read stale state
+    this way.
+
+13. **Timers get cleaned up.** AI "thinking" latency, the Memory resolve delay, and
+    the celebration loop all live in `useEffect` with `clearTimeout`/
+    `clearInterval` cleanup, so a reset/unmount can't drop a stale move onto a
+    fresh board.
+
+## Game UX / AI
+
+14. **Easy AI must not look like it's throwing.** Pure ε-greedy randomness ignored
+    obvious wins/blocks and read as intentional losing. The rule that felt right:
+    **take an immediate win → block the opponent's immediate win → else random.**
+    Medium/Hard use depth-limited alpha-beta.
+
+15. **Simulate "thinking":** the computer commits its move after a short *random*
+    `setTimeout` (≈0.4–1.2s) instead of instantly.
+
+16. **Guard destructive control changes.** Any control that restarts/reshuffles
+    (mode, difficulty, grid size, match rule) pops a `ConfirmDialog` **only while a
+    game is in progress**; the explicit **New game** button stays unguarded.
+    Treat "changing a setting" and "starting a new game" as the same action.
+
+17. **Turn/score as an icon, not text.** `PlayerBadge` (head + label) reads faster
+    than "Toy to move"; on game end the winner's looping `WinnerCelebration`
+    overlays the dimmed board (the winning-line glow stays visible behind).
+
+## Reuse
+
+18. Extract shared pieces rather than inlining: character heads (`ToyHead`,
+    `NinjaHead`) and their palettes (`toyPalette`, `ninjaPalette`) as **their own
+    modules** — a component file that also exports a constant trips the
+    `react-refresh/only-export-components` lint. Also shared: `PlayerBadge`,
+    `WinnerCelebration`, `ConfirmDialog`, `TapStage`, `SixSevenFigure`,
+    `SwordNinjaFigure`, `toyParts`, `Hand`, hooks `useNow` / `useWidgetField`. Use
+    an **extensible registry** for variant sets (Memory's `FACE_MOTIFS`).
+
+## Verification & ops
+
+19. Every change: `npm run build` (tsc + vite) **and** `npm run lint`, then drive it
+    in headless Chromium (`/opt/pw-browsers/chromium`) via `data-testid` hooks.
+    Watch for assertions polluted by new UI — counting `svg[aria-label="Toy figure"]`
+    globally once included the new footer `PlayerBadge` head, not just board marks.
+
+20. Environment quirks: `pkill -f vite` returns exit 144 and aborts a compound
+    bash command — run commit/push separately. The Pages green check can't be
+    confirmed from this environment (cached Actions API, `github.io` blocked) —
+    hand the user the URL instead.
+
+21. Branch hygiene: when the working branch is fully merged, reset it from
+    `origin/main` before new work; fast-forward merges keep history linear.
