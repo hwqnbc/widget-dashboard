@@ -1,5 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
-import { Box, Button, Stack, Typography } from '@mui/material'
+import {
+  Box,
+  Button,
+  Stack,
+  ToggleButton,
+  ToggleButtonGroup,
+  Typography,
+} from '@mui/material'
 import { useAppDispatch } from '../../app/hooks'
 import { updateWidgetData } from '../../features/widgets/widgetsSlice'
 import { useWidgetField } from '../../features/widgets/useWidgetField'
@@ -9,11 +16,13 @@ import NinjaHead from './characters/NinjaHead'
 import PlayerBadge from './PlayerBadge'
 import TurnBanner from './TurnBanner'
 import WinnerCelebration from './WinnerCelebration'
+import ConfirmDialog from './ConfirmDialog'
 import { PLAYER_COLOR } from './playerColors'
 import { useHandoff } from '../../hooks/useHandoff'
 
 type Player = 'toy' | 'ninja'
 type Scores = { toy: number; ninja: number }
+type WindMode = 'off' | 'on'
 
 // World = SVG viewBox units.
 const W = 400
@@ -29,7 +38,12 @@ const WIN = 5
 const MIN_Y = 84
 const MAX_Y = 206
 const GAP = 32 // min height difference between the two archers
+const WIND_MIN = 70
+const WIND_MAX = 170 // horizontal accel magnitude range (units/s²)
 const ZERO: Scores = { toy: 0, ninja: 0 }
+
+const randomWind = () =>
+  Math.round((WIND_MIN + Math.random() * (WIND_MAX - WIND_MIN)) * (Math.random() < 0.5 ? -1 : 1))
 
 const other = (p: Player): Player => (p === 'toy' ? 'ninja' : 'toy')
 const launchOrigin = (p: Player, py: number) => ({ x: X[p] + FACE[p] * 6, y: py - 34 })
@@ -85,6 +99,27 @@ function Archer({ player, py, hit }: { player: Player; py: number; hit: boolean 
   )
 }
 
+/** Top-centre wind gauge: an arrow pointing downwind, length ∝ strength. */
+function WindIndicator({ wind }: { wind: number }) {
+  const dir = wind >= 0 ? 1 : -1
+  const mag = Math.min(Math.abs(wind), WIND_MAX)
+  const len = 14 + (mag / WIND_MAX) * 42
+  const cx = W / 2
+  const cy = 20
+  const tip = cx + dir * len
+  return (
+    <g opacity={0.85}>
+      <text x={cx} y={11} textAnchor="middle" fontSize={9} fill="#5a6b7a" fontFamily="system-ui, sans-serif">
+        WIND
+      </text>
+      <g stroke="#5a6b7a" strokeWidth={2.5} strokeLinecap="round" fill="none">
+        <line x1={cx - dir * len} y1={cy} x2={tip} y2={cy} />
+        <path d={`M${tip} ${cy} L${tip - dir * 8} ${cy - 5} M${tip} ${cy} L${tip - dir * 8} ${cy + 5}`} />
+      </g>
+    </g>
+  )
+}
+
 export default function ArcheryWidget({ id }: WidgetProps) {
   const dispatch = useAppDispatch()
   const hand = useHandoff()
@@ -100,14 +135,29 @@ export default function ArcheryWidget({ id }: WidgetProps) {
       : undefined,
   )
   const turn = useWidgetField<Player>(id, 'turn', 'toy', (v) => (v === 'ninja' ? 'ninja' : 'toy'))
+  const windMode = useWidgetField<WindMode>(id, 'windMode', 'off', (v) =>
+    v === 'on' ? 'on' : 'off',
+  )
+  const wind = useWidgetField<number>(id, 'wind', 0, num)
+  const [pending, setPending] = useState<{ windMode: WindMode } | null>(null)
 
   const pos: Record<Player, number> = { toy: p1y, ninja: p2y }
   const dealt = p1y > 0 && p2y > 0
   const winner: Player | null = scores.toy >= WIN ? 'toy' : scores.ninja >= WIN ? 'ninja' : null
   const gameOver = winner !== null
+  const inProgress = !gameOver && (scores.toy > 0 || scores.ninja > 0)
+  const nextWind = () => (windMode === 'on' ? randomWind() : 0)
 
   const setGame = (
-    next: Partial<{ p1y: number; p2y: number; scores: Scores; turn: Player; first: Player }>,
+    next: Partial<{
+      p1y: number
+      p2y: number
+      scores: Scores
+      turn: Player
+      first: Player
+      windMode: WindMode
+      wind: number
+    }>,
   ) => dispatch(updateWidgetData({ id, data: next }))
 
   // Transient interaction state.
@@ -127,12 +177,26 @@ export default function ArcheryWidget({ id }: WidgetProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dealt])
 
-  const reset = () => {
+  const reset = (opts: { windMode?: WindMode } = {}) => {
     hand.clear()
     if (rafRef.current) cancelAnimationFrame(rafRef.current)
     setArrow(null)
     setAim(null)
-    setGame({ ...dealHeights(), scores: { toy: 0, ninja: 0 }, turn: 'toy', first: 'toy' })
+    const mode = opts.windMode ?? windMode
+    setGame({
+      ...dealHeights(),
+      scores: { toy: 0, ninja: 0 },
+      turn: 'toy',
+      first: 'toy',
+      windMode: mode,
+      wind: mode === 'on' ? randomWind() : 0,
+    })
+  }
+  const newGame = () => reset()
+  const changeWind = (next: WindMode | null) => {
+    if (!next || next === windMode) return
+    if (inProgress) setPending({ windMode: next })
+    else reset({ windMode: next })
   }
 
   const locked = gameOver || !!hand.player || !!arrow || !dealt
@@ -169,13 +233,14 @@ export default function ArcheryWidget({ id }: WidgetProps) {
     const origin = launchOrigin(shooter, pos[shooter])
     const target = hitbox(other(shooter), pos[other(shooter)])
     const captured = scores
+    const w = wind // captured horizontal acceleration
     let start: number | null = null
     const step = (ts: number) => {
       if (start === null) start = ts
       const t = (ts - start) / 1000
-      const x = origin.x + vx * t
+      const x = origin.x + vx * t + 0.5 * w * t * t
       const y = origin.y + vy * t + 0.5 * G * t * t
-      const angle = (Math.atan2(vy + G * t, vx) * 180) / Math.PI
+      const angle = (Math.atan2(vy + G * t, vx + w * t) * 180) / Math.PI
       setArrow({ x, y, angle })
       const hitTarget = x >= target.x0 && x <= target.x1 && y >= target.y0 && y <= target.y1
       const out = y > GROUND || x < -12 || x > W + 12 || t > 6
@@ -200,9 +265,9 @@ export default function ArcheryWidget({ id }: WidgetProps) {
         setGame({ scores: { ...captured, [shooter]: ns } }) // game over → celebration
         return
       }
-      setGame({ scores: { ...captured, [shooter]: ns }, turn: opp })
+      setGame({ scores: { ...captured, [shooter]: ns }, turn: opp, wind: nextWind() })
     } else {
-      setGame({ turn: opp })
+      setGame({ turn: opp, wind: nextWind() })
     }
     hand.announce(opp)
   }
@@ -228,10 +293,10 @@ export default function ArcheryWidget({ id }: WidgetProps) {
       onTouchStart={(e) => e.stopPropagation()}
       sx={{ height: '100%', display: 'flex', flexDirection: 'column', gap: 0.5, p: 0.5 }}
     >
-      <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'center', px: 0.5 }}>
+      <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'center', px: 0.5, gap: 0.5 }}>
         {(['toy', 'ninja'] as const).map((p) => {
           const active = !gameOver && turn === p
-          return (
+          const badge = (
             <Box
               key={p}
               sx={{
@@ -246,6 +311,27 @@ export default function ArcheryWidget({ id }: WidgetProps) {
               <PlayerBadge mark={p} label={`${scores[p]} / ${WIN}`} pulse={active} />
             </Box>
           )
+          if (p === 'toy') {
+            return (
+              <Box key="left" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                {badge}
+                <ToggleButtonGroup
+                  size="small"
+                  exclusive
+                  value={windMode}
+                  onChange={(_, v) => changeWind(v as WindMode | null)}
+                >
+                  <ToggleButton value="off" sx={{ textTransform: 'none', py: 0.1, px: 0.75 }}>
+                    No wind
+                  </ToggleButton>
+                  <ToggleButton value="on" sx={{ textTransform: 'none', py: 0.1, px: 0.75 }}>
+                    Wind
+                  </ToggleButton>
+                </ToggleButtonGroup>
+              </Box>
+            )
+          }
+          return badge
         })}
       </Stack>
 
@@ -273,6 +359,7 @@ export default function ArcheryWidget({ id }: WidgetProps) {
             height="100%"
             data-p1y={p1y}
             data-p2y={p2y}
+            data-wind={windMode === 'on' ? wind : 0}
             style={{ display: 'block', borderRadius: 8, touchAction: 'none', cursor: locked ? 'default' : 'crosshair' }}
             onPointerDown={onDown}
             onPointerMove={onMove}
@@ -282,6 +369,8 @@ export default function ArcheryWidget({ id }: WidgetProps) {
             <rect x={0} y={0} width={W} height={H} fill="#bfe3f5" />
             <rect x={0} y={GROUND} width={W} height={H - GROUND} fill="#6bbf59" />
             <rect x={0} y={GROUND} width={W} height={3} fill="#4f9e42" />
+
+            {windMode === 'on' && <WindIndicator wind={wind} />}
 
             {dealt && <Archer player="toy" py={p1y} hit={flash === 'toy'} />}
             {dealt && <Archer player="ninja" py={p2y} hit={flash === 'ninja'} />}
@@ -331,10 +420,21 @@ export default function ArcheryWidget({ id }: WidgetProps) {
             Drag to aim, release to fire
           </Typography>
         )}
-        <Button size="small" onClick={reset}>
+        <Button size="small" onClick={newGame}>
           New game
         </Button>
       </Stack>
+
+      <ConfirmDialog
+        open={pending !== null}
+        title="Restart game?"
+        message="Changing wind starts a new game and reshuffles the archers."
+        onConfirm={() => {
+          if (pending) reset(pending)
+          setPending(null)
+        }}
+        onCancel={() => setPending(null)}
+      />
     </Box>
   )
 }

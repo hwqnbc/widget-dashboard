@@ -125,6 +125,8 @@ export function defaultWidgetData(type: WidgetType): Record<string, unknown> {
         scores: { toy: 0, ninja: 0 },
         turn: 'toy',
         first: 'toy',
+        windMode: 'off',
+        wind: 0,
       }
     case 'clock':
     default:
