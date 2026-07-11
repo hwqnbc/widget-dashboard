@@ -160,7 +160,7 @@ function MemoryCard({
 
 export default function MemoryWidget({ id }: WidgetProps) {
   const dispatch = useAppDispatch()
-  const [pending, setPending] = useState<{ size: Size } | null>(null)
+  const [pending, setPending] = useState<{ size?: Size; rule?: Rule } | null>(null)
 
   const size = useWidgetField<Size>(id, 'size', 4, (v) => (v === 6 ? 6 : 4))
   const cards = useWidgetField<string[]>(id, 'cards', NO_STR, (v) =>
@@ -207,7 +207,8 @@ export default function MemoryWidget({ id }: WidgetProps) {
     }>,
   ) => dispatch(updateWidgetData({ id, data: next }))
 
-  const reset = (nextSize: Size = size) =>
+  const reset = (opts: { size?: Size; rule?: Rule } = {}) => {
+    const nextSize = opts.size ?? size
     setGame({
       size: nextSize,
       cards: buildDeck(nextSize),
@@ -215,11 +216,13 @@ export default function MemoryWidget({ id }: WidgetProps) {
       flipped: [],
       turn: 'toy',
       scores: { toy: 0, ninja: 0 },
+      ...(opts.rule ? { rule: opts.rule } : {}),
     })
+  }
 
   // Deal a fresh board on first mount / whenever the deck size is out of sync.
   useEffect(() => {
-    if (cards.length !== cellCount) reset(size)
+    if (cards.length !== cellCount) reset()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cards.length, cellCount, size])
 
@@ -257,13 +260,17 @@ export default function MemoryWidget({ id }: WidgetProps) {
   }
 
   const newGame = () => reset()
+  // Grid size and match rule both start a new game (like changing difficulty),
+  // guarded by a confirm while a game is in progress.
+  const requestReset = (opts: { size?: Size; rule?: Rule }) => {
+    if (inProgress) setPending(opts)
+    else reset(opts)
+  }
   const requestSize = (next: Size | null) => {
-    if (!next || next === size) return
-    if (inProgress) setPending({ size: next })
-    else reset(next)
+    if (next && next !== size) requestReset({ size: next })
   }
   const changeRule = (next: Rule | null) => {
-    if (next && next !== rule) setGame({ rule: next })
+    if (next && next !== rule) requestReset({ rule: next })
   }
 
   const resolving = flipped.length >= 2
@@ -405,9 +412,9 @@ export default function MemoryWidget({ id }: WidgetProps) {
       <ConfirmDialog
         open={pending !== null}
         title="Restart game?"
-        message="Changing the grid size starts a new game and reshuffles the board."
+        message="This starts a new game and reshuffles the board."
         onConfirm={() => {
-          if (pending) reset(pending.size)
+          if (pending) reset(pending)
           setPending(null)
         }}
         onCancel={() => setPending(null)}

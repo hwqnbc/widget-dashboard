@@ -16,7 +16,9 @@ Ninja** (reusing the heads, `PlayerBadge`, and `WinnerCelebration`).
   protection). New game is not guarded.
 - **Match rule** (`ToggleButtonGroup`): "Match: go again" (default — a match
   keeps the turn, standard memory) or "Always pass" (turn passes after every
-  two-flip). Changes live, no reset.
+  two-flip). Like the grid size, changing the rule **starts a new game**
+  (reshuffles) and is confirm-guarded mid-game — both route through
+  `requestReset`.
 
 ## Card faces — extensible registry
 Card faces are **motif × background colour**; a pair = same `"motif:colour"`.
