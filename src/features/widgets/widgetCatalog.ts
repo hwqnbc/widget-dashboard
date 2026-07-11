@@ -77,7 +77,7 @@ export const WIDGET_CATALOG: WidgetMeta[] = [
     type: 'archery',
     title: 'Archery',
     description: 'Toy vs Ninja — drag to aim, first to 5 hits',
-    defaultSize: { w: 6, h: 5, minW: 5, minH: 5 },
+    defaultSize: { w: 6, h: 6, minW: 5, minH: 5 },
   },
 ]
 
@@ -125,8 +125,9 @@ export function defaultWidgetData(type: WidgetType): Record<string, unknown> {
         scores: { toy: 0, ninja: 0 },
         turn: 'toy',
         first: 'toy',
-        windMode: 'off',
+        mode: 'calm',
         wind: 0,
+        distance: 'short',
       }
     case 'clock':
     default:

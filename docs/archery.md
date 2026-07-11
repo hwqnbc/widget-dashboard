@@ -24,15 +24,25 @@ they scale with the SVG).
   direction of the drag. Flight runs in `requestAnimationFrame` (cancelled on
   unmount/reset); each frame checks hit / ground / out-of-bounds.
 
-## Wind mode
-A **No wind / Wind** `ToggleButtonGroup` (in the centre of the score row) turns
-on a horizontal wind: each turn a random wind (`windMode:'on'` → `randomWind()`,
-±[70,170] units/s²) adds a horizontal acceleration to the arrow
-(`x = x0 + vx·t + ½·wind·t²`), re-rolled on every turn pass and shown by a
-top-centre **WIND →** gauge (direction + length ∝ strength). Like the other
-games' mode/difficulty toggles, switching wind **starts a new game** (re-deals
-heights, resets scores) and is `ConfirmDialog`-guarded mid-game. `wind`/`windMode`
-persist; the scene `<svg>` exposes `data-wind` for tests.
+## Modes & range (difficulty)
+Two independent `ToggleButtonGroup`s in a controls row above the scores:
+- **Mode: Calm / Wind / Obstacle** (`mode`).
+  - *Wind* — each turn a random wind (`randomWind()`, ±[70,170] units/s²) adds a
+    horizontal acceleration (`x = x0 + vx·t + ½·wind·t²`), re-rolled on every
+    pass and shown by a top-centre **WIND →** gauge. `wind` is 0 in other modes.
+  - *Obstacle* — a purple block bobs up/down at the field centre:
+    `blockCy(ts) = OBS_MID + OBS_AMP·sin(2π·ts/OBS_PERIOD)`. A `requestAnimationFrame`
+    loop animates it while idle (the flight loop drives it in-flight, same
+    formula, so render + collision stay in sync). A shot whose tip enters the
+    block AABB (`x∈[W/2±13]`, `y∈[blockCy±26]`) is **blocked** = a miss. The
+    obstacle rect exposes `data-testid="obstacle"` / `data-blocky`.
+- **Range: Short / Long** (`distance`) — the world width `W = long ? 560 : 400`
+  (archers at `x=50` and `x=W−50`); everything (positions, obstacle centre,
+  container sizing, `viewBox`) derives from `W`. `data-w` on the `<svg>`.
+
+Both are game settings: changing either **starts a new game** (re-deals, resets
+scores) and is `ConfirmDialog`-guarded mid-game (`requestReset`). `mode`, `wind`,
+`distance` persist; the scene `<svg>` also exposes `data-mode`/`data-wind`.
 
 ## State (persisted `data`, via `useWidgetField`)
 `p1y`, `p2y` (feet Y; `0` = "not dealt" → the component deals random heights in
