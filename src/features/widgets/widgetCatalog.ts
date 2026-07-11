@@ -128,6 +128,7 @@ export function defaultWidgetData(type: WidgetType): Record<string, unknown> {
         mode: 'calm',
         wind: 0,
         distance: 'short',
+        platforms: 'still',
       }
     case 'clock':
     default:

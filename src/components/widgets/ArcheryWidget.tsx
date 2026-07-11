@@ -24,6 +24,7 @@ type Player = 'toy' | 'ninja'
 type Scores = { toy: number; ninja: number }
 type Mode = 'calm' | 'wind' | 'obstacle'
 type Distance = 'short' | 'long'
+type Platform = 'still' | 'both' | 'target'
 
 // World = SVG viewBox units. Width depends on the Range setting; height fixed.
 const H = 260
@@ -45,6 +46,11 @@ const OBS_AMP = 58
 const OBS_PERIOD = 2200
 const OBS_HW = 13
 const OBS_HH = 26
+// Moving platforms (archers ride up/down)
+const AMP_P = 34
+const PERIOD_P = 2400
+const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v))
+const phaseOf = (p: Player) => (p === 'toy' ? 0 : Math.PI)
 const ZERO: Scores = { toy: 0, ninja: 0 }
 
 const worldW = (d: Distance) => (d === 'long' ? 560 : 400)
@@ -69,7 +75,7 @@ function Archer({ player, x, py, hit }: { player: Player; x: number; py: number;
   const stroke = '#2b3440'
   const Head = player === 'toy' ? ToyHead : NinjaHead
   return (
-    <g>
+    <g data-testid={`archer-${player}`} data-py={Math.round(py)}>
       <rect x={x - 16} y={py} width={32} height={GROUND - py} fill="#8d6e52" stroke="#6b503b" strokeWidth={1.5} />
       <rect x={x - 16} y={py} width={32} height={5} fill="#6b503b" />
       <path d={`M${x} ${hip} L${x - 7} ${py} M${x} ${hip} L${x + 7} ${py}`} stroke={stroke} strokeWidth={3} strokeLinecap="round" fill="none" />
@@ -128,13 +134,28 @@ export default function ArcheryWidget({ id }: WidgetProps) {
   const distance = useWidgetField<Distance>(id, 'distance', 'short', (v) =>
     v === 'long' ? 'long' : 'short',
   )
-  const [pending, setPending] = useState<{ mode?: Mode; distance?: Distance } | null>(null)
+  const platforms = useWidgetField<Platform>(id, 'platforms', 'still', (v) =>
+    v === 'both' || v === 'target' ? v : 'still',
+  )
+  const [pending, setPending] = useState<{
+    mode?: Mode
+    distance?: Distance
+    platforms?: Platform
+  } | null>(null)
 
   const W = worldW(distance)
   const px = (p: Player) => (p === 'toy' ? MARGIN : W - MARGIN)
   const feet = (p: Player) => (p === 'toy' ? p1y : p2y)
-  const launchOrigin = (p: Player) => ({ x: px(p) + facing(p) * 6, y: feet(p) - 34 })
-  const hitbox = (p: Player) => ({ x0: px(p) - 16, x1: px(p) + 16, y0: feet(p) - FIG_H, y1: feet(p) })
+  const launchOriginAt = (p: Player, y: number) => ({ x: px(p) + facing(p) * 6, y: y - 34 })
+  const hitboxAt = (p: Player, y: number) => ({ x0: px(p) - 16, x1: px(p) + 16, y0: y - FIG_H, y1: y })
+
+  // Platform movement: the archer's feet Y bobs about its (clamped) dealt height.
+  const platCenter = (p: Player) => clamp(feet(p), MIN_Y + AMP_P, MAX_Y - AMP_P)
+  const platY = (p: Player, ts: number) =>
+    platCenter(p) + AMP_P * Math.sin((ts / PERIOD_P) * Math.PI * 2 + phaseOf(p))
+  // In 'target' mode only the shooter's opponent bobs; in 'both' everyone bobs.
+  const moves = (p: Player) =>
+    platforms === 'both' || (platforms === 'target' && p === other(turn))
 
   const dealt = p1y > 0 && p2y > 0
   const winner: Player | null = scores.toy >= WIN ? 'toy' : scores.ninja >= WIN ? 'ninja' : null
@@ -152,6 +173,7 @@ export default function ArcheryWidget({ id }: WidgetProps) {
       mode: Mode
       wind: number
       distance: Distance
+      platforms: Platform
     }>,
   ) => dispatch(updateWidgetData({ id, data: next }))
 
@@ -160,24 +182,31 @@ export default function ArcheryWidget({ id }: WidgetProps) {
   const [aim, setAim] = useState<{ sx: number; sy: number; cx: number; cy: number } | null>(null)
   const [arrow, setArrow] = useState<{ x: number; y: number; angle: number } | null>(null)
   const [flash, setFlash] = useState<Player | null>(null)
-  const [blockCy, setBlockCy] = useState(OBS_MID)
+  // Shared animation clock (rAF timestamp) driving the obstacle + moving platforms.
+  const [animTs, setAnimTs] = useState(0)
   const rafRef = useRef<number | null>(null)
+
+  const animated = mode === 'obstacle' || platforms !== 'still'
+  // Displayed feet Y: the live platform height when bobbing, else the dealt height.
+  const dispY = (p: Player) => (moves(p) ? platY(p, animTs) : feet(p))
+  const blockCy = blockCyAt(animTs)
 
   useEffect(() => () => {
     if (rafRef.current) cancelAnimationFrame(rafRef.current)
   }, [])
 
-  // Continuously bob the obstacle while idle (the flight loop drives it in-flight).
+  // Continuously advance the animation clock while idle (the flight loop drives it
+  // in-flight) whenever the obstacle or a moving-platform mode is active.
   useEffect(() => {
-    if (mode !== 'obstacle' || arrow) return
+    if (!animated || arrow) return
     let raf = 0
     const tick = (ts: number) => {
-      setBlockCy(blockCyAt(ts))
+      setAnimTs(ts)
       raf = requestAnimationFrame(tick)
     }
     raf = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(raf)
-  }, [mode, arrow])
+  }, [animated, arrow])
 
   // Deal random heights on first mount / when the world changes size.
   useEffect(() => {
@@ -185,7 +214,7 @@ export default function ArcheryWidget({ id }: WidgetProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dealt])
 
-  const reset = (opts: { mode?: Mode; distance?: Distance } = {}) => {
+  const reset = (opts: { mode?: Mode; distance?: Distance; platforms?: Platform } = {}) => {
     hand.clear()
     if (rafRef.current) cancelAnimationFrame(rafRef.current)
     setArrow(null)
@@ -198,11 +227,12 @@ export default function ArcheryWidget({ id }: WidgetProps) {
       first: 'toy',
       mode: m,
       distance: opts.distance ?? distance,
+      platforms: opts.platforms ?? platforms,
       wind: m === 'wind' ? randomWind() : 0,
     })
   }
   const newGame = () => reset()
-  const requestReset = (opts: { mode?: Mode; distance?: Distance }) => {
+  const requestReset = (opts: { mode?: Mode; distance?: Distance; platforms?: Platform }) => {
     if (inProgress) setPending(opts)
     else reset(opts)
   }
@@ -211,6 +241,9 @@ export default function ArcheryWidget({ id }: WidgetProps) {
   }
   const changeRange = (next: Distance | null) => {
     if (next && next !== distance) requestReset({ distance: next })
+  }
+  const changePlatforms = (next: Platform | null) => {
+    if (next && next !== platforms) requestReset({ platforms: next })
   }
 
   const locked = gameOver || !!hand.player || !!arrow || !dealt
@@ -243,8 +276,13 @@ export default function ArcheryWidget({ id }: WidgetProps) {
 
   const fire = (vx: number, vy: number) => {
     const shooter = turn
-    const origin = launchOrigin(shooter)
-    const target = hitbox(other(shooter))
+    const opp = other(shooter)
+    // Whether each archer is riding a moving platform (captured for this flight).
+    const shooterMoves = moves(shooter)
+    const oppMoves = moves(opp)
+    // The arrow leaves the shooter's platform at its release height.
+    const shooterY = shooterMoves ? platY(shooter, animTs) : feet(shooter)
+    const origin = launchOriginAt(shooter, shooterY)
     const captured = scores
     const w = wind
     const obstacle = mode === 'obstacle'
@@ -256,7 +294,10 @@ export default function ArcheryWidget({ id }: WidgetProps) {
       const y = origin.y + vy * t + 0.5 * G * t * t
       const angle = (Math.atan2(vy + G * t, vx + w * t) * 180) / Math.PI
       setArrow({ x, y, angle })
-      if (obstacle) setBlockCy(blockCyAt(ts))
+      setAnimTs(ts)
+      // The target rides its platform, so re-evaluate its hitbox each frame.
+      const oppY = oppMoves ? platY(opp, ts) : feet(opp)
+      const target = hitboxAt(opp, oppY)
       const cy = blockCyAt(ts)
       const blocked =
         obstacle && x >= W / 2 - OBS_HW && x <= W / 2 + OBS_HW && y >= cy - OBS_HH && y <= cy + OBS_HH
@@ -294,7 +335,7 @@ export default function ArcheryWidget({ id }: WidgetProps) {
   // Aim indicator (short, at the shooter's origin, opposite the drag).
   let indicator: { x1: number; y1: number; x2: number; y2: number } | null = null
   if (aim && !locked) {
-    const o = launchOrigin(turn)
+    const o = launchOriginAt(turn, dispY(turn))
     const dx = aim.cx - aim.sx
     const dy = aim.cy - aim.sy
     const dist = Math.hypot(dx, dy)
@@ -314,16 +355,30 @@ export default function ArcheryWidget({ id }: WidgetProps) {
       onTouchStart={(e) => e.stopPropagation()}
       sx={{ height: '100%', display: 'flex', flexDirection: 'column', gap: 0.5, p: 0.5 }}
     >
-      <Stack direction="row" sx={{ justifyContent: 'center', alignItems: 'center', gap: 1, flexWrap: 'wrap', rowGap: 0.5 }}>
-        <ToggleButtonGroup size="small" exclusive value={mode} onChange={(_, v) => changeMode(v as Mode | null)}>
-          <ToggleButton value="calm" sx={toggleSx}>Calm</ToggleButton>
-          <ToggleButton value="wind" sx={toggleSx}>Wind</ToggleButton>
-          <ToggleButton value="obstacle" sx={toggleSx}>Obstacle</ToggleButton>
-        </ToggleButtonGroup>
-        <ToggleButtonGroup size="small" exclusive value={distance} onChange={(_, v) => changeRange(v as Distance | null)}>
-          <ToggleButton value="short" sx={toggleSx}>Short</ToggleButton>
-          <ToggleButton value="long" sx={toggleSx}>Long</ToggleButton>
-        </ToggleButtonGroup>
+      <Stack direction="row" sx={{ justifyContent: 'center', alignItems: 'flex-end', gap: 1, flexWrap: 'wrap', rowGap: 0.5 }}>
+        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1, mb: 0.25 }}>Mode</Typography>
+          <ToggleButtonGroup size="small" exclusive value={mode} onChange={(_, v) => changeMode(v as Mode | null)}>
+            <ToggleButton value="calm" sx={toggleSx}>Calm</ToggleButton>
+            <ToggleButton value="wind" sx={toggleSx}>Wind</ToggleButton>
+            <ToggleButton value="obstacle" sx={toggleSx}>Obstacle</ToggleButton>
+          </ToggleButtonGroup>
+        </Box>
+        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1, mb: 0.25 }}>Range</Typography>
+          <ToggleButtonGroup size="small" exclusive value={distance} onChange={(_, v) => changeRange(v as Distance | null)}>
+            <ToggleButton value="short" sx={toggleSx}>Short</ToggleButton>
+            <ToggleButton value="long" sx={toggleSx}>Long</ToggleButton>
+          </ToggleButtonGroup>
+        </Box>
+        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+          <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1, mb: 0.25 }}>Platforms</Typography>
+          <ToggleButtonGroup size="small" exclusive value={platforms} onChange={(_, v) => changePlatforms(v as Platform | null)}>
+            <ToggleButton value="still" sx={toggleSx}>Still</ToggleButton>
+            <ToggleButton value="both" sx={toggleSx}>Both</ToggleButton>
+            <ToggleButton value="target" sx={toggleSx}>Target</ToggleButton>
+          </ToggleButtonGroup>
+        </Box>
       </Stack>
 
       <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'center', px: 0.5 }}>
@@ -359,6 +414,7 @@ export default function ArcheryWidget({ id }: WidgetProps) {
             data-w={W}
             data-mode={mode}
             data-wind={mode === 'wind' ? wind : 0}
+            data-platforms={platforms}
             style={{ display: 'block', borderRadius: 8, touchAction: 'none', cursor: locked ? 'default' : 'crosshair' }}
             onPointerDown={onDown}
             onPointerMove={onMove}
@@ -385,8 +441,8 @@ export default function ArcheryWidget({ id }: WidgetProps) {
               />
             )}
 
-            {dealt && <Archer player="toy" x={px('toy')} py={p1y} hit={flash === 'toy'} />}
-            {dealt && <Archer player="ninja" x={px('ninja')} py={p2y} hit={flash === 'ninja'} />}
+            {dealt && <Archer player="toy" x={px('toy')} py={dispY('toy')} hit={flash === 'toy'} />}
+            {dealt && <Archer player="ninja" x={px('ninja')} py={dispY('ninja')} hit={flash === 'ninja'} />}
 
             {indicator && (
               <g stroke={PLAYER_COLOR[turn]} strokeWidth={3} strokeLinecap="round">
@@ -441,7 +497,7 @@ export default function ArcheryWidget({ id }: WidgetProps) {
       <ConfirmDialog
         open={pending !== null}
         title="Restart game?"
-        message="Changing the mode or range starts a new game and reshuffles the archers."
+        message="Changing the mode, range, or platforms starts a new game and reshuffles the archers."
         onConfirm={() => {
           if (pending) reset(pending)
           setPending(null)
