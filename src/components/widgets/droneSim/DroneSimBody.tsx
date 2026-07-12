@@ -10,6 +10,7 @@ import LocalFireDepartmentIcon from '@mui/icons-material/LocalFireDepartment'
 import ShieldIcon from '@mui/icons-material/Shield'
 import RocketLaunchIcon from '@mui/icons-material/RocketLaunch'
 import FlightIcon from '@mui/icons-material/Flight'
+import MapIcon from '@mui/icons-material/Map'
 import { useAppDispatch } from '../../../app/hooks'
 import { updateWidgetData } from '../../../features/widgets/widgetsSlice'
 import { useWidgetField } from '../../../features/widgets/useWidgetField'
@@ -37,6 +38,7 @@ import GateRings from './GateRings'
 import type { GateFlash } from './GateRings'
 import GhostLine from './GhostLine'
 import RainField from './RainField'
+import Minimap from './Minimap'
 import VirtualJoystick from './VirtualJoystick'
 
 const EMPTY_PATH: number[] = []
@@ -87,6 +89,8 @@ export default function DroneSimBody({ id }: WidgetProps) {
   })
   const crashes = useWidgetField(id, 'crashes', true)
   const flightMode = useWidgetField<FlightMode>(id, 'flightMode', 'hold', coerceFlightMode)
+  const minimap = useWidgetField(id, 'minimap', true)
+  const minimapDroneRef = useRef<SVGGElement>(null)
   // Which ring must be flown through next (GATES.length = all passed, return
   // to the pad); transient — reload/reset restarts the lap, only score and
   // best lap persist.
@@ -231,6 +235,7 @@ export default function DroneSimBody({ id }: WidgetProps) {
             flight={flight}
             hudRef={hudRef}
             timerRef={timerRef}
+            minimapDroneRef={minimapDroneRef}
             colliders={layout.colliders}
             gates={layout.gates}
             weather={weather}
@@ -404,6 +409,20 @@ export default function DroneSimBody({ id }: WidgetProps) {
             )}
           </IconButton>
         </Tooltip>
+        <Tooltip title={minimap ? 'Hide minimap' : 'Show minimap'}>
+          <IconButton
+            size="small"
+            data-testid="dronesim-minimap-toggle"
+            data-minimap={minimap ? 'on' : 'off'}
+            aria-pressed={minimap}
+            onClick={() =>
+              dispatch(updateWidgetData({ id, data: { minimap: !minimap } }))
+            }
+            sx={{ color: '#fff' }}
+          >
+            <MapIcon fontSize="small" />
+          </IconButton>
+        </Tooltip>
         <Tooltip
           title={
             flightMode === 'acro'
@@ -472,6 +491,17 @@ export default function DroneSimBody({ id }: WidgetProps) {
         onConfirm={shuffleCourse}
         onCancel={() => setConfirmShuffle(false)}
       />
+
+      {minimap && (
+        <Minimap
+          buildings={layout.buildings}
+          rings={layout.rings}
+          activeGate={activeGate}
+          bestLapPath={bestLapPath}
+          droneRef={minimapDroneRef}
+          size={fullscreen ? 140 : 100}
+        />
+      )}
 
       <VirtualJoystick
         size={stickSize}

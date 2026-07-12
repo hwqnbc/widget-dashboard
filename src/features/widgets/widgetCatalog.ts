@@ -149,6 +149,7 @@ export function defaultWidgetData(type: WidgetType): Record<string, unknown> {
         weather: 'clear',
         crashes: true,
         flightMode: 'hold',
+        minimap: true,
       }
     case 'clock':
     default:

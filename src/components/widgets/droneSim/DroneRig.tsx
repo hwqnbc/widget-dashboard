@@ -54,6 +54,7 @@ export default function DroneRig({
   flight,
   hudRef,
   timerRef,
+  minimapDroneRef,
   colliders,
   gates,
   weather,
@@ -74,6 +75,8 @@ export default function DroneRig({
   flight: FlightState
   hudRef: RefObject<HTMLDivElement | null>
   timerRef: RefObject<HTMLDivElement | null>
+  /** Minimap drone marker — transform is written here, never via React. */
+  minimapDroneRef: RefObject<SVGGElement | null>
   colliders: readonly Collider[]
   gates: readonly Gate[]
   weather: Weather
@@ -229,6 +232,16 @@ export default function DroneRig({
         hud.dataset.x = flight.pos.x.toFixed(2)
         hud.dataset.z = flight.pos.z.toFixed(2)
         hud.dataset.yaw = flight.yaw.toFixed(3)
+      }
+      const marker = minimapDroneRef.current
+      if (marker) {
+        marker.setAttribute(
+          'transform',
+          `translate(${flight.pos.x.toFixed(2)} ${flight.pos.z.toFixed(2)}) rotate(${(
+            (-flight.yaw * 180) /
+            Math.PI
+          ).toFixed(1)})`,
+        )
       }
       const timer = timerRef.current
       if (timer) {

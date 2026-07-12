@@ -219,6 +219,20 @@ bottom corners (88 px; 140 px + safe-area insets in fullscreen via
 the fullscreen rotate hint; fullscreen re-mounts the single live instance in
 the overlay, so there's never a duplicate `useFrame` loop.
 
+## Minimap
+
+A toggleable (persisted `minimap: boolean`, default on, map button) top-down
+SVG inset at the bottom centre. `viewBox` spans the world bounds with
+svgX = worldX / svgY = worldZ, so the spawn heading (−Z) points up. Buildings
+render as one group of rects, gates as circles coloured by course state
+(gold active / green done / gray upcoming, `data-gate-state` per circle),
+the pad as a ring, and the best-lap ghost as a thin polyline reusing
+`bestLapPath` (x,z of each triple). The **drone marker** is the only live
+element: `DroneRig` writes its SVG `transform`
+(`translate(x z) rotate(−yaw°)`) on the 150 ms telemetry tick — flying never
+re-renders the map, matching the widget's zero-render input rule. The inset
+is `pointerEvents: 'none'` so it can't steal joystick touches.
+
 ## Haptics
 
 On browsers with `navigator.vibrate` (Android Chrome; iOS Safari lacks the
@@ -297,8 +311,6 @@ from the enhancement menu, with the integration point each would build on.
   detectable via `COLLIDERS` tops).
 
 ### Meta
-- **Minimap** — top-down inset (plain SVG overlay) plotting drone heading,
-  buildings and gates from the layout data.
 - **Sound** — Web Audio rotor hum pitched by throttle, gate chime, crash
   thud; no asset files needed.
 - **Per-weather best laps** — storm laps are inherently slower; split
