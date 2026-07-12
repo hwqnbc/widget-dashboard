@@ -2,7 +2,13 @@ import { useRef } from 'react'
 import type { RefObject } from 'react'
 import { useFrame } from '@react-three/fiber'
 import type { Group, Mesh, MeshBasicMaterial } from 'three'
-import type { Collider, ControlInput, FlightState, Weather } from './flightModel'
+import type {
+  Collider,
+  ControlInput,
+  FlightMode,
+  FlightState,
+  Weather,
+} from './flightModel'
 import {
   CRASH_DURATION,
   CRASH_SPEED,
@@ -51,6 +57,7 @@ export default function DroneRig({
   colliders,
   gates,
   weather,
+  flightMode,
   windRef,
   crashMode,
   crashRef,
@@ -70,6 +77,7 @@ export default function DroneRig({
   colliders: readonly Collider[]
   gates: readonly Gate[]
   weather: Weather
+  flightMode: FlightMode
   /** Shared with RainField so the drops drift with the same gusts. */
   windRef: { current: { x: number; y: number } }
   crashMode: boolean
@@ -124,6 +132,7 @@ export default function DroneRig({
         dt,
         colliders,
         weather === 'storm' ? wind : undefined,
+        flightMode,
       )
       if (crashMode && impact >= CRASH_SPEED) {
         crash.active = true

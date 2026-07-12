@@ -45,6 +45,24 @@ allocation-free):
 
 Speeds: `MAX_HORIZ_SPEED 12`, `MAX_VERT_SPEED 5` world-units/s.
 
+### Acro mode (manual flight)
+
+The rocket/plane toggle switches persisted `flightMode: 'hold' | 'acro'`
+(default `hold` — the beginner model above). In acro the drone becomes a
+thrust vector under **real gravity** (`GRAVITY 14`):
+
+- The right stick commands **attitude** — `tiltPitch`/`tiltRoll` damp toward
+  stick × `MAX_ATTITUDE` (0.5 rad) and are now the real flight attitude, not
+  cosmetics (the same fields keep the rendering and FPV camera unchanged).
+- The left stick's Y is **collective thrust** around the hover point:
+  `thrust = GRAVITY · (1 + y · THRUST_RANGE)` along the body-up axis
+  (yaw/pitch/roll rotation of +Y) — stick centred hovers, full down cuts to
+  ~0.15 g and the drone falls faster than hold mode's 5 u/s descent cap.
+- Momentum **coasts** against light drag (`DRAG_H 0.35` vs hold's braking
+  λ = 5) up to `ACRO_MAX_SPEED 22` — releasing the sticks keeps you moving,
+  which is the entire skill curve. Bounds, collisions, wind, crash impacts
+  and lap logic are identical across modes.
+
 ### Weather (storm mode)
 
 The cloud/sun button toggles persisted `weather: 'clear' | 'storm'`. Storm
@@ -275,9 +293,6 @@ from the enhancement menu, with the integration point each would build on.
   setting or hand-placed courses slot into the same sequence logic.
 
 ### Simulation depth
-- **Manual/acro mode** — real gravity + attitude-based thrust as an opt-in
-  advanced mode beside the altitude-hold default (a second step function,
-  same `FlightState`).
 - **Propwash/ground effect** — a small lift cushion near surfaces (roofs
   detectable via `COLLIDERS` tops).
 

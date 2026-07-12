@@ -148,6 +148,7 @@ export function defaultWidgetData(type: WidgetType): Record<string, unknown> {
         worldSeed: DEFAULT_SEED,
         weather: 'clear',
         crashes: true,
+        flightMode: 'hold',
       }
     case 'clock':
     default:

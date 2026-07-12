@@ -58,6 +58,12 @@ export type Weather = 'clear' | 'storm'
 export const coerceWeather = (v: unknown): Weather | undefined =>
   v === 'clear' || v === 'storm' ? v : undefined
 
+/** 'hold' = beginner altitude-hold; 'acro' = gravity + attitude-based thrust. */
+export type FlightMode = 'hold' | 'acro'
+
+export const coerceFlightMode = (v: unknown): FlightMode | undefined =>
+  v === 'hold' || v === 'acro' ? v : undefined
+
 export const SPAWN: Vec3 = { x: 0, y: 2, z: 18 }
 export const MAX_HORIZ_SPEED = 12
 export const MAX_VERT_SPEED = 5
@@ -75,6 +81,18 @@ export const DEADZONE = 0.08
  * horizontal flight is 12 and max vertical is 5, so landings and gentle
  * bumps can never crash — only committed wall hits do. */
 export const CRASH_SPEED = 8
+
+// Acro mode: the drone is a thrust vector under gravity. The right stick
+// commands attitude (pitch/roll angles), the left stick's Y is collective
+// thrust around the hover point, and momentum coasts against light drag.
+export const GRAVITY = 14
+export const MAX_ATTITUDE = 0.5 // rad, ~29°
+export const ATTITUDE_RESPONSE = 6
+/** thrust = GRAVITY * (1 + left.y * THRUST_RANGE); stick centred hovers. */
+export const THRUST_RANGE = 0.85
+/** Light air drag so acro speeds coast but don't run away. */
+export const DRAG_H = 0.35
+export const ACRO_MAX_SPEED = 22
 /** Length of the crash tumble before the auto-respawn, seconds. */
 export const CRASH_DURATION = 1.6
 const CRASH_GRAVITY = 20
@@ -190,25 +208,60 @@ export function stepFlight(
   colliders: readonly Collider[] = [],
   /** Horizontal wind (x, z) added as position drift the pilot must counter. */
   wind?: Vec2,
+  mode: FlightMode = 'hold',
 ): number {
   const step = Math.min(dt, MAX_DT) // survive tab-switch dt spikes
 
   // Left stick X: yaw rate (stick right turns the nose right).
   s.yaw -= input.left.x * YAW_RATE * step
 
-  // Right stick: target velocity in the body frame, rotated to world frame.
   // At yaw 0 the nose faces -Z, so forward = (-sin yaw, 0, -cos yaw).
   const sin = Math.sin(s.yaw)
   const cos = Math.cos(s.yaw)
-  const forward = input.right.y * MAX_HORIZ_SPEED
-  const strafe = input.right.x * MAX_HORIZ_SPEED
-  const targetX = forward * -sin + strafe * cos
-  const targetZ = forward * -cos + strafe * -sin
-  const targetY = input.left.y * MAX_VERT_SPEED
 
-  s.vel.x = damp(s.vel.x, targetX, RESPONSE_H, step)
-  s.vel.z = damp(s.vel.z, targetZ, RESPONSE_H, step)
-  s.vel.y = damp(s.vel.y, targetY, RESPONSE_V, step)
+  if (mode === 'acro') {
+    // Attitude follows the right stick — in acro tiltPitch/tiltRoll ARE the
+    // flight attitude, not cosmetics (the same fields keep the rendering and
+    // FPV camera working unchanged).
+    s.tiltPitch = damp(s.tiltPitch, -input.right.y * MAX_ATTITUDE, ATTITUDE_RESPONSE, step)
+    s.tiltRoll = damp(s.tiltRoll, -input.right.x * MAX_ATTITUDE, ATTITUDE_RESPONSE, step)
+
+    // Thrust acts along the body-up axis (yaw ψ, pitch θ, roll φ; YXZ order);
+    // gravity pulls straight down; light drag lets momentum coast.
+    const thrust = GRAVITY * Math.max(0, 1 + input.left.y * THRUST_RANGE)
+    const sinP = Math.sin(s.tiltPitch)
+    const cosP = Math.cos(s.tiltPitch)
+    const sinR = Math.sin(s.tiltRoll)
+    const cosR = Math.cos(s.tiltRoll)
+    const upX = -sinR * cos + cosR * sinP * sin
+    const upY = cosR * cosP
+    const upZ = sinR * sin + cosR * sinP * cos
+    s.vel.x += thrust * upX * step
+    s.vel.y += (thrust * upY - GRAVITY) * step
+    s.vel.z += thrust * upZ * step
+    const drag = Math.exp(-DRAG_H * step)
+    s.vel.x *= drag
+    s.vel.y *= drag
+    s.vel.z *= drag
+    const speed = Math.hypot(s.vel.x, s.vel.y, s.vel.z)
+    if (speed > ACRO_MAX_SPEED) {
+      const k = ACRO_MAX_SPEED / speed
+      s.vel.x *= k
+      s.vel.y *= k
+      s.vel.z *= k
+    }
+  } else {
+    // Altitude hold: sticks command target velocities directly.
+    const forward = input.right.y * MAX_HORIZ_SPEED
+    const strafe = input.right.x * MAX_HORIZ_SPEED
+    const targetX = forward * -sin + strafe * cos
+    const targetZ = forward * -cos + strafe * -sin
+    const targetY = input.left.y * MAX_VERT_SPEED
+
+    s.vel.x = damp(s.vel.x, targetX, RESPONSE_H, step)
+    s.vel.z = damp(s.vel.z, targetZ, RESPONSE_H, step)
+    s.vel.y = damp(s.vel.y, targetY, RESPONSE_V, step)
+  }
 
   s.pos.x += s.vel.x * step
   s.pos.y += s.vel.y * step
@@ -243,9 +296,11 @@ export function stepFlight(
 
   const impact = resolveCollisions(s, colliders)
 
-  // Visual tilt: nose dips into forward flight, body banks into a strafe.
-  s.tiltPitch = damp(s.tiltPitch, -input.right.y * MAX_TILT, TILT_RESPONSE, step)
-  s.tiltRoll = damp(s.tiltRoll, -input.right.x * MAX_TILT, TILT_RESPONSE, step)
+  if (mode === 'hold') {
+    // Visual-only tilt: nose dips into forward flight, body banks in a strafe.
+    s.tiltPitch = damp(s.tiltPitch, -input.right.y * MAX_TILT, TILT_RESPONSE, step)
+    s.tiltRoll = damp(s.tiltRoll, -input.right.x * MAX_TILT, TILT_RESPONSE, step)
+  }
 
   return impact
 }

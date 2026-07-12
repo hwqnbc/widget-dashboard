@@ -8,14 +8,17 @@ import ThunderstormIcon from '@mui/icons-material/Thunderstorm'
 import WbSunnyIcon from '@mui/icons-material/WbSunny'
 import LocalFireDepartmentIcon from '@mui/icons-material/LocalFireDepartment'
 import ShieldIcon from '@mui/icons-material/Shield'
+import RocketLaunchIcon from '@mui/icons-material/RocketLaunch'
+import FlightIcon from '@mui/icons-material/Flight'
 import { useAppDispatch } from '../../../app/hooks'
 import { updateWidgetData } from '../../../features/widgets/widgetsSlice'
 import { useWidgetField } from '../../../features/widgets/useWidgetField'
 import { usePresentation } from '../../fullscreen/presentation'
 import type { WidgetProps } from '../../../registry/widgetRegistry'
 import { DAY_PALETTE, DUSK_PALETTE, NIGHT_PALETTE } from './palettes'
-import type { DroneView, Weather } from './flightModel'
+import type { DroneView, FlightMode, Weather } from './flightModel'
 import {
+  coerceFlightMode,
   coerceView,
   coerceWeather,
   createControlInput,
@@ -83,6 +86,7 @@ export default function DroneSimBody({ id }: WidgetProps) {
     spinZ: 0,
   })
   const crashes = useWidgetField(id, 'crashes', true)
+  const flightMode = useWidgetField<FlightMode>(id, 'flightMode', 'hold', coerceFlightMode)
   // Which ring must be flown through next (GATES.length = all passed, return
   // to the pad); transient — reload/reset restarts the lap, only score and
   // best lap persist.
@@ -230,6 +234,7 @@ export default function DroneSimBody({ id }: WidgetProps) {
             colliders={layout.colliders}
             gates={layout.gates}
             weather={weather}
+            flightMode={flightMode}
             windRef={windRef}
             crashMode={crashes}
             crashRef={crashRef}
@@ -396,6 +401,35 @@ export default function DroneSimBody({ id }: WidgetProps) {
               <WbSunnyIcon fontSize="small" />
             ) : (
               <ThunderstormIcon fontSize="small" />
+            )}
+          </IconButton>
+        </Tooltip>
+        <Tooltip
+          title={
+            flightMode === 'acro'
+              ? 'Beginner mode (altitude hold)'
+              : 'Acro mode (gravity + attitude thrust)'
+          }
+        >
+          <IconButton
+            size="small"
+            data-testid="dronesim-mode-toggle"
+            data-mode={flightMode}
+            aria-pressed={flightMode === 'acro'}
+            onClick={() =>
+              dispatch(
+                updateWidgetData({
+                  id,
+                  data: { flightMode: flightMode === 'acro' ? 'hold' : 'acro' },
+                }),
+              )
+            }
+            sx={{ color: '#fff' }}
+          >
+            {flightMode === 'acro' ? (
+              <FlightIcon fontSize="small" />
+            ) : (
+              <RocketLaunchIcon fontSize="small" />
             )}
           </IconButton>
         </Tooltip>
