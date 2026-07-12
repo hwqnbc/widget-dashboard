@@ -82,44 +82,45 @@ export default function FrakFigure({ chopping = false }: { chopping?: boolean })
       <path d="M92 270 L148 270" stroke={FR.white} strokeWidth={2} strokeDasharray="3 3" opacity={0.7} />
       <path d="M104 280 L136 280" stroke={FR.lime} strokeWidth={4} opacity={0.85} />
 
-      {/* ---- short neck (orange), tucked under the hood + behind the collar ---- */}
-      <path d="M112 182 L128 182 L128 200 L112 200 Z" fill={FR.skin} />
-
-      {/* ---- head: faceted lime hood covering the face; dropped so the chin meets
-             the collar (near-zero neck). Orange face opening + green eyes + wrap ---- */}
+      {/* ---- head: faceted lime hood covering the face; dropped so it meets the
+             torso (no visible neck — the hood drapes onto the shoulders). Orange
+             face opening + green eyes + wrap ---- */}
       <g transform="translate(0 22)">
         {/* hood back drape */}
-        <path d="M88 158 L86 128 L96 104 L120 92 L144 104 L154 128 L152 158 L146 140 L140 120 L120 112 L100 120 L94 140 Z" fill={FR.hoodShade} />
-        {/* faceted lime hood (covers crown, sides, jaw) */}
-        <path d="M120 90 L146 102 L156 130 L150 158 L120 172 L90 158 L84 130 L94 102 Z" fill={FR.hood} stroke={FR.hoodShade2} strokeWidth={2} />
+        <path d="M90 158 L88 128 L97 104 L120 92 L143 104 L152 128 L150 158 L145 140 L139 120 L120 112 L101 120 L95 140 Z" fill={FR.hoodShade} />
+        {/* lime hood drape over the neck, down onto the shoulders (hides the neck) */}
+        <path d="M94 152 L120 168 L146 152 L151 184 L120 194 L89 184 Z" fill={FR.hood} stroke={FR.hoodShade2} strokeWidth={1.5} />
+        <path d="M120 168 L120 194 M104 158 L108 182 M136 158 L132 182" stroke={FR.hoodShade2} strokeWidth={1.1} fill="none" opacity={0.45} />
+        {/* faceted lime hood — slim rim so a wide face + big mask show through */}
+        <path d="M120 90 L143 102 L151 130 L146 156 L120 168 L94 156 L89 130 L97 102 Z" fill={FR.hood} stroke={FR.hoodShade2} strokeWidth={2} />
         {/* right shade facet + top-left gloss */}
-        <path d="M120 90 L146 102 L156 130 L150 158 L120 172 Z" fill="#000" opacity={0.13} />
-        <path d="M120 90 L104 100 L96 116" stroke={FR.hoodHi} strokeWidth={2.4} fill="none" opacity={0.6} />
+        <path d="M120 90 L143 102 L151 130 L146 156 L120 168 Z" fill="#000" opacity={0.13} />
+        <path d="M120 90 L106 99 L99 114" stroke={FR.hoodHi} strokeWidth={2.2} fill="none" opacity={0.6} />
         {/* small crown point */}
         <path d="M120 86 L127 94 L113 94 Z" fill={FR.hood} stroke={FR.hoodShade2} strokeWidth={1} />
-        {/* face opening (orange), inset lower-centre */}
-        <path d="M107 118 L133 118 L134 140 L120 154 L106 140 Z" fill={FR.skin} stroke={FR.skinShade} strokeWidth={1.4} />
-        {/* green eyes (angled, fierce) */}
-        <path d="M108 126 L119 123 L119 130 L109 132 Z" fill={FR.eye} stroke={FR.eyeDark} strokeWidth={1} />
-        <path d="M132 126 L121 123 L121 130 L131 132 Z" fill={FR.eye} stroke={FR.eyeDark} strokeWidth={1} />
-        <rect x={112} y={125} width={2.6} height={2.6} fill={FR.eyeDark} />
-        <rect x={125} y={125} width={2.6} height={2.6} fill={FR.eyeDark} />
-        {/* green lower-face wrap */}
-        <path d="M107 135 L133 135 L134 140 L120 154 L106 140 Z" fill={FR.wrap} stroke={FR.wrapShade} strokeWidth={1} />
-        <path d="M108 140 L132 140 M112 147 L128 147" stroke={FR.wrapShade} strokeWidth={1.1} fill="none" opacity={0.8} />
+        {/* wide orange face opening */}
+        <path d="M100 112 L140 112 L141 140 L120 158 L99 140 Z" fill={FR.skin} stroke={FR.skinShade} strokeWidth={1.4} />
+        {/* green eyes (wider apart, fierce) */}
+        <path d="M102 122 L118 118 L118 127 L103 130 Z" fill={FR.eye} stroke={FR.eyeDark} strokeWidth={1} />
+        <path d="M138 122 L122 118 L122 127 L137 130 Z" fill={FR.eye} stroke={FR.eyeDark} strokeWidth={1} />
+        <rect x={106} y={123} width={3} height={3} fill={FR.eyeDark} />
+        <rect x={131} y={123} width={3} height={3} fill={FR.eyeDark} />
+        {/* big green lower-face mask */}
+        <path d="M99 132 L141 132 L141 140 L120 158 L99 140 Z" fill={FR.wrap} stroke={FR.wrapShade} strokeWidth={1.2} />
+        <path d="M101 138 L139 138 M108 147 L132 147" stroke={FR.wrapShade} strokeWidth={1.2} fill="none" opacity={0.8} />
         {/* hood facet seams */}
-        <path d="M94 102 L120 90 L146 102 M84 130 L107 122 M156 130 L133 122 M90 158 L110 150 M150 158 L130 150" stroke={FR.hoodShade2} strokeWidth={1.1} fill="none" opacity={0.5} />
+        <path d="M97 102 L120 90 L143 102 M89 130 L99 124 M151 130 L141 124" stroke={FR.hoodShade2} strokeWidth={1.1} fill="none" opacity={0.5} />
       </g>
 
       {/* ---- upper arms (static, shoulder→elbow) + shoulder caps ---- */}
-      <path d="M92 206 L86 234" stroke={FR.skin} strokeWidth={16} strokeLinecap="round" fill="none" />
-      <path d="M148 206 L154 234" stroke={FR.skin} strokeWidth={16} strokeLinecap="round" fill="none" />
-      <circle cx={92} cy={206} r={12} fill={FR.skin} stroke={FR.skinShade} strokeWidth={1.5} />
-      <circle cx={148} cy={206} r={12} fill={FR.skin} stroke={FR.skinShade} strokeWidth={1.5} />
+      <path d="M92 206 L86 234" stroke={FR.skin} strokeWidth={14} strokeLinecap="round" fill="none" />
+      <path d="M148 206 L154 234" stroke={FR.skin} strokeWidth={14} strokeLinecap="round" fill="none" />
+      <circle cx={92} cy={206} r={11} fill={FR.skin} stroke={FR.skinShade} strokeWidth={1.5} />
+      <circle cx={148} cy={206} r={11} fill={FR.skin} stroke={FR.skinShade} strokeWidth={1.5} />
 
       {/* ---- viewer-left forearm + gold sword — raised by default, pivots at elbow ---- */}
       <Box component="g" sx={{ transformBox: 'view-box', transformOrigin: LE, ...leftSx }}>
-        <path d="M86 234 L70 176" stroke={FR.skin} strokeWidth={14} strokeLinecap="round" fill="none" />
+        <path d="M86 234 L70 176" stroke={FR.skin} strokeWidth={13} strokeLinecap="round" fill="none" />
         <g transform="translate(66 172) rotate(-16)">
           <SwordHand />
         </g>
@@ -127,15 +128,15 @@ export default function FrakFigure({ chopping = false }: { chopping?: boolean })
 
       {/* ---- viewer-right forearm + gold sword — lowered by default, pivots at elbow ---- */}
       <Box component="g" sx={{ transformBox: 'view-box', transformOrigin: RE, ...rightSx }}>
-        <path d="M154 234 L170 176" stroke={FR.skin} strokeWidth={14} strokeLinecap="round" fill="none" />
+        <path d="M154 234 L170 176" stroke={FR.skin} strokeWidth={13} strokeLinecap="round" fill="none" />
         <g transform="translate(174 172) rotate(16)">
           <SwordHand />
         </g>
       </Box>
 
-      {/* elbow caps (over the forearm pivots) */}
-      <circle cx={86} cy={234} r={9} fill={FR.skin} stroke={FR.skinShade} strokeWidth={1.2} />
-      <circle cx={154} cy={234} r={9} fill={FR.skin} stroke={FR.skinShade} strokeWidth={1.2} />
+      {/* subtle elbow caps (over the forearm pivots) */}
+      <circle cx={86} cy={234} r={6} fill={FR.skin} />
+      <circle cx={154} cy={234} r={6} fill={FR.skin} />
     </svg>
   )
 }

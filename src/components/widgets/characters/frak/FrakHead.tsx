@@ -19,24 +19,24 @@ export default function FrakHead({ size = '100%' }: { size?: number | string }) 
       style={{ display: 'block', overflow: 'visible' }}
     >
       {/* hood back drape */}
-      <path d="M88 158 L86 128 L96 104 L120 92 L144 104 L154 128 L152 158 L146 140 L140 120 L120 112 L100 120 L94 140 Z" fill={FR.hoodShade} />
-      {/* faceted lime hood */}
-      <path d="M120 90 L146 102 L156 130 L150 158 L120 172 L90 158 L84 130 L94 102 Z" fill={FR.hood} stroke={FR.hoodShade2} strokeWidth={2.4} />
-      <path d="M120 90 L146 102 L156 130 L150 158 L120 172 Z" fill="#000" opacity={0.13} />
-      <path d="M120 90 L104 100 L96 116" stroke={FR.hoodHi} strokeWidth={2.6} fill="none" opacity={0.6} />
+      <path d="M90 158 L88 128 L97 104 L120 92 L143 104 L152 128 L150 158 L145 140 L139 120 L120 112 L101 120 L95 140 Z" fill={FR.hoodShade} />
+      {/* faceted lime hood — slim rim */}
+      <path d="M120 90 L143 102 L151 130 L146 156 L120 168 L94 156 L89 130 L97 102 Z" fill={FR.hood} stroke={FR.hoodShade2} strokeWidth={2.4} />
+      <path d="M120 90 L143 102 L151 130 L146 156 L120 168 Z" fill="#000" opacity={0.13} />
+      <path d="M120 90 L106 99 L99 114" stroke={FR.hoodHi} strokeWidth={2.6} fill="none" opacity={0.6} />
       <path d="M120 86 L127 94 L113 94 Z" fill={FR.hood} stroke={FR.hoodShade2} strokeWidth={1.2} />
-      {/* orange face opening */}
-      <path d="M107 118 L133 118 L134 140 L120 154 L106 140 Z" fill={FR.skin} stroke={FR.skinShade} strokeWidth={1.6} />
-      {/* green eyes */}
-      <path d="M108 126 L119 123 L119 130 L109 132 Z" fill={FR.eye} stroke={FR.eyeDark} strokeWidth={1.2} />
-      <path d="M132 126 L121 123 L121 130 L131 132 Z" fill={FR.eye} stroke={FR.eyeDark} strokeWidth={1.2} />
-      <rect x={112} y={125} width={3} height={3} fill={FR.eyeDark} />
-      <rect x={125} y={125} width={3} height={3} fill={FR.eyeDark} />
-      {/* green lower-face wrap */}
-      <path d="M107 135 L133 135 L134 140 L120 154 L106 140 Z" fill={FR.wrap} stroke={FR.wrapShade} strokeWidth={1.2} />
-      <path d="M108 140 L132 140 M112 147 L128 147" stroke={FR.wrapShade} strokeWidth={1.2} fill="none" opacity={0.8} />
+      {/* wide orange face opening */}
+      <path d="M100 112 L140 112 L141 140 L120 158 L99 140 Z" fill={FR.skin} stroke={FR.skinShade} strokeWidth={1.6} />
+      {/* green eyes (wider apart) */}
+      <path d="M102 122 L118 118 L118 127 L103 130 Z" fill={FR.eye} stroke={FR.eyeDark} strokeWidth={1.2} />
+      <path d="M138 122 L122 118 L122 127 L137 130 Z" fill={FR.eye} stroke={FR.eyeDark} strokeWidth={1.2} />
+      <rect x={106} y={123} width={3.2} height={3.2} fill={FR.eyeDark} />
+      <rect x={131} y={123} width={3.2} height={3.2} fill={FR.eyeDark} />
+      {/* big green lower-face mask */}
+      <path d="M99 132 L141 132 L141 140 L120 158 L99 140 Z" fill={FR.wrap} stroke={FR.wrapShade} strokeWidth={1.2} />
+      <path d="M101 138 L139 138 M108 147 L132 147" stroke={FR.wrapShade} strokeWidth={1.2} fill="none" opacity={0.8} />
       {/* hood facet seams */}
-      <path d="M94 102 L120 90 L146 102 M84 130 L107 122 M156 130 L133 122" stroke={FR.hoodShade2} strokeWidth={1.2} fill="none" opacity={0.5} />
+      <path d="M97 102 L120 90 L143 102 M89 130 L99 124 M151 130 L141 124" stroke={FR.hoodShade2} strokeWidth={1.2} fill="none" opacity={0.5} />
     </svg>
   )
 }
