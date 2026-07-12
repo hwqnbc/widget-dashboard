@@ -34,6 +34,7 @@ export default function WorldScene({ palette }: { palette: WorldPalette }) {
     <>
       <color attach="background" args={[palette.sky]} />
       <fog attach="fog" args={[palette.fog, 40, 160]} />
+      <ambientLight intensity={0.3} />
       <hemisphereLight args={[palette.sky, palette.ground, 0.9]} />
       <directionalLight position={[30, 50, 20]} intensity={1.4} />
 

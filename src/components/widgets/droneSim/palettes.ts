@@ -26,10 +26,10 @@ export const DAY_PALETTE: WorldPalette = {
 
 export const NIGHT_PALETTE: WorldPalette = {
   sky: '#0b1026',
-  fog: '#141b3a',
-  ground: '#1e2b24',
-  grid: '#2d4136',
-  building: '#3b4262',
-  pad: '#263238',
+  fog: '#1a2247',
+  ground: '#26352c',
+  grid: '#3e5747',
+  building: '#565f8c',
+  pad: '#2f3d44',
   ring: '#ffca28',
 }
