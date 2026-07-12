@@ -1,29 +1,14 @@
-import { useEffect, useState } from 'react'
 import { Box } from '@mui/material'
-import SixSevenFigure from './characters/SixSevenFigure'
-import SwordNinjaFigure from './characters/SwordNinjaFigure'
-
-/** The ninja draws and sheathes on a loop by toggling `drawn` on an interval.
- * Starts sheathed without animating (animate flips on once the loop begins), so
- * there's no draw/sheathe flash on mount. */
-function LoopingNinja() {
-  const [drawn, setDrawn] = useState(false)
-  const [active, setActive] = useState(false)
-  useEffect(() => {
-    const t = setInterval(() => {
-      setActive(true)
-      setDrawn((d) => !d)
-    }, 1100)
-    return () => clearInterval(t)
-  }, [])
-  return <SwordNinjaFigure drawn={drawn} animate={active} />
-}
+import type { Seat } from '../../features/avatars/types'
+import { useSeatVisual } from '../../features/avatars/useSeatAvatars'
 
 /**
- * The winner's looping celebration: the Toy does the "6 7", the Ninja draws and
- * sheathes his sword. Fills and centres within its parent.
+ * The winner's looping celebration: plays the winning seat's avatar "action"
+ * (the Toy does the "6 7"; the Ninja draws and sheathes his sword). Fills and
+ * centres within its parent.
  */
-export default function WinnerCelebration({ winner }: { winner: 'toy' | 'ninja' }) {
+export default function WinnerCelebration({ winner }: { winner: Seat }) {
+  const { Celebration } = useSeatVisual(winner)
   return (
     <Box
       sx={{
@@ -35,7 +20,7 @@ export default function WinnerCelebration({ winner }: { winner: 'toy' | 'ninja' 
         '& svg': { maxHeight: '100%', width: 'auto' },
       }}
     >
-      {winner === 'toy' ? <SixSevenFigure playing /> : <LoopingNinja />}
+      <Celebration />
     </Box>
   )
 }

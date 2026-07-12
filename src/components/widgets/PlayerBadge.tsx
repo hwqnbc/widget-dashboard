@@ -1,6 +1,6 @@
 import { Box, Stack, Typography, keyframes } from '@mui/material'
-import ToyHead from './characters/ToyHead'
-import NinjaHead from './characters/NinjaHead'
+import type { Seat } from '../../features/avatars/types'
+import { useSeatVisual } from '../../features/avatars/useSeatAvatars'
 
 const pulseKf = keyframes`
   0%, 100% { opacity: 1; }
@@ -9,17 +9,19 @@ const pulseKf = keyframes`
 
 /**
  * A small head icon + label used as the current-player turn indicator and the
- * winner label in the game footers.
+ * winner label in the game footers. `mark` is a player *seat*; the head shown is
+ * whichever avatar that seat currently renders as.
  */
 export default function PlayerBadge({
   mark,
   label,
   pulse = false,
 }: {
-  mark: 'toy' | 'ninja'
+  mark: Seat
   label: string
   pulse?: boolean
 }) {
+  const { Head } = useSeatVisual(mark)
   return (
     <Stack direction="row" spacing={0.75} sx={{ alignItems: 'center' }}>
       <Box
@@ -30,7 +32,7 @@ export default function PlayerBadge({
           animation: pulse ? `${pulseKf} 1s ease-in-out infinite` : 'none',
         }}
       >
-        {mark === 'toy' ? <ToyHead /> : <NinjaHead />}
+        <Head />
       </Box>
       <Typography variant="body2" sx={{ fontWeight: 600 }}>
         {label}

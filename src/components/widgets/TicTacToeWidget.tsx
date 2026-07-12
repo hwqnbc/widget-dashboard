@@ -12,10 +12,8 @@ import { useAppDispatch } from '../../app/hooks'
 import { updateWidgetData } from '../../features/widgets/widgetsSlice'
 import { useWidgetField } from '../../features/widgets/useWidgetField'
 import type { WidgetProps } from '../../registry/widgetRegistry'
-import ToyHead from './characters/ToyHead'
-import { TOY } from './characters/toyPalette'
-import NinjaHead from './characters/NinjaHead'
-import { N } from './characters/ninjaPalette'
+import { avatarMetaById } from '../../features/avatars/avatarCatalog'
+import { useSeatAvatars, useSeatVisual } from '../../features/avatars/useSeatAvatars'
 import WinnerCelebration from './WinnerCelebration'
 import PlayerBadge from './PlayerBadge'
 import ConfirmDialog from './ConfirmDialog'
@@ -48,7 +46,8 @@ const LINES: [number, number, number][] = [
 ]
 
 function Mark({ mark }: { mark: Mark }) {
-  return mark === 'toy' ? <ToyHead /> : <NinjaHead />
+  const { Head } = useSeatVisual(mark)
+  return <Head />
 }
 
 /** Winner + the three cell indices forming the line, or null. */
@@ -159,6 +158,8 @@ export default function TicTacToeWidget({ id }: WidgetProps) {
     { mode?: Mode; difficulty?: Difficulty } | null
   >(null)
   const hand = useHandoff()
+  const seatAvatars = useSeatAvatars()
+  const colorOf = (seat: Mark) => avatarMetaById[seatAvatars[seat]].color
 
   const board = useWidgetField<Cell[]>(id, 'board', EMPTY_BOARD, (b) =>
     Array.isArray(b) && b.length === 9 ? (b as Cell[]) : undefined,
@@ -306,7 +307,7 @@ export default function TicTacToeWidget({ id }: WidgetProps) {
         >
           {board.map((cell, i) => {
             const isWin = result?.line.includes(i) ?? false
-            const winColor = winner === 'toy' ? TOY.teal : N.iceDeep
+            const winColor = winner ? colorOf(winner) : undefined
             return (
               <Box
                 key={i}
@@ -339,7 +340,7 @@ export default function TicTacToeWidget({ id }: WidgetProps) {
                     sx={{
                       width: '82%',
                       height: '82%',
-                      color: cell === 'toy' ? TOY.teal : N.iceDeep,
+                      color: colorOf(cell),
                       animation: isWin
                         ? `${winGlow} 1s ease-in-out infinite`
                         : undefined,

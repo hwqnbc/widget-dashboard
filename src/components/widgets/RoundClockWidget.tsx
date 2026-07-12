@@ -1,5 +1,5 @@
 import { Box, keyframes } from '@mui/material'
-import ToyHead from './characters/ToyHead'
+import ToyHead from './characters/toy/ToyHead'
 import { useNow } from '../../hooks/useNow'
 
 /** Claude's signature warm terracotta. */

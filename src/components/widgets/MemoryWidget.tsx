@@ -11,13 +11,14 @@ import { useAppDispatch } from '../../app/hooks'
 import { updateWidgetData } from '../../features/widgets/widgetsSlice'
 import { useWidgetField } from '../../features/widgets/useWidgetField'
 import type { WidgetProps } from '../../registry/widgetRegistry'
-import ToyHead from './characters/ToyHead'
-import NinjaHead from './characters/NinjaHead'
+import ToyHead from './characters/toy/ToyHead'
+import NinjaHead from './characters/ninja/NinjaHead'
 import PlayerBadge from './PlayerBadge'
 import WinnerCelebration from './WinnerCelebration'
 import ConfirmDialog from './ConfirmDialog'
 import TurnBanner from './TurnBanner'
-import { PLAYER_COLOR } from './playerColors'
+import { avatarMetaById } from '../../features/avatars/avatarCatalog'
+import { useSeatAvatars } from '../../features/avatars/useSeatAvatars'
 import { useHandoff } from '../../hooks/useHandoff'
 
 type Player = 'toy' | 'ninja'
@@ -165,6 +166,8 @@ export default function MemoryWidget({ id }: WidgetProps) {
   const dispatch = useAppDispatch()
   const [pending, setPending] = useState<{ size?: Size; rule?: Rule } | null>(null)
   const hand = useHandoff()
+  const seatAvatars = useSeatAvatars()
+  const colorOf = (seat: Player) => avatarMetaById[seatAvatars[seat]].color
 
   const size = useWidgetField<Size>(id, 'size', 4, (v) => (v === 6 ? 6 : 4))
   const cards = useWidgetField<string[]>(id, 'cards', NO_STR, (v) =>
@@ -330,8 +333,8 @@ export default function MemoryWidget({ id }: WidgetProps) {
                 py: 0.25,
                 borderRadius: 1,
                 border: '2px solid',
-                borderColor: active ? PLAYER_COLOR[p] : 'transparent',
-                bgcolor: active ? `${PLAYER_COLOR[p]}22` : 'transparent',
+                borderColor: active ? colorOf(p) : 'transparent',
+                bgcolor: active ? `${colorOf(p)}22` : 'transparent',
               }}
             >
               <PlayerBadge mark={p} label={`${scores[p]}`} pulse={active} />

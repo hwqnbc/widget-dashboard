@@ -12,10 +12,8 @@ import { useAppDispatch } from '../../app/hooks'
 import { updateWidgetData } from '../../features/widgets/widgetsSlice'
 import { useWidgetField } from '../../features/widgets/useWidgetField'
 import type { WidgetProps } from '../../registry/widgetRegistry'
-import ToyHead from './characters/ToyHead'
-import NinjaHead from './characters/NinjaHead'
-import { TOY } from './characters/toyPalette'
-import { N } from './characters/ninjaPalette'
+import { avatarMetaById } from '../../features/avatars/avatarCatalog'
+import { useSeatAvatars, useSeatVisual } from '../../features/avatars/useSeatAvatars'
 import WinnerCelebration from './WinnerCelebration'
 import PlayerBadge from './PlayerBadge'
 import ConfirmDialog from './ConfirmDialog'
@@ -238,7 +236,8 @@ const cellGlow = keyframes`
 `
 
 function Disc({ mark }: { mark: Mark }) {
-  return mark === 'toy' ? <ToyHead /> : <NinjaHead />
+  const { Head } = useSeatVisual(mark)
+  return <Head />
 }
 
 export default function Connect4Widget({ id }: WidgetProps) {
@@ -268,7 +267,9 @@ export default function Connect4Widget({ id }: WidgetProps) {
   const turn = turnOf(board, first)
   const boardEmpty = board.every((c) => !c)
   const canPass = mode === 'ai' && boardEmpty && !winner && turn === 'toy'
-  const winColor = winner === 'toy' ? TOY.teal : N.iceDeep
+  const seatAvatars = useSeatAvatars()
+  const colorOf = (seat: Mark) => avatarMetaById[seatAvatars[seat]].color
+  const winColor = winner ? colorOf(winner) : undefined
 
   const setGame = (
     next: Partial<{
@@ -439,7 +440,7 @@ export default function Connect4Widget({ id }: WidgetProps) {
                         height: '80%',
                         display: 'grid',
                         placeItems: 'center',
-                        color: cell === 'toy' ? TOY.teal : N.iceDeep,
+                        color: colorOf(cell),
                         animation:
                           [
                             i === lastDrop ? `${dropAnim} 0.45s cubic-bezier(.3,.1,.3,1)` : '',

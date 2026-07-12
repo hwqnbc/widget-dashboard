@@ -11,13 +11,12 @@ import { useAppDispatch } from '../../app/hooks'
 import { updateWidgetData } from '../../features/widgets/widgetsSlice'
 import { useWidgetField } from '../../features/widgets/useWidgetField'
 import type { WidgetProps } from '../../registry/widgetRegistry'
-import ToyHead from './characters/ToyHead'
-import NinjaHead from './characters/NinjaHead'
 import PlayerBadge from './PlayerBadge'
 import TurnBanner from './TurnBanner'
 import WinnerCelebration from './WinnerCelebration'
 import ConfirmDialog from './ConfirmDialog'
-import { PLAYER_COLOR } from './playerColors'
+import { avatarMetaById } from '../../features/avatars/avatarCatalog'
+import { useSeatAvatars, useSeatVisual } from '../../features/avatars/useSeatAvatars'
 import { useHandoff } from '../../hooks/useHandoff'
 
 type Player = 'toy' | 'ninja'
@@ -73,7 +72,7 @@ function Archer({ player, x, py, hit }: { player: Player; x: number; py: number;
   const hip = py - 16
   const shoulder = py - 42
   const stroke = '#2b3440'
-  const Head = player === 'toy' ? ToyHead : NinjaHead
+  const { Head } = useSeatVisual(player)
   return (
     <g data-testid={`archer-${player}`} data-py={Math.round(py)}>
       <rect x={x - 16} y={py} width={32} height={GROUND - py} fill="#8d6e52" stroke="#6b503b" strokeWidth={1.5} />
@@ -115,6 +114,8 @@ function WindIndicator({ wind, cx }: { wind: number; cx: number }) {
 export default function ArcheryWidget({ id }: WidgetProps) {
   const dispatch = useAppDispatch()
   const hand = useHandoff()
+  const seatAvatars = useSeatAvatars()
+  const colorOf = (seat: Player) => avatarMetaById[seatAvatars[seat]].color
 
   const num = (v: unknown) => (typeof v === 'number' ? v : undefined)
   const p1y = useWidgetField<number>(id, 'p1y', 0, num)
@@ -392,8 +393,8 @@ export default function ArcheryWidget({ id }: WidgetProps) {
                 py: 0.25,
                 borderRadius: 1,
                 border: '2px solid',
-                borderColor: active ? PLAYER_COLOR[p] : 'transparent',
-                bgcolor: active ? `${PLAYER_COLOR[p]}22` : 'transparent',
+                borderColor: active ? colorOf(p) : 'transparent',
+                bgcolor: active ? `${colorOf(p)}22` : 'transparent',
               }}
             >
               <PlayerBadge mark={p} label={`${scores[p]} / ${WIN}`} pulse={active} />
@@ -445,9 +446,9 @@ export default function ArcheryWidget({ id }: WidgetProps) {
             {dealt && <Archer player="ninja" x={px('ninja')} py={dispY('ninja')} hit={flash === 'ninja'} />}
 
             {indicator && (
-              <g stroke={PLAYER_COLOR[turn]} strokeWidth={3} strokeLinecap="round">
+              <g stroke={colorOf(turn)} strokeWidth={3} strokeLinecap="round">
                 <line x1={indicator.x1} y1={indicator.y1} x2={indicator.x2} y2={indicator.y2} />
-                <circle cx={indicator.x2} cy={indicator.y2} r={3} fill={PLAYER_COLOR[turn]} stroke="none" />
+                <circle cx={indicator.x2} cy={indicator.y2} r={3} fill={colorOf(turn)} stroke="none" />
               </g>
             )}
 

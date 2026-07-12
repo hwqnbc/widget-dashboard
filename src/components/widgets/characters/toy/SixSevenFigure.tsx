@@ -1,6 +1,6 @@
 import { Box, keyframes } from '@mui/material'
 import { TOY as T } from './toyPalette'
-import Hand from './Hand'
+import Hand from '../shared/Hand'
 import { ToyLegs, ToyNeck, ToyTorso, ToyCapAndFace } from './toyParts'
 
 // The forearm hinges at the elbow so the hand bobs up and down; the upper arm

@@ -4,7 +4,7 @@
 // are shared via toyParts; only the pose-dependent arms and mouth are inline.
 
 import { TOY as T } from './toyPalette'
-import Hand from './Hand'
+import Hand from '../shared/Hand'
 import { ToyLegs, ToyNeck, ToyTorso, ToyCapAndFace } from './toyParts'
 
 export default function ToyFigure({

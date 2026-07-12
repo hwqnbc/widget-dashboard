@@ -42,8 +42,10 @@ src/
   app/store.ts        combineReducers → persistReducer; RootState / AppDispatch
   app/hooks.ts        typed useAppDispatch / useAppSelector — always use these
   features/widgets/   widgetsSlice (instances + layout), types, widgetCatalog
-  features/ui/        uiSlice (theme mode)
+  features/ui/        uiSlice (theme mode + seat→avatar map)
+  features/avatars/   AvatarId/Seat types, avatarCatalog (name/colour), useSeatAvatars
   registry/           widgetRegistry: WidgetType -> component
+                      avatarRegistry: AvatarId -> { Head, Figure, Celebration }
   theme/              buildTheme + AppThemeProvider (reads ui.mode from redux)
   components/         AppLayout, WidgetBoard, WidgetCard, widgets/*
   pages/              DashboardPage, SettingsPage
@@ -71,9 +73,32 @@ Provider order (`main.tsx`): `Provider` → `PersistGate` → `AppThemeProvider`
 
 Reusable primitives for new widgets: `hooks/useNow` (ticking clock),
 `features/widgets/useWidgetField` (typed persisted-`data` selector),
-`components/widgets/TapStage` (tap-to-animate button), and the shared character
-pieces under `components/widgets/characters/` (`ToyHead`, `NinjaHead`, `Hand`,
-`toyParts`, and the `toyPalette` / `ninjaPalette` colour modules).
+`components/widgets/TapStage` (tap-to-animate button), and the per-avatar
+character folders under `components/widgets/characters/` — `toy/` (`ToyHead`,
+`ToyFigure`, `SixSevenFigure`, `ToyCelebration`, `toyParts`, `toyPalette`),
+`ninja/` (`NinjaHead`, `SwordNinjaFigure`, `NinjaFigure`, `NinjaCelebration`,
+`ninjaPalette`), `shared/Hand`, `boy/Boy`.
+
+## Avatars (players vs seats)
+
+Games have two fixed **seats**, `'toy'` and `'ninja'` (`features/avatars/types.ts`
+`Seat`) — the identity board cells, scores, the AI and archer positions key on.
+What a seat *looks like* is its chosen **avatar** (`AvatarId`); the persisted
+`ui.avatars` seat→avatar map (default identity `{toy:'toy', ninja:'ninja'}`,
+edited on the Settings page) drives only rendering. Resolve a seat's look with
+`useSeatVisual(seat)` → `{ Head, Figure, Celebration }` (from `avatarRegistry`) and
+`avatarMetaById[…].color`/`.name` (from `avatarCatalog`). Never hardcode
+`seat === 'toy' ? <ToyHead/> : <NinjaHead/>` — go through the registry so a swapped
+avatar follows everywhere (the chip, colour, turn banner and win celebration).
+
+### Adding an avatar (figure)
+
+1. Add the id to `AvatarId` in `features/avatars/types.ts` (and `AVATAR_IDS`).
+2. Add a catalog entry (name + colour) in `features/avatars/avatarCatalog.ts`.
+3. Build the character folder `components/widgets/characters/<id>/` with `Head`,
+   `Figure`, `Celebration` (+ palette), and register the bundle in
+   `registry/avatarRegistry.tsx`. It becomes selectable on the Settings page
+   automatically.
 
 ## Docs
 
@@ -88,6 +113,9 @@ motif×colour face registry, flip animation; reuses PlayerBadge, ConfirmDialog
 and WinnerCelebration). See `docs/archery.md` for the Archery widget (2-player
 projectile game, drag-to-aim slingshot under gravity, random archer heights,
 first to 5 hits; reuses the heads, PlayerBadge, TurnBanner and WinnerCelebration).
+See `docs/avatars.md` for the avatar system (seat-vs-avatar model, the per-avatar
+character folders, the catalog/registry split, the Settings picker, and how to add
+a new figure).
 
 **Read `docs/lessons.md` before building or tweaking a board / character /
 animation widget** — it collects the recurring refinements (grid cells that

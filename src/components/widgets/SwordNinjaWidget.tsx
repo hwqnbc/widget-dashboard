@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import SwordNinjaFigure from './characters/SwordNinjaFigure'
+import SwordNinjaFigure from './characters/ninja/SwordNinjaFigure'
 import TapStage from './TapStage'
 
 /**

@@ -1,7 +1,8 @@
 import { Box, Stack, Typography, keyframes } from '@mui/material'
-import ToyHead from './characters/ToyHead'
-import NinjaHead from './characters/NinjaHead'
-import { PLAYER_COLOR } from './playerColors'
+import type { Seat } from '../../features/avatars/types'
+import { avatarMetaById } from '../../features/avatars/avatarCatalog'
+import { useSeatAvatarId } from '../../features/avatars/useSeatAvatars'
+import { avatarVisualById } from '../../registry/avatarRegistry'
 
 const popIn = keyframes`
   0%   { opacity: 0; transform: scale(0.8); }
@@ -17,10 +18,12 @@ export default function TurnBanner({
   player,
   onSkip,
 }: {
-  player: 'toy' | 'ninja'
+  player: Seat
   onSkip: () => void
 }) {
-  const color = PLAYER_COLOR[player]
+  const avatarId = useSeatAvatarId(player)
+  const { name, color } = avatarMetaById[avatarId]
+  const { Head } = avatarVisualById[avatarId]
   return (
     <Box
       onClick={onSkip}
@@ -51,10 +54,10 @@ export default function TurnBanner({
         }}
       >
         <Box sx={{ width: 52, height: 52 }}>
-          {player === 'toy' ? <ToyHead /> : <NinjaHead />}
+          <Head />
         </Box>
         <Typography sx={{ fontWeight: 700, color }}>
-          {player === 'toy' ? 'Toy' : 'Ninja'}'s turn
+          {name}'s turn
         </Typography>
       </Stack>
     </Box>

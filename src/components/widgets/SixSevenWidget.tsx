@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import SixSevenFigure from './characters/SixSevenFigure'
+import SixSevenFigure from './characters/toy/SixSevenFigure'
 import TapStage from './TapStage'
 
 /**

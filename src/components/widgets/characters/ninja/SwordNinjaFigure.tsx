@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Box, keyframes } from '@mui/material'
 import { N } from './ninjaPalette'
-import Hand from './Hand'
+import Hand from '../shared/Hand'
 
 /** A katana in local coords: hilt at (0,0), blade pointing up (−y). Hard edges. */
 function Katana() {
