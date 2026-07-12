@@ -15,10 +15,13 @@ npm run dev      # dev server (Vite, HMR)
 npm run build    # tsc -b (type-check) then vite build
 npm run preview  # serve the production build
 npm run lint     # ESLint 9 (flat config)
+npm run e2e      # Drone Sim end-to-end suites (headless Chromium; see e2e/README.md)
 ```
 
-There is no test runner configured yet. Verify changes with `npm run build`
-(catches type + bundling errors) and `npm run lint`.
+There is no unit-test runner configured. Verify changes with `npm run build`
+(catches type + bundling errors) and `npm run lint`; changes touching the
+Drone Sim widget should also pass `npm run e2e` (filterable, e.g.
+`npm run e2e core`).
 
 ## Workflow
 

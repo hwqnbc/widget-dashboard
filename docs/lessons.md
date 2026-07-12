@@ -180,3 +180,66 @@ before drawing a new character.
     (lessons #4), and remember `Figure` (static) and `Celebration` (animated) are
     separate renders — the rest pose can be posed independently of the animation's
     endpoints.
+
+## 3D / WebGL (Drone Sim)
+
+The first three.js/R3F widget. These carried across every one of its six
+feature rounds (flight, collision, gates, time trial, courses, weather, crash).
+
+28. **The R3F `<Canvas>` is a separate React root.** MUI theme, redux and any
+    other context do **not** cross into it. Resolve theme/store values outside
+    and pass them as props (palettes, layout); object props and refs cross
+    fine. Symptom when forgotten: `useTheme`/`useAppSelector` inside the scene
+    throws or returns defaults.
+
+29. **Zero-render input path.** High-frequency data never touches React state
+    or redux: joystick values write into a shared mutable ref that `useFrame`
+    reads; the flight state mutates in place; the HUD is updated by direct DOM
+    writes on a throttled (150 ms) tick. React renders only on genuine events
+    (gate pass, lap complete, crash) — a few per minute. Dispatching per
+    pointer-move or per frame re-renders the whole widget tree and thrashes
+    redux-persist.
+
+30. **Keep the simulation in pure, React-free modules** (`flightModel`,
+    `worldLayout`, `lapTimer`: mutate-in-place, allocation-free, no
+    `Date.now`/`Math.random` inside step functions). Payoff: with no test
+    runner configured, `npx esbuild --bundle` + plain node scripts unit-test
+    the physics exactly as shipped. Seed procedural content (mulberry32) so
+    worlds are deterministic; when a layout becomes seed-driven later, keep
+    the default seed reproducing the original hand-tuned content bit-for-bit
+    so existing instances (and tests) are unaffected.
+
+31. **Publish telemetry as `data-*` attributes and treat them as the test
+    contract.** The HUD's throttled tick writes `data-alt/speed/x/z/yaw/wind/
+    crash-state` (plus lap/gate state on the chips). E2E suites assert only on
+    these + `data-testid` — never on internals — and the same attributes are
+    the first debugging tool. Costs nothing beyond writes already happening.
+
+32. **Drive E2E flight closed-loop, not with timed input.** Open-loop "hold
+    the stick for 0.34 s" steering misses a 4°-wide target under browser
+    timing jitter. A P-controller reading the telemetry attributes and
+    steering via CDP touch events threads 2-unit gate rings reliably. Two
+    sub-lessons: **brake before precision moves** (damped inertia coasts
+    ~`v/λ` — the drone drifted off a roof mid-descent), and **test routes must
+    obey the game rules as they evolve** (crash mode broke the old full-speed
+    return leg; the pilot now cruises above the skyline).
+
+33. **New forces interact with every trigger you wrote earlier.** Storm wind
+    (position drift) pushed the *idle* drone off the pad and started a lap by
+    itself — fixed by gating lap start on the drone being self-propelled
+    (velocity, not drift). When adding a force/mode, sweep all
+    position-triggered logic (start/finish zones, gate checks) and re-run the
+    older suites; a fresh screenshot caught this one.
+
+34. **Collision cheaply done right:** AABBs pre-inflated by the drone radius,
+    resolve along the axis of least penetration, zero **only** the inward
+    velocity component — wall sliding and rooftop landings fall out for free,
+    and the magnitude you zero *is* the impact speed (return it and a crash
+    threshold costs nothing). Verify no tunneling: max speed × `MAX_DT` must
+    stay below the smallest inflated footprint.
+
+35. **Headless WebGL needs software GL:** launch Chromium with
+    `--enable-unsafe-swiftshader --use-angle=swiftshader`. And the lowercase
+    `<line>` JSX element collides with the SVG intrinsic in TypeScript — build
+    a `THREE.Line` imperatively and mount it with `<primitive>`, disposing
+    geometry/material in the effect cleanup.

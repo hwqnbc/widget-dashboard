@@ -201,16 +201,25 @@ bottom corners (88 px; 140 px + safe-area insets in fullscreen via
 the fullscreen rotate hint; fullscreen re-mounts the single live instance in
 the overlay, so there's never a duplicate `useFrame` loop.
 
-## HUD telemetry (also the test hook)
+## HUD telemetry (also the test contract)
 
-`DroneRig` writes `ALT x.x m · SPD x.x` into the HUD element every 150 ms via
-direct DOM writes, and mirrors the numbers into `data-alt`/`data-speed`
-attributes on `[data-testid="dronesim-hud"]`. Headless verification drives
-the sticks with synthesized pointer/touch events and asserts on those
-attributes (climb, altitude hold, inertia braking, simultaneous multi-touch
-via CDP `Input.dispatchTouchEvent`, reset, view persistence). Launch headless
-Chromium with `--enable-unsafe-swiftshader --use-angle=swiftshader` for a
-software WebGL context.
+`DroneRig` writes `ALT x.x m · SPD x.x` (+ `WIND x.x` in storm) into the HUD
+element every 150 ms via direct DOM writes, and mirrors the state into
+`data-alt/-speed/-x/-z/-yaw/-wind/-crash-state` attributes on
+`[data-testid="dronesim-hud"]`; the gate and timer chips expose
+`data-gate/-score` and `data-lap-status/-lap-ms/-best-ms`. These attributes
+plus the `data-testid` hooks are the widget's **public test contract**.
+
+## E2E test suites (`e2e/`)
+
+`npm run e2e` (optionally `npm run e2e <filter>`) bundles the pure sim
+modules with esbuild, starts a dev server, and runs six headless-Chromium
+suites — core flight, rooftop collision, the full time-trial lap, course
+shuffling, storm weather, and crash/respawn. Flight is driven **closed-loop**
+(a P-controller over the telemetry attributes steering CDP touch events);
+see `e2e/README.md` for the suite map and environment knobs
+(`CHROMIUM_PATH`, `E2E_PORT`). Chromium is launched with
+`--enable-unsafe-swiftshader --use-angle=swiftshader` for software WebGL.
 
 ## Future work
 

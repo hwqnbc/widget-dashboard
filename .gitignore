@@ -25,3 +25,7 @@ Thumbs.db
 
 # TypeScript build info
 *.tsbuildinfo
+
+# E2E runtime output
+e2e/.bundle
+e2e/.artifacts
