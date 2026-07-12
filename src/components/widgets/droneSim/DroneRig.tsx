@@ -15,6 +15,13 @@ import type { Gate } from './worldLayout'
 import { crossedGate } from './worldLayout'
 import type { LapState } from './lapTimer'
 import { fmtLap, updateLap } from './lapTimer'
+import {
+  CONTACT_COOLDOWN_MS,
+  CONTACT_MIN_IMPACT,
+  CRASH_PULSE,
+  contactPulse,
+  vibrate,
+} from './haptics'
 import DroneModel from './DroneModel'
 import type { GateFlash } from './GateRings'
 
@@ -83,6 +90,8 @@ export default function DroneRig({
   const prevPos = useRef({ ...flight.pos })
   /** Sampled positions of the lap in progress (flat x,y,z triples). */
   const pathRef = useRef<number[]>([])
+  /** Wall-clock ms of the last contact buzz (haptics cooldown). */
+  const lastBuzzMs = useRef(0)
 
   useFrame(({ clock }, dt) => {
     const wind = windRef.current
@@ -121,8 +130,16 @@ export default function DroneRig({
         crash.until = clock.elapsedTime + CRASH_DURATION
         crash.spinX = 0
         crash.spinZ = 0
+        vibrate(CRASH_PULSE)
         onCrash()
       } else {
+        if (
+          impact >= CONTACT_MIN_IMPACT &&
+          now - lastBuzzMs.current >= CONTACT_COOLDOWN_MS
+        ) {
+          lastBuzzMs.current = now
+          vibrate(contactPulse(impact))
+        }
         // Gate pass (only while a lap is running): did this frame's movement
         // cross the active ring's plane inside the ring? A long segment means
         // a teleport (reset/respawn) — skip it so the jump can't score.

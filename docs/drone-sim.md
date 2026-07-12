@@ -201,6 +201,24 @@ bottom corners (88 px; 140 px + safe-area insets in fullscreen via
 the fullscreen rotate hint; fullscreen re-mounts the single live instance in
 the overlay, so there's never a duplicate `useFrame` loop.
 
+## Haptics
+
+On browsers with `navigator.vibrate` (Android Chrome; iOS Safari lacks the
+API), `haptics.ts` fires capability-gated pulses — a silent no-op elsewhere,
+so there is no toggle and no support checks at call sites:
+
+- **Wall/roof contact**: a short buzz scaled with impact speed
+  (`min(60ms, impact × 8)`), only above `CONTACT_MIN_IMPACT` (1.5 u/s) and
+  rate-limited to one per 250 ms — scraping along a wall re-registers impact
+  every frame and would buzz continuously otherwise. Suppressed when the
+  impact escalates into a crash.
+- **Gate pass**: `GATE_PULSE` [25, 40, 25].
+- **Crash**: `CRASH_PULSE` [100, 60, 160].
+- **Lap complete**: `LAP_PULSE` [30, 50, 30, 50, 90].
+
+The E2E suite stubs `navigator.vibrate` with a recorder via `addInitScript`
+and asserts the exact patterns.
+
 ## HUD telemetry (also the test contract)
 
 `DroneRig` writes `ALT x.x m · SPD x.x` (+ `WIND x.x` in storm) into the HUD
@@ -233,8 +251,6 @@ from the enhancement menu, with the integration point each would build on.
 - **Rates/expo tuning panel** — persisted per-widget max speed / yaw rate /
   stick expo; a settings popover writing `data` keys read by `stepFlight`
   multipliers.
-- **Haptics** — `navigator.vibrate` pulses on wall contact, gate pass and
-  crash (mobile only; capability-gated).
 
 ### Camera & visuals
 - **Chase-camera building avoidance** — the third-person boom can clip

@@ -53,7 +53,8 @@ export async function launch() {
 export async function addDroneWidget(page) {
   await page.goto(BASE_URL, { waitUntil: 'networkidle' })
   await page.getByRole('button', { name: 'Add widget' }).click()
-  await page.getByText('Drone Sim').click()
+  // menuitem role: a persisted Drone Sim card's title would also match by text
+  await page.getByRole('menuitem', { name: /Drone Sim/ }).click()
   await page.waitForSelector('[data-testid="dronesim-root"]')
   await page.waitForTimeout(600)
 }

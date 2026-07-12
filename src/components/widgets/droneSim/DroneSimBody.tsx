@@ -24,6 +24,7 @@ import {
 } from './flightModel'
 import { DEFAULT_SEED, buildWorldLayout } from './worldLayout'
 import { createLapState, fmtLap, resetLapState } from './lapTimer'
+import { GATE_PULSE, LAP_PULSE, vibrate } from './haptics'
 import ConfirmDialog from '../ConfirmDialog'
 import WorldScene from './WorldScene'
 import DroneRig from './DroneRig'
@@ -97,11 +98,13 @@ export default function DroneSimBody({ id }: WidgetProps) {
   )
 
   const onGatePass = useCallback(() => {
+    vibrate(GATE_PULSE)
     setActiveGate((gate) => Math.min(gate + 1, gateCount))
   }, [gateCount])
 
   const onLapComplete = useCallback(
     (lapMs: number, path: number[]) => {
+      vibrate(LAP_PULSE)
       const isBest = bestLapMs === 0 || lapMs < bestLapMs
       dispatch(
         updateWidgetData({
