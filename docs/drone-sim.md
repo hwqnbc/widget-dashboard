@@ -82,8 +82,7 @@ in refs (`FlightState`, `ControlInput`).
 - `WorldScene`: sky/fog colours + hemisphere/directional/ambient lights,
   140×140 ground plane + `gridHelper` (motion parallax), a 36-building city
   in **one `instancedMesh`** (matrices + per-instance colour written once in
-  `useLayoutEffect`), landing pad, 3 decorative gate rings (future scoring).
-  ~10 draw calls total.
+  `useLayoutEffect`), landing pad. ~10 draw calls total.
 - Layout is deterministic: a seeded mulberry32 PRNG runs once at module load
   (the purity rule bans randomness in reducers/`defaultWidgetData`, not
   here), keeping the spawn corridor and pad clear and letting headless tests
@@ -100,6 +99,22 @@ in refs (`FlightState`, `ControlInput`).
   counter-rotate and spin up with throttle. Pose is split: outer group takes
   position + yaw, inner group takes tilt, so the camera math only cares
   about the outer transform.
+
+## Gate scoring
+
+The three rings are **score gates**, flown in order. `worldLayout.ts` derives
+a `Gate { center, normal, passRadius }` per ring, and `crossedGate` checks
+whether the frame's movement segment crossed the ring plane (signed-distance
+sign change) with the interpolated crossing point inside `passRadius`
+(direction-agnostic). `DroneRig` tests only the **active** gate each frame
+and skips teleport-length segments so reset can't score. A pass flashes the
+ring white (`GateRings` drives all gate colours in `useFrame`: green = done,
+pulsing accent = active, dim = upcoming), advances the sequence, and — after
+the last gate — increments the persisted `score` and restarts the course.
+Gate progress is transient (reload/reset restarts at gate 1); only `score`
+persists. The `dronesim-gates` chip shows `GATE n/3 · SCORE s` and exposes
+`data-gate`/`data-score` for tests. Gate state changes re-render React only a
+few times per course — the pulse/flash never does.
 
 ## Cameras (`CameraRig.tsx`)
 
@@ -137,7 +152,7 @@ software WebGL context.
 
 ## Future work
 
-- Ring/gate scoring, timers, best-lap persistence (`data` keys slot in
-  without migration).
+- Lap timers / best-lap persistence on top of gate scoring (`data` keys slot
+  in without migration).
 - Gamepad support (map axes onto the same `ControlInput` ref).
 - Chase-camera building avoidance (the camera can clip through geometry).

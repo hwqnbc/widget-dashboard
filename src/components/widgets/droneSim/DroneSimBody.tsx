@@ -1,4 +1,4 @@
-import { useCallback, useRef } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { Canvas } from '@react-three/fiber'
 import { Box, IconButton, Tooltip, alpha, useTheme } from '@mui/material'
 import CameraswitchIcon from '@mui/icons-material/Cameraswitch'
@@ -16,9 +16,12 @@ import {
   createFlightState,
   resetFlightState,
 } from './flightModel'
+import { GATES } from './worldLayout'
 import WorldScene from './WorldScene'
 import DroneRig from './DroneRig'
 import CameraRig from './CameraRig'
+import GateRings from './GateRings'
+import type { GateFlash } from './GateRings'
 import VirtualJoystick from './VirtualJoystick'
 
 /**
@@ -33,10 +36,28 @@ export default function DroneSimBody({ id }: WidgetProps) {
   const palette = mode === 'dark' ? NIGHT_PALETTE : DAY_PALETTE
   const { fullscreen } = usePresentation()
   const view = useWidgetField<DroneView>(id, 'view', 'tp', coerceView)
+  const score = useWidgetField(id, 'score', 0)
 
   const controls = useRef(createControlInput()).current
   const flight = useRef(createFlightState()).current
   const hudRef = useRef<HTMLDivElement>(null)
+  const flashRef = useRef<GateFlash>({ gate: -1, until: 0 })
+  // Which ring must be flown through next; transient — a reload (or reset)
+  // restarts the course, only the score persists.
+  const [activeGate, setActiveGate] = useState(0)
+
+  const onGatePass = useCallback(() => {
+    setActiveGate((gate) => {
+      if (gate < GATES.length - 1) return gate + 1
+      dispatch(updateWidgetData({ id, data: { score: score + 1 } }))
+      return 0
+    })
+  }, [dispatch, id, score])
+
+  const resetSim = () => {
+    resetFlightState(flight)
+    setActiveGate(0)
+  }
 
   const stickSize = fullscreen ? 140 : 88
   const stickInset = fullscreen ? 16 : 0
@@ -81,7 +102,15 @@ export default function DroneSimBody({ id }: WidgetProps) {
           camera={{ fov: 60, near: 0.1, far: 400, position: [0, 4, 26] }}
         >
           <WorldScene palette={palette} />
-          <DroneRig controls={controls} flight={flight} hudRef={hudRef} />
+          <GateRings palette={palette} activeGate={activeGate} flashRef={flashRef} />
+          <DroneRig
+            controls={controls}
+            flight={flight}
+            hudRef={hudRef}
+            activeGate={activeGate}
+            onGatePass={onGatePass}
+            flashRef={flashRef}
+          />
           <CameraRig view={view} flight={flight} />
         </Canvas>
       </Box>
@@ -106,6 +135,27 @@ export default function DroneSimBody({ id }: WidgetProps) {
         }}
       >
         ALT 2.0m · SPD 0.0
+      </Box>
+
+      <Box
+        data-testid="dronesim-gates"
+        data-gate={activeGate + 1}
+        data-score={score}
+        sx={{
+          position: 'absolute',
+          top: 36,
+          left: 8,
+          px: 1,
+          py: 0.25,
+          borderRadius: 1,
+          bgcolor: alpha('#000', 0.4),
+          color: '#ffca28',
+          fontFamily: 'monospace',
+          fontSize: 12,
+          pointerEvents: 'none',
+        }}
+      >
+        {`GATE ${activeGate + 1}/${GATES.length} · SCORE ${score}`}
       </Box>
 
       <Box
@@ -135,7 +185,7 @@ export default function DroneSimBody({ id }: WidgetProps) {
           <IconButton
             size="small"
             data-testid="dronesim-reset"
-            onClick={() => resetFlightState(flight)}
+            onClick={resetSim}
             sx={{ color: '#fff' }}
           >
             <RestartAltIcon fontSize="small" />

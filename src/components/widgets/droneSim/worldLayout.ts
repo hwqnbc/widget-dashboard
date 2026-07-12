@@ -69,9 +69,53 @@ export const COLLIDERS: readonly Collider[] = BUILDINGS.map((b) => ({
   top: b.h + DRONE_RADIUS,
 }))
 
-/** Decorative gates for now; future scoring hooks. */
+/** Score gates, flown in order. */
 export const RINGS: readonly RingSpec[] = [
   { x: 0, y: 6, z: -6, yaw: 0 },
   { x: -18, y: 10, z: -22, yaw: Math.PI / 4 },
   { x: 20, y: 14, z: -30, yaw: -Math.PI / 5 },
 ]
+
+/** Torus major radius of a gate ring (see WorldScene/GateRings geometry). */
+export const RING_RADIUS = 2.4
+
+export interface Gate {
+  center: Vec3G
+  /** Unit normal of the ring plane (torus axis after rotation-y). */
+  normal: Vec3G
+  /** Pass counts when the crossing point is within this distance of centre. */
+  passRadius: number
+}
+interface Vec3G {
+  x: number
+  y: number
+  z: number
+}
+
+export const GATES: readonly Gate[] = RINGS.map((r) => ({
+  center: { x: r.x, y: r.y, z: r.z },
+  normal: { x: Math.sin(r.yaw), y: 0, z: Math.cos(r.yaw) },
+  passRadius: RING_RADIUS - 0.3,
+}))
+
+/**
+ * Did the segment prev→cur cross the gate's plane inside the ring? Detects a
+ * sign change of the signed plane distance and checks the interpolated
+ * crossing point against passRadius. Direction-agnostic on purpose.
+ */
+export function crossedGate(
+  prev: Vec3G,
+  cur: Vec3G,
+  gate: Gate,
+): boolean {
+  const { center: c, normal: n } = gate
+  const dPrev =
+    (prev.x - c.x) * n.x + (prev.y - c.y) * n.y + (prev.z - c.z) * n.z
+  const dCur = (cur.x - c.x) * n.x + (cur.y - c.y) * n.y + (cur.z - c.z) * n.z
+  if (dPrev === dCur || dPrev * dCur > 0) return false
+  const t = dPrev / (dPrev - dCur)
+  const hx = prev.x + (cur.x - prev.x) * t - c.x
+  const hy = prev.y + (cur.y - prev.y) * t - c.y
+  const hz = prev.z + (cur.z - prev.z) * t - c.z
+  return Math.hypot(hx, hy, hz) <= gate.passRadius
+}

@@ -2,7 +2,7 @@ import { useLayoutEffect, useRef } from 'react'
 import { Color, Matrix4 } from 'three'
 import type { InstancedMesh } from 'three'
 import type { WorldPalette } from './palettes'
-import { BUILDINGS, RINGS } from './worldLayout'
+import { BUILDINGS } from './worldLayout'
 import { SPAWN } from './flightModel'
 
 /**
@@ -57,13 +57,6 @@ export default function WorldScene({ palette }: { palette: WorldPalette }) {
         <torusGeometry args={[1.5, 0.08, 8, 40]} />
         <meshStandardMaterial color={palette.ring} />
       </mesh>
-
-      {RINGS.map((r, i) => (
-        <mesh key={i} position={[r.x, r.y, r.z]} rotation-y={r.yaw}>
-          <torusGeometry args={[2.4, 0.12, 10, 40]} />
-          <meshStandardMaterial color={palette.ring} />
-        </mesh>
-      ))}
     </>
   )
 }

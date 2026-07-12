@@ -4,8 +4,9 @@ import { useFrame } from '@react-three/fiber'
 import type { Group, Mesh, MeshBasicMaterial } from 'three'
 import type { ControlInput, FlightState } from './flightModel'
 import { SPAWN, stepFlight } from './flightModel'
-import { COLLIDERS } from './worldLayout'
+import { COLLIDERS, GATES, crossedGate } from './worldLayout'
 import DroneModel from './DroneModel'
+import type { GateFlash } from './GateRings'
 
 /** Seconds between HUD DOM writes (~7 Hz — cheap, and no React renders). */
 const HUD_INTERVAL = 0.15
@@ -20,18 +21,43 @@ export default function DroneRig({
   controls,
   flight,
   hudRef,
+  activeGate,
+  onGatePass,
+  flashRef,
 }: {
   controls: ControlInput
   flight: FlightState
   hudRef: RefObject<HTMLDivElement | null>
+  activeGate: number
+  onGatePass: () => void
+  flashRef: { current: GateFlash }
 }) {
   const outerRef = useRef<Group>(null)
   const tiltRef = useRef<Group>(null)
   const shadowRef = useRef<Mesh>(null)
   const hudClock = useRef(0)
+  const prevPos = useRef({ ...flight.pos })
 
-  useFrame((_, dt) => {
+  useFrame(({ clock }, dt) => {
     stepFlight(flight, controls, dt, COLLIDERS)
+
+    // Gate pass: did this frame's movement cross the active ring's plane
+    // inside the ring? A long segment means a teleport (reset) — skip it so
+    // the jump back to the pad can't score a gate.
+    const prev = prevPos.current
+    const jump =
+      Math.hypot(
+        flight.pos.x - prev.x,
+        flight.pos.y - prev.y,
+        flight.pos.z - prev.z,
+      ) > 2
+    if (!jump && crossedGate(prev, flight.pos, GATES[activeGate])) {
+      flashRef.current = { gate: activeGate, until: clock.elapsedTime + 0.6 }
+      onGatePass()
+    }
+    prev.x = flight.pos.x
+    prev.y = flight.pos.y
+    prev.z = flight.pos.z
 
     const outer = outerRef.current
     if (outer) {
