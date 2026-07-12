@@ -9,6 +9,7 @@ export type WidgetType =
   | 'connect4'
   | 'memory'
   | 'archery'
+  | 'droneSim'
 
 /** A widget placed on the board. `data` holds per-widget persisted state. */
 export interface WidgetInstance {

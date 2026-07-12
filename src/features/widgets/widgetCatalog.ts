@@ -77,6 +77,13 @@ export const WIDGET_CATALOG: WidgetMeta[] = [
     defaultSize: { w: 6, h: 6, minW: 5, minH: 5 },
     preferredOrientation: 'landscape',
   },
+  {
+    type: 'droneSim',
+    title: 'Drone Sim',
+    description: 'Fly a quadcopter over a 3D city — twin-stick controls',
+    defaultSize: { w: 6, h: 6, minW: 5, minH: 5 },
+    preferredOrientation: 'landscape',
+  },
 ]
 
 export const widgetMetaByType = Object.fromEntries(
@@ -130,6 +137,8 @@ export function defaultWidgetData(type: WidgetType): Record<string, unknown> {
         distance: 'short',
         platforms: 'still',
       }
+    case 'droneSim':
+      return { view: 'tp' }
     case 'clock':
     default:
       return {}

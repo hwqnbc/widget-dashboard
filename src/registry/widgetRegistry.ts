@@ -10,6 +10,7 @@ import TicTacToeWidget from '../components/widgets/TicTacToeWidget'
 import Connect4Widget from '../components/widgets/Connect4Widget'
 import MemoryWidget from '../components/widgets/MemoryWidget'
 import ArcheryWidget from '../components/widgets/ArcheryWidget'
+import DroneSimWidget from '../components/widgets/droneSim/DroneSimWidget'
 
 /** Props every widget component receives. */
 export interface WidgetProps {
@@ -28,4 +29,5 @@ export const widgetComponents: Record<WidgetType, ComponentType<WidgetProps>> = 
   connect4: Connect4Widget,
   memory: MemoryWidget,
   archery: ArcheryWidget,
+  droneSim: DroneSimWidget,
 }
