@@ -18,7 +18,11 @@ import { buildWorldLayout, DEFAULT_SEED } from './.bundle/worldLayout.js'
 
 const { check, finish } = reporter('timetrial')
 const GATES = buildWorldLayout(DEFAULT_SEED).gates
-const CRUISE_ALT = 20 // above the tallest building (18.25)
+// Well above the tallest building (18.5 incl. drone radius): flyTo accepts
+// waypoints within tol 2, so cruising can start ~2 low — 24 keeps even that
+// worst case 3.5 clear of the skyline (a 20-cruise once started at ~18.1 and
+// clipped a tower at full speed under heavy rendering load).
+const CRUISE_ALT = 24
 const PAD = { x: 0, z: 18 }
 
 const { browser, context, page } = await launch()

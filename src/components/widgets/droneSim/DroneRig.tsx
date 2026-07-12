@@ -18,8 +18,8 @@ import {
   stepCrash,
   stepFlight,
 } from './flightModel'
-import type { Gate } from './worldLayout'
-import { crossedGate } from './worldLayout'
+import type { Gate, LandingPadSpec } from './worldLayout'
+import { crossedGate, scoreLanding } from './worldLayout'
 import type { LapState } from './lapTimer'
 import { fmtLap, updateLap } from './lapTimer'
 import {
@@ -66,6 +66,9 @@ export default function DroneRig({
   crashRef,
   onCrash,
   onCrashEnd,
+  landingMode,
+  landingPads,
+  onLanding,
   activeGate,
   onGatePass,
   flashRef,
@@ -90,6 +93,9 @@ export default function DroneRig({
   crashRef: { current: CrashState }
   onCrash: () => void
   onCrashEnd: () => void
+  landingMode: boolean
+  landingPads: readonly LandingPadSpec[]
+  onLanding: (points: number) => void
   activeGate: number
   onGatePass: () => void
   flashRef: { current: GateFlash }
@@ -106,6 +112,8 @@ export default function DroneRig({
   const pathRef = useRef<number[]>([])
   /** Wall-clock ms of the last contact buzz (haptics cooldown). */
   const lastBuzzMs = useRef(0)
+  /** True once the drone has left its last scored pad — arms the next one. */
+  const airborneRef = useRef(true)
 
   useFrame(({ clock }, dt) => {
     const wind = windRef.current
@@ -155,6 +163,35 @@ export default function DroneRig({
         ) {
           lastBuzzMs.current = now
           vibrate(contactPulse(impact))
+        }
+
+        // Landing challenge: an airborne drone settling onto a pad's roof
+        // (impact = the vertical speed the roof absorbed) scores by
+        // precision + softness; leaving the pad re-arms the next attempt.
+        if (landingMode) {
+          if (airborneRef.current && impact > 0) {
+            for (const pad of landingPads) {
+              if (Math.abs(flight.pos.y - pad.top) < 0.05) {
+                const dist = Math.hypot(
+                  flight.pos.x - pad.x,
+                  flight.pos.z - pad.z,
+                )
+                if (dist <= pad.r) {
+                  airborneRef.current = false
+                  onLanding(scoreLanding(dist, pad.r, impact))
+                  break
+                }
+              }
+            }
+          } else if (!airborneRef.current) {
+            const clearOfPads = landingPads.every(
+              (pad) =>
+                flight.pos.y > pad.top + 1 ||
+                Math.hypot(flight.pos.x - pad.x, flight.pos.z - pad.z) >
+                  pad.r + 0.5,
+            )
+            if (clearOfPads) airborneRef.current = true
+          }
         }
         // Gate pass (only while a lap is running): did this frame's movement
         // cross the active ring's plane inside the ring? A long segment means

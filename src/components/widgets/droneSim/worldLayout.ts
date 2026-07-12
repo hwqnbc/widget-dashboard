@@ -75,6 +75,15 @@ export interface RoofSpec {
   kind: 'antenna' | 'tank'
 }
 
+export interface LandingPadSpec {
+  building: number
+  x: number
+  z: number
+  /** Rest height for a drone on this roof (building height + drone radius). */
+  top: number
+  r: number
+}
+
 export interface WorldLayout {
   buildings: readonly BuildingSpec[]
   rings: readonly RingSpec[]
@@ -85,6 +94,23 @@ export interface WorldLayout {
   traffic: readonly TrafficSpec[]
   clouds: readonly CloudSpec[]
   roofs: readonly RoofSpec[]
+  landingPads: readonly LandingPadSpec[]
+}
+
+/** Landing-pad disc radius (world units). */
+export const LANDING_PAD_RADIUS = 1.6
+
+/**
+ * Score a rooftop touchdown: 100 for a feather-soft dead-centre landing,
+ * down to a consolation 10. Precision costs up to 40, hardness 6 per u/s.
+ */
+export function scoreLanding(
+  dist: number,
+  radius: number,
+  touchdownSpeed: number,
+): number {
+  const raw = 100 - (dist / radius) * 40 - touchdownSpeed * 6
+  return Math.round(Math.min(100, Math.max(10, raw)))
 }
 
 /** Torus major radius of a gate ring (see GateRings geometry). */
@@ -267,6 +293,43 @@ function buildRoofs(rand: () => number, buildings: readonly BuildingSpec[]): Roo
   return roofs
 }
 
+function buildLandingPads(
+  rand: () => number,
+  buildings: readonly BuildingSpec[],
+  roofs: readonly RoofSpec[],
+): LandingPadSpec[] {
+  const detailed = new Set(roofs.map((r) => r.building))
+  const candidates = buildings
+    .map((b, i) => ({ b, i }))
+    .filter(
+      ({ b, i }) =>
+        b.h >= 6 &&
+        b.h <= 16 &&
+        !detailed.has(i) &&
+        Math.min(b.w, b.d) >= 3 && // roof big enough for the disc
+        Math.hypot(b.x - SPAWN.x, b.z - SPAWN.z) >= 15,
+    )
+  const pads: LandingPadSpec[] = []
+  let guard = 0
+  while (pads.length < 3 && candidates.length > 0 && guard++ < 60) {
+    const pick = candidates[Math.floor(rand() * candidates.length)]
+    if (
+      pads.some((p) => Math.hypot(p.x - pick.b.x, p.z - pick.b.z) < 20) ||
+      pads.some((p) => p.building === pick.i)
+    ) {
+      continue
+    }
+    pads.push({
+      building: pick.i,
+      x: pick.b.x,
+      z: pick.b.z,
+      top: pick.b.h + DRONE_RADIUS,
+      r: LANDING_PAD_RADIUS,
+    })
+  }
+  return pads
+}
+
 export function buildWorldLayout(seed: number): WorldLayout {
   const rand = mulberry32(seed)
   const buildings = buildCity(rand)
@@ -281,6 +344,7 @@ export function buildWorldLayout(seed: number): WorldLayout {
   const traffic = buildTraffic(rand, roads.length)
   const clouds = buildClouds(rand)
   const roofs = buildRoofs(rand, buildings)
+  const landingPads = buildLandingPads(rand, buildings, roofs)
 
   const colliders: Collider[] = buildings.map((b) => ({
     minX: b.x - b.w / 2 - DRONE_RADIUS,
@@ -294,7 +358,18 @@ export function buildWorldLayout(seed: number): WorldLayout {
     normal: { x: Math.sin(r.yaw), y: 0, z: Math.cos(r.yaw) },
     passRadius: RING_RADIUS - 0.3,
   }))
-  return { buildings, rings, colliders, gates, trees, roads, traffic, clouds, roofs }
+  return {
+    buildings,
+    rings,
+    colliders,
+    gates,
+    trees,
+    roads,
+    traffic,
+    clouds,
+    roofs,
+    landingPads,
+  }
 }
 
 /**

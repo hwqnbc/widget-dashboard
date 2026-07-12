@@ -24,6 +24,7 @@ import FlightIcon from '@mui/icons-material/Flight'
 import MapIcon from '@mui/icons-material/Map'
 import TuneIcon from '@mui/icons-material/Tune'
 import ForestIcon from '@mui/icons-material/Forest'
+import SportsScoreIcon from '@mui/icons-material/SportsScore'
 import { useAppDispatch } from '../../../app/hooks'
 import { updateWidgetData } from '../../../features/widgets/widgetsSlice'
 import { useWidgetField } from '../../../features/widgets/useWidgetField'
@@ -61,6 +62,7 @@ import type { GateFlash } from './GateRings'
 import GhostLine from './GhostLine'
 import RainField from './RainField'
 import RichWorld from './RichWorld'
+import LandingPads from './LandingPads'
 import Minimap from './Minimap'
 import VirtualJoystick from './VirtualJoystick'
 
@@ -114,6 +116,8 @@ export default function DroneSimBody({ id }: WidgetProps) {
   const flightMode = useWidgetField<FlightMode>(id, 'flightMode', 'hold', coerceFlightMode)
   const minimap = useWidgetField(id, 'minimap', true)
   const richWorld = useWidgetField(id, 'richWorld', true)
+  const landing = useWidgetField(id, 'landing', false)
+  const landingBest = useWidgetField(id, 'landingBest', 0)
   const minimapDroneRef = useRef<SVGGElement>(null)
   const rateSpeed = useWidgetField(id, 'rateSpeed', 1, coerceRate)
   const rateYaw = useWidgetField(id, 'rateYaw', 1, coerceRate)
@@ -191,6 +195,20 @@ export default function DroneSimBody({ id }: WidgetProps) {
     resetFlightState(flight) // respawn on the pad; jump guard covers the leap
   }, [flight])
 
+  const onLanding = useCallback(
+    (points: number) => {
+      vibrate(LAP_PULSE)
+      const isBest = points > landingBest
+      if (isBest) {
+        dispatch(updateWidgetData({ id, data: { landingBest: points } }))
+      }
+      setBanner(`LANDED! ${points} pts${isBest ? ' · NEW BEST!' : ''}`)
+      if (bannerTimer.current) clearTimeout(bannerTimer.current)
+      bannerTimer.current = setTimeout(() => setBanner(null), 2500)
+    },
+    [dispatch, id, landingBest],
+  )
+
   const shuffleCourse = () => {
     setConfirmShuffle(false)
     dispatch(
@@ -240,6 +258,7 @@ export default function DroneSimBody({ id }: WidgetProps) {
       data-testid="dronesim-root"
       data-widget-id={id}
       data-world-seed={worldSeed}
+      data-landing-best={landingBest}
       onMouseDown={(e) => e.stopPropagation()}
       onTouchStart={(e) => e.stopPropagation()}
       sx={{
@@ -258,6 +277,7 @@ export default function DroneSimBody({ id }: WidgetProps) {
         >
           <WorldScene palette={palette} buildings={layout.buildings} />
           {richWorld && <RichWorld layout={layout} />}
+          {landing && <LandingPads pads={layout.landingPads} />}
           <GateRings
             palette={palette}
             rings={layout.rings}
@@ -284,6 +304,9 @@ export default function DroneSimBody({ id }: WidgetProps) {
             crashRef={crashRef}
             onCrash={onCrash}
             onCrashEnd={onCrashEnd}
+            landingMode={landing}
+            landingPads={layout.landingPads}
+            onLanding={onLanding}
             activeGate={activeGate}
             onGatePass={onGatePass}
             flashRef={flashRef}
@@ -446,6 +469,20 @@ export default function DroneSimBody({ id }: WidgetProps) {
             ) : (
               <ThunderstormIcon fontSize="small" />
             )}
+          </IconButton>
+        </Tooltip>
+        <Tooltip title={landing ? 'End landing challenge' : 'Landing challenge (rooftop pads)'}>
+          <IconButton
+            size="small"
+            data-testid="dronesim-landing-toggle"
+            data-landing={landing ? 'on' : 'off'}
+            aria-pressed={landing}
+            onClick={() =>
+              dispatch(updateWidgetData({ id, data: { landing: !landing } }))
+            }
+            sx={{ color: '#fff' }}
+          >
+            <SportsScoreIcon fontSize="small" />
           </IconButton>
         </Tooltip>
         <Tooltip title={richWorld ? 'Plain world (fewer objects)' : 'Rich world (trees, roads, clouds)'}>
@@ -627,6 +664,7 @@ export default function DroneSimBody({ id }: WidgetProps) {
           rings={layout.rings}
           activeGate={activeGate}
           bestLapPath={bestLapPath}
+          landingPads={landing ? layout.landingPads : []}
           droneRef={minimapDroneRef}
           size={fullscreen ? 140 : 100}
         />

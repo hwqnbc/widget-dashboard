@@ -219,6 +219,22 @@ bottom corners (88 px; 140 px + safe-area insets in fullscreen via
 the fullscreen rotate hint; fullscreen re-mounts the single live instance in
 the overlay, so there's never a duplicate `useFrame` loop.
 
+## Landing challenge
+
+The checkered-flag button toggles persisted `landing: boolean` (default off).
+Three **rooftop pads** are seeded per course (`buildLandingPads`, drawn after
+all other world data so existing seeds keep their exact worlds): buildings
+6–16 tall with roomy roofs, skipping any that carry antenna/tank details,
+pads ≥ 20 apart and ≥ 15 from the spawn pad. Active pads render as pulsing
+cyan discs (`LandingPads`) and appear on the minimap. **Touchdown detection**
+reuses the collision impact: when an airborne drone settles onto a pad's
+roof-rest height inside the disc, `scoreLanding(dist, r, touchdownSpeed)` =
+`clamp(100 − 40·dist/r − 6·speed, 10, 100)` — precision and softness both
+pay. A `LANDED! 87 pts` banner (+ `NEW BEST!`, persisting `landingBest`,
+exposed as `data-landing-best`) and a haptic pulse follow; leaving the pad
+re-arms the next attempt. Crash-worthy slams still crash — the detector
+lives in the non-crash branch.
+
 ## Rich world (scenery layer)
 
 The forest button toggles persisted `richWorld: boolean` (default on): roads
@@ -323,8 +339,6 @@ from the enhancement menu, with the integration point each would build on.
   racing you; `bestLapPath` already carries the positions, add per-sample
   timestamps (or rely on the fixed 150 ms cadence) and lerp along it in
   `useFrame`.
-- **Landing challenge** — designated rooftop pads (rooftop rest already
-  works) scored by touchdown precision and vertical speed.
 - **Battery / range mechanic** — a draining battery HUD bar forcing
   return-to-pad, recharging on the pad zone (`PAD_START_RADIUS` reuse).
 - **Course editor / more gates** — `RINGS`/`GATES` are data; a "gates: 5"

@@ -1,7 +1,7 @@
 import type { RefObject } from 'react'
 import { Box, alpha } from '@mui/material'
 import { SPAWN, WORLD_HALF } from './flightModel'
-import type { BuildingSpec, RingSpec } from './worldLayout'
+import type { BuildingSpec, LandingPadSpec, RingSpec } from './worldLayout'
 import { RING_RADIUS } from './worldLayout'
 
 const DONE_COLOR = '#4caf50'
@@ -20,6 +20,7 @@ export default function Minimap({
   rings,
   activeGate,
   bestLapPath,
+  landingPads,
   droneRef,
   size,
 }: {
@@ -27,6 +28,8 @@ export default function Minimap({
   rings: readonly RingSpec[]
   activeGate: number
   bestLapPath: readonly number[]
+  /** Empty unless the landing challenge is active. */
+  landingPads: readonly LandingPadSpec[]
   droneRef: RefObject<SVGGElement | null>
   size: number
 }) {
@@ -98,6 +101,18 @@ export default function Minimap({
             />
           )
         })}
+
+        {landingPads.map((p, i) => (
+          <circle
+            key={`pad-${i}`}
+            data-landing-pad
+            cx={p.x}
+            cy={p.z}
+            r={p.r + 0.8}
+            fill="#26c6da"
+            fillOpacity={0.85}
+          />
+        ))}
 
         {/* drone marker: transform written by DroneRig on the telemetry tick */}
         <g ref={droneRef} data-testid="dronesim-minimap-drone">
