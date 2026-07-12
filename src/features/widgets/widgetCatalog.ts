@@ -138,7 +138,7 @@ export function defaultWidgetData(type: WidgetType): Record<string, unknown> {
         platforms: 'still',
       }
     case 'droneSim':
-      return { view: 'tp', score: 0 }
+      return { view: 'tp', score: 0, bestLapMs: 0, bestLapPath: [] }
     case 'clock':
     default:
       return {}

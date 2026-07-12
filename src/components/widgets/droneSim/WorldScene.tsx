@@ -53,10 +53,6 @@ export default function WorldScene({ palette }: { palette: WorldPalette }) {
         <cylinderGeometry args={[2.2, 2.2, 0.1, 32]} />
         <meshStandardMaterial color={palette.pad} />
       </mesh>
-      <mesh rotation-x={-Math.PI / 2} position={[SPAWN.x, 0.12, SPAWN.z]}>
-        <torusGeometry args={[1.5, 0.08, 8, 40]} />
-        <meshStandardMaterial color={palette.ring} />
-      </mesh>
     </>
   )
 }

@@ -5,6 +5,8 @@ import type { Group, Mesh, MeshBasicMaterial } from 'three'
 import type { ControlInput, FlightState } from './flightModel'
 import { SPAWN, stepFlight } from './flightModel'
 import { COLLIDERS, GATES, crossedGate } from './worldLayout'
+import type { LapState } from './lapTimer'
+import { fmtLap, updateLap } from './lapTimer'
 import DroneModel from './DroneModel'
 import type { GateFlash } from './GateRings'
 
@@ -21,29 +23,39 @@ export default function DroneRig({
   controls,
   flight,
   hudRef,
+  timerRef,
   activeGate,
   onGatePass,
   flashRef,
+  lap,
+  bestLapMs,
+  onLapComplete,
 }: {
   controls: ControlInput
   flight: FlightState
   hudRef: RefObject<HTMLDivElement | null>
+  timerRef: RefObject<HTMLDivElement | null>
   activeGate: number
   onGatePass: () => void
   flashRef: { current: GateFlash }
+  lap: LapState
+  bestLapMs: number
+  onLapComplete: (lapMs: number, path: number[]) => void
 }) {
   const outerRef = useRef<Group>(null)
   const tiltRef = useRef<Group>(null)
   const shadowRef = useRef<Mesh>(null)
   const hudClock = useRef(0)
   const prevPos = useRef({ ...flight.pos })
+  /** Sampled positions of the lap in progress (flat x,y,z triples). */
+  const pathRef = useRef<number[]>([])
 
   useFrame(({ clock }, dt) => {
     stepFlight(flight, controls, dt, COLLIDERS)
 
-    // Gate pass: did this frame's movement cross the active ring's plane
-    // inside the ring? A long segment means a teleport (reset) — skip it so
-    // the jump back to the pad can't score a gate.
+    // Gate pass (only while a lap is running): did this frame's movement
+    // cross the active ring's plane inside the ring? A long segment means a
+    // teleport (reset) — skip it so the jump back to the pad can't score.
     const prev = prevPos.current
     const jump =
       Math.hypot(
@@ -51,13 +63,34 @@ export default function DroneRig({
         flight.pos.y - prev.y,
         flight.pos.z - prev.z,
       ) > 2
-    if (!jump && crossedGate(prev, flight.pos, GATES[activeGate])) {
+    if (
+      lap.status === 'running' &&
+      activeGate < GATES.length &&
+      !jump &&
+      crossedGate(prev, flight.pos, GATES[activeGate])
+    ) {
       flashRef.current = { gate: activeGate, until: clock.elapsedTime + 0.6 }
       onGatePass()
     }
     prev.x = flight.pos.x
     prev.y = flight.pos.y
     prev.z = flight.pos.z
+
+    // Lap start/finish against the pad zone.
+    const now = performance.now()
+    const lapEvent = jump
+      ? null
+      : updateLap(lap, flight.pos, activeGate, GATES.length, now)
+    if (lapEvent === 'started') {
+      pathRef.current = [
+        Math.round(flight.pos.x * 10) / 10,
+        Math.round(flight.pos.y * 10) / 10,
+        Math.round(flight.pos.z * 10) / 10,
+      ]
+    } else if (lapEvent === 'finished') {
+      onLapComplete(now - lap.startMs, pathRef.current)
+      pathRef.current = []
+    }
 
     const outer = outerRef.current
     if (outer) {
@@ -92,6 +125,28 @@ export default function DroneRig({
         hud.dataset.x = flight.pos.x.toFixed(2)
         hud.dataset.z = flight.pos.z.toFixed(2)
         hud.dataset.yaw = flight.yaw.toFixed(3)
+      }
+      const timer = timerRef.current
+      if (timer) {
+        if (lap.status === 'running') {
+          const ms = now - lap.startMs
+          timer.textContent = `LAP ${fmtLap(ms)}`
+          timer.dataset.lapStatus = 'running'
+          timer.dataset.lapMs = String(Math.round(ms))
+        } else {
+          timer.textContent = bestLapMs > 0 ? `BEST ${fmtLap(bestLapMs)}` : 'BEST —'
+          timer.dataset.lapStatus = 'ready'
+          timer.dataset.lapMs = '0'
+        }
+        timer.dataset.bestMs = String(bestLapMs)
+      }
+      // Sample the ghost path while racing (~7 Hz keeps a 60 s lap ~10 KB).
+      if (lap.status === 'running') {
+        pathRef.current.push(
+          Math.round(flight.pos.x * 10) / 10,
+          Math.round(flight.pos.y * 10) / 10,
+          Math.round(flight.pos.z * 10) / 10,
+        )
       }
     }
   })

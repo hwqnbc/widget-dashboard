@@ -100,21 +100,39 @@ in refs (`FlightState`, `ControlInput`).
   position + yaw, inner group takes tilt, so the camera math only cares
   about the outer transform.
 
-## Gate scoring
+## Time trial (gates + lap timer + ghost)
 
-The three rings are **score gates**, flown in order. `worldLayout.ts` derives
-a `Gate { center, normal, passRadius }` per ring, and `crossedGate` checks
-whether the frame's movement segment crossed the ring plane (signed-distance
-sign change) with the interpolated crossing point inside `passRadius`
-(direction-agnostic). `DroneRig` tests only the **active** gate each frame
-and skips teleport-length segments so reset can't score. A pass flashes the
-ring white (`GateRings` drives all gate colours in `useFrame`: green = done,
-pulsing accent = active, dim = upcoming), advances the sequence, and — after
-the last gate — increments the persisted `score` and restarts the course.
-Gate progress is transient (reload/reset restarts at gate 1); only `score`
-persists. The `dronesim-gates` chip shows `GATE n/3 · SCORE s` and exposes
-`data-gate`/`data-score` for tests. Gate state changes re-render React only a
-few times per course — the pulse/flash never does.
+A lap runs **pad → gate 1 → 2 → 3 → back to the pad**, timed from the moment
+the drone leaves the landing-pad radius (`lapTimer.ts`, a pure mutate-in-place
+state machine like `stepFlight`, clocked by `performance.now()`).
+
+- **Gates**: `worldLayout.ts` derives a `Gate { center, normal, passRadius }`
+  per ring; `crossedGate` detects a plane crossing of the frame's movement
+  segment with the interpolated crossing point inside the ring
+  (direction-agnostic). `DroneRig` tests only the **active** gate, only while
+  a lap is **running**, and skips teleport-length segments so reset can't
+  score. Passing the last gate enters the return-to-pad phase
+  (`activeGate === GATES.length`) — the pad ring pulses as the finish line.
+- **Visuals**: `GateRings` drives all gate colours in `useFrame` (green =
+  done, pulsing accent = active, dim = upcoming, white flash on pass) plus
+  the pad finish ring. Colour work never re-renders React.
+- **Lap completion** (pad re-entry after all gates): increments the persisted
+  `score` (= laps), shows a transient `LAP 41.3s · NEW BEST!` banner, and on
+  improvement persists `bestLapMs` and `bestLapPath`.
+- **Re-arm rule**: returning to the pad with *no* gates passed silently
+  resets the clock to ready, so an aborted start isn't penalised.
+- **Ghost line**: while racing, `DroneRig` samples the position on the 150 ms
+  HUD tick (flat x,y,z triples rounded to 0.1 — a 60 s lap ≈ 10 KB); a new
+  best persists the path, which `GhostLine` renders as a translucent line
+  (imperative `THREE.Line` via `<primitive>`, since lowercase `<line>` JSX
+  collides with the SVG intrinsic).
+- **HUD**: `dronesim-gates` chip shows `GATE n/3 · LAPS s` / `TO PAD · LAPS s`
+  (React, a few renders per lap); `dronesim-timer` chip is DOM-written on the
+  HUD tick (`LAP 12.4s` live / `BEST 45.3s` idle) and exposes
+  `data-lap-status`/`data-lap-ms`/`data-best-ms` for tests.
+
+Lap progress is transient (reload/reset restarts at the pad); `score`,
+`bestLapMs` and `bestLapPath` persist.
 
 ## Cameras (`CameraRig.tsx`)
 
@@ -152,7 +170,7 @@ software WebGL context.
 
 ## Future work
 
-- Lap timers / best-lap persistence on top of gate scoring (`data` keys slot
-  in without migration).
 - Gamepad support (map axes onto the same `ControlInput` ref).
 - Chase-camera building avoidance (the camera can clip through geometry).
+- Animated ghost drone replaying the best run (the persisted path already
+  carries the data; timing would need per-sample timestamps).

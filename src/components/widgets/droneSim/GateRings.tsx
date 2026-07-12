@@ -3,6 +3,7 @@ import { useFrame } from '@react-three/fiber'
 import type { MeshStandardMaterial } from 'three'
 import type { WorldPalette } from './palettes'
 import { RINGS, RING_RADIUS } from './worldLayout'
+import { SPAWN } from './flightModel'
 
 const DONE_COLOR = '#4caf50'
 const UPCOMING_COLOR = '#8a93a6'
@@ -27,13 +28,27 @@ export default function GateRings({
   flashRef,
 }: {
   palette: WorldPalette
+  /** GATES.length means all gates passed — the "return to pad" phase. */
   activeGate: number
   flashRef: { current: GateFlash }
 }) {
   const materialsRef = useRef<(MeshStandardMaterial | null)[]>([])
+  const padMatRef = useRef<MeshStandardMaterial>(null)
 
   useFrame(({ clock }) => {
     const t = clock.elapsedTime
+    const pad = padMatRef.current
+    if (pad) {
+      pad.color.set(palette.ring)
+      if (activeGate === RINGS.length) {
+        // finish line is live — pulse the pad ring
+        pad.emissive.set(palette.ring)
+        pad.emissiveIntensity = 0.45 + 0.35 * Math.sin(t * 4)
+      } else {
+        pad.emissive.set('#000000')
+        pad.emissiveIntensity = 0
+      }
+    }
     materialsRef.current.forEach((mat, i) => {
       if (!mat) return
       const flash = flashRef.current
@@ -59,6 +74,10 @@ export default function GateRings({
 
   return (
     <>
+      <mesh rotation-x={-Math.PI / 2} position={[SPAWN.x, 0.12, SPAWN.z]}>
+        <torusGeometry args={[1.5, 0.08, 8, 40]} />
+        <meshStandardMaterial ref={padMatRef} />
+      </mesh>
       {RINGS.map((r, i) => (
         <mesh key={i} position={[r.x, r.y, r.z]} rotation-y={r.yaw}>
           <torusGeometry args={[RING_RADIUS, 0.12, 10, 40]} />

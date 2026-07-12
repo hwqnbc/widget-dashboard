@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Canvas } from '@react-three/fiber'
 import { Box, IconButton, Tooltip, alpha, useTheme } from '@mui/material'
 import CameraswitchIcon from '@mui/icons-material/Cameraswitch'
@@ -17,12 +17,20 @@ import {
   resetFlightState,
 } from './flightModel'
 import { GATES } from './worldLayout'
+import { createLapState, fmtLap, resetLapState } from './lapTimer'
 import WorldScene from './WorldScene'
 import DroneRig from './DroneRig'
 import CameraRig from './CameraRig'
 import GateRings from './GateRings'
 import type { GateFlash } from './GateRings'
+import GhostLine from './GhostLine'
 import VirtualJoystick from './VirtualJoystick'
+
+const EMPTY_PATH: number[] = []
+const coercePath = (v: unknown): number[] | undefined =>
+  Array.isArray(v) && v.every((n) => typeof n === 'number')
+    ? (v as number[])
+    : undefined
 
 /**
  * The 3D drone simulator. Everything inside <Canvas> renders in a separate
@@ -37,26 +45,59 @@ export default function DroneSimBody({ id }: WidgetProps) {
   const { fullscreen } = usePresentation()
   const view = useWidgetField<DroneView>(id, 'view', 'tp', coerceView)
   const score = useWidgetField(id, 'score', 0)
+  const bestLapMs = useWidgetField(id, 'bestLapMs', 0)
+  const bestLapPath = useWidgetField<number[]>(id, 'bestLapPath', EMPTY_PATH, coercePath)
 
   const controls = useRef(createControlInput()).current
   const flight = useRef(createFlightState()).current
+  const lap = useRef(createLapState()).current
   const hudRef = useRef<HTMLDivElement>(null)
+  const timerRef = useRef<HTMLDivElement>(null)
   const flashRef = useRef<GateFlash>({ gate: -1, until: 0 })
-  // Which ring must be flown through next; transient — a reload (or reset)
-  // restarts the course, only the score persists.
+  // Which ring must be flown through next (GATES.length = all passed, return
+  // to the pad); transient — reload/reset restarts the lap, only score and
+  // best lap persist.
   const [activeGate, setActiveGate] = useState(0)
+  const [banner, setBanner] = useState<string | null>(null)
+  const bannerTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(
+    () => () => {
+      if (bannerTimer.current) clearTimeout(bannerTimer.current)
+    },
+    [],
+  )
 
   const onGatePass = useCallback(() => {
-    setActiveGate((gate) => {
-      if (gate < GATES.length - 1) return gate + 1
-      dispatch(updateWidgetData({ id, data: { score: score + 1 } }))
-      return 0
-    })
-  }, [dispatch, id, score])
+    setActiveGate((gate) => Math.min(gate + 1, GATES.length))
+  }, [])
+
+  const onLapComplete = useCallback(
+    (lapMs: number, path: number[]) => {
+      const isBest = bestLapMs === 0 || lapMs < bestLapMs
+      dispatch(
+        updateWidgetData({
+          id,
+          data: {
+            score: score + 1,
+            ...(isBest
+              ? { bestLapMs: Math.round(lapMs), bestLapPath: path }
+              : {}),
+          },
+        }),
+      )
+      setActiveGate(0)
+      setBanner(`LAP ${fmtLap(lapMs)}${isBest ? ' · NEW BEST!' : ''}`)
+      if (bannerTimer.current) clearTimeout(bannerTimer.current)
+      bannerTimer.current = setTimeout(() => setBanner(null), 3000)
+    },
+    [bestLapMs, dispatch, id, score],
+  )
 
   const resetSim = () => {
     resetFlightState(flight)
+    resetLapState(lap)
     setActiveGate(0)
+    setBanner(null)
   }
 
   const stickSize = fullscreen ? 140 : 88
@@ -103,13 +144,18 @@ export default function DroneSimBody({ id }: WidgetProps) {
         >
           <WorldScene palette={palette} />
           <GateRings palette={palette} activeGate={activeGate} flashRef={flashRef} />
+          <GhostLine path={bestLapPath} color={palette.ring} />
           <DroneRig
             controls={controls}
             flight={flight}
             hudRef={hudRef}
+            timerRef={timerRef}
             activeGate={activeGate}
             onGatePass={onGatePass}
             flashRef={flashRef}
+            lap={lap}
+            bestLapMs={bestLapMs}
+            onLapComplete={onLapComplete}
           />
           <CameraRig view={view} flight={flight} />
         </Canvas>
@@ -155,8 +201,57 @@ export default function DroneSimBody({ id }: WidgetProps) {
           pointerEvents: 'none',
         }}
       >
-        {`GATE ${activeGate + 1}/${GATES.length} · SCORE ${score}`}
+        {activeGate >= GATES.length
+          ? `TO PAD · LAPS ${score}`
+          : `GATE ${activeGate + 1}/${GATES.length} · LAPS ${score}`}
       </Box>
+
+      <Box
+        ref={timerRef}
+        data-testid="dronesim-timer"
+        data-lap-status="ready"
+        data-lap-ms="0"
+        data-best-ms={bestLapMs}
+        sx={{
+          position: 'absolute',
+          top: 64,
+          left: 8,
+          px: 1,
+          py: 0.25,
+          borderRadius: 1,
+          bgcolor: alpha('#000', 0.4),
+          color: '#80deea',
+          fontFamily: 'monospace',
+          fontSize: 12,
+          pointerEvents: 'none',
+        }}
+      >
+        {bestLapMs > 0 ? `BEST ${fmtLap(bestLapMs)}` : 'BEST —'}
+      </Box>
+
+      {banner && (
+        <Box
+          data-testid="dronesim-lap-banner"
+          sx={{
+            position: 'absolute',
+            top: '38%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            px: 2,
+            py: 1,
+            borderRadius: 1.5,
+            bgcolor: alpha('#000', 0.55),
+            color: '#ffca28',
+            fontFamily: 'monospace',
+            fontSize: 20,
+            fontWeight: 700,
+            pointerEvents: 'none',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {banner}
+        </Box>
+      )}
 
       <Box
         sx={{
