@@ -4,6 +4,7 @@ import { useFrame } from '@react-three/fiber'
 import type { Group, Mesh, MeshBasicMaterial } from 'three'
 import type { ControlInput, FlightState } from './flightModel'
 import { SPAWN, stepFlight } from './flightModel'
+import { COLLIDERS } from './worldLayout'
 import DroneModel from './DroneModel'
 
 /** Seconds between HUD DOM writes (~7 Hz — cheap, and no React renders). */
@@ -30,7 +31,7 @@ export default function DroneRig({
   const hudClock = useRef(0)
 
   useFrame((_, dt) => {
-    stepFlight(flight, controls, dt)
+    stepFlight(flight, controls, dt, COLLIDERS)
 
     const outer = outerRef.current
     if (outer) {
@@ -61,6 +62,10 @@ export default function DroneRig({
         hud.textContent = `ALT ${alt.toFixed(1)}m · SPD ${speed.toFixed(1)}`
         hud.dataset.alt = alt.toFixed(1)
         hud.dataset.speed = speed.toFixed(1)
+        // Extra telemetry for tests/debugging; costs nothing beyond the write.
+        hud.dataset.x = flight.pos.x.toFixed(2)
+        hud.dataset.z = flight.pos.z.toFixed(2)
+        hud.dataset.yaw = flight.yaw.toFixed(3)
       }
     }
   })

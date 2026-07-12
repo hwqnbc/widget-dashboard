@@ -43,9 +43,20 @@ allocation-free):
 6. Visual tilt (`tiltPitch`/`tiltRoll`) damps toward stick deflection ×
    `MAX_TILT` — pure cosmetics, it never feeds back into motion.
 
-Buildings are fly-through in v1; `worldLayout.ts` keeps each building as a
-plain `{x, z, w, d, h}` spec so a future collision pass can treat them as
-AABBs. Speeds: `MAX_HORIZ_SPEED 12`, `MAX_VERT_SPEED 5` world-units/s.
+Speeds: `MAX_HORIZ_SPEED 12`, `MAX_VERT_SPEED 5` world-units/s.
+
+### Building collision
+
+`worldLayout.ts` derives a `Collider` per building — its AABB **pre-inflated**
+by `DRONE_RADIUS` in x/z (drone treated as a point) with `top = h +
+DRONE_RADIUS`. After integration + bounds clamping, `resolveCollisions` pushes
+the drone out of any box along the **axis of least penetration** and zeroes
+only the velocity component that carried it in, so the drone slides along
+walls and can **land on roofs** (pushed up ⇒ rests at `top`; altitude hold
+keeps it parked, and flying off the edge just leaves it hovering). No
+tunneling is possible: max travel per step is 0.6 u (12 u/s × MAX_DT), well
+under the smallest inflated footprint (~2.5 u). Gate rings stay fly-through
+on purpose.
 
 ## Input path (why nothing re-renders in flight)
 
@@ -126,7 +137,7 @@ software WebGL context.
 
 ## Future work
 
-- Building AABB collision (`worldLayout` specs are ready).
 - Ring/gate scoring, timers, best-lap persistence (`data` keys slot in
   without migration).
 - Gamepad support (map axes onto the same `ControlInput` ref).
+- Chase-camera building avoidance (the camera can clip through geometry).

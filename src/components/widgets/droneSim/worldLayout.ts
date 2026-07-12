@@ -5,6 +5,9 @@
  * building as an AABB.
  */
 
+import type { Collider } from './flightModel'
+import { DRONE_RADIUS } from './flightModel'
+
 export interface BuildingSpec {
   x: number
   z: number
@@ -56,6 +59,15 @@ function buildCity(): BuildingSpec[] {
 }
 
 export const BUILDINGS: readonly BuildingSpec[] = buildCity()
+
+/** Building AABBs pre-inflated for point-vs-box tests (see Collider docs). */
+export const COLLIDERS: readonly Collider[] = BUILDINGS.map((b) => ({
+  minX: b.x - b.w / 2 - DRONE_RADIUS,
+  maxX: b.x + b.w / 2 + DRONE_RADIUS,
+  minZ: b.z - b.d / 2 - DRONE_RADIUS,
+  maxZ: b.z + b.d / 2 + DRONE_RADIUS,
+  top: b.h + DRONE_RADIUS,
+}))
 
 /** Decorative gates for now; future scoring hooks. */
 export const RINGS: readonly RingSpec[] = [

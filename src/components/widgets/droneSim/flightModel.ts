@@ -35,6 +35,19 @@ export interface FlightState {
   tiltRoll: number
 }
 
+/**
+ * An axis-aligned collision box, pre-inflated by DRONE_RADIUS in x/z (drone
+ * treated as a point) with `top` at roof height + DRONE_RADIUS so the drone
+ * can land on roofs.
+ */
+export interface Collider {
+  minX: number
+  maxX: number
+  minZ: number
+  maxZ: number
+  top: number
+}
+
 export type DroneView = 'tp' | 'fp'
 
 export const coerceView = (v: unknown): DroneView | undefined =>
@@ -84,7 +97,56 @@ export function resetFlightState(s: FlightState): void {
   s.tiltRoll = 0
 }
 
-export function stepFlight(s: FlightState, input: ControlInput, dt: number): void {
+/**
+ * Push the drone out of any collider along the axis of least penetration and
+ * zero the velocity component that carried it in. Resolving upward lands the
+ * drone on the roof (it can sit there — altitude hold keeps it in place).
+ */
+export function resolveCollisions(
+  s: FlightState,
+  colliders: readonly Collider[],
+): void {
+  for (const c of colliders) {
+    if (
+      s.pos.x <= c.minX ||
+      s.pos.x >= c.maxX ||
+      s.pos.z <= c.minZ ||
+      s.pos.z >= c.maxZ ||
+      s.pos.y >= c.top
+    ) {
+      continue
+    }
+    const pushWest = s.pos.x - c.minX
+    const pushEast = c.maxX - s.pos.x
+    const pushNorth = s.pos.z - c.minZ
+    const pushSouth = c.maxZ - s.pos.z
+    const pushUp = c.top - s.pos.y
+    const min = Math.min(pushWest, pushEast, pushNorth, pushSouth, pushUp)
+    if (min === pushUp) {
+      s.pos.y = c.top
+      s.vel.y = Math.max(0, s.vel.y)
+    } else if (min === pushWest) {
+      s.pos.x = c.minX
+      s.vel.x = Math.min(0, s.vel.x)
+    } else if (min === pushEast) {
+      s.pos.x = c.maxX
+      s.vel.x = Math.max(0, s.vel.x)
+    } else if (min === pushNorth) {
+      s.pos.z = c.minZ
+      s.vel.z = Math.min(0, s.vel.z)
+    } else {
+      s.pos.z = c.maxZ
+      s.vel.z = Math.max(0, s.vel.z)
+    }
+  }
+}
+
+export function stepFlight(
+  s: FlightState,
+  input: ControlInput,
+  dt: number,
+  colliders: readonly Collider[] = [],
+): void {
   const step = Math.min(dt, MAX_DT) // survive tab-switch dt spikes
 
   // Left stick X: yaw rate (stick right turns the nose right).
@@ -130,6 +192,8 @@ export function stepFlight(s: FlightState, input: ControlInput, dt: number): voi
     s.pos.y = MAX_ALT
     s.vel.y = Math.min(0, s.vel.y)
   }
+
+  resolveCollisions(s, colliders)
 
   // Visual tilt: nose dips into forward flight, body banks into a strafe.
   s.tiltPitch = damp(s.tiltPitch, -input.right.y * MAX_TILT, TILT_RESPONSE, step)
