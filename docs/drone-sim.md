@@ -219,6 +219,21 @@ bottom corners (88 px; 140 px + safe-area insets in fullscreen via
 the fullscreen rotate hint; fullscreen re-mounts the single live instance in
 the overlay, so there's never a duplicate `useFrame` loop.
 
+## Rich world (scenery layer)
+
+The forest button toggles persisted `richWorld: boolean` (default on): roads
+with moving traffic dots, ~40 instanced trees, rooftop antennas/tanks on tall
+buildings, and slowly drifting clouds. All of it is **seeded** —
+`buildWorldLayout` draws the extras from the PRNG stream *after* buildings
+and rings, so every pre-existing seed keeps its exact course, and a given
+course always grows the same forest. Placement is constraint-checked (trees
+never intersect buildings/roads/pad; road lanes pick maximum building
+clearance and avoid the pad). Rendering stays cheap: trees are two instanced
+meshes (trunks + canopies), roof details one, traffic one (matrices slide
+along their road each frame), clouds one (three puffs each, drifting and
+wrapping) — about ten extra draw calls total. Traffic and scenery are
+non-colliding by design.
+
 ## Tuning panel (rates & expo)
 
 The tune button opens a Popover with per-widget persisted controls:
@@ -299,8 +314,6 @@ from the enhancement menu, with the integration point each would build on.
 - **Chase-camera building avoidance** — the third-person boom can clip
   through walls; sweep the camera offset against `COLLIDERS` (same AABB
   math) and shorten the boom on obstruction.
-- **Richer world** — trees/roads/traffic dots as more instanced meshes;
-  extend `buildWorldLayout` so they stay seed-deterministic.
 - **FPV polish** — subtle throttle shake, optional roll in FPV (acro feel),
   horizon indicator.
 - **Rain streaks** — upgrade `RainField` points to short line segments.

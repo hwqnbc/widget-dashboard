@@ -154,6 +154,7 @@ export function defaultWidgetData(type: WidgetType): Record<string, unknown> {
         rateYaw: 1,
         stickExpo: 0,
         turbo: false,
+        richWorld: true,
       }
     case 'clock':
     default:

@@ -23,6 +23,7 @@ import RocketLaunchIcon from '@mui/icons-material/RocketLaunch'
 import FlightIcon from '@mui/icons-material/Flight'
 import MapIcon from '@mui/icons-material/Map'
 import TuneIcon from '@mui/icons-material/Tune'
+import ForestIcon from '@mui/icons-material/Forest'
 import { useAppDispatch } from '../../../app/hooks'
 import { updateWidgetData } from '../../../features/widgets/widgetsSlice'
 import { useWidgetField } from '../../../features/widgets/useWidgetField'
@@ -59,6 +60,7 @@ import GateRings from './GateRings'
 import type { GateFlash } from './GateRings'
 import GhostLine from './GhostLine'
 import RainField from './RainField'
+import RichWorld from './RichWorld'
 import Minimap from './Minimap'
 import VirtualJoystick from './VirtualJoystick'
 
@@ -111,6 +113,7 @@ export default function DroneSimBody({ id }: WidgetProps) {
   const crashes = useWidgetField(id, 'crashes', true)
   const flightMode = useWidgetField<FlightMode>(id, 'flightMode', 'hold', coerceFlightMode)
   const minimap = useWidgetField(id, 'minimap', true)
+  const richWorld = useWidgetField(id, 'richWorld', true)
   const minimapDroneRef = useRef<SVGGElement>(null)
   const rateSpeed = useWidgetField(id, 'rateSpeed', 1, coerceRate)
   const rateYaw = useWidgetField(id, 'rateYaw', 1, coerceRate)
@@ -254,6 +257,7 @@ export default function DroneSimBody({ id }: WidgetProps) {
           camera={{ fov: 60, near: 0.1, far: 400, position: [0, 4, 26] }}
         >
           <WorldScene palette={palette} buildings={layout.buildings} />
+          {richWorld && <RichWorld layout={layout} />}
           <GateRings
             palette={palette}
             rings={layout.rings}
@@ -442,6 +446,20 @@ export default function DroneSimBody({ id }: WidgetProps) {
             ) : (
               <ThunderstormIcon fontSize="small" />
             )}
+          </IconButton>
+        </Tooltip>
+        <Tooltip title={richWorld ? 'Plain world (fewer objects)' : 'Rich world (trees, roads, clouds)'}>
+          <IconButton
+            size="small"
+            data-testid="dronesim-rich-toggle"
+            data-rich={richWorld ? 'on' : 'off'}
+            aria-pressed={richWorld}
+            onClick={() =>
+              dispatch(updateWidgetData({ id, data: { richWorld: !richWorld } }))
+            }
+            sx={{ color: '#fff' }}
+          >
+            <ForestIcon fontSize="small" />
           </IconButton>
         </Tooltip>
         <Tooltip title="Tuning (rates & expo)">

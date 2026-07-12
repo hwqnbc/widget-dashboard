@@ -39,11 +39,52 @@ interface Vec3G {
   z: number
 }
 
+export interface TreeSpec {
+  x: number
+  z: number
+  /** Canopy height (trunk is a fixed fraction). */
+  h: number
+  r: number
+  shade: number
+}
+
+export interface RoadSpec {
+  /** 'x' runs along the X axis at z = at; 'z' runs along Z at x = at. */
+  axis: 'x' | 'z'
+  at: number
+}
+
+export interface TrafficSpec {
+  road: number
+  offset: number
+  speed: number
+  dir: 1 | -1
+  /** 0..1 — picks the dot colour. */
+  hue: number
+}
+
+export interface CloudSpec {
+  x: number
+  y: number
+  z: number
+  scale: number
+}
+
+export interface RoofSpec {
+  building: number
+  kind: 'antenna' | 'tank'
+}
+
 export interface WorldLayout {
   buildings: readonly BuildingSpec[]
   rings: readonly RingSpec[]
   colliders: readonly Collider[]
   gates: readonly Gate[]
+  trees: readonly TreeSpec[]
+  roads: readonly RoadSpec[]
+  traffic: readonly TrafficSpec[]
+  clouds: readonly CloudSpec[]
+  roofs: readonly RoofSpec[]
 }
 
 /** Torus major radius of a gate ring (see GateRings geometry). */
@@ -136,6 +177,96 @@ function buildRings(
   return rings
 }
 
+/** Pick road lanes with the most clearance from building centres. */
+function buildRoads(rand: () => number, buildings: readonly BuildingSpec[]): RoadSpec[] {
+  const laneScore = (axis: 'x' | 'z', at: number) =>
+    Math.min(
+      ...buildings.map((b) => Math.abs((axis === 'x' ? b.z : b.x) - at)),
+    )
+  const pick = (axis: 'x' | 'z'): RoadSpec => {
+    let best = 0
+    let bestScore = -1
+    for (let i = 0; i < 8; i++) {
+      const at = (rand() * 2 - 1) * 45
+      if (Math.abs(at - (axis === 'x' ? SPAWN.z : SPAWN.x)) < 6) continue
+      const score = laneScore(axis, at)
+      if (score > bestScore) {
+        bestScore = score
+        best = at
+      }
+    }
+    return { axis, at: Math.round(best * 10) / 10 }
+  }
+  return [pick('x'), pick('x'), pick('z'), pick('z')]
+}
+
+function buildTrees(
+  rand: () => number,
+  buildings: readonly BuildingSpec[],
+  roads: readonly RoadSpec[],
+): TreeSpec[] {
+  const trees: TreeSpec[] = []
+  let guard = 0
+  while (trees.length < 40 && guard++ < 400) {
+    const x = (rand() * 2 - 1) * 55
+    const z = (rand() * 2 - 1) * 55
+    if (Math.hypot(x - SPAWN.x, z - SPAWN.z) < 6) continue
+    if (
+      buildings.some(
+        (b) => Math.abs(x - b.x) < b.w / 2 + 1.2 && Math.abs(z - b.z) < b.d / 2 + 1.2,
+      )
+    ) {
+      continue
+    }
+    if (roads.some((r) => Math.abs((r.axis === 'x' ? z : x) - r.at) < 3)) continue
+    trees.push({
+      x,
+      z,
+      h: 1.6 + rand() * 2.4,
+      r: 0.8 + rand() * 0.8,
+      shade: 0.7 + rand() * 0.6,
+    })
+  }
+  return trees
+}
+
+function buildTraffic(rand: () => number, roadCount: number): TrafficSpec[] {
+  const cars: TrafficSpec[] = []
+  for (let i = 0; i < 12; i++) {
+    cars.push({
+      road: i % roadCount,
+      offset: rand() * WORLD_HALF * 2,
+      speed: 3 + rand() * 5,
+      dir: rand() < 0.5 ? 1 : -1,
+      hue: rand(),
+    })
+  }
+  return cars
+}
+
+function buildClouds(rand: () => number): CloudSpec[] {
+  const clouds: CloudSpec[] = []
+  for (let i = 0; i < 8; i++) {
+    clouds.push({
+      x: (rand() * 2 - 1) * 65,
+      y: 28 + rand() * 8,
+      z: (rand() * 2 - 1) * 65,
+      scale: 1.5 + rand() * 2,
+    })
+  }
+  return clouds
+}
+
+function buildRoofs(rand: () => number, buildings: readonly BuildingSpec[]): RoofSpec[] {
+  const roofs: RoofSpec[] = []
+  buildings.forEach((b, i) => {
+    if (b.h > 10 && rand() < 0.5) {
+      roofs.push({ building: i, kind: rand() < 0.5 ? 'antenna' : 'tank' })
+    }
+  })
+  return roofs
+}
+
 export function buildWorldLayout(seed: number): WorldLayout {
   const rand = mulberry32(seed)
   const buildings = buildCity(rand)
@@ -143,6 +274,13 @@ export function buildWorldLayout(seed: number): WorldLayout {
   // widgets (and their persisted best laps) are unchanged by the seed model.
   const rings =
     seed === DEFAULT_SEED ? CLASSIC_RINGS : buildRings(rand, buildings)
+  // Rich-world extras draw from the stream AFTER buildings/rings, so every
+  // pre-existing seed keeps its exact course.
+  const roads = buildRoads(rand, buildings)
+  const trees = buildTrees(rand, buildings, roads)
+  const traffic = buildTraffic(rand, roads.length)
+  const clouds = buildClouds(rand)
+  const roofs = buildRoofs(rand, buildings)
 
   const colliders: Collider[] = buildings.map((b) => ({
     minX: b.x - b.w / 2 - DRONE_RADIUS,
@@ -156,7 +294,7 @@ export function buildWorldLayout(seed: number): WorldLayout {
     normal: { x: Math.sin(r.yaw), y: 0, z: Math.cos(r.yaw) },
     passRadius: RING_RADIUS - 0.3,
   }))
-  return { buildings, rings, colliders, gates }
+  return { buildings, rings, colliders, gates, trees, roads, traffic, clouds, roofs }
 }
 
 /**
