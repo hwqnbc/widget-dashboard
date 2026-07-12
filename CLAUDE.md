@@ -92,7 +92,11 @@ Reusable primitives for new widgets: `hooks/useNow` (ticking clock),
 character folders under `components/widgets/characters/` — `toy/` (`ToyHead`,
 `ToyFigure`, `SixSevenFigure`, `ToyCelebration`, `toyParts`, `toyPalette`),
 `ninja/` (`NinjaHead`, `SwordNinjaFigure`, `NinjaFigure`, `NinjaCelebration`,
-`ninjaPalette`), `shared/Hand`, `boy/Boy`.
+`ninjaPalette`), `fireninja/` (`FireNinjaHead`, `FireBladeFigure`, `FireNinjaFigure`,
+`FireNinjaCelebration`, `fireNinjaPalette`), `darkarin/` (`DarkArinHead`,
+`TwinSwordFigure`, `DarkArinFigure`, `DarkArinCelebration`, `darkArinPalette`),
+`frak/` (`FrakHead`, `FrakFigure`, `FrakCelebration`, `frakPalette`),
+`shared/Hand`, `boy/Boy`.
 
 ## Avatars (players vs seats)
 
