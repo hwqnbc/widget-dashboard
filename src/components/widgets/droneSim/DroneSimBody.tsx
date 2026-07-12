@@ -251,6 +251,11 @@ export default function DroneSimBody({ id }: WidgetProps) {
         data-testid="dronesim-hud"
         data-alt="2.0"
         data-speed="0.0"
+        data-x="0.00"
+        data-z="18.00"
+        data-yaw="0.000"
+        data-wind="0"
+        data-crash-state="none"
         sx={{
           position: 'absolute',
           top: 8,
