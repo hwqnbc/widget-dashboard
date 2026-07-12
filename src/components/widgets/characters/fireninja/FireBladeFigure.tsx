@@ -78,32 +78,35 @@ const flicker = keyframes`
   100% { transform: scaleY(1)    skewX(0deg);    filter: drop-shadow(0 0 6px currentColor); }
 `
 
-// Once lit, the sword sweeps across the front of the body — a defensive guard
-// parry, pivoting about the wrist: wind up to the high cross-body guard, sweep
-// across to the right, and return. Amplitude is bounded so the long blade stays
+// Once lit, the whole sword arm swings across the front of the body about the
+// SHOULDER — a defensive guard sweep: wind the blade up across the body, drive it
+// across to the far side, and return. Amplitude is bounded so the long blade stays
 // within the viewBox (no card clipping / scrollbars).
 const sweep = keyframes`
-  0%   { transform: rotate(-25deg); }
-  30%  { transform: rotate(-48deg); }
-  66%  { transform: rotate(20deg); }
-  100% { transform: rotate(-25deg); }
+  0%   { transform: rotate(0deg); }
+  30%  { transform: rotate(-26deg); }
+  64%  { transform: rotate(10deg); }
+  100% { transform: rotate(0deg); }
 `
 
 const DUR = '0.5s'
 const EASE = 'cubic-bezier(.3, .8, .3, 1)'
 const IGNITE_MS = 500
 
-// The grip/wrist point (in front of the lower chest): the sword rotates about it
-// and the hand grips here. The guard sits 15u above it (grip centre) so the blade
-// rises from there; at rest the sword is angled into a cross-body defensive guard.
+// Shoulder pivot for the whole sword arm (the swing rotates about this).
+const SHOULDER = '150px 200px'
+// The grip/wrist point (in front of the lower chest) where the hand holds the
+// hilt. The guard sits 15u above it (grip centre) so the blade rises from there;
+// REST_DEG angles the sword (relative to the arm) into a cross-body guard.
 const GRIP_X = 128
 const GRIP_Y = 234
 const HILT_X = GRIP_X
 const HILT_Y = GRIP_Y - 15
 const REST_DEG = -25
-// The grip "C" is turned side-on so it wraps the handle like a fist, with the
-// guard showing above it and the pommel below (default Hand opens downward).
-const GRIP_DEG = -90
+// The grip "C" is turned side-on with its curved spine toward the forearm and its
+// two tips (top + bottom) wrapping the handle like fingers (default Hand opens
+// downward, spine up).
+const GRIP_DEG = 90
 
 /**
  * A stylized fire ninja braced in a cross-body guard, gripping a sword handle in
@@ -221,57 +224,67 @@ export default function FireBladeFigure({
         <path d="M113 146 C116 149 124 149 127 146 C126 151 122 153 120 153 C118 153 114 151 113 146 Z" fill={F.line} />
       </g>
 
-      {/* ---- right forearm, bent across the front of the torso to the grip ---- */}
-      <path d="M150 200 C157 214 150 228 136 232 C133 233 130 233 128 234" stroke={F.gi} strokeWidth={16} strokeLinecap="round" fill="none" />
-      <path d="M150 207 C155 217 149 226 138 230" stroke={F.giShade} strokeWidth={4} fill="none" opacity={0.7} />
-
-      {/* ---- sword (blade + hilt + gripping hand): held in a cross-body guard and,
-             when lit, sweeping across the front of the body — pivots about the wrist ---- */}
+      {/* ---- sword arm (forearm + sword + gripping hand): held in a cross-body
+             guard and, when lit, swinging across the front of the body about the
+             SHOULDER — a defensive guard sweep ---- */}
       <Box
         component="g"
         sx={{
           transformBox: 'view-box',
-          transformOrigin: `${GRIP_X}px ${GRIP_Y}px`,
-          transform: `rotate(${REST_DEG}deg)`,
+          transformOrigin: SHOULDER,
           animation: lit && animate ? `${sweep} 1.5s ease-in-out ${IGNITE_MS}ms infinite` : 'none',
         }}
       >
-        {/* flaming sword blade (behind the hand, so the grip reads as held) */}
+        {/* right forearm, bent across the front of the torso to the grip */}
+        <path d="M150 200 C157 214 150 228 136 232 C133 233 130 233 128 234" stroke={F.gi} strokeWidth={16} strokeLinecap="round" fill="none" />
+        <path d="M150 207 C155 217 149 226 138 230" stroke={F.giShade} strokeWidth={4} fill="none" opacity={0.7} />
+
+        {/* the sword, statically angled (relative to the arm) into the guard */}
         <Box
           component="g"
-          aria-hidden
           sx={{
             transformBox: 'view-box',
-            transformOrigin: `${HILT_X}px ${HILT_Y}px`,
-            color: F.flame,
-            filter: !animate && lit ? 'drop-shadow(0 0 7px currentColor)' : 'none',
-            animation: bladeAnim,
-            // When animating, the ignite/extinguish keyframes own opacity (they end
-            // `forwards`); when snapping, set it directly from `lit`.
-            opacity: animate ? 1 : lit ? 1 : 0,
+            transformOrigin: `${GRIP_X}px ${GRIP_Y}px`,
+            transform: `rotate(${REST_DEG}deg)`,
           }}
         >
+          {/* flaming sword blade (behind the hand, so the grip reads as held) */}
           <Box
             component="g"
+            aria-hidden
             sx={{
               transformBox: 'view-box',
               transformOrigin: `${HILT_X}px ${HILT_Y}px`,
-              animation: lit && animate ? `${flicker} 0.9s ease-in-out ${IGNITE_MS}ms infinite` : 'none',
+              color: F.flame,
+              filter: !animate && lit ? 'drop-shadow(0 0 7px currentColor)' : 'none',
+              animation: bladeAnim,
+              // When animating, the ignite/extinguish keyframes own opacity (they end
+              // `forwards`); when snapping, set it directly from `lit`.
+              opacity: animate ? 1 : lit ? 1 : 0,
             }}
           >
-            <g transform={`translate(${HILT_X} ${HILT_Y})`}>
-              <FireBlade />
-            </g>
+            <Box
+              component="g"
+              sx={{
+                transformBox: 'view-box',
+                transformOrigin: `${HILT_X}px ${HILT_Y}px`,
+                animation: lit && animate ? `${flicker} 0.9s ease-in-out ${IGNITE_MS}ms infinite` : 'none',
+              }}
+            >
+              <g transform={`translate(${HILT_X} ${HILT_Y})`}>
+                <FireBlade />
+              </g>
+            </Box>
           </Box>
-        </Box>
 
-        {/* the hilt + gripping hand (opening faces up the hilt) */}
-        <g transform={`translate(${HILT_X} ${HILT_Y})`}>
-          <Hilt />
-        </g>
-        <g transform={`rotate(${GRIP_DEG} ${GRIP_X} ${GRIP_Y})`}>
-          <Hand cx={GRIP_X} cy={GRIP_Y} stroke={F.skin} r={8} />
-        </g>
+          {/* the hilt + gripping hand (side-on so it wraps the handle) */}
+          <g transform={`translate(${HILT_X} ${HILT_Y})`}>
+            <Hilt />
+          </g>
+          <g transform={`rotate(${GRIP_DEG} ${GRIP_X} ${GRIP_Y})`}>
+            <Hand cx={GRIP_X} cy={GRIP_Y} stroke={F.skin} r={8} />
+          </g>
+        </Box>
       </Box>
     </svg>
   )
