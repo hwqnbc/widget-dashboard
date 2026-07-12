@@ -71,6 +71,14 @@ export const MAX_ALT = 40
 export const DRONE_RADIUS = 0.25
 export const MAX_DT = 0.05
 export const DEADZONE = 0.08
+/** Impact speed (u/s) into a building that counts as a crash. Full-tilt
+ * horizontal flight is 12 and max vertical is 5, so landings and gentle
+ * bumps can never crash — only committed wall hits do. */
+export const CRASH_SPEED = 8
+/** Length of the crash tumble before the auto-respawn, seconds. */
+export const CRASH_DURATION = 1.6
+const CRASH_GRAVITY = 20
+const CRASH_SKID = 1.5
 
 /** Exponential approach — framerate-independent smoothing. */
 export const damp = (cur: number, target: number, lambda: number, dt: number) =>
@@ -126,11 +134,14 @@ export function resetFlightState(s: FlightState): void {
  * Push the drone out of any collider along the axis of least penetration and
  * zero the velocity component that carried it in. Resolving upward lands the
  * drone on the roof (it can sit there — altitude hold keeps it in place).
+ * Returns the largest velocity magnitude absorbed by a surface this step —
+ * the impact speed the crash check compares against CRASH_SPEED.
  */
 export function resolveCollisions(
   s: FlightState,
   colliders: readonly Collider[],
-): void {
+): number {
+  let impact = 0
   for (const c of colliders) {
     if (
       s.pos.x <= c.minX ||
@@ -149,21 +160,27 @@ export function resolveCollisions(
     const min = Math.min(pushWest, pushEast, pushNorth, pushSouth, pushUp)
     if (min === pushUp) {
       s.pos.y = c.top
+      impact = Math.max(impact, -Math.min(0, s.vel.y))
       s.vel.y = Math.max(0, s.vel.y)
     } else if (min === pushWest) {
       s.pos.x = c.minX
+      impact = Math.max(impact, Math.max(0, s.vel.x))
       s.vel.x = Math.min(0, s.vel.x)
     } else if (min === pushEast) {
       s.pos.x = c.maxX
+      impact = Math.max(impact, -Math.min(0, s.vel.x))
       s.vel.x = Math.max(0, s.vel.x)
     } else if (min === pushNorth) {
       s.pos.z = c.minZ
+      impact = Math.max(impact, Math.max(0, s.vel.z))
       s.vel.z = Math.min(0, s.vel.z)
     } else {
       s.pos.z = c.maxZ
+      impact = Math.max(impact, -Math.min(0, s.vel.z))
       s.vel.z = Math.max(0, s.vel.z)
     }
   }
+  return impact
 }
 
 export function stepFlight(
@@ -173,7 +190,7 @@ export function stepFlight(
   colliders: readonly Collider[] = [],
   /** Horizontal wind (x, z) added as position drift the pilot must counter. */
   wind?: Vec2,
-): void {
+): number {
   const step = Math.min(dt, MAX_DT) // survive tab-switch dt spikes
 
   // Left stick X: yaw rate (stick right turns the nose right).
@@ -224,9 +241,36 @@ export function stepFlight(
     s.vel.y = Math.min(0, s.vel.y)
   }
 
-  resolveCollisions(s, colliders)
+  const impact = resolveCollisions(s, colliders)
 
   // Visual tilt: nose dips into forward flight, body banks into a strafe.
   s.tiltPitch = damp(s.tiltPitch, -input.right.y * MAX_TILT, TILT_RESPONSE, step)
   s.tiltRoll = damp(s.tiltRoll, -input.right.x * MAX_TILT, TILT_RESPONSE, step)
+
+  return impact
+}
+
+/**
+ * One frame of the crash tumble: controls are dead, the drone skids and
+ * falls under gravity, still collides with buildings, and bounces once off
+ * the ground before coming to rest. Attitude (the spin) is handled by the
+ * rig — this is translation only.
+ */
+export function stepCrash(
+  s: FlightState,
+  dt: number,
+  colliders: readonly Collider[] = [],
+): void {
+  const step = Math.min(dt, MAX_DT)
+  s.vel.x = damp(s.vel.x, 0, CRASH_SKID, step)
+  s.vel.z = damp(s.vel.z, 0, CRASH_SKID, step)
+  s.vel.y -= CRASH_GRAVITY * step
+  s.pos.x += s.vel.x * step
+  s.pos.y += s.vel.y * step
+  s.pos.z += s.vel.z * step
+  if (s.pos.y < DRONE_RADIUS) {
+    s.pos.y = DRONE_RADIUS
+    s.vel.y = s.vel.y < -2 ? -s.vel.y * 0.3 : 0
+  }
+  resolveCollisions(s, colliders)
 }

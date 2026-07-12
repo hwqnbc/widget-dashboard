@@ -3,7 +3,14 @@ import type { RefObject } from 'react'
 import { useFrame } from '@react-three/fiber'
 import type { Group, Mesh, MeshBasicMaterial } from 'three'
 import type { Collider, ControlInput, FlightState, Weather } from './flightModel'
-import { SPAWN, sampleWind, stepFlight } from './flightModel'
+import {
+  CRASH_DURATION,
+  CRASH_SPEED,
+  SPAWN,
+  sampleWind,
+  stepCrash,
+  stepFlight,
+} from './flightModel'
 import type { Gate } from './worldLayout'
 import { crossedGate } from './worldLayout'
 import type { LapState } from './lapTimer'
@@ -13,6 +20,15 @@ import type { GateFlash } from './GateRings'
 
 /** Seconds between HUD DOM writes (~7 Hz — cheap, and no React renders). */
 const HUD_INTERVAL = 0.15
+
+/** Transient crash-tumble state, owned by the body, mutated by the rig. */
+export interface CrashState {
+  active: boolean
+  /** Canvas clock time (s) when the tumble ends and the drone respawns. */
+  until: number
+  spinX: number
+  spinZ: number
+}
 
 /**
  * The sim loop. Every frame: advance the flight model, pose the drone (outer
@@ -29,6 +45,10 @@ export default function DroneRig({
   gates,
   weather,
   windRef,
+  crashMode,
+  crashRef,
+  onCrash,
+  onCrashEnd,
   activeGate,
   onGatePass,
   flashRef,
@@ -45,6 +65,10 @@ export default function DroneRig({
   weather: Weather
   /** Shared with RainField so the drops drift with the same gusts. */
   windRef: { current: { x: number; y: number } }
+  crashMode: boolean
+  crashRef: { current: CrashState }
+  onCrash: () => void
+  onCrashEnd: () => void
   activeGate: number
   onGatePass: () => void
   flashRef: { current: GateFlash }
@@ -68,48 +92,77 @@ export default function DroneRig({
       wind.x = 0
       wind.y = 0
     }
-    stepFlight(flight, controls, dt, colliders, weather === 'storm' ? wind : undefined)
 
-    // Gate pass (only while a lap is running): did this frame's movement
-    // cross the active ring's plane inside the ring? A long segment means a
-    // teleport (reset) — skip it so the jump back to the pad can't score.
+    const crash = crashRef.current
     const prev = prevPos.current
-    const jump =
-      Math.hypot(
-        flight.pos.x - prev.x,
-        flight.pos.y - prev.y,
-        flight.pos.z - prev.z,
-      ) > 2
-    if (
-      lap.status === 'running' &&
-      activeGate < gates.length &&
-      !jump &&
-      crossedGate(prev, flight.pos, gates[activeGate])
-    ) {
-      flashRef.current = { gate: activeGate, until: clock.elapsedTime + 0.6 }
-      onGatePass()
+    const now = performance.now()
+
+    if (crash.active) {
+      // Tumble: controls dead, gravity wins, gates/laps suspended.
+      stepCrash(flight, dt, colliders)
+      crash.spinX += 6 * dt
+      crash.spinZ += 4.5 * dt
+      if (clock.elapsedTime >= crash.until) {
+        crash.active = false
+        crash.spinX = 0
+        crash.spinZ = 0
+        onCrashEnd()
+      }
+    } else {
+      const impact = stepFlight(
+        flight,
+        controls,
+        dt,
+        colliders,
+        weather === 'storm' ? wind : undefined,
+      )
+      if (crashMode && impact >= CRASH_SPEED) {
+        crash.active = true
+        crash.until = clock.elapsedTime + CRASH_DURATION
+        crash.spinX = 0
+        crash.spinZ = 0
+        onCrash()
+      } else {
+        // Gate pass (only while a lap is running): did this frame's movement
+        // cross the active ring's plane inside the ring? A long segment means
+        // a teleport (reset/respawn) — skip it so the jump can't score.
+        const jump =
+          Math.hypot(
+            flight.pos.x - prev.x,
+            flight.pos.y - prev.y,
+            flight.pos.z - prev.z,
+          ) > 2
+        if (
+          lap.status === 'running' &&
+          activeGate < gates.length &&
+          !jump &&
+          crossedGate(prev, flight.pos, gates[activeGate])
+        ) {
+          flashRef.current = { gate: activeGate, until: clock.elapsedTime + 0.6 }
+          onGatePass()
+        }
+
+        // Lap start/finish against the pad zone.
+        const selfPropelled =
+          Math.hypot(flight.vel.x, flight.vel.y, flight.vel.z) > 0.5
+        const lapEvent = jump
+          ? null
+          : updateLap(lap, flight.pos, activeGate, gates.length, now, selfPropelled)
+        if (lapEvent === 'started') {
+          pathRef.current = [
+            Math.round(flight.pos.x * 10) / 10,
+            Math.round(flight.pos.y * 10) / 10,
+            Math.round(flight.pos.z * 10) / 10,
+          ]
+        } else if (lapEvent === 'finished') {
+          onLapComplete(now - lap.startMs, pathRef.current)
+          pathRef.current = []
+        }
+      }
     }
     prev.x = flight.pos.x
     prev.y = flight.pos.y
     prev.z = flight.pos.z
-
-    // Lap start/finish against the pad zone.
-    const now = performance.now()
-    const selfPropelled =
-      Math.hypot(flight.vel.x, flight.vel.y, flight.vel.z) > 0.5
-    const lapEvent = jump
-      ? null
-      : updateLap(lap, flight.pos, activeGate, gates.length, now, selfPropelled)
-    if (lapEvent === 'started') {
-      pathRef.current = [
-        Math.round(flight.pos.x * 10) / 10,
-        Math.round(flight.pos.y * 10) / 10,
-        Math.round(flight.pos.z * 10) / 10,
-      ]
-    } else if (lapEvent === 'finished') {
-      onLapComplete(now - lap.startMs, pathRef.current)
-      pathRef.current = []
-    }
 
     const outer = outerRef.current
     if (outer) {
@@ -118,8 +171,9 @@ export default function DroneRig({
     }
     const tilt = tiltRef.current
     if (tilt) {
-      tilt.rotation.x = flight.tiltPitch
-      tilt.rotation.z = flight.tiltRoll
+      // Crash overrides the aerodynamic tilt with an accelerating tumble.
+      tilt.rotation.x = crash.active ? crash.spinX : flight.tiltPitch
+      tilt.rotation.z = crash.active ? crash.spinZ : flight.tiltRoll
     }
     const shadow = shadowRef.current
     if (shadow) {
@@ -144,6 +198,7 @@ export default function DroneRig({
         hud.dataset.alt = alt.toFixed(1)
         hud.dataset.speed = speed.toFixed(1)
         hud.dataset.wind = weather === 'storm' ? windSpeed.toFixed(1) : '0'
+        hud.dataset.crashState = crash.active ? 'tumbling' : 'none'
         // Extra telemetry for tests/debugging; costs nothing beyond the write.
         hud.dataset.x = flight.pos.x.toFixed(2)
         hud.dataset.z = flight.pos.z.toFixed(2)

@@ -74,6 +74,22 @@ tunneling is possible: max travel per step is 0.6 u (12 u/s × MAX_DT), well
 under the smallest inflated footprint (~2.5 u). Gate rings stay fly-through
 on purpose.
 
+### Crash & respawn
+
+`resolveCollisions` returns the velocity magnitude it absorbed — the impact
+speed. With crash mode on (persisted `crashes: boolean`, default true,
+shield/fire toggle button) an impact ≥ `CRASH_SPEED` (8 u/s) triggers a
+crash: full-tilt horizontal flight is 12 while max vertical is 5, so
+rooftop/ground landings and gentle bumps can never crash — only committed
+wall hits. The tumble (`stepCrash`, `CRASH_DURATION` 1.6 s) kills the
+controls, skids the horizontal velocity down, applies fake gravity with one
+ground bounce, keeps resolving buildings, and spins the tilt group for the
+visual; the `CRASHED!` banner shows, any lap in progress is voided, and the
+drone auto-respawns on the pad (the teleport-jump guard keeps the respawn
+from scoring gates or starting laps). World-bounds clamps never crash —
+hitting an invisible wall would feel unfair. HUD exposes
+`data-crash-state` (`none`/`tumbling`) on the usual 150 ms tick.
+
 ## Input path (why nothing re-renders in flight)
 
 `VirtualJoystick` is a custom pointer-event component (no nipplejs — it's

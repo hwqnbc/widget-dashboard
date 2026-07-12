@@ -6,6 +6,8 @@ import RestartAltIcon from '@mui/icons-material/RestartAlt'
 import ShuffleIcon from '@mui/icons-material/Shuffle'
 import ThunderstormIcon from '@mui/icons-material/Thunderstorm'
 import WbSunnyIcon from '@mui/icons-material/WbSunny'
+import LocalFireDepartmentIcon from '@mui/icons-material/LocalFireDepartment'
+import ShieldIcon from '@mui/icons-material/Shield'
 import { useAppDispatch } from '../../../app/hooks'
 import { updateWidgetData } from '../../../features/widgets/widgetsSlice'
 import { useWidgetField } from '../../../features/widgets/useWidgetField'
@@ -25,6 +27,7 @@ import { createLapState, fmtLap, resetLapState } from './lapTimer'
 import ConfirmDialog from '../ConfirmDialog'
 import WorldScene from './WorldScene'
 import DroneRig from './DroneRig'
+import type { CrashState } from './DroneRig'
 import CameraRig from './CameraRig'
 import GateRings from './GateRings'
 import type { GateFlash } from './GateRings'
@@ -72,6 +75,13 @@ export default function DroneSimBody({ id }: WidgetProps) {
   // Shared between the sim loop (which samples it) and the rain (which
   // drifts with it) — mutable, never re-renders.
   const windRef = useRef({ x: 0, y: 0 })
+  const crashRef = useRef<CrashState>({
+    active: false,
+    until: 0,
+    spinX: 0,
+    spinZ: 0,
+  })
+  const crashes = useWidgetField(id, 'crashes', true)
   // Which ring must be flown through next (GATES.length = all passed, return
   // to the pad); transient — reload/reset restarts the lap, only score and
   // best lap persist.
@@ -115,9 +125,23 @@ export default function DroneSimBody({ id }: WidgetProps) {
   const resetSim = () => {
     resetFlightState(flight)
     resetLapState(lap)
+    crashRef.current.active = false
     setActiveGate(0)
     setBanner(null)
   }
+
+  const onCrash = useCallback(() => {
+    // A crash voids the lap in progress.
+    resetLapState(lap)
+    setActiveGate(0)
+    setBanner('CRASHED!')
+    if (bannerTimer.current) clearTimeout(bannerTimer.current)
+    bannerTimer.current = setTimeout(() => setBanner(null), 2500)
+  }, [lap])
+
+  const onCrashEnd = useCallback(() => {
+    resetFlightState(flight) // respawn on the pad; jump guard covers the leap
+  }, [flight])
 
   const shuffleCourse = () => {
     setConfirmShuffle(false)
@@ -204,6 +228,10 @@ export default function DroneSimBody({ id }: WidgetProps) {
             gates={layout.gates}
             weather={weather}
             windRef={windRef}
+            crashMode={crashes}
+            crashRef={crashRef}
+            onCrash={onCrash}
+            onCrashEnd={onCrashEnd}
             activeGate={activeGate}
             onGatePass={onGatePass}
             flashRef={flashRef}
@@ -360,6 +388,24 @@ export default function DroneSimBody({ id }: WidgetProps) {
               <WbSunnyIcon fontSize="small" />
             ) : (
               <ThunderstormIcon fontSize="small" />
+            )}
+          </IconButton>
+        </Tooltip>
+        <Tooltip title={crashes ? 'Safe mode (no crashes)' : 'Crash mode (hard impacts tumble)'}>
+          <IconButton
+            size="small"
+            data-testid="dronesim-crash-toggle"
+            data-crashes={crashes ? 'on' : 'off'}
+            aria-pressed={crashes}
+            onClick={() =>
+              dispatch(updateWidgetData({ id, data: { crashes: !crashes } }))
+            }
+            sx={{ color: '#fff' }}
+          >
+            {crashes ? (
+              <ShieldIcon fontSize="small" />
+            ) : (
+              <LocalFireDepartmentIcon fontSize="small" />
             )}
           </IconButton>
         </Tooltip>
