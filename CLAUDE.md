@@ -63,6 +63,9 @@ src/
                       avatarRegistry: AvatarId -> { Head, Figure, Celebration }
   theme/              buildTheme + AppThemeProvider (reads ui.mode from redux)
   components/         AppLayout, WidgetBoard, WidgetCard, widgets/*
+  components/fullscreen/  FullscreenProvider (transient fullscreen id) +
+                      FullscreenView overlay; presentation context (usePresentation)
+  hooks/useViewport   live viewport size + orientation (portrait/landscape)
   pages/              DashboardPage, SettingsPage
 ```
 
@@ -139,7 +142,10 @@ projectile game, drag-to-aim slingshot under gravity, random archer heights,
 first to 5 hits; reuses the heads, PlayerBadge, TurnBanner and WinnerCelebration).
 See `docs/avatars.md` for the avatar system (seat-vs-avatar model, the per-avatar
 character folders, the catalog/registry split, the Settings picker, and how to add
-a new figure).
+a new figure). See `docs/fullscreen.md` for full-screen mode (the WidgetCard
+maximise button, the transient `FullscreenProvider` + portaled `Dialog` overlay,
+the `usePresentation` fullscreen context, `useViewport` orientation, the per-widget
+`preferredOrientation` catalog field + rotate hint, and the board size-cap relaxation).
 
 **Read `docs/lessons.md` before building or tweaking a board / character /
 animation widget** — it collects the recurring refinements (grid cells that

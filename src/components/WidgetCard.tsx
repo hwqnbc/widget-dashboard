@@ -1,11 +1,13 @@
 import type { ReactNode } from 'react'
-import { Card, CardContent, CardHeader, IconButton, Tooltip } from '@mui/material'
+import { Card, CardContent, CardHeader, IconButton, Stack, Tooltip } from '@mui/material'
 import CloseIcon from '@mui/icons-material/Close'
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator'
+import FullscreenIcon from '@mui/icons-material/Fullscreen'
 
 interface WidgetCardProps {
   title: string
   onRemove: () => void
+  onFullscreen?: () => void
   children: ReactNode
 }
 
@@ -14,7 +16,7 @@ interface WidgetCardProps {
  * class so react-grid-layout only initiates a drag from the header, leaving
  * the body interactive.
  */
-export default function WidgetCard({ title, onRemove, children }: WidgetCardProps) {
+export default function WidgetCard({ title, onRemove, onFullscreen, children }: WidgetCardProps) {
   return (
     <Card
       variant="outlined"
@@ -28,20 +30,34 @@ export default function WidgetCard({ title, onRemove, children }: WidgetCardProp
         // the old prop leaks onto the DOM and React warns about it.
         slotProps={{ title: { variant: 'subtitle1', sx: { fontWeight: 600 } } }}
         action={
-          <Tooltip title="Remove widget">
-            <IconButton
-              // `widget-no-drag` tells react-grid-layout not to start a drag
-              // from this element, so taps reach the button on touch devices.
-              className="widget-no-drag"
-              aria-label={`remove ${title} widget`}
-              // Stop the drag handler from swallowing the press (mouse + touch).
-              onMouseDown={(e) => e.stopPropagation()}
-              onTouchStart={(e) => e.stopPropagation()}
-              onClick={onRemove}
-            >
-              <CloseIcon fontSize="small" />
-            </IconButton>
-          </Tooltip>
+          // `widget-no-drag` tells react-grid-layout not to start a drag from
+          // these controls, and stopPropagation lets taps reach them on touch.
+          <Stack direction="row" spacing={0.25}>
+            {onFullscreen && (
+              <Tooltip title="Full screen">
+                <IconButton
+                  className="widget-no-drag"
+                  aria-label={`full screen ${title} widget`}
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onTouchStart={(e) => e.stopPropagation()}
+                  onClick={onFullscreen}
+                >
+                  <FullscreenIcon fontSize="small" />
+                </IconButton>
+              </Tooltip>
+            )}
+            <Tooltip title="Remove widget">
+              <IconButton
+                className="widget-no-drag"
+                aria-label={`remove ${title} widget`}
+                onMouseDown={(e) => e.stopPropagation()}
+                onTouchStart={(e) => e.stopPropagation()}
+                onClick={onRemove}
+              >
+                <CloseIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          </Stack>
         }
         sx={{
           cursor: 'move',

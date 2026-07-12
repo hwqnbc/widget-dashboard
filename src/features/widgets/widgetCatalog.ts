@@ -10,6 +10,9 @@ export interface WidgetMeta {
   title: string
   description: string
   defaultSize: { w: number; h: number; minW: number; minH: number }
+  /** If set, full-screen mode nudges the device to this orientation (rotate
+   * hint + best-effort lock). Omit for widgets that work in any orientation. */
+  preferredOrientation?: 'landscape' | 'portrait'
 }
 
 export const WIDGET_CATALOG: WidgetMeta[] = [
@@ -72,6 +75,7 @@ export const WIDGET_CATALOG: WidgetMeta[] = [
     title: 'Archery',
     description: 'Toy vs Ninja — drag to aim, first to 5 hits',
     defaultSize: { w: 6, h: 6, minW: 5, minH: 5 },
+    preferredOrientation: 'landscape',
   },
 ]
 

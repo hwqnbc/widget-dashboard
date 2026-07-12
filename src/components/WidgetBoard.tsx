@@ -10,6 +10,7 @@ import {
 import { widgetMetaByType } from '../features/widgets/widgetCatalog'
 import { widgetComponents } from '../registry/widgetRegistry'
 import WidgetCard from './WidgetCard'
+import { useFullscreen } from './fullscreen/fullscreenContext'
 
 import 'react-grid-layout/css/styles.css'
 import 'react-resizable/css/styles.css'
@@ -22,6 +23,7 @@ const COLS = { lg: GRID_COLS, md: 10, sm: 6, xs: 4, xxs: 2 }
 /** The draggable / resizable grid of widgets, backed by redux + persistence. */
 export default function WidgetBoard() {
   const dispatch = useAppDispatch()
+  const { fullscreenId, open } = useFullscreen()
   const allInstances = useAppSelector((state) => state.widgets.instances)
   const layout = useAppSelector((state) => state.widgets.layout)
 
@@ -100,13 +102,25 @@ export default function WidgetBoard() {
         {instances.map((inst) => {
           const Widget = widgetComponents[inst.type]
           const meta = widgetMetaByType[inst.type]
+          // While a widget is fullscreen it's mounted only in the overlay; the
+          // in-grid card shows a placeholder so there's a single live instance.
+          const isFullscreen = fullscreenId === inst.id
           return (
             <div key={inst.id}>
               <WidgetCard
                 title={meta.title}
                 onRemove={() => dispatch(removeWidget(inst.id))}
+                onFullscreen={() => open(inst.id)}
               >
-                <Widget id={inst.id} />
+                {isFullscreen ? (
+                  <Box sx={{ height: '100%', display: 'grid', placeItems: 'center', p: 2 }}>
+                    <Typography variant="body2" color="text.secondary" align="center">
+                      Opened in full screen
+                    </Typography>
+                  </Box>
+                ) : (
+                  <Widget id={inst.id} />
+                )}
               </WidgetCard>
             </div>
           )

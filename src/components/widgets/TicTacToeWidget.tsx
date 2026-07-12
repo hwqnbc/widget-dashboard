@@ -14,6 +14,7 @@ import { useWidgetField } from '../../features/widgets/useWidgetField'
 import type { WidgetProps } from '../../registry/widgetRegistry'
 import { avatarMetaById } from '../../features/avatars/avatarCatalog'
 import { useSeatAvatars, useSeatVisual } from '../../features/avatars/useSeatAvatars'
+import { usePresentation } from '../fullscreen/presentation'
 import WinnerCelebration from './WinnerCelebration'
 import PlayerBadge from './PlayerBadge'
 import ConfirmDialog from './ConfirmDialog'
@@ -160,6 +161,9 @@ export default function TicTacToeWidget({ id }: WidgetProps) {
   const hand = useHandoff()
   const seatAvatars = useSeatAvatars()
   const colorOf = (seat: Mark) => avatarMetaById[seatAvatars[seat]].color
+  const { fullscreen } = usePresentation()
+  // Fullscreen relaxes the fixed px cap so the board fills the larger space.
+  const boardMax = fullscreen ? 'min(100cqmin, 88vmin)' : 'min(100cqmin, 340px)'
 
   const board = useWidgetField<Cell[]>(id, 'board', EMPTY_BOARD, (b) =>
     Array.isArray(b) && b.length === 9 ? (b as Cell[]) : undefined,
@@ -293,8 +297,8 @@ export default function TicTacToeWidget({ id }: WidgetProps) {
       >
         <Box
           sx={{
-            width: 'min(100cqmin, 340px)',
-            height: 'min(100cqmin, 340px)',
+            width: boardMax,
+            height: boardMax,
             display: 'grid',
             gridTemplateColumns: 'repeat(3, 1fr)',
             gridTemplateRows: 'repeat(3, 1fr)',

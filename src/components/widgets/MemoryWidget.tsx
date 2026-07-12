@@ -18,6 +18,7 @@ import TurnBanner from './TurnBanner'
 import { avatarMetaById } from '../../features/avatars/avatarCatalog'
 import { AVATAR_IDS } from '../../features/avatars/types'
 import { avatarVisualById } from '../../registry/avatarRegistry'
+import { usePresentation } from '../fullscreen/presentation'
 import { useSeatAvatars } from '../../features/avatars/useSeatAvatars'
 import { useHandoff } from '../../hooks/useHandoff'
 
@@ -180,6 +181,9 @@ export default function MemoryWidget({ id }: WidgetProps) {
   const hand = useHandoff()
   const seatAvatars = useSeatAvatars()
   const colorOf = (seat: Player) => avatarMetaById[seatAvatars[seat]].color
+  const { fullscreen } = usePresentation()
+  // Fullscreen relaxes the fixed px cap so the board fills the larger space.
+  const boardMax = fullscreen ? 'min(100cqmin, 92vmin)' : 'min(100cqmin, 460px)'
 
   const size = useWidgetField<Size>(id, 'size', 4, (v) => (v === 6 ? 6 : 4))
   const cards = useWidgetField<string[]>(id, 'cards', NO_STR, (v) =>
@@ -367,8 +371,8 @@ export default function MemoryWidget({ id }: WidgetProps) {
       >
         <Box
           sx={{
-            width: 'min(100cqmin, 460px)',
-            height: 'min(100cqmin, 460px)',
+            width: boardMax,
+            height: boardMax,
             display: 'grid',
             gridTemplateColumns: `repeat(${size}, 1fr)`,
             gridTemplateRows: `repeat(${size}, 1fr)`,

@@ -7,6 +7,7 @@ import WidgetsIcon from '@mui/icons-material/Widgets'
 import { NavLink, Outlet } from 'react-router-dom'
 import { useAppDispatch, useAppSelector } from '../app/hooks'
 import { toggleMode } from '../features/ui/uiSlice'
+import FullscreenProvider from './fullscreen/FullscreenProvider'
 
 interface NavItem {
   label: string
@@ -54,9 +55,11 @@ export default function AppLayout() {
           </Tooltip>
         </Toolbar>
       </AppBar>
-      <Container maxWidth="xl" sx={{ py: 3, flexGrow: 1 }}>
-        <Outlet />
-      </Container>
+      <FullscreenProvider>
+        <Container maxWidth="xl" sx={{ py: 3, flexGrow: 1 }}>
+          <Outlet />
+        </Container>
+      </FullscreenProvider>
     </Box>
   )
 }
