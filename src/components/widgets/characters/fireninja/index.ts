@@ -5,6 +5,5 @@
 export { default as FireNinjaHead } from './FireNinjaHead'
 export { default as FireNinjaFigure } from './FireNinjaFigure'
 export { default as FireNinjaCelebration } from './FireNinjaCelebration'
-export { default as FireNinjaAction } from './FireNinjaAction'
 export { default as FireBladeFigure } from './FireBladeFigure'
 export { F } from './fireNinjaPalette'

@@ -46,7 +46,7 @@ export const WIDGET_CATALOG: WidgetMeta[] = [
   {
     type: 'avatarActions',
     title: 'Avatar Actions',
-    description: 'Pick a character, tap to see its action',
+    description: 'Pick a character, tap to play its celebration',
     defaultSize: { w: 3, h: 6, minW: 3, minH: 5 },
   },
   {

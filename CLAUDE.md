@@ -45,7 +45,7 @@ src/
   features/ui/        uiSlice (theme mode + seat→avatar map)
   features/avatars/   AvatarId/Seat types, avatarCatalog (name/colour), useSeatAvatars
   registry/           widgetRegistry: WidgetType -> component
-                      avatarRegistry: AvatarId -> { Head, Figure, Celebration, Action }
+                      avatarRegistry: AvatarId -> { Head, Figure, Celebration }
   theme/              buildTheme + AppThemeProvider (reads ui.mode from redux)
   components/         AppLayout, WidgetBoard, WidgetCard, widgets/*
   pages/              DashboardPage, SettingsPage
@@ -86,21 +86,22 @@ Games have two fixed **seats**, `'toy'` and `'ninja'` (`features/avatars/types.t
 What a seat *looks like* is its chosen **avatar** (`AvatarId`); the persisted
 `ui.avatars` seat→avatar map (default identity `{toy:'toy', ninja:'ninja'}`,
 edited on the Settings page) drives only rendering. Resolve a seat's look with
-`useSeatVisual(seat)` → `{ Head, Figure, Celebration, Action }` (from
+`useSeatVisual(seat)` → `{ Head, Figure, Celebration }` (from
 `avatarRegistry`) and `avatarMetaById[…].color`/`.name` (from `avatarCatalog`).
 Never hardcode `seat === 'toy' ? <ToyHead/> : <NinjaHead/>` — go through the
 registry so a swapped avatar follows everywhere (the chip, colour, turn banner and
-win celebration). `Celebration` is the looping win animation; `Action` is the
-tap-toggled move driven by the **Avatar Actions** widget
+win celebration). `Celebration` is the looping win animation; it's also what the
+**Avatar Actions** widget plays on tap
 (`components/widgets/AvatarActionsWidget.tsx` — pick a character, tap to play its
-action; works for any registered avatar).
+celebration, tap again to return to the static figure; works for any registered
+avatar, uniformly).
 
 ### Adding an avatar (figure)
 
 1. Add the id to `AvatarId` in `features/avatars/types.ts` (and `AVATAR_IDS`).
 2. Add a catalog entry (name + colour) in `features/avatars/avatarCatalog.ts`.
 3. Build the character folder `components/widgets/characters/<id>/` with `Head`,
-   `Figure`, `Celebration` and `Action` (+ palette), and register the bundle in
+   `Figure` and `Celebration` (+ palette), and register the bundle in
    `registry/avatarRegistry.tsx`. It becomes selectable on the Settings page and in
    the Avatar Actions widget automatically.
 

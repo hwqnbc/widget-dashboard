@@ -4,6 +4,5 @@
 export { default as NinjaHead } from './NinjaHead'
 export { default as NinjaFigure } from './NinjaFigure'
 export { default as NinjaCelebration } from './NinjaCelebration'
-export { default as NinjaAction } from './NinjaAction'
 export { default as SwordNinjaFigure } from './SwordNinjaFigure'
 export { N } from './ninjaPalette'

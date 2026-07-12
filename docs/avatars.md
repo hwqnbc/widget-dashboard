@@ -11,8 +11,8 @@ Two concepts that used to be one string:
   cells, score keys, the AI seat (the computer is always seat `'ninja'`), archer
   positions and turn order all key on it. It never changes, so **no persisted game
   state migrates** as avatars are added.
-- An **avatar** is a *look* — a grouped `{ head, figure, actions }` plus a name and
-  a brand colour (`AvatarId`). Each seat renders whichever avatar the player chose.
+- An **avatar** is a *look* — a grouped `{ head, figure, celebration }` plus a name
+  and a brand colour (`AvatarId`). Each seat renders whichever avatar the player chose.
 
 The bridge is the persisted **seat→avatar map** `ui.avatars`
 (`Record<Seat, AvatarId>`), default identity `{ toy:'toy', ninja:'ninja' }` — so out
@@ -28,36 +28,34 @@ the split. Only *rendering* consults the map.
   `playerColors.ts` map and the inline `'Toy'/'Ninja'` label strings). Kept free of
   component imports so the `ui` slice can depend on it.
 - `registry/avatarRegistry.tsx` — **component-carrying**
-  `AvatarVisual { Head, Figure, Celebration, Action }` + `avatarVisualById`,
+  `AvatarVisual { Head, Figure, Celebration }` + `avatarVisualById`,
   assembled from the per-avatar folder bundles.
 
 ## Per-avatar character folders
 `components/widgets/characters/` groups each character's pieces physically:
 ```
 shared/Hand.tsx                       cross-character primitive
-toy/   ToyHead, ToyFigure, SixSevenFigure, ToyCelebration, ToyAction, toyParts, toyPalette, index
-ninja/ NinjaHead, SwordNinjaFigure, NinjaFigure, NinjaCelebration, NinjaAction, ninjaPalette, index
+toy/   ToyHead, ToyFigure, SixSevenFigure, ToyCelebration, toyParts, toyPalette, index
+ninja/ NinjaHead, SwordNinjaFigure, NinjaFigure, NinjaCelebration, ninjaPalette, index
 boy/   Boy.tsx                        (an ImageToggle figure, not a game avatar)
 ```
 - **Head** = the standalone `<svg>` chip/mark (`size` prop; default `'100%'`).
 - **Figure** = the static full body (no-prop). `NinjaFigure` is a static
   `SwordNinjaFigure drawn={false}` wrapper so every avatar exposes a uniform Figure.
-- **Celebration** = the looping victory "action" (no-prop): `ToyCelebration` = the
+- **Celebration** = the looping victory animation (no-prop): `ToyCelebration` = the
   "6 7"; `NinjaCelebration` = the draw/sheathe loop (extracted from the old inline
-  `LoopingNinja`). Rendered by `WinnerCelebration`.
-- **Action** = the tap-toggled move (`AvatarActionProps { active, animate }`):
-  `ToyAction` = `SixSevenFigure playing={active}`; `NinjaAction` =
-  `SwordNinjaFigure drawn={active} animate={animate}`. Driven by the **Avatar
-  Actions** widget (`components/widgets/AvatarActionsWidget.tsx`) — pick a character,
-  tap to play its action. `Action` *holds* on tap; `Celebration` *loops* — they
-  differ (notably for the ninja), so both exist. This is what makes the single
-  Avatar Actions widget cover every present and future avatar.
+  `LoopingNinja`). Rendered by `WinnerCelebration`, and also what the **Avatar
+  Actions** widget (`components/widgets/AvatarActionsWidget.tsx`) plays on tap —
+  pick a character, tap to loop its celebration, tap again to return to the static
+  `Figure`. Using the one looping `Celebration` (rather than a separate per-avatar
+  tap move) keeps the widget's behaviour uniform across every present and future
+  avatar.
 
 ## Reading a seat's look
 `features/avatars/useSeatAvatars.ts`:
 - `useSeatAvatars()` → the `{ toy, ninja }` map from persisted state, with a coerced
   fallback to the identity default (guards pre-field state / removed ids).
-- `useSeatVisual(seat)` → `{ Head, Figure, Celebration, Action }`; `useSeatColor(seat)` → hex.
+- `useSeatVisual(seat)` → `{ Head, Figure, Celebration }`; `useSeatColor(seat)` → hex.
 
 In a component that draws many seats (board cells), call `useSeatAvatars()` once and
 resolve per-cell via `avatarMetaById[map[cell]].color` and `useSeatVisual` inside the

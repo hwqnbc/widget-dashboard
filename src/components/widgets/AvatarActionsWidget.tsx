@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useState } from 'react'
 import { Box, Stack, ToggleButton, ToggleButtonGroup } from '@mui/material'
 import { useAppDispatch } from '../../app/hooks'
 import { updateWidgetData } from '../../features/widgets/widgetsSlice'
@@ -14,32 +14,27 @@ const coerceAvatar = (v: unknown): AvatarId | undefined =>
   typeof v === 'string' && (AVATAR_IDS as string[]).includes(v) ? (v as AvatarId) : undefined
 
 /**
- * A configurable character viewer: pick an avatar and tap to play its action
- * (the toy's "6 7", the ninja's katana draw, …). Reuses the avatar registry, so
- * every present and future avatar's `Action` is available automatically. The
- * selection persists per-widget-instance; the play state is transient.
+ * A configurable character viewer: pick an avatar and tap to play its
+ * celebration — the looping victory animation, uniform across every avatar (so
+ * there's no per-avatar inconsistency between one-shot and looping moves). Tapping
+ * again returns to the static figure. Reuses the avatar registry, so every present
+ * and future avatar is available automatically. The selection persists
+ * per-widget-instance; the play state is transient.
  */
 export default function AvatarActionsWidget({ id }: WidgetProps) {
   const dispatch = useAppDispatch()
   const avatar = useWidgetField<AvatarId>(id, 'avatar', 'toy', coerceAvatar)
   const [active, setActive] = useState(false)
-  // Gates the figure's transition so a freshly selected avatar snaps to its
-  // static pose instead of animating on mount.
-  const interacted = useRef(false)
 
-  const { Action } = avatarVisualById[avatar]
+  const { Figure, Celebration } = avatarVisualById[avatar]
   const name = avatarMetaById[avatar].name
 
   const select = (next: AvatarId | null) => {
     if (!next || next === avatar) return
     setActive(false)
-    interacted.current = false
     dispatch(updateWidgetData({ id, data: { avatar: next } }))
   }
-  const toggle = () => {
-    interacted.current = true
-    setActive((a) => !a)
-  }
+  const toggle = () => setActive((a) => !a)
 
   return (
     <Box
@@ -70,8 +65,8 @@ export default function AvatarActionsWidget({ id }: WidgetProps) {
       </Stack>
 
       <Box sx={{ flex: 1, minHeight: 0 }}>
-        <TapStage onClick={toggle} ariaLabel={`${active ? 'Stop' : 'Play'} the ${name} action`}>
-          <Action active={active} animate={interacted.current} />
+        <TapStage onClick={toggle} ariaLabel={`${active ? 'Stop' : 'Play'} the ${name} celebration`}>
+          {active ? <Celebration /> : <Figure />}
         </TapStage>
       </Box>
     </Box>

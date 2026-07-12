@@ -4,6 +4,5 @@
 export { default as DarkArinHead } from './DarkArinHead'
 export { default as DarkArinFigure } from './DarkArinFigure'
 export { default as DarkArinCelebration } from './DarkArinCelebration'
-export { default as DarkArinAction } from './DarkArinAction'
 export { default as TwinSwordFigure } from './TwinSwordFigure'
 export { D } from './darkArinPalette'

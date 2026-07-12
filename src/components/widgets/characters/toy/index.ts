@@ -4,7 +4,6 @@
 export { default as ToyHead } from './ToyHead'
 export { default as ToyFigure } from './ToyFigure'
 export { default as ToyCelebration } from './ToyCelebration'
-export { default as ToyAction } from './ToyAction'
 export { default as SixSevenFigure } from './SixSevenFigure'
 export { TOY } from './toyPalette'
 export * from './toyParts'
