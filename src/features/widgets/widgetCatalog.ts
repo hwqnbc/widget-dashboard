@@ -44,16 +44,10 @@ export const WIDGET_CATALOG: WidgetMeta[] = [
     defaultSize: { w: 3, h: 5, minW: 2, minH: 4 },
   },
   {
-    type: 'sixSeven',
-    title: 'Six Seven',
-    description: 'Tap the toy to do the 6 7',
-    defaultSize: { w: 3, h: 5, minW: 2, minH: 4 },
-  },
-  {
-    type: 'swordNinja',
-    title: 'Sword Ninja',
-    description: 'Tap to draw the katana and defend',
-    defaultSize: { w: 3, h: 5, minW: 3, minH: 4 },
+    type: 'avatarActions',
+    title: 'Avatar Actions',
+    description: 'Pick a character, tap to see its action',
+    defaultSize: { w: 3, h: 6, minW: 3, minH: 5 },
   },
   {
     type: 'ticTacToe',
@@ -94,6 +88,8 @@ export function defaultWidgetData(type: WidgetType): Record<string, unknown> {
       return { text: '' }
     case 'imageToggle':
       return { character: 'toy' }
+    case 'avatarActions':
+      return { avatar: 'toy' }
     case 'ticTacToe':
       return {
         board: Array(9).fill(null),

@@ -5,8 +5,7 @@ import RoundClockWidget from '../components/widgets/RoundClockWidget'
 import CounterWidget from '../components/widgets/CounterWidget'
 import NotesWidget from '../components/widgets/NotesWidget'
 import ImageToggleWidget from '../components/widgets/ImageToggleWidget'
-import SixSevenWidget from '../components/widgets/SixSevenWidget'
-import SwordNinjaWidget from '../components/widgets/SwordNinjaWidget'
+import AvatarActionsWidget from '../components/widgets/AvatarActionsWidget'
 import TicTacToeWidget from '../components/widgets/TicTacToeWidget'
 import Connect4Widget from '../components/widgets/Connect4Widget'
 import MemoryWidget from '../components/widgets/MemoryWidget'
@@ -24,8 +23,7 @@ export const widgetComponents: Record<WidgetType, ComponentType<WidgetProps>> = 
   counter: CounterWidget,
   notes: NotesWidget,
   imageToggle: ImageToggleWidget,
-  sixSeven: SixSevenWidget,
-  swordNinja: SwordNinjaWidget,
+  avatarActions: AvatarActionsWidget,
   ticTacToe: TicTacToeWidget,
   connect4: Connect4Widget,
   memory: MemoryWidget,

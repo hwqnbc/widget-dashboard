@@ -26,3 +26,15 @@ export const AVATAR_IDS: AvatarId[] = ['toy', 'ninja']
 
 /** Identity mapping — each seat shows its namesake avatar (the default look). */
 export const DEFAULT_SEAT_AVATARS: SeatAvatars = { toy: 'toy', ninja: 'ninja' }
+
+/**
+ * Props for an avatar's tap-toggled "action" component (the animated move shown
+ * by the Avatar Actions widget). `active` plays/holds the action; `animate`
+ * gates the transition so the initial/static render snaps without flashing.
+ * Component-free so the per-avatar wrappers and the registry share it without an
+ * import cycle.
+ */
+export interface AvatarActionProps {
+  active: boolean
+  animate: boolean
+}

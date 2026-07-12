@@ -22,8 +22,15 @@ const COLS = { lg: GRID_COLS, md: 10, sm: 6, xs: 4, xxs: 2 }
 /** The draggable / resizable grid of widgets, backed by redux + persistence. */
 export default function WidgetBoard() {
   const dispatch = useAppDispatch()
-  const instances = useAppSelector((state) => state.widgets.instances)
+  const allInstances = useAppSelector((state) => state.widgets.instances)
   const layout = useAppSelector((state) => state.widgets.layout)
+
+  // Skip any persisted instance whose widget type no longer exists (e.g. a
+  // removed widget), so stale saved state renders gracefully instead of crashing.
+  const instances = useMemo(
+    () => allInstances.filter((i) => widgetComponents[i.type] && widgetMetaByType[i.type]),
+    [allInstances],
+  )
 
   // Feed the persisted layout to every breakpoint.
   const layouts = useMemo(
