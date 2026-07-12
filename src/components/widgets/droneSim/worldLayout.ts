@@ -1,12 +1,13 @@
 /**
- * Deterministic world layout. A seeded PRNG (evaluated once at module load)
- * keeps the city identical across reloads and test runs while still looking
- * scattered. Specs are plain data so a future collision pass can treat each
- * building as an AABB.
+ * Seeded world builder. `buildWorldLayout(seed)` deterministically produces
+ * the city, the gate rings and their derived collision/gate data — the same
+ * seed always yields the same course, so a widget instance's persisted
+ * `worldSeed` recreates its world across reloads while the "new course"
+ * button just re-rolls the seed. Specs are plain data (buildings are AABBs
+ * for the collision pass).
  */
-
 import type { Collider } from './flightModel'
-import { DRONE_RADIUS } from './flightModel'
+import { DRONE_RADIUS, SPAWN, WORLD_HALF } from './flightModel'
 
 export interface BuildingSpec {
   x: number
@@ -25,6 +26,37 @@ export interface RingSpec {
   yaw: number
 }
 
+export interface Gate {
+  center: Vec3G
+  /** Unit normal of the ring plane (torus axis after rotation-y). */
+  normal: Vec3G
+  /** Pass counts when the crossing point is within this distance of centre. */
+  passRadius: number
+}
+interface Vec3G {
+  x: number
+  y: number
+  z: number
+}
+
+export interface WorldLayout {
+  buildings: readonly BuildingSpec[]
+  rings: readonly RingSpec[]
+  colliders: readonly Collider[]
+  gates: readonly Gate[]
+}
+
+/** Torus major radius of a gate ring (see GateRings geometry). */
+export const RING_RADIUS = 2.4
+
+/** The original hand-tuned course; also the ring fallback if sampling fails. */
+export const DEFAULT_SEED = 0x5eed
+const CLASSIC_RINGS: readonly RingSpec[] = [
+  { x: 0, y: 6, z: -6, yaw: 0 },
+  { x: -18, y: 10, z: -22, yaw: Math.PI / 4 },
+  { x: 20, y: 14, z: -30, yaw: -Math.PI / 5 },
+]
+
 function mulberry32(seed: number): () => number {
   let a = seed >>> 0
   return () => {
@@ -35,15 +67,14 @@ function mulberry32(seed: number): () => number {
   }
 }
 
-function buildCity(): BuildingSpec[] {
-  const rand = mulberry32(0x5eed)
+function buildCity(rand: () => number): BuildingSpec[] {
   const specs: BuildingSpec[] = []
   let guard = 0
   while (specs.length < 36 && guard++ < 500) {
     const x = (rand() * 2 - 1) * 55
     const z = (rand() * 2 - 1) * 55
     // Keep the spawn corridor (drone starts at z=18 looking toward -Z) and
-    // the ring area near the origin breathable.
+    // the area near the origin breathable.
     if (Math.abs(x) < 10 && z > 8) continue
     if (Math.hypot(x, z) < 9) continue
     specs.push({
@@ -58,45 +89,75 @@ function buildCity(): BuildingSpec[] {
   return specs
 }
 
-export const BUILDINGS: readonly BuildingSpec[] = buildCity()
-
-/** Building AABBs pre-inflated for point-vs-box tests (see Collider docs). */
-export const COLLIDERS: readonly Collider[] = BUILDINGS.map((b) => ({
-  minX: b.x - b.w / 2 - DRONE_RADIUS,
-  maxX: b.x + b.w / 2 + DRONE_RADIUS,
-  minZ: b.z - b.d / 2 - DRONE_RADIUS,
-  maxZ: b.z + b.d / 2 + DRONE_RADIUS,
-  top: b.h + DRONE_RADIUS,
-}))
-
-/** Score gates, flown in order. */
-export const RINGS: readonly RingSpec[] = [
-  { x: 0, y: 6, z: -6, yaw: 0 },
-  { x: -18, y: 10, z: -22, yaw: Math.PI / 4 },
-  { x: 20, y: 14, z: -30, yaw: -Math.PI / 5 },
-]
-
-/** Torus major radius of a gate ring (see WorldScene/GateRings geometry). */
-export const RING_RADIUS = 2.4
-
-export interface Gate {
-  center: Vec3G
-  /** Unit normal of the ring plane (torus axis after rotation-y). */
-  normal: Vec3G
-  /** Pass counts when the crossing point is within this distance of centre. */
-  passRadius: number
-}
-interface Vec3G {
-  x: number
-  y: number
-  z: number
+function ringFits(
+  ring: RingSpec,
+  others: readonly RingSpec[],
+  buildings: readonly BuildingSpec[],
+): boolean {
+  if (Math.hypot(ring.x - SPAWN.x, ring.z - SPAWN.z) < 12) return false
+  if (others.some((o) => Math.hypot(ring.x - o.x, ring.z - o.z) < 18)) {
+    return false
+  }
+  // Reject rings whose disc could overlap a building: centre inside the
+  // footprint inflated by the ring radius while the roof reaches the ring.
+  const clear = RING_RADIUS + 0.5
+  return !buildings.some(
+    (b) =>
+      Math.abs(ring.x - b.x) < b.w / 2 + clear &&
+      Math.abs(ring.z - b.z) < b.d / 2 + clear &&
+      b.h > ring.y - RING_RADIUS,
+  )
 }
 
-export const GATES: readonly Gate[] = RINGS.map((r) => ({
-  center: { x: r.x, y: r.y, z: r.z },
-  normal: { x: Math.sin(r.yaw), y: 0, z: Math.cos(r.yaw) },
-  passRadius: RING_RADIUS - 0.3,
-}))
+function buildRings(
+  rand: () => number,
+  buildings: readonly BuildingSpec[],
+): RingSpec[] {
+  const rings: RingSpec[] = []
+  for (let i = 0; i < CLASSIC_RINGS.length; i++) {
+    let placed = false
+    for (let attempt = 0; attempt < 100 && !placed; attempt++) {
+      const ring: RingSpec = {
+        x: (rand() * 2 - 1) * 40,
+        z: (rand() * 2 - 1) * 40,
+        y: 5 + rand() * 11,
+        yaw: (rand() * 2 - 1) * Math.PI,
+      }
+      if (Math.abs(ring.x) > WORLD_HALF - 5 || Math.abs(ring.z) > WORLD_HALF - 5) {
+        continue
+      }
+      if (ringFits(ring, rings, buildings)) {
+        rings.push(ring)
+        placed = true
+      }
+    }
+    if (!placed) rings.push(CLASSIC_RINGS[i])
+  }
+  return rings
+}
+
+export function buildWorldLayout(seed: number): WorldLayout {
+  const rand = mulberry32(seed)
+  const buildings = buildCity(rand)
+  // The default seed keeps the original hand-placed course so existing
+  // widgets (and their persisted best laps) are unchanged by the seed model.
+  const rings =
+    seed === DEFAULT_SEED ? CLASSIC_RINGS : buildRings(rand, buildings)
+
+  const colliders: Collider[] = buildings.map((b) => ({
+    minX: b.x - b.w / 2 - DRONE_RADIUS,
+    maxX: b.x + b.w / 2 + DRONE_RADIUS,
+    minZ: b.z - b.d / 2 - DRONE_RADIUS,
+    maxZ: b.z + b.d / 2 + DRONE_RADIUS,
+    top: b.h + DRONE_RADIUS,
+  }))
+  const gates: Gate[] = rings.map((r) => ({
+    center: { x: r.x, y: r.y, z: r.z },
+    normal: { x: Math.sin(r.yaw), y: 0, z: Math.cos(r.yaw) },
+    passRadius: RING_RADIUS - 0.3,
+  }))
+  return { buildings, rings, colliders, gates }
+}
 
 /**
  * Did the segment prev→cur cross the gate's plane inside the ring? Detects a

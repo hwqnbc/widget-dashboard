@@ -1,4 +1,6 @@
 import type { WidgetType } from './types'
+// Data-only module (no components/React) — safe for the catalog to import.
+import { DEFAULT_SEED } from '../../components/widgets/droneSim/worldLayout'
 
 /**
  * Static metadata about each widget type. Kept free of component imports so
@@ -138,7 +140,13 @@ export function defaultWidgetData(type: WidgetType): Record<string, unknown> {
         platforms: 'still',
       }
     case 'droneSim':
-      return { view: 'tp', score: 0, bestLapMs: 0, bestLapPath: [] }
+      return {
+        view: 'tp',
+        score: 0,
+        bestLapMs: 0,
+        bestLapPath: [],
+        worldSeed: DEFAULT_SEED,
+      }
     case 'clock':
     default:
       return {}

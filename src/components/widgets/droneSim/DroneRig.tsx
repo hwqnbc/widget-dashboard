@@ -2,9 +2,10 @@ import { useRef } from 'react'
 import type { RefObject } from 'react'
 import { useFrame } from '@react-three/fiber'
 import type { Group, Mesh, MeshBasicMaterial } from 'three'
-import type { ControlInput, FlightState } from './flightModel'
+import type { Collider, ControlInput, FlightState } from './flightModel'
 import { SPAWN, stepFlight } from './flightModel'
-import { COLLIDERS, GATES, crossedGate } from './worldLayout'
+import type { Gate } from './worldLayout'
+import { crossedGate } from './worldLayout'
 import type { LapState } from './lapTimer'
 import { fmtLap, updateLap } from './lapTimer'
 import DroneModel from './DroneModel'
@@ -24,6 +25,8 @@ export default function DroneRig({
   flight,
   hudRef,
   timerRef,
+  colliders,
+  gates,
   activeGate,
   onGatePass,
   flashRef,
@@ -35,6 +38,8 @@ export default function DroneRig({
   flight: FlightState
   hudRef: RefObject<HTMLDivElement | null>
   timerRef: RefObject<HTMLDivElement | null>
+  colliders: readonly Collider[]
+  gates: readonly Gate[]
   activeGate: number
   onGatePass: () => void
   flashRef: { current: GateFlash }
@@ -51,7 +56,7 @@ export default function DroneRig({
   const pathRef = useRef<number[]>([])
 
   useFrame(({ clock }, dt) => {
-    stepFlight(flight, controls, dt, COLLIDERS)
+    stepFlight(flight, controls, dt, colliders)
 
     // Gate pass (only while a lap is running): did this frame's movement
     // cross the active ring's plane inside the ring? A long segment means a
@@ -65,9 +70,9 @@ export default function DroneRig({
       ) > 2
     if (
       lap.status === 'running' &&
-      activeGate < GATES.length &&
+      activeGate < gates.length &&
       !jump &&
-      crossedGate(prev, flight.pos, GATES[activeGate])
+      crossedGate(prev, flight.pos, gates[activeGate])
     ) {
       flashRef.current = { gate: activeGate, until: clock.elapsedTime + 0.6 }
       onGatePass()
@@ -80,7 +85,7 @@ export default function DroneRig({
     const now = performance.now()
     const lapEvent = jump
       ? null
-      : updateLap(lap, flight.pos, activeGate, GATES.length, now)
+      : updateLap(lap, flight.pos, activeGate, gates.length, now)
     if (lapEvent === 'started') {
       pathRef.current = [
         Math.round(flight.pos.x * 10) / 10,

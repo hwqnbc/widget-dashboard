@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas } from '@react-three/fiber'
 import { Box, IconButton, Tooltip, alpha, useTheme } from '@mui/material'
 import CameraswitchIcon from '@mui/icons-material/Cameraswitch'
 import RestartAltIcon from '@mui/icons-material/RestartAlt'
+import ShuffleIcon from '@mui/icons-material/Shuffle'
 import { useAppDispatch } from '../../../app/hooks'
 import { updateWidgetData } from '../../../features/widgets/widgetsSlice'
 import { useWidgetField } from '../../../features/widgets/useWidgetField'
@@ -16,8 +17,9 @@ import {
   createFlightState,
   resetFlightState,
 } from './flightModel'
-import { GATES } from './worldLayout'
+import { DEFAULT_SEED, buildWorldLayout } from './worldLayout'
 import { createLapState, fmtLap, resetLapState } from './lapTimer'
+import ConfirmDialog from '../ConfirmDialog'
 import WorldScene from './WorldScene'
 import DroneRig from './DroneRig'
 import CameraRig from './CameraRig'
@@ -47,6 +49,9 @@ export default function DroneSimBody({ id }: WidgetProps) {
   const score = useWidgetField(id, 'score', 0)
   const bestLapMs = useWidgetField(id, 'bestLapMs', 0)
   const bestLapPath = useWidgetField<number[]>(id, 'bestLapPath', EMPTY_PATH, coercePath)
+  const worldSeed = useWidgetField(id, 'worldSeed', DEFAULT_SEED)
+  const layout = useMemo(() => buildWorldLayout(worldSeed), [worldSeed])
+  const gateCount = layout.gates.length
 
   const controls = useRef(createControlInput()).current
   const flight = useRef(createFlightState()).current
@@ -59,6 +64,7 @@ export default function DroneSimBody({ id }: WidgetProps) {
   // best lap persist.
   const [activeGate, setActiveGate] = useState(0)
   const [banner, setBanner] = useState<string | null>(null)
+  const [confirmShuffle, setConfirmShuffle] = useState(false)
   const bannerTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   useEffect(
     () => () => {
@@ -68,8 +74,8 @@ export default function DroneSimBody({ id }: WidgetProps) {
   )
 
   const onGatePass = useCallback(() => {
-    setActiveGate((gate) => Math.min(gate + 1, GATES.length))
-  }, [])
+    setActiveGate((gate) => Math.min(gate + 1, gateCount))
+  }, [gateCount])
 
   const onLapComplete = useCallback(
     (lapMs: number, path: number[]) => {
@@ -100,6 +106,28 @@ export default function DroneSimBody({ id }: WidgetProps) {
     setBanner(null)
   }
 
+  const shuffleCourse = () => {
+    setConfirmShuffle(false)
+    dispatch(
+      updateWidgetData({
+        id,
+        data: {
+          worldSeed: Math.floor(Math.random() * 0x100000000),
+          score: 0,
+          bestLapMs: 0,
+          bestLapPath: [],
+        },
+      }),
+    )
+    resetSim()
+  }
+
+  const requestShuffle = () => {
+    // Destroys a recorded best (or an in-progress lap) — confirm first.
+    if (bestLapMs > 0 || lap.status === 'running') setConfirmShuffle(true)
+    else shuffleCourse()
+  }
+
   const stickSize = fullscreen ? 140 : 88
   const stickInset = fullscreen ? 16 : 0
 
@@ -126,6 +154,7 @@ export default function DroneSimBody({ id }: WidgetProps) {
       className="widget-no-drag"
       data-testid="dronesim-root"
       data-widget-id={id}
+      data-world-seed={worldSeed}
       onMouseDown={(e) => e.stopPropagation()}
       onTouchStart={(e) => e.stopPropagation()}
       sx={{
@@ -142,14 +171,21 @@ export default function DroneSimBody({ id }: WidgetProps) {
           dpr={[1, 1.75]}
           camera={{ fov: 60, near: 0.1, far: 400, position: [0, 4, 26] }}
         >
-          <WorldScene palette={palette} />
-          <GateRings palette={palette} activeGate={activeGate} flashRef={flashRef} />
+          <WorldScene palette={palette} buildings={layout.buildings} />
+          <GateRings
+            palette={palette}
+            rings={layout.rings}
+            activeGate={activeGate}
+            flashRef={flashRef}
+          />
           <GhostLine path={bestLapPath} color={palette.ring} />
           <DroneRig
             controls={controls}
             flight={flight}
             hudRef={hudRef}
             timerRef={timerRef}
+            colliders={layout.colliders}
+            gates={layout.gates}
             activeGate={activeGate}
             onGatePass={onGatePass}
             flashRef={flashRef}
@@ -201,9 +237,9 @@ export default function DroneSimBody({ id }: WidgetProps) {
           pointerEvents: 'none',
         }}
       >
-        {activeGate >= GATES.length
+        {activeGate >= gateCount
           ? `TO PAD · LAPS ${score}`
-          : `GATE ${activeGate + 1}/${GATES.length} · LAPS ${score}`}
+          : `GATE ${activeGate + 1}/${gateCount} · LAPS ${score}`}
       </Box>
 
       <Box
@@ -286,7 +322,27 @@ export default function DroneSimBody({ id }: WidgetProps) {
             <RestartAltIcon fontSize="small" />
           </IconButton>
         </Tooltip>
+        <Tooltip title="New course (shuffle buildings & gates)">
+          <IconButton
+            size="small"
+            data-testid="dronesim-new-course"
+            onClick={requestShuffle}
+            sx={{ color: '#fff' }}
+          >
+            <ShuffleIcon fontSize="small" />
+          </IconButton>
+        </Tooltip>
       </Box>
+
+      <ConfirmDialog
+        open={confirmShuffle}
+        title="New course?"
+        message="Shuffling the buildings and gates clears your lap count, best time and ghost line for this course."
+        confirmLabel="Shuffle"
+        cancelLabel="Keep course"
+        onConfirm={shuffleCourse}
+        onCancel={() => setConfirmShuffle(false)}
+      />
 
       <VirtualJoystick
         size={stickSize}

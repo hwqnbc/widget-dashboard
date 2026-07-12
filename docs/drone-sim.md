@@ -83,10 +83,18 @@ in refs (`FlightState`, `ControlInput`).
   140×140 ground plane + `gridHelper` (motion parallax), a 36-building city
   in **one `instancedMesh`** (matrices + per-instance colour written once in
   `useLayoutEffect`), landing pad. ~10 draw calls total.
-- Layout is deterministic: a seeded mulberry32 PRNG runs once at module load
-  (the purity rule bans randomness in reducers/`defaultWidgetData`, not
-  here), keeping the spawn corridor and pad clear and letting headless tests
-  rely on a stable world.
+- **Seeded layouts**: `buildWorldLayout(seed)` deterministically produces
+  buildings, rings, colliders and gates from one mulberry32 stream; the
+  widget's persisted `worldSeed` (default `DEFAULT_SEED`) recreates its
+  course across reloads. The **new-course button** (shuffle icon) re-rolls
+  the seed — `Math.random` in the click handler, which the purity rule
+  allows — and clears laps/best/ghost (a ghost through relocated rings is
+  meaningless), confirm-guarded via `ConfirmDialog` when a best lap exists
+  or a lap is running. For the default seed the rings stay the hand-placed
+  classic course; re-rolled seeds place rings by rejection sampling (min 12
+  from the pad, 18 apart, never intersecting a building, inside bounds,
+  classic-ring fallback if sampling exhausts). The spawn corridor and pad
+  stay clear under every seed, so reset is always safe.
 - No shadow maps. `DroneRig` moves a **blob shadow** (flat circle) under the
   drone whose opacity fades and radius grows with altitude — the depth cue
   that makes height legible.

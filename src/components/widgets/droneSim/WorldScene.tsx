@@ -2,7 +2,7 @@ import { useLayoutEffect, useRef } from 'react'
 import { Color, Matrix4 } from 'three'
 import type { InstancedMesh } from 'three'
 import type { WorldPalette } from './palettes'
-import { BUILDINGS } from './worldLayout'
+import type { BuildingSpec } from './worldLayout'
 import { SPAWN } from './flightModel'
 
 /**
@@ -11,7 +11,13 @@ import { SPAWN } from './flightModel'
  * few decorative gate rings. No shadow maps — the drone carries a cheap blob
  * shadow instead (see DroneRig).
  */
-export default function WorldScene({ palette }: { palette: WorldPalette }) {
+export default function WorldScene({
+  palette,
+  buildings,
+}: {
+  palette: WorldPalette
+  buildings: readonly BuildingSpec[]
+}) {
   const buildingsRef = useRef<InstancedMesh>(null)
 
   useLayoutEffect(() => {
@@ -20,7 +26,7 @@ export default function WorldScene({ palette }: { palette: WorldPalette }) {
     const matrix = new Matrix4()
     const color = new Color()
     const base = new Color(palette.building)
-    BUILDINGS.forEach((b, i) => {
+    buildings.forEach((b, i) => {
       matrix.makeScale(b.w, b.h, b.d)
       matrix.setPosition(b.x, b.h / 2, b.z)
       mesh.setMatrixAt(i, matrix)
@@ -28,7 +34,7 @@ export default function WorldScene({ palette }: { palette: WorldPalette }) {
     })
     mesh.instanceMatrix.needsUpdate = true
     if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true
-  }, [palette.building])
+  }, [palette.building, buildings])
 
   return (
     <>
@@ -44,7 +50,11 @@ export default function WorldScene({ palette }: { palette: WorldPalette }) {
       </mesh>
       <gridHelper args={[120, 60, palette.grid, palette.grid]} position={[0, 0.01, 0]} />
 
-      <instancedMesh ref={buildingsRef} args={[undefined, undefined, BUILDINGS.length]}>
+      <instancedMesh
+        key={buildings.length /* re-mount if the instance count ever changes */}
+        ref={buildingsRef}
+        args={[undefined, undefined, buildings.length]}
+      >
         <boxGeometry />
         <meshStandardMaterial />
       </instancedMesh>
