@@ -221,9 +221,54 @@ see `e2e/README.md` for the suite map and environment knobs
 (`CHROMIUM_PATH`, `E2E_PORT`). Chromium is launched with
 `--enable-unsafe-swiftshader --use-angle=swiftshader` for software WebGL.
 
-## Future work
+## Future work (enhancement backlog)
 
-- Gamepad support (map axes onto the same `ControlInput` ref).
-- Chase-camera building avoidance (the camera can clip through geometry).
-- Animated ghost drone replaying the best run (the persisted path already
-  carries the data; timing would need per-sample timestamps).
+Everything above is shipped. The backlog below tracks the remaining ideas
+from the enhancement menu, with the integration point each would build on.
+
+### Controls & feel
+- **Gamepad support** — poll the Gamepad API in the sim loop and map axes
+  onto the same `ControlInput` ref; zero changes to the flight model.
+- **Keyboard controls** — WASD + arrows writing the same ref (desktop).
+- **Rates/expo tuning panel** — persisted per-widget max speed / yaw rate /
+  stick expo; a settings popover writing `data` keys read by `stepFlight`
+  multipliers.
+- **Haptics** — `navigator.vibrate` pulses on wall contact, gate pass and
+  crash (mobile only; capability-gated).
+
+### Camera & visuals
+- **Chase-camera building avoidance** — the third-person boom can clip
+  through walls; sweep the camera offset against `COLLIDERS` (same AABB
+  math) and shorten the boom on obstruction.
+- **Richer world** — trees/roads/traffic dots as more instanced meshes;
+  extend `buildWorldLayout` so they stay seed-deterministic.
+- **FPV polish** — subtle throttle shake, optional roll in FPV (acro feel),
+  horizon indicator.
+- **Rain streaks** — upgrade `RainField` points to short line segments.
+
+### Gameplay
+- **Animated ghost drone** — replay the best run as a translucent drone
+  racing you; `bestLapPath` already carries the positions, add per-sample
+  timestamps (or rely on the fixed 150 ms cadence) and lerp along it in
+  `useFrame`.
+- **Landing challenge** — designated rooftop pads (rooftop rest already
+  works) scored by touchdown precision and vertical speed.
+- **Battery / range mechanic** — a draining battery HUD bar forcing
+  return-to-pad, recharging on the pad zone (`PAD_START_RADIUS` reuse).
+- **Course editor / more gates** — `RINGS`/`GATES` are data; a "gates: 5"
+  setting or hand-placed courses slot into the same sequence logic.
+
+### Simulation depth
+- **Manual/acro mode** — real gravity + attitude-based thrust as an opt-in
+  advanced mode beside the altitude-hold default (a second step function,
+  same `FlightState`).
+- **Propwash/ground effect** — a small lift cushion near surfaces (roofs
+  detectable via `COLLIDERS` tops).
+
+### Meta
+- **Minimap** — top-down inset (plain SVG overlay) plotting drone heading,
+  buildings and gates from the layout data.
+- **Sound** — Web Audio rotor hum pitched by throttle, gate chime, crash
+  thud; no asset files needed.
+- **Per-weather best laps** — storm laps are inherently slower; split
+  `bestLapMs` by weather if fairness starts to matter.
