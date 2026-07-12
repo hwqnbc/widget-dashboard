@@ -82,15 +82,12 @@ export default function FrakFigure({ chopping = false }: { chopping?: boolean })
       <path d="M92 270 L148 270" stroke={FR.white} strokeWidth={2} strokeDasharray="3 3" opacity={0.7} />
       <path d="M104 280 L136 280" stroke={FR.lime} strokeWidth={4} opacity={0.85} />
 
-      {/* ---- head: faceted lime hood covering the face; dropped so it meets the
-             torso (no visible neck — the hood drapes onto the shoulders). Orange
-             face opening + green eyes + wrap ---- */}
-      <g transform="translate(0 22)">
+      {/* ---- head: faceted lime hood covering the face; dropped low so the hood
+             base meets the torso (no visible neck). Orange face opening + green
+             eyes + wrap ---- */}
+      <g transform="translate(0 32)">
         {/* hood back drape */}
         <path d="M90 158 L88 128 L97 104 L120 92 L143 104 L152 128 L150 158 L145 140 L139 120 L120 112 L101 120 L95 140 Z" fill={FR.hoodShade} />
-        {/* lime hood drape over the neck, down onto the shoulders (hides the neck) */}
-        <path d="M94 152 L120 168 L146 152 L151 184 L120 194 L89 184 Z" fill={FR.hood} stroke={FR.hoodShade2} strokeWidth={1.5} />
-        <path d="M120 168 L120 194 M104 158 L108 182 M136 158 L132 182" stroke={FR.hoodShade2} strokeWidth={1.1} fill="none" opacity={0.45} />
         {/* faceted lime hood — slim rim so a wide face + big mask show through */}
         <path d="M120 90 L143 102 L151 130 L146 156 L120 168 L94 156 L89 130 L97 102 Z" fill={FR.hood} stroke={FR.hoodShade2} strokeWidth={2} />
         {/* right shade facet + top-left gloss */}
@@ -115,8 +112,8 @@ export default function FrakFigure({ chopping = false }: { chopping?: boolean })
       {/* ---- upper arms (static, shoulder→elbow) + shoulder caps ---- */}
       <path d="M92 206 L86 234" stroke={FR.skin} strokeWidth={14} strokeLinecap="round" fill="none" />
       <path d="M148 206 L154 234" stroke={FR.skin} strokeWidth={14} strokeLinecap="round" fill="none" />
-      <circle cx={92} cy={206} r={11} fill={FR.skin} stroke={FR.skinShade} strokeWidth={1.5} />
-      <circle cx={148} cy={206} r={11} fill={FR.skin} stroke={FR.skinShade} strokeWidth={1.5} />
+      <circle cx={92} cy={207} r={8} fill={FR.skin} />
+      <circle cx={148} cy={207} r={8} fill={FR.skin} />
 
       {/* ---- viewer-left forearm + gold sword — raised by default, pivots at elbow ---- */}
       <Box component="g" sx={{ transformBox: 'view-box', transformOrigin: LE, ...leftSx }}>
