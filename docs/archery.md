@@ -83,14 +83,18 @@ Two layouts, chosen by `overlay = usePresentation().fullscreen && useViewport()
   score row, scene, footer row, top-to-bottom. Unchanged.
 - **Immersive (full-screen *landscape* only):** the scene `Box` is the sole flow
   child so it fills the whole area (the aspect scene grows to the largest fit),
-  and the controls/scores/footer become `position:absolute` overlays over the
-  scene's sky/grass margins — scores top corners, the three toggle groups centred
-  in a translucent theme-aware panel (`alpha(background.paper, .82)`), the hint +
-  `New game` along the bottom. Overlay wrappers are `pointerEvents:'none'` except
-  the toggles / `New game`, and `toWorld` reads the svg's own rect, so drag-to-aim
-  is unaffected. This stops the stacked chrome from capping the scene height, so
-  rotating to landscape actually enlarges the playfield (the point of the rotate
-  hint). Portrait keeps the stacked layout because it gains little there.
+  and the chrome becomes `position:absolute` overlays so nothing sits over the
+  shooters or the arrow arc: **the two small score badges stay in the top
+  corners**, and **the controls + footer move to the otherwise-empty bottom band**
+  — hint (left) · the three toggle groups in a translucent theme-aware panel
+  (`alpha(background.paper, .82)`, `flexWrap:'wrap'` so they wrap on a small phone)
+  · `New game` (right), via `space-between`. (Controls used to float top-centre but
+  crowded high shooters and felt squeezed in short range.) Overlay wrappers are
+  `pointerEvents:'none'` except the toggles / `New game`, and `toWorld` reads the
+  svg's own rect, so drag-to-aim is unaffected. This keeps the stacked chrome from
+  capping the scene height, so rotating to landscape actually enlarges the
+  playfield (the point of the rotate hint). Portrait keeps the stacked layout
+  because it gains little there.
 
 ## Verifying
 `npm run build` + `npm run lint`, then headless Chromium. The scene svg exposes

@@ -509,15 +509,19 @@ export default function ArcheryWidget({ id }: WidgetProps) {
 
         {overlay && (
           <>
+            {/* Scores stay in the top corners (small, glanceable); the top-centre
+                over the shooters + arrow arc is kept clear. */}
             <Box sx={{ position: 'absolute', top: 0, left: 0, right: 0, p: 1, display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 1, zIndex: 1, pointerEvents: 'none' }}>
               {renderScore('toy')}
+              {renderScore('ninja')}
+            </Box>
+            {/* Controls + footer live along the otherwise-empty bottom band:
+                hint left · controls centre · New game right (space-between). */}
+            <Box sx={{ position: 'absolute', bottom: 0, left: 0, right: 0, p: 1, display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 1, zIndex: 1, pointerEvents: 'none' }}>
+              <Box sx={panelSx}>{footerText}</Box>
               <Stack direction="row" sx={{ ...panelSx, gap: 1, flexWrap: 'wrap', alignItems: 'flex-end', justifyContent: 'center' }}>
                 {controlGroups}
               </Stack>
-              {renderScore('ninja')}
-            </Box>
-            <Box sx={{ position: 'absolute', bottom: 0, left: 0, right: 0, p: 1, display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 1, zIndex: 1, pointerEvents: 'none' }}>
-              <Box sx={panelSx}>{footerText}</Box>
               <Box sx={{ pointerEvents: 'auto' }}>{newGameButton}</Box>
             </Box>
           </>
