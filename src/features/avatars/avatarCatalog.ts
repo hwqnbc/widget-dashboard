@@ -2,6 +2,7 @@ import type { AvatarId } from './types'
 import { TOY } from '../../components/widgets/characters/toy/toyPalette'
 import { N } from '../../components/widgets/characters/ninja/ninjaPalette'
 import { F } from '../../components/widgets/characters/fireninja/fireNinjaPalette'
+import { D } from '../../components/widgets/characters/darkarin/darkArinPalette'
 
 /**
  * Component-free avatar metadata (name + brand colour). Kept free of component
@@ -21,6 +22,7 @@ export const AVATAR_CATALOG: AvatarMeta[] = [
   { id: 'toy', name: 'Toy', color: TOY.teal },
   { id: 'ninja', name: 'Ninja', color: N.iceDeep },
   { id: 'fireninja', name: 'Fire Ninja', color: F.gi },
+  { id: 'darkarin', name: 'DarkArin', color: D.gi },
 ]
 
 export const avatarMetaById = Object.fromEntries(
