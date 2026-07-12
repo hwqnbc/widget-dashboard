@@ -150,6 +150,10 @@ export function defaultWidgetData(type: WidgetType): Record<string, unknown> {
         crashes: true,
         flightMode: 'hold',
         minimap: true,
+        rateSpeed: 1,
+        rateYaw: 1,
+        stickExpo: 0,
+        turbo: false,
       }
     case 'clock':
     default:

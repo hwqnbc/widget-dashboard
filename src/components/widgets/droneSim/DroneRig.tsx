@@ -7,6 +7,7 @@ import type {
   ControlInput,
   FlightMode,
   FlightState,
+  Tuning,
   Weather,
 } from './flightModel'
 import {
@@ -59,6 +60,7 @@ export default function DroneRig({
   gates,
   weather,
   flightMode,
+  tuning,
   windRef,
   crashMode,
   crashRef,
@@ -81,6 +83,7 @@ export default function DroneRig({
   gates: readonly Gate[]
   weather: Weather
   flightMode: FlightMode
+  tuning: Tuning
   /** Shared with RainField so the drops drift with the same gusts. */
   windRef: { current: { x: number; y: number } }
   crashMode: boolean
@@ -136,6 +139,7 @@ export default function DroneRig({
         colliders,
         weather === 'storm' ? wind : undefined,
         flightMode,
+        tuning,
       )
       if (crashMode && impact >= CRASH_SPEED) {
         crash.active = true

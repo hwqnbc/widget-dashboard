@@ -219,6 +219,20 @@ bottom corners (88 px; 140 px + safe-area insets in fullscreen via
 the fullscreen rotate hint; fullscreen re-mounts the single live instance in
 the overlay, so there's never a duplicate `useFrame` loop.
 
+## Tuning panel (rates & expo)
+
+The tune button opens a Popover with per-widget persisted controls:
+`rateSpeed` (×0.5–2, hold-mode target speeds; acro attitude authority — capped
+at 0.65 rad — and speed cap), `rateYaw` (×0.5–2), `stickExpo` (0–80%, RC-style
+`v' = v(1−e) + v³e`, softening the stick centre while preserving the ends),
+and `turbo` (an extra ×1.4 on speed and yaw). The combined speed multiplier is
+hard-capped at `MAX_SPEED_MULT` 2.5 — 30 u/s is at most 1.5 u per physics
+step, still under the smallest inflated building footprint, so the
+no-tunneling guarantee survives any tuning. Everything is applied inside
+`stepFlight` via a `Tuning` object (`NEUTRAL_TUNING` default keeps all
+positional callers and old tests valid). Faster settings raise crash risk —
+`CRASH_SPEED` doesn't scale, deliberately.
+
 ## Minimap
 
 A toggleable (persisted `minimap: boolean`, default on, map button) top-down
@@ -280,9 +294,6 @@ from the enhancement menu, with the integration point each would build on.
 - **Gamepad support** — poll the Gamepad API in the sim loop and map axes
   onto the same `ControlInput` ref; zero changes to the flight model.
 - **Keyboard controls** — WASD + arrows writing the same ref (desktop).
-- **Rates/expo tuning panel** — persisted per-widget max speed / yaw rate /
-  stick expo; a settings popover writing `data` keys read by `stepFlight`
-  multipliers.
 
 ### Camera & visuals
 - **Chase-camera building avoidance** — the third-person boom can clip

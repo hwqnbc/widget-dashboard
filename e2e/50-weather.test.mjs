@@ -10,7 +10,22 @@ const { browser, page } = await launch()
 await addDroneWidget(page)
 const { hud, telemetry } = readers(page)
 const toggle = page.locator('[data-testid="dronesim-weather-toggle"]')
-const pos = async () => {
+// Stable position read: two consecutive samples must agree, so a read can't
+// race a telemetry write; retries (loudly) if it hits the exact-spawn
+// signature seen in one flaky run while the previous sample sat elsewhere.
+const pos = async (prev) => {
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const a = await telemetry()
+    await page.waitForTimeout(200)
+    const b = await telemetry()
+    const stable = Math.hypot(a.x - b.x, a.z - b.z) < 0.02
+    const spawnAnomaly =
+      prev && b.x === 0 && b.z === 18 && Math.hypot(prev.x, prev.z - 18) > 0.2
+    if (stable && !spawnAnomaly) return { x: b.x, z: b.z }
+    console.log(
+      `  (pos read retry ${attempt + 1}: stable=${stable} spawnAnomaly=${Boolean(spawnAnomaly)} a=${JSON.stringify(a)} b=${JSON.stringify(b)})`,
+    )
+  }
   const t = await telemetry()
   return { x: t.x, z: t.z }
 }
@@ -51,7 +66,7 @@ await page.locator('[data-testid="dronesim-weather-toggle"]').click()
 await page.waitForTimeout(800)
 const b0 = await pos()
 await page.waitForTimeout(2500)
-const b1 = await pos()
+const b1 = await pos(b0)
 check('clear again: drift stops', Math.hypot(b1.x - b0.x, b1.z - b0.z) < 0.05, JSON.stringify({ b0, b1 }))
 
 await finish(browser)

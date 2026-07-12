@@ -1,6 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas } from '@react-three/fiber'
-import { Box, IconButton, Tooltip, alpha, useTheme } from '@mui/material'
+import {
+  Box,
+  IconButton,
+  Popover,
+  Slider,
+  Stack,
+  Switch,
+  Tooltip,
+  Typography,
+  alpha,
+  useTheme,
+} from '@mui/material'
 import CameraswitchIcon from '@mui/icons-material/Cameraswitch'
 import RestartAltIcon from '@mui/icons-material/RestartAlt'
 import ShuffleIcon from '@mui/icons-material/Shuffle'
@@ -11,14 +22,17 @@ import ShieldIcon from '@mui/icons-material/Shield'
 import RocketLaunchIcon from '@mui/icons-material/RocketLaunch'
 import FlightIcon from '@mui/icons-material/Flight'
 import MapIcon from '@mui/icons-material/Map'
+import TuneIcon from '@mui/icons-material/Tune'
 import { useAppDispatch } from '../../../app/hooks'
 import { updateWidgetData } from '../../../features/widgets/widgetsSlice'
 import { useWidgetField } from '../../../features/widgets/useWidgetField'
 import { usePresentation } from '../../fullscreen/presentation'
 import type { WidgetProps } from '../../../registry/widgetRegistry'
 import { DAY_PALETTE, DUSK_PALETTE, NIGHT_PALETTE } from './palettes'
-import type { DroneView, FlightMode, Weather } from './flightModel'
+import type { DroneView, FlightMode, Tuning, Weather } from './flightModel'
 import {
+  MAX_SPEED_MULT,
+  TURBO_BOOST,
   coerceFlightMode,
   coerceView,
   coerceWeather,
@@ -26,6 +40,13 @@ import {
   createFlightState,
   resetFlightState,
 } from './flightModel'
+
+const clampNum = (lo: number, hi: number) => (v: unknown) =>
+  typeof v === 'number' && Number.isFinite(v)
+    ? Math.min(hi, Math.max(lo, v))
+    : undefined
+const coerceRate = clampNum(0.5, 2)
+const coerceExpo = clampNum(0, 0.8)
 import { DEFAULT_SEED, buildWorldLayout } from './worldLayout'
 import { createLapState, fmtLap, resetLapState } from './lapTimer'
 import { GATE_PULSE, LAP_PULSE, vibrate } from './haptics'
@@ -91,6 +112,19 @@ export default function DroneSimBody({ id }: WidgetProps) {
   const flightMode = useWidgetField<FlightMode>(id, 'flightMode', 'hold', coerceFlightMode)
   const minimap = useWidgetField(id, 'minimap', true)
   const minimapDroneRef = useRef<SVGGElement>(null)
+  const rateSpeed = useWidgetField(id, 'rateSpeed', 1, coerceRate)
+  const rateYaw = useWidgetField(id, 'rateYaw', 1, coerceRate)
+  const stickExpo = useWidgetField(id, 'stickExpo', 0, coerceExpo)
+  const turbo = useWidgetField(id, 'turbo', false)
+  const [tuneAnchor, setTuneAnchor] = useState<HTMLElement | null>(null)
+  const tuning = useMemo<Tuning>(() => {
+    const boost = turbo ? TURBO_BOOST : 1
+    return {
+      speed: Math.min(MAX_SPEED_MULT, rateSpeed * boost),
+      yaw: Math.min(MAX_SPEED_MULT, rateYaw * boost),
+      expo: stickExpo,
+    }
+  }, [rateSpeed, rateYaw, stickExpo, turbo])
   // Which ring must be flown through next (GATES.length = all passed, return
   // to the pad); transient — reload/reset restarts the lap, only score and
   // best lap persist.
@@ -240,6 +274,7 @@ export default function DroneSimBody({ id }: WidgetProps) {
             gates={layout.gates}
             weather={weather}
             flightMode={flightMode}
+            tuning={tuning}
             windRef={windRef}
             crashMode={crashes}
             crashRef={crashRef}
@@ -409,6 +444,16 @@ export default function DroneSimBody({ id }: WidgetProps) {
             )}
           </IconButton>
         </Tooltip>
+        <Tooltip title="Tuning (rates & expo)">
+          <IconButton
+            size="small"
+            data-testid="dronesim-tune"
+            onClick={(e) => setTuneAnchor(e.currentTarget)}
+            sx={{ color: '#fff' }}
+          >
+            <TuneIcon fontSize="small" />
+          </IconButton>
+        </Tooltip>
         <Tooltip title={minimap ? 'Hide minimap' : 'Show minimap'}>
           <IconButton
             size="small"
@@ -481,6 +526,72 @@ export default function DroneSimBody({ id }: WidgetProps) {
           </IconButton>
         </Tooltip>
       </Box>
+
+      <Popover
+        open={Boolean(tuneAnchor)}
+        anchorEl={tuneAnchor}
+        onClose={() => setTuneAnchor(null)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+        transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+      >
+        <Stack spacing={1} sx={{ p: 2, width: 240 }} data-testid="dronesim-tune-panel">
+          <Typography variant="caption" color="text.secondary">
+            {`Max speed ×${rateSpeed.toFixed(1)}`}
+          </Typography>
+          <Slider
+            data-testid="dronesim-tune-speed"
+            size="small"
+            min={0.5}
+            max={2}
+            step={0.1}
+            value={rateSpeed}
+            onChange={(_, v) =>
+              dispatch(updateWidgetData({ id, data: { rateSpeed: v as number } }))
+            }
+          />
+          <Typography variant="caption" color="text.secondary">
+            {`Yaw rate ×${rateYaw.toFixed(1)}`}
+          </Typography>
+          <Slider
+            data-testid="dronesim-tune-yaw"
+            size="small"
+            min={0.5}
+            max={2}
+            step={0.1}
+            value={rateYaw}
+            onChange={(_, v) =>
+              dispatch(updateWidgetData({ id, data: { rateYaw: v as number } }))
+            }
+          />
+          <Typography variant="caption" color="text.secondary">
+            {`Stick expo ${Math.round(stickExpo * 100)}%`}
+          </Typography>
+          <Slider
+            data-testid="dronesim-tune-expo"
+            size="small"
+            min={0}
+            max={0.8}
+            step={0.05}
+            value={stickExpo}
+            onChange={(_, v) =>
+              dispatch(updateWidgetData({ id, data: { stickExpo: v as number } }))
+            }
+          />
+          <Stack direction="row" sx={{ alignItems: 'center', justifyContent: 'space-between' }}>
+            <Typography variant="caption" color="text.secondary">
+              {`Turbo (+40% speed & yaw)`}
+            </Typography>
+            <Switch
+              size="small"
+              data-testid="dronesim-tune-turbo"
+              checked={turbo}
+              onChange={(_, v) =>
+                dispatch(updateWidgetData({ id, data: { turbo: v } }))
+              }
+            />
+          </Stack>
+        </Stack>
+      </Popover>
 
       <ConfirmDialog
         open={confirmShuffle}

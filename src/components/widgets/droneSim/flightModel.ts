@@ -102,6 +102,29 @@ const CRASH_SKID = 1.5
 export const damp = (cur: number, target: number, lambda: number, dt: number) =>
   cur + (target - cur) * (1 - Math.exp(-lambda * dt))
 
+/** Per-widget rate tuning, applied inside stepFlight. */
+export interface Tuning {
+  /** Speed multiplier (hold targets; acro attitude authority + speed cap). */
+  speed: number
+  /** Yaw-rate multiplier. */
+  yaw: number
+  /** RC-style stick expo, 0..~0.8 — softens the centre, keeps the ends. */
+  expo: number
+}
+
+export const NEUTRAL_TUNING: Tuning = { speed: 1, yaw: 1, expo: 0 }
+/** Extra multiplier the Turbo switch stacks onto speed and yaw. */
+export const TURBO_BOOST = 1.4
+/** Hard cap on the combined speed multiplier: 2.5 × 12 u/s = 30 u/s means at
+ * most 1.5 u per MAX_DT step — still under the smallest inflated building
+ * footprint, so tunneling stays impossible. */
+export const MAX_SPEED_MULT = 2.5
+/** Acro attitude authority never exceeds this, whatever the tuning. */
+export const MAX_ATTITUDE_CAP = 0.65
+
+/** Expo curve: v' = v(1−e) + v³e. Endpoints (±1) are preserved. */
+export const applyExpo = (v: number, e: number) => v * (1 - e) + v * v * v * e
+
 /** Peak horizontal wind speed in storm weather, world-units/s. */
 export const WIND_MAX = 4.5
 
@@ -209,11 +232,17 @@ export function stepFlight(
   /** Horizontal wind (x, z) added as position drift the pilot must counter. */
   wind?: Vec2,
   mode: FlightMode = 'hold',
+  tuning: Tuning = NEUTRAL_TUNING,
 ): number {
   const step = Math.min(dt, MAX_DT) // survive tab-switch dt spikes
+  const speedMult = Math.min(MAX_SPEED_MULT, tuning.speed)
+  const leftX = applyExpo(input.left.x, tuning.expo)
+  const leftY = applyExpo(input.left.y, tuning.expo)
+  const rightX = applyExpo(input.right.x, tuning.expo)
+  const rightY = applyExpo(input.right.y, tuning.expo)
 
   // Left stick X: yaw rate (stick right turns the nose right).
-  s.yaw -= input.left.x * YAW_RATE * step
+  s.yaw -= leftX * YAW_RATE * tuning.yaw * step
 
   // At yaw 0 the nose faces -Z, so forward = (-sin yaw, 0, -cos yaw).
   const sin = Math.sin(s.yaw)
@@ -223,12 +252,13 @@ export function stepFlight(
     // Attitude follows the right stick — in acro tiltPitch/tiltRoll ARE the
     // flight attitude, not cosmetics (the same fields keep the rendering and
     // FPV camera working unchanged).
-    s.tiltPitch = damp(s.tiltPitch, -input.right.y * MAX_ATTITUDE, ATTITUDE_RESPONSE, step)
-    s.tiltRoll = damp(s.tiltRoll, -input.right.x * MAX_ATTITUDE, ATTITUDE_RESPONSE, step)
+    const attitude = Math.min(MAX_ATTITUDE * speedMult, MAX_ATTITUDE_CAP)
+    s.tiltPitch = damp(s.tiltPitch, -rightY * attitude, ATTITUDE_RESPONSE, step)
+    s.tiltRoll = damp(s.tiltRoll, -rightX * attitude, ATTITUDE_RESPONSE, step)
 
     // Thrust acts along the body-up axis (yaw ψ, pitch θ, roll φ; YXZ order);
     // gravity pulls straight down; light drag lets momentum coast.
-    const thrust = GRAVITY * Math.max(0, 1 + input.left.y * THRUST_RANGE)
+    const thrust = GRAVITY * Math.max(0, 1 + leftY * THRUST_RANGE)
     const sinP = Math.sin(s.tiltPitch)
     const cosP = Math.cos(s.tiltPitch)
     const sinR = Math.sin(s.tiltRoll)
@@ -243,20 +273,21 @@ export function stepFlight(
     s.vel.x *= drag
     s.vel.y *= drag
     s.vel.z *= drag
+    const speedCap = ACRO_MAX_SPEED * speedMult
     const speed = Math.hypot(s.vel.x, s.vel.y, s.vel.z)
-    if (speed > ACRO_MAX_SPEED) {
-      const k = ACRO_MAX_SPEED / speed
+    if (speed > speedCap) {
+      const k = speedCap / speed
       s.vel.x *= k
       s.vel.y *= k
       s.vel.z *= k
     }
   } else {
     // Altitude hold: sticks command target velocities directly.
-    const forward = input.right.y * MAX_HORIZ_SPEED
-    const strafe = input.right.x * MAX_HORIZ_SPEED
+    const forward = rightY * MAX_HORIZ_SPEED * speedMult
+    const strafe = rightX * MAX_HORIZ_SPEED * speedMult
     const targetX = forward * -sin + strafe * cos
     const targetZ = forward * -cos + strafe * -sin
-    const targetY = input.left.y * MAX_VERT_SPEED
+    const targetY = leftY * MAX_VERT_SPEED * speedMult
 
     s.vel.x = damp(s.vel.x, targetX, RESPONSE_H, step)
     s.vel.z = damp(s.vel.z, targetZ, RESPONSE_H, step)
@@ -298,8 +329,8 @@ export function stepFlight(
 
   if (mode === 'hold') {
     // Visual-only tilt: nose dips into forward flight, body banks in a strafe.
-    s.tiltPitch = damp(s.tiltPitch, -input.right.y * MAX_TILT, TILT_RESPONSE, step)
-    s.tiltRoll = damp(s.tiltRoll, -input.right.x * MAX_TILT, TILT_RESPONSE, step)
+    s.tiltPitch = damp(s.tiltPitch, -rightY * MAX_TILT, TILT_RESPONSE, step)
+    s.tiltRoll = damp(s.tiltRoll, -rightX * MAX_TILT, TILT_RESPONSE, step)
   }
 
   return impact
