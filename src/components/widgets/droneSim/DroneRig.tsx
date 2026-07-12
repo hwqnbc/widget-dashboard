@@ -10,18 +10,21 @@ import type {
   Tuning,
   Weather,
 } from './flightModel'
+import type { BatteryEvent, BatteryState } from './flightModel'
 import {
   CRASH_DURATION,
   CRASH_SPEED,
+  DEAD_INPUT,
   SPAWN,
   sampleWind,
+  stepBattery,
   stepCrash,
   stepFlight,
 } from './flightModel'
 import type { Gate, LandingPadSpec } from './worldLayout'
 import { crossedGate, scoreLanding } from './worldLayout'
 import type { LapState } from './lapTimer'
-import { fmtLap, updateLap } from './lapTimer'
+import { PAD_CENTER, PAD_START_RADIUS, fmtLap, updateLap } from './lapTimer'
 import {
   CONTACT_COOLDOWN_MS,
   CONTACT_MIN_IMPACT,
@@ -69,6 +72,10 @@ export default function DroneRig({
   landingMode,
   landingPads,
   onLanding,
+  batteryMode,
+  batteryRef,
+  batteryBarRef,
+  onBatteryEvent,
   activeGate,
   onGatePass,
   flashRef,
@@ -96,6 +103,11 @@ export default function DroneRig({
   landingMode: boolean
   landingPads: readonly LandingPadSpec[]
   onLanding: (points: number) => void
+  batteryMode: boolean
+  batteryRef: { current: BatteryState }
+  /** Battery bar fill element — width/colour written on the telemetry tick. */
+  batteryBarRef: RefObject<HTMLDivElement | null>
+  onBatteryEvent: (event: BatteryEvent) => void
   activeGate: number
   onGatePass: () => void
   flashRef: { current: GateFlash }
@@ -140,9 +152,41 @@ export default function DroneRig({
         onCrashEnd()
       }
     } else {
+      // Battery bookkeeping first — a dead battery kills the sticks and the
+      // drone descends where it is until rescued (pad recharge or reset).
+      const battery = batteryRef.current
+      let effectiveControls = controls
+      if (batteryMode) {
+        const activity = Math.max(
+          Math.abs(controls.left.x),
+          Math.abs(controls.left.y),
+          Math.abs(controls.right.x),
+          Math.abs(controls.right.y),
+        )
+        const onSpawnPad =
+          flight.pos.y < 1.2 &&
+          Math.hypot(flight.pos.x - PAD_CENTER.x, flight.pos.z - PAD_CENTER.z) <=
+            PAD_START_RADIUS
+        const onRooftopPad =
+          landingMode &&
+          landingPads.some(
+            (pad) =>
+              Math.abs(flight.pos.y - pad.top) < 0.1 &&
+              Math.hypot(flight.pos.x - pad.x, flight.pos.z - pad.z) <= pad.r,
+          )
+        const event = stepBattery(
+          battery,
+          activity,
+          onSpawnPad || onRooftopPad,
+          Math.min(dt, 0.05),
+        )
+        if (event) onBatteryEvent(event)
+        if (battery.dead) effectiveControls = DEAD_INPUT
+      }
+
       const impact = stepFlight(
         flight,
-        controls,
+        effectiveControls,
         dt,
         colliders,
         weather === 'storm' ? wind : undefined,
@@ -273,6 +317,14 @@ export default function DroneRig({
         hud.dataset.x = flight.pos.x.toFixed(2)
         hud.dataset.z = flight.pos.z.toFixed(2)
         hud.dataset.yaw = flight.yaw.toFixed(3)
+      }
+      const bar = batteryBarRef.current
+      if (bar) {
+        const level = batteryRef.current.level
+        bar.style.width = `${level}%`
+        bar.style.backgroundColor =
+          level > 40 ? '#66bb6a' : level > 15 ? '#ffb300' : '#ef5350'
+        bar.dataset.level = level.toFixed(0)
       }
       const marker = minimapDroneRef.current
       if (marker) {

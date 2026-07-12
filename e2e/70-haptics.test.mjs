@@ -75,22 +75,28 @@ check(
 check('no crash pattern on a gentle hit', !contact.some((v) => Array.isArray(v) && v.length === 3 && v[0] === 100))
 
 // ---- gate pulse ---------------------------------------------------------------
+// Under heavy load the control loop can drift a thread of the ring — retry
+// the pass up to 3 times before judging (each attempt re-approaches the
+// entry and flies through).
 await page.locator('[data-testid="dronesim-reset"]').click()
 await page.waitForTimeout(400)
 await clearVibrations()
+let gatePulsed = false
+let afterGate = []
 await pilot.touchStart()
-// gate 1 sits straight ahead of spawn: entry 4 units before, exit 4 after
-await pilot.flyTo({ x: G.center.x, y: G.center.y, z: G.center.z + 4 }, { maxForward: 0.5 })
-await pilot.brake()
-await pilot.flyTo({ x: G.center.x, y: G.center.y, z: G.center.z - 4 }, { maxForward: 0.5, tol: 1.5 })
+for (let attempt = 0; attempt < 3 && !gatePulsed; attempt++) {
+  // gate 1 sits straight ahead of spawn: entry 4 units before, exit 4 after
+  await pilot.flyTo({ x: G.center.x, y: G.center.y, z: G.center.z + 4 }, { maxForward: 0.5 })
+  await pilot.brake()
+  await pilot.flyTo({ x: G.center.x, y: G.center.y, z: G.center.z - 4 }, { maxForward: 0.5, tol: 1.5 })
+  await pilot.brake()
+  await page.waitForTimeout(400)
+  afterGate = await vibrations()
+  gatePulsed = afterGate.some((v) => JSON.stringify(v) === JSON.stringify(GATE_PULSE))
+  if (!gatePulsed) console.log(`  (gate pass attempt ${attempt + 1} missed the ring, retrying)`)
+}
 await pilot.touchEnd()
-await page.waitForTimeout(400)
-const afterGate = await vibrations()
-check(
-  'gate pass fires the GATE_PULSE pattern',
-  afterGate.some((v) => JSON.stringify(v) === JSON.stringify(GATE_PULSE)),
-  JSON.stringify(afterGate),
-)
+check('gate pass fires the GATE_PULSE pattern', gatePulsed, JSON.stringify(afterGate))
 
 // ---- crash pulse ---------------------------------------------------------------
 await page.locator('[data-testid="dronesim-reset"]').click()

@@ -25,21 +25,24 @@ import MapIcon from '@mui/icons-material/Map'
 import TuneIcon from '@mui/icons-material/Tune'
 import ForestIcon from '@mui/icons-material/Forest'
 import SportsScoreIcon from '@mui/icons-material/SportsScore'
+import BatteryChargingFullIcon from '@mui/icons-material/BatteryChargingFull'
 import { useAppDispatch } from '../../../app/hooks'
 import { updateWidgetData } from '../../../features/widgets/widgetsSlice'
 import { useWidgetField } from '../../../features/widgets/useWidgetField'
 import { usePresentation } from '../../fullscreen/presentation'
 import type { WidgetProps } from '../../../registry/widgetRegistry'
 import { DAY_PALETTE, DUSK_PALETTE, NIGHT_PALETTE } from './palettes'
-import type { DroneView, FlightMode, Tuning, Weather } from './flightModel'
+import type { BatteryEvent, BatteryState, DroneView, FlightMode, Tuning, Weather } from './flightModel'
 import {
   MAX_SPEED_MULT,
   TURBO_BOOST,
   coerceFlightMode,
   coerceView,
   coerceWeather,
+  createBatteryState,
   createControlInput,
   createFlightState,
+  resetBatteryState,
   resetFlightState,
 } from './flightModel'
 
@@ -51,7 +54,7 @@ const coerceRate = clampNum(0.5, 2)
 const coerceExpo = clampNum(0, 0.8)
 import { DEFAULT_SEED, buildWorldLayout } from './worldLayout'
 import { createLapState, fmtLap, resetLapState } from './lapTimer'
-import { GATE_PULSE, LAP_PULSE, vibrate } from './haptics'
+import { CRASH_PULSE, GATE_PULSE, LAP_PULSE, vibrate } from './haptics'
 import ConfirmDialog from '../ConfirmDialog'
 import WorldScene from './WorldScene'
 import DroneRig from './DroneRig'
@@ -118,6 +121,9 @@ export default function DroneSimBody({ id }: WidgetProps) {
   const richWorld = useWidgetField(id, 'richWorld', true)
   const landing = useWidgetField(id, 'landing', false)
   const landingBest = useWidgetField(id, 'landingBest', 0)
+  const battery = useWidgetField(id, 'battery', false)
+  const batteryRef = useRef<BatteryState>(createBatteryState())
+  const batteryBarRef = useRef<HTMLDivElement>(null)
   const minimapDroneRef = useRef<SVGGElement>(null)
   const rateSpeed = useWidgetField(id, 'rateSpeed', 1, coerceRate)
   const rateYaw = useWidgetField(id, 'rateYaw', 1, coerceRate)
@@ -177,10 +183,32 @@ export default function DroneSimBody({ id }: WidgetProps) {
   const resetSim = () => {
     resetFlightState(flight)
     resetLapState(lap)
+    resetBatteryState(batteryRef.current)
     crashRef.current.active = false
     setActiveGate(0)
     setBanner(null)
   }
+
+  const showBanner = useCallback((text: string, ms = 2500) => {
+    setBanner(text)
+    if (bannerTimer.current) clearTimeout(bannerTimer.current)
+    bannerTimer.current = setTimeout(() => setBanner(null), ms)
+  }, [])
+
+  const onBatteryEvent = useCallback(
+    (event: BatteryEvent) => {
+      if (event === 'low') {
+        vibrate(GATE_PULSE)
+        showBanner('LOW BATTERY!')
+      } else if (event === 'died') {
+        vibrate(CRASH_PULSE)
+        showBanner('BATTERY DEAD — AUTO-LANDING')
+      } else {
+        showBanner('RECHARGED!')
+      }
+    },
+    [showBanner],
+  )
 
   const onCrash = useCallback(() => {
     // A crash voids the lap in progress.
@@ -307,6 +335,10 @@ export default function DroneSimBody({ id }: WidgetProps) {
             landingMode={landing}
             landingPads={layout.landingPads}
             onLanding={onLanding}
+            batteryMode={battery}
+            batteryRef={batteryRef}
+            batteryBarRef={batteryBarRef}
+            onBatteryEvent={onBatteryEvent}
             activeGate={activeGate}
             onGatePass={onGatePass}
             flashRef={flashRef}
@@ -391,6 +423,31 @@ export default function DroneSimBody({ id }: WidgetProps) {
         {bestLapMs > 0 ? `BEST ${fmtLap(bestLapMs)}` : 'BEST —'}
       </Box>
 
+      {battery && (
+        <Box
+          data-testid="dronesim-battery"
+          sx={{
+            position: 'absolute',
+            top: 92,
+            left: 8,
+            width: 92,
+            height: 8,
+            borderRadius: 1,
+            bgcolor: alpha('#000', 0.45),
+            border: `1px solid ${alpha('#fff', 0.3)}`,
+            overflow: 'hidden',
+            pointerEvents: 'none',
+          }}
+        >
+          <Box
+            ref={batteryBarRef}
+            data-testid="dronesim-battery-fill"
+            data-level="100"
+            sx={{ height: '100%', width: '100%', bgcolor: '#66bb6a' }}
+          />
+        </Box>
+      )}
+
       {banner && (
         <Box
           data-testid="dronesim-lap-banner"
@@ -469,6 +526,21 @@ export default function DroneSimBody({ id }: WidgetProps) {
             ) : (
               <ThunderstormIcon fontSize="small" />
             )}
+          </IconButton>
+        </Tooltip>
+        <Tooltip title={battery ? 'Unlimited power' : 'Battery mode (land on pads to recharge)'}>
+          <IconButton
+            size="small"
+            data-testid="dronesim-battery-toggle"
+            data-battery={battery ? 'on' : 'off'}
+            aria-pressed={battery}
+            onClick={() => {
+              resetBatteryState(batteryRef.current)
+              dispatch(updateWidgetData({ id, data: { battery: !battery } }))
+            }}
+            sx={{ color: '#fff' }}
+          >
+            <BatteryChargingFullIcon fontSize="small" />
           </IconButton>
         </Tooltip>
         <Tooltip title={landing ? 'End landing challenge' : 'Landing challenge (rooftop pads)'}>

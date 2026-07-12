@@ -125,6 +125,76 @@ export const MAX_ATTITUDE_CAP = 0.65
 /** Expo curve: v' = v(1−e) + v³e. Endpoints (±1) are preserved. */
 export const applyExpo = (v: number, e: number) => v * (1 - e) + v * v * v * e
 
+// Battery mode: flying drains charge (harder flying drains faster), landing
+// on the spawn pad (or an active landing-challenge pad) recharges. An empty
+// battery kills the sticks and the drone auto-descends where it is.
+export const BATTERY_DRAIN_BASE = 0.8 // %/s just staying airborne
+export const BATTERY_DRAIN_ACTIVE = 2.2 // additional %/s at full stick
+export const BATTERY_RECHARGE = 25 // %/s while resting on a pad
+export const BATTERY_LOW = 15 // one-shot warning threshold
+export const BATTERY_REVIVE = 20 // a dead drone wakes at this charge
+/** Stick override while dead: gentle powered descent, no lateral control. */
+export const DEAD_INPUT: ControlInput = {
+  left: { x: 0, y: -0.7 },
+  right: { x: 0, y: 0 },
+}
+
+export interface BatteryState {
+  level: number
+  dead: boolean
+  /** Low-battery warning fired for the current discharge cycle. */
+  warned: boolean
+}
+
+export type BatteryEvent = 'low' | 'died' | 'revived'
+
+export function createBatteryState(): BatteryState {
+  return { level: 100, dead: false, warned: false }
+}
+
+export function resetBatteryState(b: BatteryState): void {
+  b.level = 100
+  b.dead = false
+  b.warned = false
+}
+
+/**
+ * One frame of battery bookkeeping. `activity` is 0..1 stick effort,
+ * `charging` is whether the drone is resting on a recharge pad. Mutates in
+ * place; returns an event when something noteworthy happened.
+ */
+export function stepBattery(
+  b: BatteryState,
+  activity: number,
+  charging: boolean,
+  dt: number,
+): BatteryEvent | null {
+  if (charging) {
+    b.level = Math.min(100, b.level + BATTERY_RECHARGE * dt)
+    if (b.dead && b.level >= BATTERY_REVIVE) {
+      b.dead = false
+      b.warned = false
+      return 'revived'
+    }
+    if (b.level > BATTERY_LOW) b.warned = false
+    return null
+  }
+  if (b.dead) return null
+  b.level = Math.max(
+    0,
+    b.level - (BATTERY_DRAIN_BASE + BATTERY_DRAIN_ACTIVE * Math.min(1, activity)) * dt,
+  )
+  if (b.level === 0) {
+    b.dead = true
+    return 'died'
+  }
+  if (b.level <= BATTERY_LOW && !b.warned) {
+    b.warned = true
+    return 'low'
+  }
+  return null
+}
+
 /** Peak horizontal wind speed in storm weather, world-units/s. */
 export const WIND_MAX = 4.5
 

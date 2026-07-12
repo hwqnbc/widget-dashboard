@@ -219,6 +219,21 @@ bottom corners (88 px; 140 px + safe-area insets in fullscreen via
 the fullscreen rotate hint; fullscreen re-mounts the single live instance in
 the overlay, so there's never a duplicate `useFrame` loop.
 
+## Battery / range mode
+
+The battery button toggles persisted `battery: boolean` (default off). While
+on, a HUD bar (top-left, tick-written width/colour + `data-level`) drains at
+`0.8 %/s` base plus up to `2.2 %/s` with stick effort — a full charge is
+roughly 35–75 s of flying, forcing route planning. **Recharge** (25 %/s)
+happens while resting on the spawn pad (landed, inside the pad radius) or on
+an active landing-challenge pad — the two modes combine into a
+station-hopping game. At `15 %` a one-shot `LOW BATTERY!` warns; at `0 %`
+the sticks die (`DEAD_INPUT`: gentle powered descent, no lateral control),
+the drone auto-lands wherever it is, and it stays dead until recharged on a
+pad (revives at `20 %` with a `RECHARGED!` banner) or rescued by reset
+(which always refills). The state machine (`stepBattery`) is pure and
+transient — a reload starts full, like the rest of the live sim state.
+
 ## Landing challenge
 
 The checkered-flag button toggles persisted `landing: boolean` (default off).
@@ -339,8 +354,6 @@ from the enhancement menu, with the integration point each would build on.
   racing you; `bestLapPath` already carries the positions, add per-sample
   timestamps (or rely on the fixed 150 ms cadence) and lerp along it in
   `useFrame`.
-- **Battery / range mechanic** — a draining battery HUD bar forcing
-  return-to-pad, recharging on the pad zone (`PAD_START_RADIUS` reuse).
 - **Course editor / more gates** — `RINGS`/`GATES` are data; a "gates: 5"
   setting or hand-placed courses slot into the same sequence logic.
 

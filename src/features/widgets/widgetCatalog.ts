@@ -157,6 +157,7 @@ export function defaultWidgetData(type: WidgetType): Record<string, unknown> {
         richWorld: true,
         landing: false,
         landingBest: 0,
+        battery: false,
       }
     case 'clock':
     default:
