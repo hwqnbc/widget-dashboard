@@ -1,7 +1,11 @@
+import { useRef } from 'react'
 import { Canvas } from '@react-three/fiber'
 import { Box, useTheme } from '@mui/material'
 import type { WidgetProps } from '../../../registry/widgetRegistry'
 import { DAY_PALETTE, NIGHT_PALETTE } from './palettes'
+import { SPAWN, createControlInput } from './flightModel'
+import WorldScene from './WorldScene'
+import DroneModel from './DroneModel'
 
 /**
  * The 3D drone simulator. Everything inside <Canvas> renders in a separate
@@ -10,6 +14,9 @@ import { DAY_PALETTE, NIGHT_PALETTE } from './palettes'
 export default function DroneSimBody({ id }: WidgetProps) {
   const mode = useTheme().palette.mode
   const palette = mode === 'dark' ? NIGHT_PALETTE : DAY_PALETTE
+  // Live joystick values — mutated by the sticks, read by the sim loop each
+  // frame. Never goes through React state (pointer moves fire 60-120 Hz).
+  const controls = useRef(createControlInput()).current
 
   return (
     <Box
@@ -32,7 +39,10 @@ export default function DroneSimBody({ id }: WidgetProps) {
           dpr={[1, 1.75]}
           camera={{ fov: 60, near: 0.1, far: 400, position: [0, 4, 26] }}
         >
-          <color attach="background" args={[palette.sky]} />
+          <WorldScene palette={palette} />
+          <group position={[SPAWN.x, SPAWN.y, SPAWN.z]}>
+            <DroneModel controls={controls} />
+          </group>
         </Canvas>
       </Box>
     </Box>
