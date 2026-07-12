@@ -34,7 +34,9 @@ export function resetLapState(lap: LapState): void {
 /**
  * Advance the lap state for this frame. `activeGate === gateCount` means all
  * gates have been passed (the "return to pad" phase). Returns an event when
- * the state changed, else null.
+ * the state changed, else null. `selfPropelled` is whether the drone's own
+ * velocity is carrying it (vs. drifting on storm wind, which moves position
+ * without velocity) — only deliberate flight starts the clock.
  */
 export function updateLap(
   lap: LapState,
@@ -42,11 +44,12 @@ export function updateLap(
   activeGate: number,
   gateCount: number,
   nowMs: number,
+  selfPropelled = true,
 ): LapEvent | null {
   const onPad =
     Math.hypot(pos.x - PAD_CENTER.x, pos.z - PAD_CENTER.z) <= PAD_START_RADIUS
   if (lap.status === 'ready') {
-    if (!onPad) {
+    if (!onPad && selfPropelled) {
       lap.status = 'running'
       lap.startMs = nowMs
       return 'started'

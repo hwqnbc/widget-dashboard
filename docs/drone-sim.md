@@ -45,6 +45,22 @@ allocation-free):
 
 Speeds: `MAX_HORIZ_SPEED 12`, `MAX_VERT_SPEED 5` world-units/s.
 
+### Weather (storm mode)
+
+The cloud/sun button toggles persisted `weather: 'clear' | 'storm'`. Storm
+mode swaps in `DUSK_PALETTE` (dim sun via the palette's `sunIntensity`),
+mounts `RainField` — one 800-point `Points` cloud kept centred on the drone,
+drops falling and drifting with the wind, wrapping within a fixed volume,
+single draw call — and feeds `stepFlight` a wind vector. `sampleWind(t)` is
+a pure sum-of-sines: a slowly veering heading with layered gusts, capped at
+`WIND_MAX` (4.5 u/s), deterministic and allocation-free. Wind applies as a
+**position drift** the pilot must counter (never touches the velocity
+targets, so releasing the sticks still brakes cleanly — the drone then
+drifts with the gusts instead of holding station). The HUD appends
+`WIND x.x` (`data-wind`) in storm. The same `windRef` is shared by the sim
+loop and the rain so drops and drift always agree. Lap times in storm are
+naturally slower — the best lap makes no weather distinction, by design.
+
 ### Building collision
 
 `worldLayout.ts` derives a `Collider` per building — its AABB **pre-inflated**
@@ -129,6 +145,10 @@ state machine like `stepFlight`, clocked by `performance.now()`).
   improvement persists `bestLapMs` and `bestLapPath`.
 - **Re-arm rule**: returning to the pad with *no* gates passed silently
   resets the clock to ready, so an aborted start isn't penalised.
+- **Start guard**: the clock only starts when the drone's own velocity
+  carries it off the pad (`selfPropelled`) — storm wind drifting an idle
+  drone off the pad moves position without velocity and must not start a
+  lap.
 - **Ghost line**: while racing, `DroneRig` samples the position on the 150 ms
   HUD tick (flat x,y,z triples rounded to 0.1 — a 60 s lap ≈ 10 KB); a new
   best persists the path, which `GhostLine` renders as a translucent line

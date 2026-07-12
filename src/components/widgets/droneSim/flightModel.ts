@@ -53,6 +53,11 @@ export type DroneView = 'tp' | 'fp'
 export const coerceView = (v: unknown): DroneView | undefined =>
   v === 'tp' || v === 'fp' ? v : undefined
 
+export type Weather = 'clear' | 'storm'
+
+export const coerceWeather = (v: unknown): Weather | undefined =>
+  v === 'clear' || v === 'storm' ? v : undefined
+
 export const SPAWN: Vec3 = { x: 0, y: 2, z: 18 }
 export const MAX_HORIZ_SPEED = 12
 export const MAX_VERT_SPEED = 5
@@ -70,6 +75,26 @@ export const DEADZONE = 0.08
 /** Exponential approach — framerate-independent smoothing. */
 export const damp = (cur: number, target: number, lambda: number, dt: number) =>
   cur + (target - cur) * (1 - Math.exp(-lambda * dt))
+
+/** Peak horizontal wind speed in storm weather, world-units/s. */
+export const WIND_MAX = 4.5
+
+/**
+ * Storm wind at time t (seconds) — layered sines give a slowly veering base
+ * wind with irregular gusts, deterministic and allocation-free (writes into
+ * `out`). Magnitude stays within WIND_MAX.
+ */
+export function sampleWind(t: number, out: Vec2): void {
+  const heading = Math.sin(t * 0.05) * Math.PI + Math.sin(t * 0.023) * 1.2
+  const gust =
+    0.45 +
+    0.3 * Math.sin(t * 0.7) +
+    0.15 * Math.sin(t * 1.7 + 1.3) +
+    0.1 * Math.sin(t * 3.1 + 0.4)
+  const speed = WIND_MAX * Math.min(1, Math.max(0.1, gust))
+  out.x = Math.sin(heading) * speed
+  out.y = Math.cos(heading) * speed // y is the z-axis component here (Vec2)
+}
 
 export function createControlInput(): ControlInput {
   return { left: { x: 0, y: 0 }, right: { x: 0, y: 0 } }
@@ -146,6 +171,8 @@ export function stepFlight(
   input: ControlInput,
   dt: number,
   colliders: readonly Collider[] = [],
+  /** Horizontal wind (x, z) added as position drift the pilot must counter. */
+  wind?: Vec2,
 ): void {
   const step = Math.min(dt, MAX_DT) // survive tab-switch dt spikes
 
@@ -169,6 +196,10 @@ export function stepFlight(
   s.pos.x += s.vel.x * step
   s.pos.y += s.vel.y * step
   s.pos.z += s.vel.z * step
+  if (wind) {
+    s.pos.x += wind.x * step
+    s.pos.z += wind.y * step
+  }
 
   // World bounds: clamp position and zero the outward velocity component.
   if (s.pos.x > WORLD_HALF) {

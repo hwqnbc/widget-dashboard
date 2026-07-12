@@ -2,8 +2,8 @@ import { useRef } from 'react'
 import type { RefObject } from 'react'
 import { useFrame } from '@react-three/fiber'
 import type { Group, Mesh, MeshBasicMaterial } from 'three'
-import type { Collider, ControlInput, FlightState } from './flightModel'
-import { SPAWN, stepFlight } from './flightModel'
+import type { Collider, ControlInput, FlightState, Weather } from './flightModel'
+import { SPAWN, sampleWind, stepFlight } from './flightModel'
 import type { Gate } from './worldLayout'
 import { crossedGate } from './worldLayout'
 import type { LapState } from './lapTimer'
@@ -27,6 +27,8 @@ export default function DroneRig({
   timerRef,
   colliders,
   gates,
+  weather,
+  windRef,
   activeGate,
   onGatePass,
   flashRef,
@@ -40,6 +42,9 @@ export default function DroneRig({
   timerRef: RefObject<HTMLDivElement | null>
   colliders: readonly Collider[]
   gates: readonly Gate[]
+  weather: Weather
+  /** Shared with RainField so the drops drift with the same gusts. */
+  windRef: { current: { x: number; y: number } }
   activeGate: number
   onGatePass: () => void
   flashRef: { current: GateFlash }
@@ -56,7 +61,14 @@ export default function DroneRig({
   const pathRef = useRef<number[]>([])
 
   useFrame(({ clock }, dt) => {
-    stepFlight(flight, controls, dt, colliders)
+    const wind = windRef.current
+    if (weather === 'storm') {
+      sampleWind(clock.elapsedTime, wind)
+    } else {
+      wind.x = 0
+      wind.y = 0
+    }
+    stepFlight(flight, controls, dt, colliders, weather === 'storm' ? wind : undefined)
 
     // Gate pass (only while a lap is running): did this frame's movement
     // cross the active ring's plane inside the ring? A long segment means a
@@ -83,9 +95,11 @@ export default function DroneRig({
 
     // Lap start/finish against the pad zone.
     const now = performance.now()
+    const selfPropelled =
+      Math.hypot(flight.vel.x, flight.vel.y, flight.vel.z) > 0.5
     const lapEvent = jump
       ? null
-      : updateLap(lap, flight.pos, activeGate, gates.length, now)
+      : updateLap(lap, flight.pos, activeGate, gates.length, now, selfPropelled)
     if (lapEvent === 'started') {
       pathRef.current = [
         Math.round(flight.pos.x * 10) / 10,
@@ -123,9 +137,13 @@ export default function DroneRig({
       if (hud) {
         const alt = flight.pos.y
         const speed = Math.hypot(flight.vel.x, flight.vel.y, flight.vel.z)
-        hud.textContent = `ALT ${alt.toFixed(1)}m · SPD ${speed.toFixed(1)}`
+        const windSpeed = Math.hypot(windRef.current.x, windRef.current.y)
+        hud.textContent =
+          `ALT ${alt.toFixed(1)}m · SPD ${speed.toFixed(1)}` +
+          (weather === 'storm' ? ` · WIND ${windSpeed.toFixed(1)}` : '')
         hud.dataset.alt = alt.toFixed(1)
         hud.dataset.speed = speed.toFixed(1)
+        hud.dataset.wind = weather === 'storm' ? windSpeed.toFixed(1) : '0'
         // Extra telemetry for tests/debugging; costs nothing beyond the write.
         hud.dataset.x = flight.pos.x.toFixed(2)
         hud.dataset.z = flight.pos.z.toFixed(2)

@@ -42,7 +42,7 @@ export default function WorldScene({
       <fog attach="fog" args={[palette.fog, 40, 160]} />
       <ambientLight intensity={0.3} />
       <hemisphereLight args={[palette.sky, palette.ground, 0.9]} />
-      <directionalLight position={[30, 50, 20]} intensity={1.4} />
+      <directionalLight position={[30, 50, 20]} intensity={palette.sunIntensity} />
 
       <mesh rotation-x={-Math.PI / 2}>
         <planeGeometry args={[140, 140]} />

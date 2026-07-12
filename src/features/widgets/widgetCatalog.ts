@@ -146,6 +146,7 @@ export function defaultWidgetData(type: WidgetType): Record<string, unknown> {
         bestLapMs: 0,
         bestLapPath: [],
         worldSeed: DEFAULT_SEED,
+        weather: 'clear',
       }
     case 'clock':
     default:

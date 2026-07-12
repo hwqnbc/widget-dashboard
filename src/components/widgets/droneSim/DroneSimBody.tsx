@@ -4,15 +4,18 @@ import { Box, IconButton, Tooltip, alpha, useTheme } from '@mui/material'
 import CameraswitchIcon from '@mui/icons-material/Cameraswitch'
 import RestartAltIcon from '@mui/icons-material/RestartAlt'
 import ShuffleIcon from '@mui/icons-material/Shuffle'
+import ThunderstormIcon from '@mui/icons-material/Thunderstorm'
+import WbSunnyIcon from '@mui/icons-material/WbSunny'
 import { useAppDispatch } from '../../../app/hooks'
 import { updateWidgetData } from '../../../features/widgets/widgetsSlice'
 import { useWidgetField } from '../../../features/widgets/useWidgetField'
 import { usePresentation } from '../../fullscreen/presentation'
 import type { WidgetProps } from '../../../registry/widgetRegistry'
-import { DAY_PALETTE, NIGHT_PALETTE } from './palettes'
-import type { DroneView } from './flightModel'
+import { DAY_PALETTE, DUSK_PALETTE, NIGHT_PALETTE } from './palettes'
+import type { DroneView, Weather } from './flightModel'
 import {
   coerceView,
+  coerceWeather,
   createControlInput,
   createFlightState,
   resetFlightState,
@@ -26,6 +29,7 @@ import CameraRig from './CameraRig'
 import GateRings from './GateRings'
 import type { GateFlash } from './GateRings'
 import GhostLine from './GhostLine'
+import RainField from './RainField'
 import VirtualJoystick from './VirtualJoystick'
 
 const EMPTY_PATH: number[] = []
@@ -43,7 +47,13 @@ const coercePath = (v: unknown): number[] | undefined =>
 export default function DroneSimBody({ id }: WidgetProps) {
   const dispatch = useAppDispatch()
   const mode = useTheme().palette.mode
-  const palette = mode === 'dark' ? NIGHT_PALETTE : DAY_PALETTE
+  const weather = useWidgetField<Weather>(id, 'weather', 'clear', coerceWeather)
+  const palette =
+    weather === 'storm'
+      ? DUSK_PALETTE
+      : mode === 'dark'
+        ? NIGHT_PALETTE
+        : DAY_PALETTE
   const { fullscreen } = usePresentation()
   const view = useWidgetField<DroneView>(id, 'view', 'tp', coerceView)
   const score = useWidgetField(id, 'score', 0)
@@ -59,6 +69,9 @@ export default function DroneSimBody({ id }: WidgetProps) {
   const hudRef = useRef<HTMLDivElement>(null)
   const timerRef = useRef<HTMLDivElement>(null)
   const flashRef = useRef<GateFlash>({ gate: -1, until: 0 })
+  // Shared between the sim loop (which samples it) and the rain (which
+  // drifts with it) — mutable, never re-renders.
+  const windRef = useRef({ x: 0, y: 0 })
   // Which ring must be flown through next (GATES.length = all passed, return
   // to the pad); transient — reload/reset restarts the lap, only score and
   // best lap persist.
@@ -179,6 +192,9 @@ export default function DroneSimBody({ id }: WidgetProps) {
             flashRef={flashRef}
           />
           <GhostLine path={bestLapPath} color={palette.ring} />
+          {weather === 'storm' && (
+            <RainField flight={flight} wind={windRef.current} />
+          )}
           <DroneRig
             controls={controls}
             flight={flight}
@@ -186,6 +202,8 @@ export default function DroneSimBody({ id }: WidgetProps) {
             timerRef={timerRef}
             colliders={layout.colliders}
             gates={layout.gates}
+            weather={weather}
+            windRef={windRef}
             activeGate={activeGate}
             onGatePass={onGatePass}
             flashRef={flashRef}
@@ -320,6 +338,29 @@ export default function DroneSimBody({ id }: WidgetProps) {
             sx={{ color: '#fff' }}
           >
             <RestartAltIcon fontSize="small" />
+          </IconButton>
+        </Tooltip>
+        <Tooltip title={weather === 'storm' ? 'Clear weather' : 'Storm weather (wind + rain)'}>
+          <IconButton
+            size="small"
+            data-testid="dronesim-weather-toggle"
+            data-weather={weather}
+            aria-pressed={weather === 'storm'}
+            onClick={() =>
+              dispatch(
+                updateWidgetData({
+                  id,
+                  data: { weather: weather === 'storm' ? 'clear' : 'storm' },
+                }),
+              )
+            }
+            sx={{ color: '#fff' }}
+          >
+            {weather === 'storm' ? (
+              <WbSunnyIcon fontSize="small" />
+            ) : (
+              <ThunderstormIcon fontSize="small" />
+            )}
           </IconButton>
         </Tooltip>
         <Tooltip title="New course (shuffle buildings & gates)">

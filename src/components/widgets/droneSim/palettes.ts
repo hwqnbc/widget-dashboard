@@ -12,6 +12,8 @@ export interface WorldPalette {
   building: string
   pad: string
   ring: string
+  /** Directional-light intensity — storms are dimmer than clear skies. */
+  sunIntensity: number
 }
 
 export const DAY_PALETTE: WorldPalette = {
@@ -22,6 +24,7 @@ export const DAY_PALETTE: WorldPalette = {
   building: '#b9c0cc',
   pad: '#455a64',
   ring: '#ffb300',
+  sunIntensity: 1.4,
 }
 
 export const NIGHT_PALETTE: WorldPalette = {
@@ -32,4 +35,17 @@ export const NIGHT_PALETTE: WorldPalette = {
   building: '#565f8c',
   pad: '#2f3d44',
   ring: '#ffca28',
+  sunIntensity: 1.4,
+}
+
+/** Storm weather: a brooding dusk regardless of the dashboard theme. */
+export const DUSK_PALETTE: WorldPalette = {
+  sky: '#494a66',
+  fog: '#585a78',
+  ground: '#48604e',
+  grid: '#3d5244',
+  building: '#767d99',
+  pad: '#37474f',
+  ring: '#ffb300',
+  sunIntensity: 0.6,
 }
