@@ -76,6 +76,22 @@ Derived: `winner` (first to 5), `gameOver`, and the displayed feet Y
   locks input; a winning 5th hit shows `WinnerCelebration` instead. Input is
   locked during flight, during the banner, and after game over.
 
+## Layout (stacked vs immersive)
+Two layouts, chosen by `overlay = usePresentation().fullscreen && useViewport()
+.orientation === 'landscape'`:
+- **Stacked (default — the grid tile and portrait full-screen):** controls row,
+  score row, scene, footer row, top-to-bottom. Unchanged.
+- **Immersive (full-screen *landscape* only):** the scene `Box` is the sole flow
+  child so it fills the whole area (the aspect scene grows to the largest fit),
+  and the controls/scores/footer become `position:absolute` overlays over the
+  scene's sky/grass margins — scores top corners, the three toggle groups centred
+  in a translucent theme-aware panel (`alpha(background.paper, .82)`), the hint +
+  `New game` along the bottom. Overlay wrappers are `pointerEvents:'none'` except
+  the toggles / `New game`, and `toWorld` reads the svg's own rect, so drag-to-aim
+  is unaffected. This stops the stacked chrome from capping the scene height, so
+  rotating to landscape actually enlarges the playfield (the point of the rotate
+  hint). Portrait keeps the stacked layout because it gains little there.
+
 ## Verifying
 `npm run build` + `npm run lint`, then headless Chromium. The scene svg exposes
 `data-p1y`/`data-p2y`/`data-platforms`; each archer `<g>` exposes

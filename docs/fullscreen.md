@@ -54,6 +54,14 @@ orientation is opt-in per widget via `WidgetMeta.preferredOrientation`
 orientation, isMobile }` from `resize`/`orientationchange` (`isMobile` via
 `matchMedia('(pointer: coarse)')`).
 
+**Immersive layout example (Archery):** so rotating actually pays off, Archery
+switches to an overlay layout **only in full-screen landscape**
+(`fullscreen && orientation === 'landscape'`) — the scene fills the whole area and
+the controls/scores/footer float over its margins; portrait and the grid tile keep
+the stacked layout. See `docs/archery.md`. A widget that just needs to grow (TTT/
+Memory cap relaxation) only reads `usePresentation().fullscreen`; one that also
+reorganises by orientation additionally reads `useViewport()`.
+
 ## Verifying
 `npm run build` + `npm run lint`, then headless Chromium: add a widget, click the
 maximise button (`aria-label` contains "full screen"), assert a `role="dialog"`

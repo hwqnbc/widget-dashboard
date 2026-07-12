@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import {
+  alpha,
   Box,
   Button,
   Stack,
@@ -7,6 +8,7 @@ import {
   ToggleButtonGroup,
   Typography,
 } from '@mui/material'
+import type { Theme } from '@mui/material'
 import { useAppDispatch } from '../../app/hooks'
 import { updateWidgetData } from '../../features/widgets/widgetsSlice'
 import { useWidgetField } from '../../features/widgets/useWidgetField'
@@ -18,6 +20,8 @@ import ConfirmDialog from './ConfirmDialog'
 import { avatarMetaById } from '../../features/avatars/avatarCatalog'
 import { useSeatAvatars, useSeatVisual } from '../../features/avatars/useSeatAvatars'
 import { useHandoff } from '../../hooks/useHandoff'
+import { usePresentation } from '../fullscreen/presentation'
+import { useViewport } from '../../hooks/useViewport'
 
 type Player = 'toy' | 'ninja'
 type Scores = { toy: number; ninja: number }
@@ -116,6 +120,11 @@ export default function ArcheryWidget({ id }: WidgetProps) {
   const hand = useHandoff()
   const seatAvatars = useSeatAvatars()
   const colorOf = (seat: Player) => avatarMetaById[seatAvatars[seat]].color
+  // Full-screen landscape uses an immersive overlay layout (scene fills the area,
+  // controls float over the margins); every other presentation keeps the stacked one.
+  const { fullscreen } = usePresentation()
+  const { orientation } = useViewport()
+  const overlay = fullscreen && orientation === 'landscape'
 
   const num = (v: unknown) => (typeof v === 'number' ? v : undefined)
   const p1y = useWidgetField<number>(id, 'p1y', 0, num)
@@ -349,59 +358,95 @@ export default function ArcheryWidget({ id }: WidgetProps) {
 
   const toggleSx = { textTransform: 'none' as const, py: 0.1, px: 0.75 }
 
+  // Render pieces shared by the stacked layout and the immersive overlay layout.
+  const controlGroups = (
+    <>
+      <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+        <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1, mb: 0.25 }}>Mode</Typography>
+        <ToggleButtonGroup size="small" exclusive value={mode} onChange={(_, v) => changeMode(v as Mode | null)}>
+          <ToggleButton value="calm" sx={toggleSx}>Calm</ToggleButton>
+          <ToggleButton value="wind" sx={toggleSx}>Wind</ToggleButton>
+          <ToggleButton value="obstacle" sx={toggleSx}>Obstacle</ToggleButton>
+        </ToggleButtonGroup>
+      </Box>
+      <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+        <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1, mb: 0.25 }}>Range</Typography>
+        <ToggleButtonGroup size="small" exclusive value={distance} onChange={(_, v) => changeRange(v as Distance | null)}>
+          <ToggleButton value="short" sx={toggleSx}>Short</ToggleButton>
+          <ToggleButton value="long" sx={toggleSx}>Long</ToggleButton>
+        </ToggleButtonGroup>
+      </Box>
+      <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+        <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1, mb: 0.25 }}>Platforms</Typography>
+        <ToggleButtonGroup size="small" exclusive value={platforms} onChange={(_, v) => changePlatforms(v as Platform | null)}>
+          <ToggleButton value="still" sx={toggleSx}>Still</ToggleButton>
+          <ToggleButton value="both" sx={toggleSx}>Both</ToggleButton>
+          <ToggleButton value="target" sx={toggleSx}>Target</ToggleButton>
+        </ToggleButtonGroup>
+      </Box>
+    </>
+  )
+
+  const renderScore = (p: Player) => {
+    const active = !gameOver && turn === p
+    return (
+      <Box
+        sx={{
+          px: 0.75,
+          py: 0.25,
+          borderRadius: 1,
+          border: '2px solid',
+          borderColor: active ? colorOf(p) : 'transparent',
+          bgcolor: active ? `${colorOf(p)}22` : 'transparent',
+        }}
+      >
+        <PlayerBadge mark={p} label={`${scores[p]} / ${WIN}`} pulse={active} />
+      </Box>
+    )
+  }
+
+  const footerText =
+    gameOver && winner ? (
+      <PlayerBadge mark={winner} label="wins!" />
+    ) : (
+      <Typography variant="body2" color="text.secondary">
+        Drag to aim, release to fire
+      </Typography>
+    )
+  const newGameButton = (
+    <Button size="small" onClick={newGame}>
+      New game
+    </Button>
+  )
+
+  // Translucent, theme-aware backing so overlaid controls stay legible on the scene.
+  const panelSx = {
+    bgcolor: (t: Theme) => alpha(t.palette.background.paper, 0.82),
+    borderRadius: 1,
+    px: 1,
+    py: 0.5,
+    pointerEvents: 'auto' as const,
+  }
+
   return (
     <Box
       className="widget-no-drag"
       onMouseDown={(e) => e.stopPropagation()}
       onTouchStart={(e) => e.stopPropagation()}
-      sx={{ height: '100%', display: 'flex', flexDirection: 'column', gap: 0.5, p: 0.5 }}
+      sx={{ height: '100%', display: 'flex', flexDirection: 'column', gap: overlay ? 0 : 0.5, p: overlay ? 0 : 0.5 }}
     >
-      <Stack direction="row" sx={{ justifyContent: 'center', alignItems: 'flex-end', gap: 1, flexWrap: 'wrap', rowGap: 0.5 }}>
-        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-          <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1, mb: 0.25 }}>Mode</Typography>
-          <ToggleButtonGroup size="small" exclusive value={mode} onChange={(_, v) => changeMode(v as Mode | null)}>
-            <ToggleButton value="calm" sx={toggleSx}>Calm</ToggleButton>
-            <ToggleButton value="wind" sx={toggleSx}>Wind</ToggleButton>
-            <ToggleButton value="obstacle" sx={toggleSx}>Obstacle</ToggleButton>
-          </ToggleButtonGroup>
-        </Box>
-        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-          <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1, mb: 0.25 }}>Range</Typography>
-          <ToggleButtonGroup size="small" exclusive value={distance} onChange={(_, v) => changeRange(v as Distance | null)}>
-            <ToggleButton value="short" sx={toggleSx}>Short</ToggleButton>
-            <ToggleButton value="long" sx={toggleSx}>Long</ToggleButton>
-          </ToggleButtonGroup>
-        </Box>
-        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-          <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1, mb: 0.25 }}>Platforms</Typography>
-          <ToggleButtonGroup size="small" exclusive value={platforms} onChange={(_, v) => changePlatforms(v as Platform | null)}>
-            <ToggleButton value="still" sx={toggleSx}>Still</ToggleButton>
-            <ToggleButton value="both" sx={toggleSx}>Both</ToggleButton>
-            <ToggleButton value="target" sx={toggleSx}>Target</ToggleButton>
-          </ToggleButtonGroup>
-        </Box>
-      </Stack>
+      {!overlay && (
+        <Stack direction="row" sx={{ justifyContent: 'center', alignItems: 'flex-end', gap: 1, flexWrap: 'wrap', rowGap: 0.5 }}>
+          {controlGroups}
+        </Stack>
+      )}
 
-      <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'center', px: 0.5 }}>
-        {(['toy', 'ninja'] as const).map((p) => {
-          const active = !gameOver && turn === p
-          return (
-            <Box
-              key={p}
-              sx={{
-                px: 0.75,
-                py: 0.25,
-                borderRadius: 1,
-                border: '2px solid',
-                borderColor: active ? colorOf(p) : 'transparent',
-                bgcolor: active ? `${colorOf(p)}22` : 'transparent',
-              }}
-            >
-              <PlayerBadge mark={p} label={`${scores[p]} / ${WIN}`} pulse={active} />
-            </Box>
-          )
-        })}
-      </Stack>
+      {!overlay && (
+        <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'center', px: 0.5 }}>
+          {renderScore('toy')}
+          {renderScore('ninja')}
+        </Stack>
+      )}
 
       <Box sx={{ flex: 1, minHeight: 0, position: 'relative', containerType: 'size', display: 'grid', placeItems: 'center' }}>
         <Box sx={{ width: `min(100cqw, calc(100cqh * ${W} / ${H}))`, maxWidth: '100%', aspectRatio: `${W} / ${H}` }}>
@@ -462,6 +507,22 @@ export default function ArcheryWidget({ id }: WidgetProps) {
           </svg>
         </Box>
 
+        {overlay && (
+          <>
+            <Box sx={{ position: 'absolute', top: 0, left: 0, right: 0, p: 1, display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 1, zIndex: 1, pointerEvents: 'none' }}>
+              {renderScore('toy')}
+              <Stack direction="row" sx={{ ...panelSx, gap: 1, flexWrap: 'wrap', alignItems: 'flex-end', justifyContent: 'center' }}>
+                {controlGroups}
+              </Stack>
+              {renderScore('ninja')}
+            </Box>
+            <Box sx={{ position: 'absolute', bottom: 0, left: 0, right: 0, p: 1, display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 1, zIndex: 1, pointerEvents: 'none' }}>
+              <Box sx={panelSx}>{footerText}</Box>
+              <Box sx={{ pointerEvents: 'auto' }}>{newGameButton}</Box>
+            </Box>
+          </>
+        )}
+
         {hand.player && !gameOver && <TurnBanner player={hand.player} onSkip={hand.clear} />}
 
         {gameOver && winner && (
@@ -482,18 +543,12 @@ export default function ArcheryWidget({ id }: WidgetProps) {
         )}
       </Box>
 
-      <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'center', px: 0.5 }}>
-        {gameOver && winner ? (
-          <PlayerBadge mark={winner} label="wins!" />
-        ) : (
-          <Typography variant="body2" color="text.secondary">
-            Drag to aim, release to fire
-          </Typography>
-        )}
-        <Button size="small" onClick={newGame}>
-          New game
-        </Button>
-      </Stack>
+      {!overlay && (
+        <Stack direction="row" sx={{ justifyContent: 'space-between', alignItems: 'center', px: 0.5 }}>
+          {footerText}
+          {newGameButton}
+        </Stack>
+      )}
 
       <ConfirmDialog
         open={pending !== null}
