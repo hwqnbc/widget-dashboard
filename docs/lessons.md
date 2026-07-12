@@ -148,3 +148,35 @@ reported and asked to fix, captured so they don't recur.
     so they scale with the viewBox. For deterministic tests, mirror the physics
     constants, solve a launch that lands in the target hitbox, and invert the
     slingshot mapping (`dragΔ = −v/K`) to synthesise the pointer drag.
+
+## Character figures (heads, hoods, action pivots)
+
+These bit us on **three** avatars in a row (Fire Ninja, DarkArin, frak). Read
+before drawing a new character.
+
+24. **Connect the head to the body — every time.** New heads keep coming out
+    *floating* above the torso with a neck gap. The head SVG is drawn high in the
+    240×380 space; the torso top is ~`y196`. **Fix (proven on DarkArin/FireNinja):**
+    draw a short neck rect (`~x111–129`, down to the torso top) **and** wrap the whole
+    head group in `<g transform="translate(0 N)">` (N ≈ 18–24) so the chin drops onto
+    the collar — near-zero visible neck. A collar shape at the torso top
+    (`characters/frak` uses a small `torsoShade` V) hides the seam. Always eyeball the
+    head↔torso join in the first render.
+25. **Heads read best faceted, short, and helmet-like.** A tall, round head looks
+    wrong at avatar scale (reads as a blob/hair). Prefer straight-edged facets (an
+    octagon-ish silhouette, like `DarkArinHead`) over smooth curves, and keep the head
+    **short** (minifig proportions) — squash it and pull the features up.
+26. **Match a hood/mask to the reference's coverage.** A hood drawn as two side
+    pieces framing an open face reads as *hair*. If the reference *covers* the face,
+    draw one continuous covering piece (crown + sides + jaw) with a **small face
+    opening** for the eyes/skin/wrap — see `frak`'s faceted hood over an orange face
+    patch with green eyes + wrap.
+27. **Pick the action's pivot to match the motion.** Whole-arm *swings* pivot at the
+    **shoulder**; *chops* and wrist flicks pivot at the **elbow** (draw a static upper
+    arm shoulder→elbow, rotate the forearm+weapon about the elbow, cap the joint with a
+    small circle). The wrong pivot makes an action read as a wave/flap — see the Fire
+    Ninja shoulder-vs-wrist sweep and frak's elbow chop. Long blades sweep out of the
+    viewBox fast, so keep blades short enough that the swing's extremes stay in-bounds
+    (lessons #4), and remember `Figure` (static) and `Celebration` (animated) are
+    separate renders — the rest pose can be posed independently of the animation's
+    endpoints.
