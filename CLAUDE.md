@@ -20,6 +20,21 @@ npm run lint     # ESLint 9 (flat config)
 There is no test runner configured yet. Verify changes with `npm run build`
 (catches type + bundling errors) and `npm run lint`.
 
+## Workflow
+
+**Always start from the latest `main`.** Before doing any work on a task, sync the
+current branch onto the newest `origin/main`:
+
+```bash
+git fetch origin main
+git rebase origin/main
+```
+
+Resolve any conflicts before continuing. If the working tree has uncommitted
+changes, stash first (`git stash`), rebase, then pop. Re-check before pushing if
+`main` may have moved. A merged branch is finished — restart it from `origin/main`
+rather than stacking new commits on already-merged history.
+
 ## Stack
 
 - Vite 8 + React 19 + TypeScript (strict, `verbatimModuleSyntax` — use
