@@ -10,9 +10,15 @@ const { browser, page } = await launch()
 await addDroneWidget(page)
 const { hud, telemetry } = readers(page)
 const toggle = page.locator('[data-testid="dronesim-weather-toggle"]')
-// Stable position read: two consecutive samples must agree, so a read can't
-// race a telemetry write; retries (loudly) if it hits the exact-spawn
-// signature seen in one flaky run while the previous sample sat elsewhere.
+// Plain read — for storm phases, where the drone is legitimately drifting.
+const posNow = async () => {
+  const t = await telemetry()
+  return { x: t.x, z: t.z }
+}
+// Stable position read — for clear phases (station-hold expected): two
+// consecutive samples must agree, so a read can't race a telemetry write;
+// retries (loudly) if it hits the exact-spawn signature seen in one flaky
+// run while the previous sample sat elsewhere.
 const pos = async (prev) => {
   for (let attempt = 0; attempt < 5; attempt++) {
     const a = await telemetry()
@@ -45,9 +51,9 @@ const wind = (await telemetry()).wind
 check('HUD reports live wind', wind > 0.2 && wind <= 4.6, `wind=${wind}`)
 check('HUD text includes WIND', (await hud.textContent()).includes('WIND'))
 
-const s0 = await pos()
+const s0 = await posNow()
 await page.waitForTimeout(3000)
-const s1 = await pos()
+const s1 = await posNow()
 const drift = Math.hypot(s1.x - s0.x, s1.z - s0.z)
 check('storm: drone drifts hands-off', drift > 1.0, `drift=${drift.toFixed(2)} over 3s`)
 
