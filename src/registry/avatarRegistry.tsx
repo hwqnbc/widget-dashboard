@@ -4,6 +4,7 @@ import { ToyHead, ToyFigure, ToyCelebration } from '../components/widgets/charac
 import { NinjaHead, NinjaFigure, NinjaCelebration } from '../components/widgets/characters/ninja'
 import { FireNinjaHead, FireNinjaFigure, FireNinjaCelebration } from '../components/widgets/characters/fireninja'
 import { DarkArinHead, DarkArinFigure, DarkArinCelebration } from '../components/widgets/characters/darkarin'
+import { FrakHead, FrakFigure, FrakCelebration } from '../components/widgets/characters/frak'
 
 /**
  * The visual pieces of an avatar, grouped: the head (used as the game chip/mark),
@@ -24,4 +25,5 @@ export const avatarVisualById: Record<AvatarId, AvatarVisual> = {
   ninja: { Head: NinjaHead, Figure: NinjaFigure, Celebration: NinjaCelebration },
   fireninja: { Head: FireNinjaHead, Figure: FireNinjaFigure, Celebration: FireNinjaCelebration },
   darkarin: { Head: DarkArinHead, Figure: DarkArinFigure, Celebration: DarkArinCelebration },
+  frak: { Head: FrakHead, Figure: FrakFigure, Celebration: FrakCelebration },
 }

@@ -13,7 +13,7 @@
  * `AvatarId` is the extension point — add a new figure here (and a catalog +
  * registry entry) to grow the roster.
  */
-export type AvatarId = 'toy' | 'ninja' | 'fireninja' | 'darkarin'
+export type AvatarId = 'toy' | 'ninja' | 'fireninja' | 'darkarin' | 'frak'
 
 /** The two immutable player seats. Same literals as the original player ids. */
 export type Seat = 'toy' | 'ninja'
@@ -22,7 +22,7 @@ export type Seat = 'toy' | 'ninja'
 export type SeatAvatars = Record<Seat, AvatarId>
 
 export const SEATS: Seat[] = ['toy', 'ninja']
-export const AVATAR_IDS: AvatarId[] = ['toy', 'ninja', 'fireninja', 'darkarin']
+export const AVATAR_IDS: AvatarId[] = ['toy', 'ninja', 'fireninja', 'darkarin', 'frak']
 
 /** Identity mapping — each seat shows its namesake avatar (the default look). */
 export const DEFAULT_SEAT_AVATARS: SeatAvatars = { toy: 'toy', ninja: 'ninja' }
