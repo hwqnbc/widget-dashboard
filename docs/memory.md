@@ -20,13 +20,19 @@ Ninja** (reusing the heads, `PlayerBadge`, and `WinnerCelebration`).
   (reshuffles) and is confirm-guarded mid-game — both route through
   `requestReset`.
 
-## Card faces — extensible registry
+## Card faces — every avatar head
 Card faces are **motif × background colour**; a pair = same `"motif:colour"`.
-- `MOTIF_BY_ID` / `FACE_MOTIFS` — the SVG motifs (currently `ToyHead`,
-  `NinjaHead`). **Add new SVGs here** to grow the pool.
-- `FACE_COLORS` — 9 distinct colours. `ALL_FACES` = colour × motif = 18 faces,
-  enough for 6×6. `buildDeck(size)` takes the first `size*size/2` faces,
-  duplicates, and Fisher–Yates shuffles (`Math.random`).
+- Motifs are **every registered avatar's head**, pulled straight from the avatar
+  registry: `MOTIF_BY_ID` is built from `AVATAR_IDS` → `avatarVisualById[id].Head`,
+  so adding an avatar grows the Memory pool automatically (no edit here needed).
+- `FACE_COLORS` — 9 distinct colours. `ALL_FACES` = avatar × colour (e.g. 5×9 = 45
+  faces), far more than the 18 pairs a 6×6 board needs. `buildDeck(size)` **randomly
+  samples** `size*size/2` distinct faces from the pool (shuffle-then-slice), lays each
+  out as a pair, and Fisher–Yates shuffles the positions — via a shared `shuffle`
+  helper (`Math.random`). So every deal varies and any avatar can appear.
+- `MemoryCard` flips (rotateY + `backfaceVisibility`, à la ImageToggle) between a
+  neutral "?" back and the face (coloured tile + a white disc holding the motif
+  head). Matched cards render as a faded empty slot.
 - `MemoryCard` flips (rotateY + `backfaceVisibility`, à la ImageToggle) between a
   neutral "?" back and the face (coloured tile + a white disc holding the motif
   head). Matched cards render as a faded empty slot.

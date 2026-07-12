@@ -128,8 +128,8 @@ Easy AI, 2-player vs vs-computer, the pass-opening-move button, board
 responsiveness, and the persisted state model). See `docs/connect-4.md` for the
 Connect 4 widget (7×6 board, depth-based Easy/Medium/Hard alpha-beta AI,
 animated disc drop; reuses the same modes, latency, pass button and glow). See
-`docs/memory.md` for the Memory widget (2-player pairs, 4×4/6×6, extensible
-motif×colour face registry, flip animation; reuses PlayerBadge, ConfirmDialog
+`docs/memory.md` for the Memory widget (2-player pairs, 4×4/6×6, card faces are
+every avatar head × colour sampled at random, flip animation; reuses PlayerBadge, ConfirmDialog
 and WinnerCelebration). See `docs/archery.md` for the Archery widget (2-player
 projectile game, drag-to-aim slingshot under gravity, random archer heights,
 first to 5 hits; reuses the heads, PlayerBadge, TurnBanner and WinnerCelebration).

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ComponentType } from 'react'
 import {
   Box,
   Button,
@@ -11,13 +11,13 @@ import { useAppDispatch } from '../../app/hooks'
 import { updateWidgetData } from '../../features/widgets/widgetsSlice'
 import { useWidgetField } from '../../features/widgets/useWidgetField'
 import type { WidgetProps } from '../../registry/widgetRegistry'
-import ToyHead from './characters/toy/ToyHead'
-import NinjaHead from './characters/ninja/NinjaHead'
 import PlayerBadge from './PlayerBadge'
 import WinnerCelebration from './WinnerCelebration'
 import ConfirmDialog from './ConfirmDialog'
 import TurnBanner from './TurnBanner'
 import { avatarMetaById } from '../../features/avatars/avatarCatalog'
+import { AVATAR_IDS } from '../../features/avatars/types'
+import { avatarVisualById } from '../../registry/avatarRegistry'
 import { useSeatAvatars } from '../../features/avatars/useSeatAvatars'
 import { useHandoff } from '../../hooks/useHandoff'
 
@@ -26,15 +26,20 @@ type Size = 4 | 6
 type Rule = 'again' | 'pass'
 type Scores = { toy: number; ninja: number }
 
-// Card-face motifs — an extensible registry; add new SVGs here to grow the pool.
-const MOTIF_BY_ID: Record<string, typeof ToyHead> = { toy: ToyHead, ninja: NinjaHead }
-const FACE_MOTIFS = ['toy', 'ninja']
+// Card-face motifs — every registered avatar's head, pulled straight from the
+// avatar registry, so adding an avatar grows the pool automatically.
+type HeadComponent = ComponentType<{ size?: number | string }>
+const MOTIF_BY_ID: Record<string, HeadComponent> = Object.fromEntries(
+  AVATAR_IDS.map((av) => [av, avatarVisualById[av].Head]),
+)
+const FALLBACK_HEAD: HeadComponent = avatarVisualById.toy.Head
 const FACE_COLORS = [
   '#d5504b', '#e5842a', '#f2b705', '#4a9d5b', '#16b3a3',
   '#3d7edb', '#5c5fd6', '#9b59b6', '#e0559b',
 ]
-// colour-outer, motif-inner → 18 distinct faces; a pair = same "motif:colour".
-const ALL_FACES = FACE_COLORS.flatMap((c) => FACE_MOTIFS.map((m) => `${m}:${c}`))
+// motif × colour → distinct faces; a pair = same "motif:colour". With every
+// avatar in the pool there are plenty for the 6×6 board (18 pairs).
+const ALL_FACES = AVATAR_IDS.flatMap((m) => FACE_COLORS.map((c) => `${m}:${c}`))
 
 // Stable fallbacks so useWidgetField selectors don't loop on fresh arrays.
 const NO_STR: string[] = []
@@ -42,14 +47,21 @@ const NO_BOOL: boolean[] = []
 const NO_NUM: number[] = []
 const ZERO: Scores = { toy: 0, ninja: 0 }
 
+/** Fisher–Yates shuffle, in place, returning the array for chaining. */
+function shuffle<T>(arr: T[]): T[] {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[arr[i], arr[j]] = [arr[j], arr[i]]
+  }
+  return arr
+}
+
 function buildDeck(size: Size): string[] {
   const pairs = (size * size) / 2
-  const deck = ALL_FACES.slice(0, pairs).flatMap((id) => [id, id])
-  for (let i = deck.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1))
-    ;[deck[i], deck[j]] = [deck[j], deck[i]]
-  }
-  return deck
+  // Randomly pick distinct faces from the full pool — so every game varies and
+  // any avatar can appear — then lay each out as a pair and shuffle positions.
+  const faces = shuffle(ALL_FACES.slice()).slice(0, pairs)
+  return shuffle(faces.flatMap((f) => [f, f]))
 }
 
 /** A single memory card: flips (rotateY) between a neutral back and the face
@@ -68,7 +80,7 @@ function MemoryCard({
   onClick: () => void
 }) {
   const [motifId, color] = faceId.split(':')
-  const Motif = MOTIF_BY_ID[motifId] ?? ToyHead
+  const Motif = MOTIF_BY_ID[motifId] ?? FALLBACK_HEAD
 
   if (matched) {
     return (
