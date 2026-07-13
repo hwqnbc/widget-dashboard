@@ -125,6 +125,17 @@ export const MAX_ATTITUDE_CAP = 0.65
 /** Expo curve: v' = v(1−e) + v³e. Endpoints (±1) are preserved. */
 export const applyExpo = (v: number, e: number) => v * (1 - e) + v * v * v * e
 
+// Ground effect / propwash: descending into the last stretch above a surface
+// (ground or a rooftop) rides a cushion of air — the descent rate damps
+// exponentially the closer the surface gets — and a firm touchdown bounces
+// back a little instead of stopping dead.
+export const GROUND_EFFECT_HEIGHT = 1.2
+/** Must comfortably beat RESPONSE_V (8), which keeps re-feeding the descent
+ * velocity toward the stick target every frame. */
+export const GROUND_EFFECT_STRENGTH = 14
+export const BOUNCE_FACTOR = 0.22
+export const BOUNCE_MIN_SPEED = 2
+
 // Battery mode: flying drains charge (harder flying drains faster), landing
 // on the spawn pad (or an active landing-challenge pad) recharges. An empty
 // battery kills the sticks and the drone auto-descends where it is.
@@ -271,8 +282,11 @@ export function resolveCollisions(
     const min = Math.min(pushWest, pushEast, pushNorth, pushSouth, pushUp)
     if (min === pushUp) {
       s.pos.y = c.top
-      impact = Math.max(impact, -Math.min(0, s.vel.y))
-      s.vel.y = Math.max(0, s.vel.y)
+      const downV = -Math.min(0, s.vel.y)
+      impact = Math.max(impact, downV)
+      // firm touchdowns bounce a little (propwash feel); soft ones settle
+      s.vel.y =
+        downV > BOUNCE_MIN_SPEED ? downV * BOUNCE_FACTOR : Math.max(0, s.vel.y)
     } else if (min === pushWest) {
       s.pos.x = c.minX
       impact = Math.max(impact, Math.max(0, s.vel.x))
@@ -364,6 +378,30 @@ export function stepFlight(
     s.vel.y = damp(s.vel.y, targetY, RESPONSE_V, step)
   }
 
+  // Ground effect: a descending drone rides a cushion in the last stretch
+  // above whatever surface is directly below (ground or a rooftop).
+  if (s.vel.y < 0) {
+    let rest = DRONE_RADIUS
+    for (const c of colliders) {
+      if (
+        s.pos.x > c.minX &&
+        s.pos.x < c.maxX &&
+        s.pos.z > c.minZ &&
+        s.pos.z < c.maxZ &&
+        s.pos.y >= c.top &&
+        c.top > rest
+      ) {
+        rest = c.top
+      }
+    }
+    const agl = s.pos.y - rest
+    if (agl > 0 && agl < GROUND_EFFECT_HEIGHT) {
+      s.vel.y *= Math.exp(
+        -GROUND_EFFECT_STRENGTH * (1 - agl / GROUND_EFFECT_HEIGHT) * step,
+      )
+    }
+  }
+
   s.pos.x += s.vel.x * step
   s.pos.y += s.vel.y * step
   s.pos.z += s.vel.z * step
@@ -389,7 +427,9 @@ export function stepFlight(
   }
   if (s.pos.y < DRONE_RADIUS) {
     s.pos.y = DRONE_RADIUS
-    s.vel.y = Math.max(0, s.vel.y)
+    const downV = -Math.min(0, s.vel.y)
+    s.vel.y =
+      downV > BOUNCE_MIN_SPEED ? downV * BOUNCE_FACTOR : Math.max(0, s.vel.y)
   } else if (s.pos.y > MAX_ALT) {
     s.pos.y = MAX_ALT
     s.vel.y = Math.min(0, s.vel.y)
