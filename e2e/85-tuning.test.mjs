@@ -4,7 +4,15 @@
  * the speed slider (and further with turbo), yaw rate scales heading change,
  * and settings survive a reload.
  */
-import { addDroneWidget, createPilot, launch, readers, reporter } from './helpers.mjs'
+import {
+  addDroneWidget,
+  closeSettings,
+  createPilot,
+  launch,
+  openSettings,
+  readers,
+  reporter,
+} from './helpers.mjs'
 
 const { check, finish } = reporter('tuning')
 const { browser, context, page } = await launch()
@@ -12,14 +20,8 @@ await addDroneWidget(page)
 const { telemetry } = readers(page)
 const pilot = await createPilot(page, context)
 
-const openPanel = async () => {
-  await page.locator('[data-testid="dronesim-tune"]').click()
-  await page.waitForSelector('[data-testid="dronesim-tune-panel"]')
-}
-const closePanel = async () => {
-  await page.keyboard.press('Escape')
-  await page.waitForTimeout(300)
-}
+const openPanel = () => openSettings(page)
+const closePanel = () => closeSettings(page)
 const setSlider = async (tid, fraction) => {
   const box = await page.locator(`[data-testid="${tid}"]`).boundingBox()
   await page.mouse.click(box.x + box.width * fraction, box.y + box.height / 2)
@@ -85,7 +87,7 @@ check('yaw x2 roughly doubles turn rate', fastYaw > baseYaw * 1.6, `${baseYaw.to
 // persistence
 await page.waitForTimeout(1600)
 await page.reload({ waitUntil: 'networkidle' })
-await page.waitForSelector('[data-testid="dronesim-tune"]')
+await page.waitForSelector('[data-testid="dronesim-settings"]')
 await openPanel()
 const speedVal = await page.locator('[data-testid="dronesim-tune-speed"] input').inputValue()
 const yawVal = await page.locator('[data-testid="dronesim-tune-yaw"] input').inputValue()

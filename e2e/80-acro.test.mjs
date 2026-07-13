@@ -5,16 +5,24 @@
  * the sticks and a cut throttle falls faster than hold's descent cap; in
  * hold the same inputs brake/limit. The mode persists across reloads.
  */
-import { addDroneWidget, createPilot, launch, readers, reporter } from './helpers.mjs'
+import {
+  addDroneWidget,
+  createPilot,
+  launch,
+  readers,
+  reporter,
+  rootState,
+  setSwitch,
+} from './helpers.mjs'
 
 const { check, finish } = reporter('acro')
 const { browser, context, page } = await launch()
 await addDroneWidget(page)
 const { telemetry } = readers(page)
 const pilot = await createPilot(page, context)
-const toggle = page.locator('[data-testid="dronesim-mode-toggle"]')
+const modeState = () => rootState(page, 'data-mode')
 
-check('defaults to beginner (hold) mode', (await toggle.getAttribute('data-mode')) === 'hold')
+check('defaults to beginner (hold) mode', (await modeState()) === 'hold')
 
 // baseline: hold mode brakes after release
 await pilot.touchStart()
@@ -30,9 +38,8 @@ check('hold: releasing the stick brakes to a stop', holdMoving > 8 && holdAfter 
 await pilot.touchEnd()
 
 // switch to acro
-await toggle.click()
-await page.waitForTimeout(300)
-check('toggle switches to acro', (await toggle.getAttribute('data-mode')) === 'acro')
+await setSwitch(page, 'dronesim-mode-toggle', true)
+check('toggle switches to acro', (await modeState()) === 'acro')
 
 // acro: momentum coasts after release
 await pilot.touchStart()
@@ -68,15 +75,11 @@ await pilot.touchEnd()
 // persistence
 await page.waitForTimeout(1600)
 await page.reload({ waitUntil: 'networkidle' })
-await page.waitForSelector('[data-testid="dronesim-mode-toggle"]')
-check(
-  'flight mode persists across reload',
-  (await page.locator('[data-testid="dronesim-mode-toggle"]').getAttribute('data-mode')) === 'acro',
-)
+await page.waitForSelector('[data-testid="dronesim-root"]')
+check('flight mode persists across reload', (await modeState()) === 'acro')
 
 // back to hold: descent is capped again
-await page.locator('[data-testid="dronesim-mode-toggle"]').click()
-await page.waitForTimeout(300)
-check('toggle returns to hold', (await page.locator('[data-testid="dronesim-mode-toggle"]').getAttribute('data-mode')) === 'hold')
+await setSwitch(page, 'dronesim-mode-toggle', false)
+check('toggle returns to hold', (await modeState()) === 'hold')
 
 await finish(browser)

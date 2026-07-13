@@ -243,3 +243,20 @@ feature rounds (flight, collision, gates, time trial, courses, weather, crash).
     `<line>` JSX element collides with the SVG intrinsic in TypeScript — build
     a `THREE.Line` imperatively and mount it with `<primitive>`, disposing
     geometry/material in the effect cleanup.
+
+36. **Per-feature icon toggles do not scale — regroup into a described**
+    **settings surface once they pass a handful.** Each Drone Sim feature
+    added "one more icon button" until eleven sat in the top-right corner:
+    unlabelled, cryptic, clipping at narrow card widths. Worse, a toggle
+    with a static icon gives **zero feedback** — the landing-challenge
+    button was reported "not working" when it worked perfectly; its effects
+    (rooftop pads ≥ 15 units away) were simply invisible from spawn and the
+    button itself never changed. Fixes: (a) keep only universal actions as
+    inline buttons (camera, reset, settings) and move every mode into a
+    grouped dialog of labelled Switch rows with one-line descriptions —
+    state becomes self-evident; (b) give distant world effects a visible
+    beacon (tall translucent column over each pad) so toggling produces
+    on-screen change; (c) mirror all mode state onto the widget root as
+    `data-*` attributes so tests read state without hunting buttons. Debug
+    "toggle does not work" reports empirically first — the state usually
+    flips fine and the real defect is missing feedback.

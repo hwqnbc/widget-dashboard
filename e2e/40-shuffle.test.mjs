@@ -8,6 +8,7 @@ import {
   ARTIFACTS_DIR,
   addDroneWidget,
   launch,
+  openSettings,
   readers,
   reporter,
   stickCenter,
@@ -21,16 +22,22 @@ const { hud, timerChip, gatesChip } = readers(page)
 
 const root = page.locator('[data-testid="dronesim-root"]')
 const seed = async () => await root.getAttribute('data-world-seed')
-const btn = page.locator('[data-testid="dronesim-new-course"]')
+// New-course lives in the settings panel; clicking it closes the panel itself
+const clickNewCourse = async () => {
+  await openSettings(page)
+  await page.locator('[data-testid="dronesim-new-course"]').click()
+  await page.waitForTimeout(500) // settings dialog exit transition
+}
+const confirmDialog = () => page.getByRole('dialog').filter({ hasText: 'New course?' })
 
 const seed0 = await seed()
 check('starts on the default seed', seed0 === String(DEFAULT_SEED), `seed=${seed0}`)
 await page.screenshot({ path: `${ARTIFACTS_DIR}course-default.png` })
 
 // no best lap yet -> shuffles immediately, no dialog
-await btn.click()
-await page.waitForTimeout(600)
-check('no confirm dialog without a best lap', (await page.getByRole('dialog').count()) === 0)
+await clickNewCourse()
+await page.waitForTimeout(300)
+check('no confirm dialog without a best lap', (await confirmDialog().count()) === 0)
 const seed1 = await seed()
 check('seed re-rolled', seed1 !== seed0, `${seed0} -> ${seed1}`)
 await page.waitForTimeout(1500)
@@ -45,15 +52,13 @@ await page.waitForTimeout(1500)
 await page.mouse.up()
 check('lap is running', (await timerChip.getAttribute('data-lap-status')) === 'running')
 
-await btn.click()
-await page.waitForTimeout(400)
-check('confirm dialog appears mid-lap', (await page.getByRole('dialog').count()) === 1)
+await clickNewCourse()
+check('confirm dialog appears mid-lap', (await confirmDialog().count()) === 1)
 await page.getByRole('button', { name: 'Keep course' }).click()
 await page.waitForTimeout(400)
 check('cancel keeps the seed', (await seed()) === seed1)
 
-await btn.click()
-await page.waitForTimeout(400)
+await clickNewCourse()
 await page.getByRole('button', { name: 'Shuffle' }).click()
 await page.waitForTimeout(600)
 const seed2 = await seed()

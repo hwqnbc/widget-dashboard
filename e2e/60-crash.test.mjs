@@ -10,6 +10,8 @@ import {
   launch,
   readers,
   reporter,
+  rootState,
+  setSwitch,
 } from './helpers.mjs'
 import { buildWorldLayout, DEFAULT_SEED } from './.bundle/worldLayout.js'
 
@@ -19,7 +21,7 @@ const B = buildWorldLayout(DEFAULT_SEED).buildings[0]
 const { browser, context, page } = await launch()
 await addDroneWidget(page)
 const { telemetry, timerChip } = readers(page)
-const toggle = page.locator('[data-testid="dronesim-crash-toggle"]')
+const crashState = () => rootState(page, 'data-crashes')
 const pilot = await createPilot(page, context)
 
 const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a))
@@ -54,7 +56,7 @@ async function flyAtBuilding(timeout = 25000) {
   return { sawCrash, stopped }
 }
 
-check('crash mode on by default', (await toggle.getAttribute('data-crashes')) === 'on')
+check('crash mode on by default', (await crashState()) === 'on')
 
 const run1 = await flyAtBuilding()
 check('impact triggered a tumble', run1.sawCrash)
@@ -74,9 +76,8 @@ check(
 )
 check('tumble state cleared', after.crash === 'none')
 
-await toggle.click()
-await page.waitForTimeout(300)
-check('toggle switches to safe mode', (await toggle.getAttribute('data-crashes')) === 'off')
+await setSwitch(page, 'dronesim-crash-toggle', false)
+check('toggle switches to safe mode', (await crashState()) === 'off')
 const run2 = await flyAtBuilding()
 check('safe mode: no tumble', !run2.sawCrash)
 check(
@@ -87,10 +88,7 @@ check(
 
 await page.waitForTimeout(1600)
 await page.reload({ waitUntil: 'networkidle' })
-await page.waitForSelector('[data-testid="dronesim-crash-toggle"]')
-check(
-  'safe mode persists across reload',
-  (await page.locator('[data-testid="dronesim-crash-toggle"]').getAttribute('data-crashes')) === 'off',
-)
+await page.waitForSelector('[data-testid="dronesim-root"]')
+check('safe mode persists across reload', (await crashState()) === 'off')
 
 await finish(browser)

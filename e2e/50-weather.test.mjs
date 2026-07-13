@@ -3,13 +3,21 @@
  * a clear-mode drone holds station), a live HUD wind readout, the dusk
  * visual, and persistence — and clearing the weather stops the drift.
  */
-import { ARTIFACTS_DIR, addDroneWidget, launch, readers, reporter } from './helpers.mjs'
+import {
+  ARTIFACTS_DIR,
+  addDroneWidget,
+  launch,
+  readers,
+  reporter,
+  rootState,
+  setSwitch,
+} from './helpers.mjs'
 
 const { check, finish } = reporter('weather')
 const { browser, page } = await launch()
 await addDroneWidget(page)
 const { hud, telemetry } = readers(page)
-const toggle = page.locator('[data-testid="dronesim-weather-toggle"]')
+const weatherState = () => rootState(page, 'data-weather')
 // Plain read — for storm phases, where the drone is legitimately drifting.
 const posNow = async () => {
   const t = await telemetry()
@@ -36,7 +44,7 @@ const pos = async (prev) => {
   return { x: t.x, z: t.z }
 }
 
-check('starts clear', (await toggle.getAttribute('data-weather')) === 'clear')
+check('starts clear', (await weatherState()) === 'clear')
 check('no wind readout when clear', (await telemetry()).wind === 0)
 
 const c0 = await pos()
@@ -44,9 +52,9 @@ await page.waitForTimeout(2500)
 const c1 = await pos()
 check('clear: drone holds station hands-off', Math.hypot(c1.x - c0.x, c1.z - c0.z) < 0.05, JSON.stringify({ c0, c1 }))
 
-await toggle.click()
-await page.waitForTimeout(600)
-check('toggle switches to storm', (await toggle.getAttribute('data-weather')) === 'storm')
+await setSwitch(page, 'dronesim-weather-toggle', true)
+await page.waitForTimeout(300)
+check('toggle switches to storm', (await weatherState()) === 'storm')
 const wind = (await telemetry()).wind
 check('HUD reports live wind', wind > 0.2 && wind <= 4.6, `wind=${wind}`)
 check('HUD text includes WIND', (await hud.textContent()).includes('WIND'))
@@ -62,13 +70,10 @@ await page.screenshot({ path: `${ARTIFACTS_DIR}weather-storm.png` })
 
 await page.waitForTimeout(1600)
 await page.reload({ waitUntil: 'networkidle' })
-await page.waitForSelector('[data-testid="dronesim-weather-toggle"]')
-check(
-  'weather persists across reload',
-  (await page.locator('[data-testid="dronesim-weather-toggle"]').getAttribute('data-weather')) === 'storm',
-)
+await page.waitForSelector('[data-testid="dronesim-root"]')
+check('weather persists across reload', (await weatherState()) === 'storm')
 
-await page.locator('[data-testid="dronesim-weather-toggle"]').click()
+await setSwitch(page, 'dronesim-weather-toggle', false)
 await page.waitForTimeout(800)
 const b0 = await pos()
 await page.waitForTimeout(2500)

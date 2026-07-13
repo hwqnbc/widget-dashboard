@@ -4,23 +4,32 @@
  * toggle persists. Death/revive timing lives in the pure-unit checks —
  * draining 100% to empty is too slow for E2E.
  */
-import { ARTIFACTS_DIR, addDroneWidget, createPilot, launch, readers, reporter } from './helpers.mjs'
+import {
+  ARTIFACTS_DIR,
+  addDroneWidget,
+  createPilot,
+  launch,
+  readers,
+  reporter,
+  rootState,
+  setSwitch,
+} from './helpers.mjs'
 
 const { check, finish } = reporter('battery')
 const { browser, context, page } = await launch()
 await addDroneWidget(page)
 const { telemetry } = readers(page)
 const pilot = await createPilot(page, context)
-const toggle = page.locator('[data-testid="dronesim-battery-toggle"]')
+const batteryState = () => rootState(page, 'data-battery')
 const level = async () =>
   parseFloat(await page.locator('[data-testid="dronesim-battery-fill"]').getAttribute('data-level'))
 
-check('battery mode off by default', (await toggle.getAttribute('data-battery')) === 'off')
+check('battery mode off by default', (await batteryState()) === 'off')
 check('no battery bar when off', (await page.locator('[data-testid="dronesim-battery"]').count()) === 0)
 
-await toggle.click()
-await page.waitForTimeout(600)
-check('toggle turns battery mode on', (await toggle.getAttribute('data-battery')) === 'on')
+await setSwitch(page, 'dronesim-battery-toggle', true)
+await page.waitForTimeout(400)
+check('toggle turns battery mode on', (await batteryState()) === 'on')
 check('bar appears full', (await level()) >= 98, `level=${await level()}`)
 
 // hard flying drains ~3%/s
@@ -55,18 +64,17 @@ await page.screenshot({ path: `${ARTIFACTS_DIR}battery.png` })
 // persistence of the toggle (level itself is transient by design)
 await page.waitForTimeout(1600)
 await page.reload({ waitUntil: 'networkidle' })
-await page.waitForSelector('[data-testid="dronesim-battery-toggle"]')
+await page.waitForSelector('[data-testid="dronesim-root"]')
 check(
   'battery mode persists across reload',
-  (await page.locator('[data-testid="dronesim-battery-toggle"]').getAttribute('data-battery')) === 'on',
+  (await batteryState()) === 'on',
 )
 check(
   'level restarts full after reload (transient)',
   (await level()) >= 98,
   `level=${await level()}`,
 )
-await page.locator('[data-testid="dronesim-battery-toggle"]').click()
-await page.waitForTimeout(400)
+await setSwitch(page, 'dronesim-battery-toggle', false)
 check(
   'toggling off removes the bar',
   (await page.locator('[data-testid="dronesim-battery"]').count()) === 0,

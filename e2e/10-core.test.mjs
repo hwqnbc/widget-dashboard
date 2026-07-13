@@ -6,8 +6,10 @@
 import {
   ARTIFACTS_DIR,
   addDroneWidget,
+  closeSettings,
   createPilot,
   launch,
+  openSettings,
   readers,
   reporter,
   stickCenter,
@@ -28,13 +30,31 @@ for (const tid of [
   'dronesim-joystick-right',
   'dronesim-view-toggle',
   'dronesim-reset',
-  'dronesim-new-course',
-  'dronesim-weather-toggle',
-  'dronesim-crash-toggle',
+  'dronesim-settings',
 ]) {
   const n = await page.locator(`[data-testid="${tid}"]`).count()
   check(`element ${tid} present`, n === 1, `count=${n}`)
 }
+// mode toggles + tuning + new-course live inside the settings panel
+await openSettings(page)
+for (const tid of [
+  'dronesim-mode-toggle',
+  'dronesim-crash-toggle',
+  'dronesim-landing-toggle',
+  'dronesim-battery-toggle',
+  'dronesim-weather-toggle',
+  'dronesim-rich-toggle',
+  'dronesim-minimap-toggle',
+  'dronesim-tune-speed',
+  'dronesim-tune-yaw',
+  'dronesim-tune-expo',
+  'dronesim-tune-turbo',
+  'dronesim-new-course',
+]) {
+  const n = await page.locator(`[data-testid="${tid}"]`).count()
+  check(`settings panel has ${tid}`, n === 1, `count=${n}`)
+}
+await closeSettings(page)
 const canvasSize = await page.evaluate(() => {
   const c = document.querySelector('[data-testid="dronesim-canvas"] canvas')
   return c ? { w: c.clientWidth, h: c.clientHeight } : null

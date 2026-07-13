@@ -11,6 +11,8 @@ import {
   launch,
   readers,
   reporter,
+  rootState,
+  setSwitch,
 } from './helpers.mjs'
 import { buildWorldLayout, DEFAULT_SEED } from './.bundle/worldLayout.js'
 
@@ -25,8 +27,8 @@ const { browser, context, page } = await launch()
 await addDroneWidget(page)
 const { telemetry } = readers(page)
 const pilot = await createPilot(page, context)
-const toggle = page.locator('[data-testid="dronesim-landing-toggle"]')
 const root = page.locator('[data-testid="dronesim-root"]')
+const landingState = () => rootState(page, 'data-landing')
 const best = async () => parseInt(await root.getAttribute('data-landing-best'), 10)
 const bannerText = () =>
   page
@@ -34,12 +36,11 @@ const bannerText = () =>
     .textContent({ timeout: 1500 })
     .catch(() => '')
 
-check('landing challenge off by default', (await toggle.getAttribute('data-landing')) === 'off')
+check('landing challenge off by default', (await landingState()) === 'off')
 check('no pad markers on the minimap when off', (await page.locator('[data-landing-pad]').count()) === 0)
 
-await toggle.click()
-await page.waitForTimeout(400)
-check('toggle turns it on', (await toggle.getAttribute('data-landing')) === 'on')
+await setSwitch(page, 'dronesim-landing-toggle', true)
+check('toggle turns it on', (await landingState()) === 'on')
 check(
   'minimap shows the pads',
   (await page.locator('[data-landing-pad]').count()) === L.landingPads.length,
@@ -52,12 +53,17 @@ const landOn = async (target) => {
   await pilot.brake()
   await pilot.flyTo({ x: target.x, y: target.top + 4, z: target.z }, { maxForward: 0.4 })
   await pilot.brake()
-  const deadline = Date.now() + 15000
+  // Hold full-down until the drone actually RESTS on the roof: the ground-
+  // effect cushion slows the last metre, so releasing early (e.g. at
+  // top + 0.4) lets altitude-hold capture it hovering just above the pad —
+  // no contact, no impact, no score.
+  const deadline = Date.now() + 20000
   while (Date.now() < deadline) {
     await pilot.touch(0, -1, 0, 0)
-    if ((await telemetry()).alt < target.top + 0.4) break
-    await page.waitForTimeout(150)
+    if ((await telemetry()).alt <= target.top + 0.05) break
+    await page.waitForTimeout(120)
   }
+  await page.waitForTimeout(300) // stay held through the touchdown frame
   await pilot.touch(0, 0, 0, 0)
   await page.waitForTimeout(800)
   await pilot.touchEnd()
@@ -82,14 +88,13 @@ check('best unchanged after plain-roof landing', (await best()) === b1)
 // persistence
 await page.waitForTimeout(1600)
 await page.reload({ waitUntil: 'networkidle' })
-await page.waitForSelector('[data-testid="dronesim-landing-toggle"]')
+await page.waitForSelector('[data-testid="dronesim-root"]')
 check(
   'toggle and best persist across reload',
-  (await page.locator('[data-testid="dronesim-landing-toggle"]').getAttribute('data-landing')) === 'on' &&
+  (await landingState()) === 'on' &&
     parseInt(await page.locator('[data-testid="dronesim-root"]').getAttribute('data-landing-best'), 10) === b1,
 )
-await page.locator('[data-testid="dronesim-landing-toggle"]').click()
-await page.waitForTimeout(400)
+await setSwitch(page, 'dronesim-landing-toggle', false)
 check(
   'toggling off hides the pads again',
   (await page.locator('[data-landing-pad]').count()) === 0,

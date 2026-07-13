@@ -10,6 +10,8 @@ import {
   launch,
   readers,
   reporter,
+  rootState,
+  setSwitch,
 } from './helpers.mjs'
 import { buildWorldLayout, DEFAULT_SEED } from './.bundle/worldLayout.js'
 
@@ -20,11 +22,11 @@ const { browser, context, page } = await launch()
 await addDroneWidget(page)
 const { telemetry } = readers(page)
 const minimap = page.locator('[data-testid="dronesim-minimap"]')
-const toggle = page.locator('[data-testid="dronesim-minimap-toggle"]')
 const marker = page.locator('[data-testid="dronesim-minimap-drone"]')
+const minimapState = () => rootState(page, 'data-minimap')
 
 check('minimap visible by default', (await minimap.count()) === 1)
-check('toggle reports on', (await toggle.getAttribute('data-minimap')) === 'on')
+check('toggle reports on', (await minimapState()) === 'on')
 
 const rects = await minimap.locator('rect').count()
 check('one rect per building', rects === L.buildings.length, `rects=${rects}`)
@@ -77,19 +79,17 @@ check('drone actually moved for the tracking test', Math.hypot(t1.x - t0.x, t1.z
 await page.screenshot({ path: `${ARTIFACTS_DIR}minimap.png` })
 
 // toggle off, persist, toggle back on
-await toggle.click()
-await page.waitForTimeout(300)
+await setSwitch(page, 'dronesim-minimap-toggle', false)
 check('toggle hides the minimap', (await minimap.count()) === 0)
 await page.waitForTimeout(1600)
 await page.reload({ waitUntil: 'networkidle' })
-await page.waitForSelector('[data-testid="dronesim-minimap-toggle"]')
+await page.waitForSelector('[data-testid="dronesim-root"]')
 check(
   'hidden state persists across reload',
   (await page.locator('[data-testid="dronesim-minimap"]').count()) === 0 &&
-    (await page.locator('[data-testid="dronesim-minimap-toggle"]').getAttribute('data-minimap')) === 'off',
+    (await minimapState()) === 'off',
 )
-await page.locator('[data-testid="dronesim-minimap-toggle"]').click()
-await page.waitForTimeout(300)
+await setSwitch(page, 'dronesim-minimap-toggle', true)
 check('re-toggling shows it again', (await page.locator('[data-testid="dronesim-minimap"]').count()) === 1)
 
 await finish(browser)

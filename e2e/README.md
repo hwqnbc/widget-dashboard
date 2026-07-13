@@ -24,6 +24,12 @@ The runner bundles the widget's pure modules (`flightModel`, `worldLayout`,
 from the real (seeded, deterministic) world layout. Screenshots land in
 `e2e/.artifacts/`. Both directories are gitignored.
 
+Mode toggles live in the **settings panel** (gear button → dialog), not the
+button row: suites flip them with `setSwitch(page, testId, desired)` from
+`helpers.mjs` (opens the panel, syncs the switch, closes it) and read current
+mode state from the widget root's `data-*` attributes via
+`rootState(page, attr)`.
+
 | Suite | Covers |
 |---|---|
 | `10-core` | element presence, climb + altitude hold, inertia braking, simultaneous multi-touch, reset, camera toggle + persistence, grid-drag isolation |

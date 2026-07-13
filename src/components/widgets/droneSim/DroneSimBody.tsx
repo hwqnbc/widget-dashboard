@@ -1,31 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas } from '@react-three/fiber'
-import {
-  Box,
-  IconButton,
-  Popover,
-  Slider,
-  Stack,
-  Switch,
-  Tooltip,
-  Typography,
-  alpha,
-  useTheme,
-} from '@mui/material'
+import { Box, IconButton, Tooltip, alpha, useTheme } from '@mui/material'
 import CameraswitchIcon from '@mui/icons-material/Cameraswitch'
 import RestartAltIcon from '@mui/icons-material/RestartAlt'
-import ShuffleIcon from '@mui/icons-material/Shuffle'
-import ThunderstormIcon from '@mui/icons-material/Thunderstorm'
-import WbSunnyIcon from '@mui/icons-material/WbSunny'
-import LocalFireDepartmentIcon from '@mui/icons-material/LocalFireDepartment'
-import ShieldIcon from '@mui/icons-material/Shield'
-import RocketLaunchIcon from '@mui/icons-material/RocketLaunch'
-import FlightIcon from '@mui/icons-material/Flight'
-import MapIcon from '@mui/icons-material/Map'
-import TuneIcon from '@mui/icons-material/Tune'
-import ForestIcon from '@mui/icons-material/Forest'
-import SportsScoreIcon from '@mui/icons-material/SportsScore'
-import BatteryChargingFullIcon from '@mui/icons-material/BatteryChargingFull'
+import SettingsIcon from '@mui/icons-material/Settings'
 import { useAppDispatch } from '../../../app/hooks'
 import { updateWidgetData } from '../../../features/widgets/widgetsSlice'
 import { useWidgetField } from '../../../features/widgets/useWidgetField'
@@ -67,6 +45,7 @@ import RainField from './RainField'
 import RichWorld from './RichWorld'
 import LandingPads from './LandingPads'
 import Minimap from './Minimap'
+import SettingsPanel from './SettingsPanel'
 import VirtualJoystick from './VirtualJoystick'
 
 const EMPTY_PATH: number[] = []
@@ -129,7 +108,11 @@ export default function DroneSimBody({ id }: WidgetProps) {
   const rateYaw = useWidgetField(id, 'rateYaw', 1, coerceRate)
   const stickExpo = useWidgetField(id, 'stickExpo', 0, coerceExpo)
   const turbo = useWidgetField(id, 'turbo', false)
-  const [tuneAnchor, setTuneAnchor] = useState<HTMLElement | null>(null)
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  // Toggling battery mode always restarts from a full charge.
+  useEffect(() => {
+    resetBatteryState(batteryRef.current)
+  }, [battery])
   const tuning = useMemo<Tuning>(() => {
     const boost = turbo ? TURBO_BOOST : 1
     return {
@@ -287,6 +270,14 @@ export default function DroneSimBody({ id }: WidgetProps) {
       data-widget-id={id}
       data-world-seed={worldSeed}
       data-landing-best={landingBest}
+      data-mode={flightMode}
+      data-crashes={crashes ? 'on' : 'off'}
+      data-landing={landing ? 'on' : 'off'}
+      data-battery={battery ? 'on' : 'off'}
+      data-weather={weather}
+      data-rich={richWorld ? 'on' : 'off'}
+      data-minimap={minimap ? 'on' : 'off'}
+      data-turbo={turbo ? 'on' : 'off'}
       onMouseDown={(e) => e.stopPropagation()}
       onTouchStart={(e) => e.stopPropagation()}
       sx={{
@@ -505,220 +496,38 @@ export default function DroneSimBody({ id }: WidgetProps) {
             <RestartAltIcon fontSize="small" />
           </IconButton>
         </Tooltip>
-        <Tooltip title={weather === 'storm' ? 'Clear weather' : 'Storm weather (wind + rain)'}>
+        <Tooltip title="Settings (modes, environment, tuning)">
           <IconButton
             size="small"
-            data-testid="dronesim-weather-toggle"
-            data-weather={weather}
-            aria-pressed={weather === 'storm'}
-            onClick={() =>
-              dispatch(
-                updateWidgetData({
-                  id,
-                  data: { weather: weather === 'storm' ? 'clear' : 'storm' },
-                }),
-              )
-            }
+            data-testid="dronesim-settings"
+            onClick={() => setSettingsOpen(true)}
             sx={{ color: '#fff' }}
           >
-            {weather === 'storm' ? (
-              <WbSunnyIcon fontSize="small" />
-            ) : (
-              <ThunderstormIcon fontSize="small" />
-            )}
-          </IconButton>
-        </Tooltip>
-        <Tooltip title={battery ? 'Unlimited power' : 'Battery mode (land on pads to recharge)'}>
-          <IconButton
-            size="small"
-            data-testid="dronesim-battery-toggle"
-            data-battery={battery ? 'on' : 'off'}
-            aria-pressed={battery}
-            onClick={() => {
-              resetBatteryState(batteryRef.current)
-              dispatch(updateWidgetData({ id, data: { battery: !battery } }))
-            }}
-            sx={{ color: '#fff' }}
-          >
-            <BatteryChargingFullIcon fontSize="small" />
-          </IconButton>
-        </Tooltip>
-        <Tooltip title={landing ? 'End landing challenge' : 'Landing challenge (rooftop pads)'}>
-          <IconButton
-            size="small"
-            data-testid="dronesim-landing-toggle"
-            data-landing={landing ? 'on' : 'off'}
-            aria-pressed={landing}
-            onClick={() =>
-              dispatch(updateWidgetData({ id, data: { landing: !landing } }))
-            }
-            sx={{ color: '#fff' }}
-          >
-            <SportsScoreIcon fontSize="small" />
-          </IconButton>
-        </Tooltip>
-        <Tooltip title={richWorld ? 'Plain world (fewer objects)' : 'Rich world (trees, roads, clouds)'}>
-          <IconButton
-            size="small"
-            data-testid="dronesim-rich-toggle"
-            data-rich={richWorld ? 'on' : 'off'}
-            aria-pressed={richWorld}
-            onClick={() =>
-              dispatch(updateWidgetData({ id, data: { richWorld: !richWorld } }))
-            }
-            sx={{ color: '#fff' }}
-          >
-            <ForestIcon fontSize="small" />
-          </IconButton>
-        </Tooltip>
-        <Tooltip title="Tuning (rates & expo)">
-          <IconButton
-            size="small"
-            data-testid="dronesim-tune"
-            onClick={(e) => setTuneAnchor(e.currentTarget)}
-            sx={{ color: '#fff' }}
-          >
-            <TuneIcon fontSize="small" />
-          </IconButton>
-        </Tooltip>
-        <Tooltip title={minimap ? 'Hide minimap' : 'Show minimap'}>
-          <IconButton
-            size="small"
-            data-testid="dronesim-minimap-toggle"
-            data-minimap={minimap ? 'on' : 'off'}
-            aria-pressed={minimap}
-            onClick={() =>
-              dispatch(updateWidgetData({ id, data: { minimap: !minimap } }))
-            }
-            sx={{ color: '#fff' }}
-          >
-            <MapIcon fontSize="small" />
-          </IconButton>
-        </Tooltip>
-        <Tooltip
-          title={
-            flightMode === 'acro'
-              ? 'Beginner mode (altitude hold)'
-              : 'Acro mode (gravity + attitude thrust)'
-          }
-        >
-          <IconButton
-            size="small"
-            data-testid="dronesim-mode-toggle"
-            data-mode={flightMode}
-            aria-pressed={flightMode === 'acro'}
-            onClick={() =>
-              dispatch(
-                updateWidgetData({
-                  id,
-                  data: { flightMode: flightMode === 'acro' ? 'hold' : 'acro' },
-                }),
-              )
-            }
-            sx={{ color: '#fff' }}
-          >
-            {flightMode === 'acro' ? (
-              <FlightIcon fontSize="small" />
-            ) : (
-              <RocketLaunchIcon fontSize="small" />
-            )}
-          </IconButton>
-        </Tooltip>
-        <Tooltip title={crashes ? 'Safe mode (no crashes)' : 'Crash mode (hard impacts tumble)'}>
-          <IconButton
-            size="small"
-            data-testid="dronesim-crash-toggle"
-            data-crashes={crashes ? 'on' : 'off'}
-            aria-pressed={crashes}
-            onClick={() =>
-              dispatch(updateWidgetData({ id, data: { crashes: !crashes } }))
-            }
-            sx={{ color: '#fff' }}
-          >
-            {crashes ? (
-              <ShieldIcon fontSize="small" />
-            ) : (
-              <LocalFireDepartmentIcon fontSize="small" />
-            )}
-          </IconButton>
-        </Tooltip>
-        <Tooltip title="New course (shuffle buildings & gates)">
-          <IconButton
-            size="small"
-            data-testid="dronesim-new-course"
-            onClick={requestShuffle}
-            sx={{ color: '#fff' }}
-          >
-            <ShuffleIcon fontSize="small" />
+            <SettingsIcon fontSize="small" />
           </IconButton>
         </Tooltip>
       </Box>
 
-      <Popover
-        open={Boolean(tuneAnchor)}
-        anchorEl={tuneAnchor}
-        onClose={() => setTuneAnchor(null)}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-        transformOrigin={{ vertical: 'top', horizontal: 'right' }}
-      >
-        <Stack spacing={1} sx={{ p: 2, width: 240 }} data-testid="dronesim-tune-panel">
-          <Typography variant="caption" color="text.secondary">
-            {`Max speed ×${rateSpeed.toFixed(1)}`}
-          </Typography>
-          <Slider
-            data-testid="dronesim-tune-speed"
-            size="small"
-            min={0.5}
-            max={2}
-            step={0.1}
-            value={rateSpeed}
-            onChange={(_, v) =>
-              dispatch(updateWidgetData({ id, data: { rateSpeed: v as number } }))
-            }
-          />
-          <Typography variant="caption" color="text.secondary">
-            {`Yaw rate ×${rateYaw.toFixed(1)}`}
-          </Typography>
-          <Slider
-            data-testid="dronesim-tune-yaw"
-            size="small"
-            min={0.5}
-            max={2}
-            step={0.1}
-            value={rateYaw}
-            onChange={(_, v) =>
-              dispatch(updateWidgetData({ id, data: { rateYaw: v as number } }))
-            }
-          />
-          <Typography variant="caption" color="text.secondary">
-            {`Stick expo ${Math.round(stickExpo * 100)}%`}
-          </Typography>
-          <Slider
-            data-testid="dronesim-tune-expo"
-            size="small"
-            min={0}
-            max={0.8}
-            step={0.05}
-            value={stickExpo}
-            onChange={(_, v) =>
-              dispatch(updateWidgetData({ id, data: { stickExpo: v as number } }))
-            }
-          />
-          <Stack direction="row" sx={{ alignItems: 'center', justifyContent: 'space-between' }}>
-            <Typography variant="caption" color="text.secondary">
-              {`Turbo (+40% speed & yaw)`}
-            </Typography>
-            <Switch
-              size="small"
-              data-testid="dronesim-tune-turbo"
-              checked={turbo}
-              onChange={(_, v) =>
-                dispatch(updateWidgetData({ id, data: { turbo: v } }))
-              }
-            />
-          </Stack>
-        </Stack>
-      </Popover>
+      <SettingsPanel
+        id={id}
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        flightMode={flightMode}
+        crashes={crashes}
+        landing={landing}
+        battery={battery}
+        weather={weather}
+        richWorld={richWorld}
+        minimap={minimap}
+        rateSpeed={rateSpeed}
+        rateYaw={rateYaw}
+        stickExpo={stickExpo}
+        turbo={turbo}
+        onNewCourse={() => {
+          setSettingsOpen(false)
+          requestShuffle()
+        }}
+      />
 
       <ConfirmDialog
         open={confirmShuffle}

@@ -87,6 +87,35 @@ export function readers(page) {
   }
 }
 
+/** Open the settings dialog (all mode toggles + tuning live in it now). */
+export async function openSettings(page) {
+  await page.locator('[data-testid="dronesim-settings"]').click()
+  await page.waitForSelector('[data-testid="dronesim-settings-panel"]')
+  await page.waitForTimeout(250) // dialog enter transition
+}
+
+export async function closeSettings(page) {
+  await page.keyboard.press('Escape')
+  await page.waitForTimeout(350) // dialog exit transition
+}
+
+/** Set a settings switch to the desired state (opens/closes the panel). */
+export async function setSwitch(page, testId, desired) {
+  await openSettings(page)
+  const input = page.locator(`[data-testid="${testId}"] input`)
+  if ((await input.isChecked()) !== desired) {
+    await input.click()
+    await page.waitForTimeout(150)
+  }
+  await closeSettings(page)
+}
+
+/** Mode state attributes are mirrored on the widget root (readable any time,
+ * unlike the switches which only exist while the panel is open). */
+export async function rootState(page, attr) {
+  return await page.locator('[data-testid="dronesim-root"]').getAttribute(attr)
+}
+
 export async function stickCenter(page, tid) {
   return await page
     .locator(`[data-testid="${tid}"] > div`)

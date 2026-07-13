@@ -20,8 +20,33 @@ city with twin on-screen thumbsticks, in third-person chase or first-person
 | Left (`THR · YAW`) | yaw rate (right = nose right) | vertical velocity (up = climb) |
 | Right (`MOVE`) | strafe | forward / backward |
 
-Top-right buttons: camera toggle (`tp` chase ↔ `fp` FPV, persisted) and
-reset (back to the landing pad, transient).
+Top-right buttons — only three, deliberately: camera toggle (`tp` chase ↔
+`fp` FPV, persisted), reset (back to the landing pad, transient), and a
+settings gear that opens the **settings panel** (below). Every mode toggle
+lives in the panel, not in the button row.
+
+## Settings panel (`SettingsPanel.tsx`)
+
+A portaled MUI `Dialog` (the ConfirmDialog pattern — works at any widget
+size, scrolls when short). Each mode is a labelled switch row with a
+one-line description, grouped by concern:
+
+- **Gameplay**: Acro flight mode, Crash & respawn, Landing challenge,
+  Battery mode.
+- **Environment**: Storm weather, Rich scenery, Minimap.
+- **Tuning**: the speed/yaw/expo sliders and the Turbo switch (formerly a
+  separate popover).
+- **Course**: the New course action button (confirm-guarded re-roll).
+
+The panel reads current values as props from `DroneSimBody` and dispatches
+`updateWidgetData` itself. The original per-toggle `data-testid`s moved onto
+the switch rows unchanged, and the widget root mirrors every mode as
+`data-mode/-crashes/-landing/-battery/-weather/-rich/-minimap/-turbo`
+attributes — the E2E contract reads state from the root and flips switches
+through the panel. History note: each feature originally added its own
+icon-toggle to the button row; at 11 buttons that stopped scaling (and a
+static icon gives no on/off feedback — the landing toggle "didn't work"
+purely because nothing visible changed), hence the regroup (lessons #36).
 
 ## Flight model (`flightModel.ts`)
 
@@ -47,7 +72,7 @@ Speeds: `MAX_HORIZ_SPEED 12`, `MAX_VERT_SPEED 5` world-units/s.
 
 ### Acro mode (manual flight)
 
-The rocket/plane toggle switches persisted `flightMode: 'hold' | 'acro'`
+The settings panel's flight-mode switch flips persisted `flightMode: 'hold' | 'acro'`
 (default `hold` — the beginner model above). In acro the drone becomes a
 thrust vector under **real gravity** (`GRAVITY 14`):
 
@@ -65,7 +90,7 @@ thrust vector under **real gravity** (`GRAVITY 14`):
 
 ### Weather (storm mode)
 
-The cloud/sun button toggles persisted `weather: 'clear' | 'storm'`. Storm
+The storm-weather switch toggles persisted `weather: 'clear' | 'storm'`. Storm
 mode swaps in `DUSK_PALETTE` (dim sun via the palette's `sunIntensity`),
 mounts `RainField` — one 800-point `Points` cloud kept centred on the drone,
 drops falling and drifting with the wind, wrapping within a fixed volume,
@@ -96,8 +121,8 @@ on purpose.
 
 `resolveCollisions` returns the velocity magnitude it absorbed — the impact
 speed. With crash mode on (persisted `crashes: boolean`, default true,
-shield/fire toggle button) an impact ≥ `CRASH_SPEED` (8 u/s) triggers a
-crash: full-tilt horizontal flight is 12 while max vertical is 5, so
+settings-panel switch) an impact ≥ `CRASH_SPEED` (8 u/s) triggers a
+crash — full-tilt horizontal flight is 12 while max vertical is 5, so
 rooftop/ground landings and gentle bumps can never crash — only committed
 wall hits. The tumble (`stepCrash`, `CRASH_DURATION` 1.6 s) kills the
 controls, skids the horizontal velocity down, applies fake gravity with one
@@ -136,7 +161,7 @@ in refs (`FlightState`, `ControlInput`).
 - **Seeded layouts**: `buildWorldLayout(seed)` deterministically produces
   buildings, rings, colliders and gates from one mulberry32 stream; the
   widget's persisted `worldSeed` (default `DEFAULT_SEED`) recreates its
-  course across reloads. The **new-course button** (shuffle icon) re-rolls
+  course across reloads. The **New course** button (settings panel) re-rolls
   the seed — `Math.random` in the click handler, which the purity rule
   allows — and clears laps/best/ghost (a ghost through relocated rings is
   meaningless), confirm-guarded via `ConfirmDialog` when a best lap exists
@@ -213,7 +238,7 @@ One default camera (`fov 60`), moved per frame with preallocated temps:
 Root Box: `widget-no-drag` + both `onMouseDown`/`onTouchStart`
 stopPropagation (lessons #6), `overflow: hidden` (lessons #4), canvas in an
 absolute-inset box (R3F's own resize observer follows react-grid-layout).
-Overlays: HUD chip top-left, camera/reset buttons top-right, sticks in the
+Overlays: HUD chip top-left, camera/reset/settings buttons top-right, sticks in the
 bottom corners (88 px; 140 px + safe-area insets in fullscreen via
 `usePresentation()`). Catalog sets `preferredOrientation: 'landscape'` for
 the fullscreen rotate hint; fullscreen re-mounts the single live instance in
@@ -236,7 +261,7 @@ friendlier, which is intended.
 
 ## Battery / range mode
 
-The battery button toggles persisted `battery: boolean` (default off). While
+The battery switch toggles persisted `battery: boolean` (default off). While
 on, a HUD bar (top-left, tick-written width/colour + `data-level`) drains at
 `0.8 %/s` base plus up to `2.2 %/s` with stick effort — a full charge is
 roughly 35–75 s of flying, forcing route planning. **Recharge** (25 %/s)
@@ -251,12 +276,15 @@ transient — a reload starts full, like the rest of the live sim state.
 
 ## Landing challenge
 
-The checkered-flag button toggles persisted `landing: boolean` (default off).
+The landing-challenge switch toggles persisted `landing: boolean` (default off).
 Three **rooftop pads** are seeded per course (`buildLandingPads`, drawn after
 all other world data so existing seeds keep their exact worlds): buildings
 6–16 tall with roomy roofs, skipping any that carry antenna/tank details,
 pads ≥ 20 apart and ≥ 15 from the spawn pad. Active pads render as pulsing
-cyan discs (`LandingPads`) and appear on the minimap. **Touchdown detection**
+cyan discs (`LandingPads`) topped by a tall translucent **light beacon**
+(open-ended cylinder, no depth write) so they read from anywhere on the map
+— the pads sit ≥ 15 units from spawn, and without the beacons switching the
+mode on showed nothing in view. They also appear on the minimap. **Touchdown detection**
 reuses the collision impact: when an airborne drone settles onto a pad's
 roof-rest height inside the disc, `scoreLanding(dist, r, touchdownSpeed)` =
 `clamp(100 − 40·dist/r − 6·speed, 10, 100)` — precision and softness both
@@ -267,7 +295,7 @@ lives in the non-crash branch.
 
 ## Rich world (scenery layer)
 
-The forest button toggles persisted `richWorld: boolean` (default on): roads
+The rich-scenery switch toggles persisted `richWorld: boolean` (default on): roads
 with moving traffic dots, ~40 instanced trees, rooftop antennas/tanks on tall
 buildings, and slowly drifting clouds. All of it is **seeded** —
 `buildWorldLayout` draws the extras from the PRNG stream *after* buildings
@@ -282,7 +310,7 @@ non-colliding by design.
 
 ## Tuning panel (rates & expo)
 
-The tune button opens a Popover with per-widget persisted controls:
+The settings panel's Tuning group holds per-widget persisted controls:
 `rateSpeed` (×0.5–2, hold-mode target speeds; acro attitude authority — capped
 at 0.65 rad — and speed cap), `rateYaw` (×0.5–2), `stickExpo` (0–80%, RC-style
 `v' = v(1−e) + v³e`, softening the stick centre while preserving the ends),
@@ -296,7 +324,7 @@ positional callers and old tests valid). Faster settings raise crash risk —
 
 ## Minimap
 
-A toggleable (persisted `minimap: boolean`, default on, map button) top-down
+A toggleable (persisted `minimap: boolean`, default on, settings-panel switch) top-down
 SVG inset at the bottom centre. `viewBox` spans the world bounds with
 svgX = worldX / svgY = worldZ, so the spawn heading (−Z) points up. Buildings
 render as one group of rects, gates as circles coloured by course state
@@ -338,9 +366,9 @@ plus the `data-testid` hooks are the widget's **public test contract**.
 ## E2E test suites (`e2e/`)
 
 `npm run e2e` (optionally `npm run e2e <filter>`) bundles the pure sim
-modules with esbuild, starts a dev server, and runs six headless-Chromium
-suites — core flight, rooftop collision, the full time-trial lap, course
-shuffling, storm weather, and crash/respawn. Flight is driven **closed-loop**
+modules with esbuild, starts a dev server, and runs the headless-Chromium
+suites — one per feature area (see `e2e/README.md` for the full map).
+Flight is driven **closed-loop**
 (a P-controller over the telemetry attributes steering CDP touch events);
 see `e2e/README.md` for the suite map and environment knobs
 (`CHROMIUM_PATH`, `E2E_PORT`). Chromium is launched with

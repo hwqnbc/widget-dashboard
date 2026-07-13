@@ -1,5 +1,6 @@
 import { useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
+import { DoubleSide } from 'three'
 import type { MeshStandardMaterial } from 'three'
 import type { LandingPadSpec } from './worldLayout'
 
@@ -42,6 +43,17 @@ export default function LandingPads({
           <mesh rotation-x={-Math.PI / 2} position={[0, 0.01, 0]}>
             <ringGeometry args={[p.r * 0.35, p.r * 0.45, 28]} />
             <meshStandardMaterial color="#ffffff" transparent opacity={0.9} />
+          </mesh>
+          {/* light beacon: makes active pads findable from across the map */}
+          <mesh position={[0, 13, 0]}>
+            <cylinderGeometry args={[0.5, 0.5, 26, 12, 1, true]} />
+            <meshBasicMaterial
+              color={PAD_COLOR}
+              transparent
+              opacity={0.12}
+              depthWrite={false}
+              side={DoubleSide}
+            />
           </mesh>
         </group>
       ))}
