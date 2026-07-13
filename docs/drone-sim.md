@@ -251,6 +251,15 @@ The view button cycles `tp → fp → los → tp` (persisted `view`):
 - **`tp` chase** (default): desired = drone pos + yaw-rotated `(0, 2.4, 6)`
   (+Z body = behind), damped per axis (λ = 4), then `lookAt` slightly above
   the drone. The lag is deliberate — it makes yaw and speed readable.
+  **Wall avoidance**: every frame the drone→camera segment is swept against
+  the building colliders (`boomClipT`, a pure slab-method segment/AABB test
+  in `flightModel.ts`) and the boom shortens to just ahead of the first hit
+  (margin 0.4 so the near plane never clips the wall, floor 0.8 so it never
+  sits inside the drone). The *damped* position is what gets clamped, so no
+  wall can come between drone and camera, and when the obstruction clears
+  the damper re-extends the boom on its own. The live boom length is
+  mirrored as `data-boom` on the HUD (throttled) — the test contract for
+  the `15-chasecam` suite.
 - **`fp` FPV**: rigid at the nose `(0, 0.06, −0.35)`; orientation
   `Euler(tiltPitch·0.6, yaw, 0, 'YXZ')` — partial pitch for feel, **no
   roll** (nausea). Switching modes needs no snap handling: `tp` re-converges
@@ -419,9 +428,6 @@ from the enhancement menu, with the integration point each would build on.
 - **Keyboard controls** — WASD + arrows writing the same ref (desktop).
 
 ### Camera & visuals
-- **Chase-camera building avoidance** — the third-person boom can clip
-  through walls; sweep the camera offset against `COLLIDERS` (same AABB
-  math) and shorten the boom on obstruction.
 - **FPV polish** — subtle throttle shake, optional roll in FPV (acro feel),
   horizon indicator.
 - **Rain streaks** — upgrade `RainField` points to short line segments.

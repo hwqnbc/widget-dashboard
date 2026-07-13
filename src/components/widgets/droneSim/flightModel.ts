@@ -314,6 +314,73 @@ export function resolveCollisions(
   return impact
 }
 
+/**
+ * Earliest interpolation factor t ∈ (0, 1] where the segment from→to enters
+ * any collider box (buildings span y = 0..top), or 1 if the path is clear.
+ * Slab method, allocation-free. Used by the chase camera to shorten its boom
+ * instead of clipping through walls. A t of exactly 0 (`from` resting on an
+ * inflated face — the drone can touch a wall) is treated as clear: the
+ * resolve pass keeps the drone out of interiors.
+ */
+export function boomClipT(
+  from: Vec3,
+  to: Vec3,
+  colliders: readonly Collider[],
+): number {
+  const dx = to.x - from.x
+  const dy = to.y - from.y
+  const dz = to.z - from.z
+  let best = 1
+  for (const c of colliders) {
+    let t0 = 0
+    let t1 = best
+    if (dx === 0) {
+      if (from.x <= c.minX || from.x >= c.maxX) continue
+    } else {
+      let tA = (c.minX - from.x) / dx
+      let tB = (c.maxX - from.x) / dx
+      if (tA > tB) {
+        const tmp = tA
+        tA = tB
+        tB = tmp
+      }
+      if (tA > t0) t0 = tA
+      if (tB < t1) t1 = tB
+      if (t0 > t1) continue
+    }
+    if (dy === 0) {
+      if (from.y <= 0 || from.y >= c.top) continue
+    } else {
+      let tA = (0 - from.y) / dy
+      let tB = (c.top - from.y) / dy
+      if (tA > tB) {
+        const tmp = tA
+        tA = tB
+        tB = tmp
+      }
+      if (tA > t0) t0 = tA
+      if (tB < t1) t1 = tB
+      if (t0 > t1) continue
+    }
+    if (dz === 0) {
+      if (from.z <= c.minZ || from.z >= c.maxZ) continue
+    } else {
+      let tA = (c.minZ - from.z) / dz
+      let tB = (c.maxZ - from.z) / dz
+      if (tA > tB) {
+        const tmp = tA
+        tA = tB
+        tB = tmp
+      }
+      if (tA > t0) t0 = tA
+      if (tB < t1) t1 = tB
+      if (t0 > t1) continue
+    }
+    if (t0 > 0 && t0 < best) best = t0
+  }
+  return best
+}
+
 export function stepFlight(
   s: FlightState,
   input: ControlInput,

@@ -403,7 +403,12 @@ export default function DroneSimBody({ id }: WidgetProps) {
             bestLapMs={bestLapMs}
             onLapComplete={onLapComplete}
           />
-          <CameraRig view={view} flight={flight} />
+          <CameraRig
+            view={view}
+            flight={flight}
+            colliders={layout.colliders}
+            hudRef={hudRef}
+          />
         </Canvas>
       </Box>
 
@@ -417,6 +422,7 @@ export default function DroneSimBody({ id }: WidgetProps) {
         data-yaw="0.000"
         data-wind="0"
         data-crash-state="none"
+        data-boom="6.5"
         sx={{
           position: 'absolute',
           top: 8,
