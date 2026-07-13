@@ -36,7 +36,9 @@ one-line description, grouped by concern:
 - **Environment**: Storm weather, Rich scenery, Minimap.
 - **Tuning**: the speed/yaw/expo sliders and the Turbo switch (formerly a
   separate popover).
-- **Course**: the New course action button (confirm-guarded re-roll).
+- **Course**: the gates-per-lap slider (3–6) and the New course action
+  button. Both destroy the recorded best (and any lap in progress), so both
+  route through the same confirm guard.
 
 The panel reads current values as props from `DroneSimBody` and dispatches
 `updateWidgetData` itself. The original per-toggle `data-testid`s moved onto
@@ -185,9 +187,23 @@ in refs (`FlightState`, `ControlInput`).
 
 ## Time trial (gates + lap timer + ghost)
 
-A lap runs **pad → gate 1 → 2 → 3 → back to the pad**, timed from the moment
-the drone leaves the landing-pad radius (`lapTimer.ts`, a pure mutate-in-place
-state machine like `stepFlight`, clocked by `performance.now()`).
+A lap runs **pad → gate 1 → … → gate N → back to the pad**, timed from the
+moment the drone leaves the landing-pad radius (`lapTimer.ts`, a pure
+mutate-in-place state machine like `stepFlight`, clocked by
+`performance.now()`).
+
+**Lap length is configurable** — persisted `gateCount` (3–6, default 3, the
+Course slider in the settings panel). `buildWorldLayout(seed, gateCount)`
+draws extra rings from the PRNG stream **after** every other world table
+(the same stream-append rule the rich-world data followed), so a seed's
+city, classic course, scenery and landing pads are bit-identical at any
+count — the lap just grows rings 4–6, rejection-sampled under the usual
+constraints (clear of spawn, ≥ 18 apart, never intersecting a building,
+hand-placed fallbacks if sampling exhausts). Everything downstream keys on
+`gates.length`, so the chip (`GATE n/N`), minimap, sequencing and
+return-to-pad phase follow automatically. Changing the count rebuilds the
+course, so it clears laps/best/ghost through the same confirm guard as the
+new-course shuffle.
 
 - **Gates**: `worldLayout.ts` derives a `Gate { center, normal, passRadius }`
   per ring; `crossedGate` detects a plane crossing of the frame's movement
@@ -397,8 +413,9 @@ from the enhancement menu, with the integration point each would build on.
   racing you; `bestLapPath` already carries the positions, add per-sample
   timestamps (or rely on the fixed 150 ms cadence) and lerp along it in
   `useFrame`.
-- **Course editor / more gates** — `RINGS`/`GATES` are data; a "gates: 5"
-  setting or hand-placed courses slot into the same sequence logic.
+- **Course editor** — hand-placed custom courses; the gate-count setting
+  shipped, and `RINGS`/`GATES` stay plain data, so an editor only needs a
+  way to author ring specs.
 
 ### Simulation depth
 *(empty — acro mode and ground effect shipped)*

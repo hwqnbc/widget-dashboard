@@ -16,6 +16,7 @@ import ShuffleIcon from '@mui/icons-material/Shuffle'
 import { useAppDispatch } from '../../../app/hooks'
 import { updateWidgetData } from '../../../features/widgets/widgetsSlice'
 import type { FlightMode, Weather } from './flightModel'
+import { MAX_GATES, MIN_GATES } from './worldLayout'
 
 function ToggleRow({
   testId,
@@ -74,6 +75,8 @@ export default function SettingsPanel({
   rateYaw,
   stickExpo,
   turbo,
+  gateCount,
+  onGateCount,
   onNewCourse,
 }: {
   id: string
@@ -90,6 +93,8 @@ export default function SettingsPanel({
   rateYaw: number
   stickExpo: number
   turbo: boolean
+  gateCount: number
+  onGateCount: (n: number) => void
   onNewCourse: () => void
 }) {
   const dispatch = useAppDispatch()
@@ -217,6 +222,23 @@ export default function SettingsPanel({
           />
         </List>
         <List dense subheader={<ListSubheader disableGutters>Course</ListSubheader>}>
+          <Stack sx={{ px: 0.5 }}>
+            <Typography variant="caption" color="text.secondary">
+              {`Gates per lap: ${gateCount}`}
+            </Typography>
+            <Slider
+              data-testid="dronesim-gate-count"
+              size="small"
+              min={MIN_GATES}
+              max={MAX_GATES}
+              step={1}
+              marks
+              value={gateCount}
+              // Committed only — changing lap length rebuilds the course and
+              // may need a stats-clearing confirmation; mid-drag would spam it.
+              onChangeCommitted={(_, v) => onGateCount(v as number)}
+            />
+          </Stack>
           <ListItem disableGutters sx={{ py: 0.5 }}>
             <ListItemText
               primary="New course"

@@ -49,6 +49,7 @@ for (const tid of [
   'dronesim-tune-yaw',
   'dronesim-tune-expo',
   'dronesim-tune-turbo',
+  'dronesim-gate-count',
   'dronesim-new-course',
 ]) {
   const n = await page.locator(`[data-testid="${tid}"]`).count()

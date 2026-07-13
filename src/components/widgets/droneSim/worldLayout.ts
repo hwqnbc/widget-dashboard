@@ -116,6 +116,15 @@ export function scoreLanding(
 /** Torus major radius of a gate ring (see GateRings geometry). */
 export const RING_RADIUS = 2.4
 
+/** Configurable lap length — gates per lap (persisted `gateCount`). */
+export const MIN_GATES = 3
+export const MAX_GATES = 6
+
+export const coerceGateCount = (v: unknown): number | undefined =>
+  typeof v === 'number' && Number.isFinite(v)
+    ? Math.min(MAX_GATES, Math.max(MIN_GATES, Math.round(v)))
+    : undefined
+
 /** The original hand-tuned course; also the ring fallback if sampling fails. */
 export const DEFAULT_SEED = 0x5eed
 const CLASSIC_RINGS: readonly RingSpec[] = [
@@ -201,6 +210,48 @@ function buildRings(
     if (!placed) rings.push(CLASSIC_RINGS[i])
   }
   return rings
+}
+
+/** Hand-placed fallbacks for extra gates if rejection sampling exhausts —
+ * mirrored around the classic course so they stay clear of the spawn pad. */
+const EXTRA_RING_FALLBACKS: readonly RingSpec[] = [
+  { x: -24, y: 8, z: 20, yaw: Math.PI / 3 },
+  { x: 26, y: 12, z: 16, yaw: -Math.PI / 6 },
+  { x: -32, y: 9, z: -2, yaw: Math.PI / 2 },
+]
+
+/**
+ * Gates 4..N. Drawn from the PRNG stream AFTER all other world data, so a
+ * seed's world (city, course, scenery, pads) is bit-identical at the default
+ * count and simply grows extra rings above it.
+ */
+function buildExtraRings(
+  rand: () => number,
+  buildings: readonly BuildingSpec[],
+  existing: readonly RingSpec[],
+  count: number,
+): RingSpec[] {
+  const extras: RingSpec[] = []
+  for (let i = 0; i < count; i++) {
+    let placed = false
+    for (let attempt = 0; attempt < 100 && !placed; attempt++) {
+      const ring: RingSpec = {
+        x: (rand() * 2 - 1) * 40,
+        z: (rand() * 2 - 1) * 40,
+        y: 5 + rand() * 11,
+        yaw: (rand() * 2 - 1) * Math.PI,
+      }
+      if (Math.abs(ring.x) > WORLD_HALF - 5 || Math.abs(ring.z) > WORLD_HALF - 5) {
+        continue
+      }
+      if (ringFits(ring, [...existing, ...extras], buildings)) {
+        extras.push(ring)
+        placed = true
+      }
+    }
+    if (!placed) extras.push(EXTRA_RING_FALLBACKS[i % EXTRA_RING_FALLBACKS.length])
+  }
+  return extras
 }
 
 /** Pick road lanes with the most clearance from building centres. */
@@ -330,12 +381,15 @@ function buildLandingPads(
   return pads
 }
 
-export function buildWorldLayout(seed: number): WorldLayout {
+export function buildWorldLayout(
+  seed: number,
+  gateCount: number = MIN_GATES,
+): WorldLayout {
   const rand = mulberry32(seed)
   const buildings = buildCity(rand)
   // The default seed keeps the original hand-placed course so existing
   // widgets (and their persisted best laps) are unchanged by the seed model.
-  const rings =
+  const baseRings =
     seed === DEFAULT_SEED ? CLASSIC_RINGS : buildRings(rand, buildings)
   // Rich-world extras draw from the stream AFTER buildings/rings, so every
   // pre-existing seed keeps its exact course.
@@ -345,6 +399,15 @@ export function buildWorldLayout(seed: number): WorldLayout {
   const clouds = buildClouds(rand)
   const roofs = buildRoofs(rand, buildings)
   const landingPads = buildLandingPads(rand, buildings, roofs)
+  // Extra gates (count > 3) draw LAST for the same stream-append reason.
+  const wanted = coerceGateCount(gateCount) ?? MIN_GATES
+  const rings =
+    wanted > baseRings.length
+      ? [
+          ...baseRings,
+          ...buildExtraRings(rand, buildings, baseRings, wanted - baseRings.length),
+        ]
+      : baseRings
 
   const colliders: Collider[] = buildings.map((b) => ({
     minX: b.x - b.w / 2 - DRONE_RADIUS,

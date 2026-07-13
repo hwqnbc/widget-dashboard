@@ -36,6 +36,7 @@ mode state from the widget root's `data-*` attributes via
 | `20-collision` | closed-loop rooftop landing: rests on the roof, stays in the footprint, no tunneling under sustained descent |
 | `30-timetrial` | full lap (pad → gates 1-3 → pad): timer start/finish, TO PAD phase, banner, laps/best bookkeeping, mid-lap reset, persistence, ghost render |
 | `40-shuffle` | new-course button: instant shuffle vs ConfirmDialog guard, stat clearing, seed persistence |
+| `45-gates` | gate-count slider: 3→6 on the same world, HUD/minimap follow, persistence, gate 1/6 sequences, mid-lap confirm guard + stat clearing |
 | `50-weather` | storm toggle: hands-off wind drift vs clear station-hold, HUD wind readout, persistence |
 | `60-crash` | crash mode: full-speed wall hit → tumble + banner + lap void + pad respawn; safe mode → wall pin; toggle persistence |
 | `70-haptics` | vibration recorder stub: contact buzz + cooldown, gate/crash patterns, no-API degradation |

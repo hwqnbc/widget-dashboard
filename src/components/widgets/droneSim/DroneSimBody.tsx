@@ -30,7 +30,7 @@ const clampNum = (lo: number, hi: number) => (v: unknown) =>
     : undefined
 const coerceRate = clampNum(0.5, 2)
 const coerceExpo = clampNum(0, 0.8)
-import { DEFAULT_SEED, buildWorldLayout } from './worldLayout'
+import { DEFAULT_SEED, buildWorldLayout, coerceGateCount } from './worldLayout'
 import { createLapState, fmtLap, resetLapState } from './lapTimer'
 import { CRASH_PULSE, GATE_PULSE, LAP_PULSE, vibrate } from './haptics'
 import ConfirmDialog from '../ConfirmDialog'
@@ -76,7 +76,11 @@ export default function DroneSimBody({ id }: WidgetProps) {
   const bestLapMs = useWidgetField(id, 'bestLapMs', 0)
   const bestLapPath = useWidgetField<number[]>(id, 'bestLapPath', EMPTY_PATH, coercePath)
   const worldSeed = useWidgetField(id, 'worldSeed', DEFAULT_SEED)
-  const layout = useMemo(() => buildWorldLayout(worldSeed), [worldSeed])
+  const gateSetting = useWidgetField(id, 'gateCount', 3, coerceGateCount)
+  const layout = useMemo(
+    () => buildWorldLayout(worldSeed, gateSetting),
+    [worldSeed, gateSetting],
+  )
   const gateCount = layout.gates.length
 
   const controls = useRef(createControlInput()).current
@@ -126,7 +130,9 @@ export default function DroneSimBody({ id }: WidgetProps) {
   // best lap persist.
   const [activeGate, setActiveGate] = useState(0)
   const [banner, setBanner] = useState<string | null>(null)
-  const [confirmShuffle, setConfirmShuffle] = useState(false)
+  // Pending course change awaiting confirmation: 'shuffle' re-rolls the
+  // seed, a number is a new gate count. Both clear laps/best/ghost.
+  const [confirmCourse, setConfirmCourse] = useState<'shuffle' | number | null>(null)
   const bannerTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   useEffect(
     () => () => {
@@ -220,13 +226,15 @@ export default function DroneSimBody({ id }: WidgetProps) {
     [dispatch, id, landingBest],
   )
 
-  const shuffleCourse = () => {
-    setConfirmShuffle(false)
+  const applyCourseChange = (change: 'shuffle' | number) => {
+    setConfirmCourse(null)
     dispatch(
       updateWidgetData({
         id,
         data: {
-          worldSeed: Math.floor(Math.random() * 0x100000000),
+          ...(change === 'shuffle'
+            ? { worldSeed: Math.floor(Math.random() * 0x100000000) }
+            : { gateCount: change }),
           score: 0,
           bestLapMs: 0,
           bestLapPath: [],
@@ -236,10 +244,11 @@ export default function DroneSimBody({ id }: WidgetProps) {
     resetSim()
   }
 
-  const requestShuffle = () => {
+  const requestCourseChange = (change: 'shuffle' | number) => {
+    if (change !== 'shuffle' && change === gateSetting) return
     // Destroys a recorded best (or an in-progress lap) — confirm first.
-    if (bestLapMs > 0 || lap.status === 'running') setConfirmShuffle(true)
-    else shuffleCourse()
+    if (bestLapMs > 0 || lap.status === 'running') setConfirmCourse(change)
+    else applyCourseChange(change)
   }
 
   const stickSize = fullscreen ? 140 : 88
@@ -269,6 +278,7 @@ export default function DroneSimBody({ id }: WidgetProps) {
       data-testid="dronesim-root"
       data-widget-id={id}
       data-world-seed={worldSeed}
+      data-gate-count={gateCount}
       data-landing-best={landingBest}
       data-mode={flightMode}
       data-crashes={crashes ? 'on' : 'off'}
@@ -523,20 +533,28 @@ export default function DroneSimBody({ id }: WidgetProps) {
         rateYaw={rateYaw}
         stickExpo={stickExpo}
         turbo={turbo}
+        gateCount={gateSetting}
+        onGateCount={requestCourseChange}
         onNewCourse={() => {
           setSettingsOpen(false)
-          requestShuffle()
+          requestCourseChange('shuffle')
         }}
       />
 
       <ConfirmDialog
-        open={confirmShuffle}
-        title="New course?"
-        message="Shuffling the buildings and gates clears your lap count, best time and ghost line for this course."
-        confirmLabel="Shuffle"
+        open={confirmCourse !== null}
+        title={confirmCourse === 'shuffle' ? 'New course?' : 'Change gates?'}
+        message={
+          confirmCourse === 'shuffle'
+            ? 'Shuffling the buildings and gates clears your lap count, best time and ghost line for this course.'
+            : 'Changing the lap length clears your lap count, best time and ghost line for this course.'
+        }
+        confirmLabel={confirmCourse === 'shuffle' ? 'Shuffle' : 'Change'}
         cancelLabel="Keep course"
-        onConfirm={shuffleCourse}
-        onCancel={() => setConfirmShuffle(false)}
+        onConfirm={() => {
+          if (confirmCourse !== null) applyCourseChange(confirmCourse)
+        }}
+        onCancel={() => setConfirmCourse(null)}
       />
 
       {minimap && (
