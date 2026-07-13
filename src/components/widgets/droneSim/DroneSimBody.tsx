@@ -299,8 +299,15 @@ export default function DroneSimBody({ id }: WidgetProps) {
   const stickSize = fullscreen ? 140 : 88
   const stickInset = fullscreen ? 16 : 0
 
+  // Cycle chase -> FPV -> line-of-sight (standing operator) -> chase.
+  const NEXT_VIEW: Record<DroneView, DroneView> = { tp: 'fp', fp: 'los', los: 'tp' }
+  const VIEW_TOOLTIP: Record<DroneView, string> = {
+    tp: 'Switch to first person (FPV)',
+    fp: 'Switch to pilot view (stand at the pad)',
+    los: 'Switch to third person (chase)',
+  }
   const toggleView = () =>
-    dispatch(updateWidgetData({ id, data: { view: view === 'tp' ? 'fp' : 'tp' } }))
+    dispatch(updateWidgetData({ id, data: { view: NEXT_VIEW[view] } }))
 
   const onLeftStick = useCallback(
     (x: number, y: number) => {
@@ -349,7 +356,11 @@ export default function DroneSimBody({ id }: WidgetProps) {
           dpr={[1, 1.75]}
           camera={{ fov: 60, near: 0.1, far: 400, position: [0, 4, 26] }}
         >
-          <WorldScene palette={palette} buildings={layout.buildings} />
+          <WorldScene
+            palette={palette}
+            buildings={layout.buildings}
+            showOperator={view !== 'los'}
+          />
           {richWorld && <RichWorld layout={layout} />}
           {landing && <LandingPads pads={layout.landingPads} />}
           <GateRings
@@ -529,12 +540,11 @@ export default function DroneSimBody({ id }: WidgetProps) {
           bgcolor: alpha('#000', 0.4),
         }}
       >
-        <Tooltip title={view === 'tp' ? 'Switch to first person' : 'Switch to third person'}>
+        <Tooltip title={VIEW_TOOLTIP[view]}>
           <IconButton
             size="small"
             data-testid="dronesim-view-toggle"
             data-view={view}
-            aria-pressed={view === 'fp'}
             onClick={toggleView}
             sx={{ color: '#fff' }}
           >

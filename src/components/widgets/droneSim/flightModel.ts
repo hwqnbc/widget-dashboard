@@ -48,10 +48,12 @@ export interface Collider {
   top: number
 }
 
-export type DroneView = 'tp' | 'fp'
+/** Camera modes: third-person chase, first-person FPV, and line-of-sight —
+ * the view of an operator standing beside the pad watching the drone fly. */
+export type DroneView = 'tp' | 'fp' | 'los'
 
 export const coerceView = (v: unknown): DroneView | undefined =>
-  v === 'tp' || v === 'fp' ? v : undefined
+  v === 'tp' || v === 'fp' || v === 'los' ? v : undefined
 
 export type Weather = 'clear' | 'storm'
 
@@ -65,6 +67,10 @@ export const coerceFlightMode = (v: unknown): FlightMode | undefined =>
   v === 'hold' || v === 'acro' ? v : undefined
 
 export const SPAWN: Vec3 = { x: 0, y: 2, z: 18 }
+/** Where the line-of-sight operator stands (beside the pad, inside the
+ * spawn corridor + tree/road exclusion zones, so it's clear on every seed). */
+export const OPERATOR: Vec3 = { x: 3.2, y: 0, z: 23 }
+export const OPERATOR_EYE_HEIGHT = 1.55
 export const MAX_HORIZ_SPEED = 12
 export const MAX_VERT_SPEED = 5
 export const YAW_RATE = 2.8

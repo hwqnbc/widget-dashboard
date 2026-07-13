@@ -32,7 +32,7 @@ mode state from the widget root's `data-*` attributes via
 
 | Suite | Covers |
 |---|---|
-| `10-core` | element presence, climb + altitude hold, inertia braking, simultaneous multi-touch, reset, camera toggle + persistence, grid-drag isolation |
+| `10-core` | element presence, climb + altitude hold, inertia braking, simultaneous multi-touch, reset, camera cycle (tp/fp/los) + persistence, grid-drag isolation |
 | `20-collision` | closed-loop rooftop landing: rests on the roof, stays in the footprint, no tunneling under sustained descent |
 | `30-timetrial` | full lap (pad → gates 1-3 → pad): timer start/finish, TO PAD phase, banner, laps/best bookkeeping, mid-lap reset, persistence, ghost render |
 | `40-shuffle` | new-course button: instant shuffle vs ConfirmDialog guard, stat clearing, seed persistence |

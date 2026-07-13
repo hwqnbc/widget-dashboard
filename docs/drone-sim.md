@@ -20,10 +20,10 @@ city with twin on-screen thumbsticks, in third-person chase or first-person
 | Left (`THR · YAW`) | yaw rate (right = nose right) | vertical velocity (up = climb) |
 | Right (`MOVE`) | strafe | forward / backward |
 
-Top-right buttons — only three, deliberately: camera toggle (`tp` chase ↔
-`fp` FPV, persisted), reset (back to the landing pad, transient), and a
-settings gear that opens the **settings panel** (below). Every mode toggle
-lives in the panel, not in the button row.
+Top-right buttons — only three, deliberately: camera cycle (`tp` chase →
+`fp` FPV → `los` pilot view → back; persisted), reset (back to the landing
+pad, transient), and a settings gear that opens the **settings panel**
+(below). Every mode toggle lives in the panel, not in the button row.
 
 ## Settings panel (`SettingsPanel.tsx`)
 
@@ -245,7 +245,8 @@ Lap progress is transient (reload/reset restarts at the pad); `score`,
 
 ## Cameras (`CameraRig.tsx`)
 
-One default camera (`fov 60`), moved per frame with preallocated temps:
+One default camera (base `fov 60`), moved per frame with preallocated temps.
+The view button cycles `tp → fp → los → tp` (persisted `view`):
 
 - **`tp` chase** (default): desired = drone pos + yaw-rotated `(0, 2.4, 6)`
   (+Z body = behind), damped per axis (λ = 4), then `lookAt` slightly above
@@ -254,6 +255,17 @@ One default camera (`fov 60`), moved per frame with preallocated temps:
   `Euler(tiltPitch·0.6, yaw, 0, 'YXZ')` — partial pitch for feel, **no
   roll** (nausea). Switching modes needs no snap handling: `tp` re-converges
   through its own damping.
+- **`los` pilot view (line of sight)**: you *are* the operator — the eye is
+  planted at a figure standing beside the pad (`OPERATOR` (3.2, 0, 23),
+  eye 1.55; the spot sits inside the spawn-corridor / tree / road exclusion
+  zones so it's clear on every seed) and tracks the drone with a damped
+  look (λ = 10 — quick but human, not servo-rigid). The fov narrows with
+  distance (65 → 22 over ~78 u, damped λ = 3) so the drone stays legible
+  across the map — the squint-into-the-distance feel of real line-of-sight
+  flying. Leaving `los` eases the fov back to 60. The operator figure
+  (`WorldScene`, simple primitives holding an RC transmitter, facing the
+  pad) renders in the other two views and hides in `los` — the camera
+  stands at its eyes.
 
 ## Layout / fullscreen
 

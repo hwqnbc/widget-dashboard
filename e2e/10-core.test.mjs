@@ -112,7 +112,7 @@ await page.waitForTimeout(400)
 const altReset = (await telemetry()).alt
 check('reset returns to spawn altitude', Math.abs(altReset - 2.0) < 0.3, `alt=${altReset}`)
 
-// view toggle + persistence
+// view cycle (tp -> fp -> los -> tp) + persistence
 const toggle = page.locator('[data-testid="dronesim-view-toggle"]')
 check('default view is tp', (await toggle.getAttribute('data-view')) === 'tp')
 await page.screenshot({ path: `${ARTIFACTS_DIR}core-tp.png` })
@@ -120,12 +120,21 @@ await toggle.click()
 check('toggle switches to fp', (await toggle.getAttribute('data-view')) === 'fp')
 await page.waitForTimeout(400)
 await page.screenshot({ path: `${ARTIFACTS_DIR}core-fp.png` })
+await toggle.click()
+check('toggle switches to los (pilot view)', (await toggle.getAttribute('data-view')) === 'los')
+await page.waitForTimeout(600) // let the look/zoom damping settle
+await page.screenshot({ path: `${ARTIFACTS_DIR}core-los.png` })
 await page.waitForTimeout(1600) // redux-persist debounce
 await page.reload({ waitUntil: 'networkidle' })
 await page.waitForSelector('[data-testid="dronesim-view-toggle"]')
 check(
   'view persists across reload',
-  (await page.locator('[data-testid="dronesim-view-toggle"]').getAttribute('data-view')) === 'fp',
+  (await page.locator('[data-testid="dronesim-view-toggle"]').getAttribute('data-view')) === 'los',
+)
+await page.locator('[data-testid="dronesim-view-toggle"]').click()
+check(
+  'cycle wraps back to tp',
+  (await page.locator('[data-testid="dronesim-view-toggle"]').getAttribute('data-view')) === 'tp',
 )
 
 // grid interop: joystick drag must not move the card
