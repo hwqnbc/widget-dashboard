@@ -260,3 +260,17 @@ feature rounds (flight, collision, gates, time trial, courses, weather, crash).
     `data-*` attributes so tests read state without hunting buttons. Debug
     "toggle does not work" reports empirically first — the state usually
     flips fine and the real defect is missing feedback.
+
+37. **A fixed-viewpoint camera needs an adaptive field of view.** The
+    line-of-sight pilot view plants the eye at a standing figure and only
+    rotates — at a constant 60° fov the drone shrinks to an invisible pixel
+    within ~40 units. Narrow the fov with distance (65° → 22°, damped) and
+    the mode stays flyable across the whole map; ease it back to the base
+    value when switching away so the other cameras are unaffected. Two
+    companion tricks: damp the look target (λ ≈ 10) so tracking reads as a
+    human head turn rather than a servo, and hide the avatar the camera
+    stands inside (its head sphere would otherwise clip the near plane) —
+    render it only in the views that see it from outside. Place the
+    standing spot inside zones procedural generation already keeps clear
+    (the spawn corridor), or a shuffled world will eventually bury it in a
+    building.
