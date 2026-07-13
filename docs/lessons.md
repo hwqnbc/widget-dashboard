@@ -274,3 +274,17 @@ feature rounds (flight, collision, gates, time trial, courses, weather, crash).
     standing spot inside zones procedural generation already keeps clear
     (the spawn corridor), or a shuffled world will eventually bury it in a
     building.
+
+38. **Chase-camera obstruction: clamp the damped position against the
+    physics colliders.** Sweep the subject→camera segment with a pure
+    slab-method AABB test (`boomClipT`) over the same pre-inflated colliders
+    the flight model resolves against — camera and physics can then never
+    disagree about where walls are. Clamp the *damped* boom position, not
+    the desired target: that guarantees no wall between drone and camera on
+    every frame, and when the path clears the existing damper re-extends the
+    boom by itself — zero extra state. Stop a margin short of the wall (the
+    near plane clips otherwise) and floor the boom so the camera never
+    enters the subject. Publish the live boom length on the telemetry tick
+    (`data-boom`) — camera behaviour is otherwise invisible to DOM-level
+    tests. E2E sub-lesson: steering yaw continuously off 150 ms-stale
+    telemetry overshoots; align with short nudge → settle → re-read rounds.

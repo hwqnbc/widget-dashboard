@@ -38,6 +38,13 @@ changes, stash first (`git stash`), rebase, then pop. Re-check before pushing if
 `main` may have moved. A merged branch is finished — restart it from `origin/main`
 rather than stacking new commits on already-merged history.
 
+**Docs ship with the change, by default.** Every feature or behaviour change
+ends with a docs pass in the same round — no separate ask needed: update the
+feature's design note (`docs/drone-sim.md` or the relevant `docs/*.md`),
+`e2e/README.md` when test suites change, and append to `docs/lessons.md`
+whenever the round produced a reusable lesson (a recurring refinement, a
+debugging insight, a pattern worth repeating).
+
 ## Stack
 
 - Vite 8 + React 19 + TypeScript (strict, `verbatimModuleSyntax` — use
