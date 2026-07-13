@@ -219,6 +219,21 @@ bottom corners (88 px; 140 px + safe-area insets in fullscreen via
 the fullscreen rotate hint; fullscreen re-mounts the single live instance in
 the overlay, so there's never a duplicate `useFrame` loop.
 
+## Ground effect / propwash
+
+Always on — a feel layer, not a mode. Descending through the last
+`GROUND_EFFECT_HEIGHT` (1.2 u) above whatever surface is directly below —
+the ground or a rooftop (found by scanning the colliders under the drone) —
+rides an air cushion: the descent rate damps exponentially with proximity,
+scaled by `GROUND_EFFECT_STRENGTH` (14, deliberately stronger than the
+altitude-hold's `RESPONSE_V` 8 which keeps re-feeding the commanded descent
+every frame). A full-down-stick landing touches down at ~1.8 u/s instead of
+5. Touchdowns above `BOUNCE_MIN_SPEED` (2 u/s) bounce back at
+`BOUNCE_FACTOR` (22 %) instead of stopping dead; softer ones settle. Hard
+acro free-falls still thunk, hop once and rest — and can still crash on
+roofs. The cushion also makes landing-challenge softness scores a little
+friendlier, which is intended.
+
 ## Battery / range mode
 
 The battery button toggles persisted `battery: boolean` (default off). While
@@ -358,8 +373,7 @@ from the enhancement menu, with the integration point each would build on.
   setting or hand-placed courses slot into the same sequence logic.
 
 ### Simulation depth
-- **Propwash/ground effect** — a small lift cushion near surfaces (roofs
-  detectable via `COLLIDERS` tops).
+*(empty — acro mode and ground effect shipped)*
 
 ### Meta
 - **Sound** — Web Audio rotor hum pitched by throttle, gate chime, crash

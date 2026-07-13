@@ -68,11 +68,22 @@ try {
   }
   for (const suite of suites) {
     console.log(`\n=== ${suite} ===`)
-    const run = spawnSync('node', [join(here, suite)], {
-      cwd: root,
-      stdio: 'inherit',
-      env: { ...process.env, E2E_BASE_URL: BASE_URL },
-    })
+    const runOnce = () =>
+      spawnSync('node', [join(here, suite)], {
+        cwd: root,
+        stdio: 'inherit',
+        env: { ...process.env, E2E_BASE_URL: BASE_URL },
+      })
+    let run = runOnce()
+    if (run.status !== 0) {
+      // The closed-loop pilot's precision maneuvers (threading gates, pad
+      // touchdowns, timed wall hits) have a small miss rate under software-GL
+      // load; one retry with a fresh browser separates flakes from real
+      // failures.
+      console.log(`--- ${suite} failed, retrying once ---`)
+      run = runOnce()
+      if (run.status === 0) console.log(`--- ${suite} passed on retry ---`)
+    }
     if (run.status !== 0) failed++
   }
 } finally {

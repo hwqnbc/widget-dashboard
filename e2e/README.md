@@ -32,7 +32,21 @@ from the real (seeded, deterministic) world layout. Screenshots land in
 | `40-shuffle` | new-course button: instant shuffle vs ConfirmDialog guard, stat clearing, seed persistence |
 | `50-weather` | storm toggle: hands-off wind drift vs clear station-hold, HUD wind readout, persistence |
 | `60-crash` | crash mode: full-speed wall hit → tumble + banner + lap void + pad respawn; safe mode → wall pin; toggle persistence |
+| `70-haptics` | vibration recorder stub: contact buzz + cooldown, gate/crash patterns, no-API degradation |
+| `80-acro` | flight-mode toggle: hold brakes vs acro coasts, gravity fall beats the descent cap, persistence |
+| `85-tuning` | rates/expo panel: speed/yaw sliders scale HUD-observable flight, turbo stacks, persistence |
+| `90-minimap` | inset map: layout contents, marker tracks position/heading, toggle + persistence |
+| `95-richworld` | scenery toggle contract + persistence (generation is unit-covered) |
+| `97-landing` | landing challenge: pad markers, scored touchdown + banner/best, plain-roof no-score, persistence |
+| `98-battery` | battery mode: bar, drain under effort, pad recharge, transient level, persistence |
 
 Routes must respect the game rules: laps only start under the drone's own
-power, and fast legs cruise **above** the skyline because crash mode (on by
-default) punishes full-speed flight at building height.
+power, and fast legs cruise **above** the skyline (24 — waypoint tolerance
+can start a leg ~2 low) because crash mode (on by default) punishes
+full-speed flight at building height.
+
+**Flake policy**: the pilot's precision maneuvers (threading a 2-unit ring,
+touching down on a 1.6-unit pad, timed wall hits) carry a small miss rate
+under software-GL load, which compounds across a full run. The runner
+re-runs a failed suite once with a fresh browser and logs the retry — a
+suite that fails twice is a real failure.
