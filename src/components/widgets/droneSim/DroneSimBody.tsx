@@ -7,6 +7,7 @@ import SettingsIcon from '@mui/icons-material/Settings'
 import { useAppDispatch } from '../../../app/hooks'
 import { updateWidgetData } from '../../../features/widgets/widgetsSlice'
 import { useWidgetField } from '../../../features/widgets/useWidgetField'
+import { defaultWidgetData } from '../../../features/widgets/widgetCatalog'
 import { usePresentation } from '../../fullscreen/presentation'
 import type { WidgetProps } from '../../../registry/widgetRegistry'
 import { DAY_PALETTE, DUSK_PALETTE, NIGHT_PALETTE } from './palettes'
@@ -47,6 +48,28 @@ import LandingPads from './LandingPads'
 import Minimap from './Minimap'
 import SettingsPanel from './SettingsPanel'
 import VirtualJoystick from './VirtualJoystick'
+
+/** What "Reset settings" restores: every settings-panel field, sourced from
+ * the catalog defaults. Records (score/best/ghost/landingBest), the camera
+ * view and the world seed are deliberately NOT settings. */
+const SETTING_KEYS = [
+  'flightMode',
+  'crashes',
+  'landing',
+  'battery',
+  'weather',
+  'richWorld',
+  'minimap',
+  'rateSpeed',
+  'rateYaw',
+  'stickExpo',
+  'turbo',
+  'gateCount',
+] as const
+const SETTING_DEFAULTS: Record<string, unknown> = Object.fromEntries(
+  SETTING_KEYS.map((k) => [k, defaultWidgetData('droneSim')[k]]),
+)
+const DEFAULT_GATES = coerceGateCount(SETTING_DEFAULTS.gateCount) ?? 3
 
 const EMPTY_PATH: number[] = []
 const coercePath = (v: unknown): number[] | undefined =>
@@ -131,8 +154,9 @@ export default function DroneSimBody({ id }: WidgetProps) {
   const [activeGate, setActiveGate] = useState(0)
   const [banner, setBanner] = useState<string | null>(null)
   // Pending course change awaiting confirmation: 'shuffle' re-rolls the
-  // seed, a number is a new gate count. Both clear laps/best/ghost.
-  const [confirmCourse, setConfirmCourse] = useState<'shuffle' | number | null>(null)
+  // seed, a number is a new gate count, 'defaults' restores all settings
+  // (guarded only when that reverts the gate count). All clear laps/best/ghost.
+  const [confirmCourse, setConfirmCourse] = useState<'shuffle' | 'defaults' | number | null>(null)
   const bannerTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   useEffect(
     () => () => {
@@ -226,8 +250,24 @@ export default function DroneSimBody({ id }: WidgetProps) {
     [dispatch, id, landingBest],
   )
 
-  const applyCourseChange = (change: 'shuffle' | number) => {
+  const applyCourseChange = (change: 'shuffle' | 'defaults' | number) => {
     setConfirmCourse(null)
+    if (change === 'defaults') {
+      const courseChanges = gateSetting !== DEFAULT_GATES
+      dispatch(
+        updateWidgetData({
+          id,
+          data: {
+            ...SETTING_DEFAULTS,
+            ...(courseChanges
+              ? { score: 0, bestLapMs: 0, bestLapPath: [] }
+              : {}),
+          },
+        }),
+      )
+      if (courseChanges) resetSim()
+      return
+    }
     dispatch(
       updateWidgetData({
         id,
@@ -244,11 +284,16 @@ export default function DroneSimBody({ id }: WidgetProps) {
     resetSim()
   }
 
-  const requestCourseChange = (change: 'shuffle' | number) => {
-    if (change !== 'shuffle' && change === gateSetting) return
+  const requestCourseChange = (change: 'shuffle' | 'defaults' | number) => {
+    if (typeof change === 'number' && change === gateSetting) return
     // Destroys a recorded best (or an in-progress lap) — confirm first.
-    if (bestLapMs > 0 || lap.status === 'running') setConfirmCourse(change)
-    else applyCourseChange(change)
+    // Resetting settings only rebuilds the course when the gate count moves.
+    const changesCourse = change !== 'defaults' || gateSetting !== DEFAULT_GATES
+    if (changesCourse && (bestLapMs > 0 || lap.status === 'running')) {
+      setConfirmCourse(change)
+    } else {
+      applyCourseChange(change)
+    }
   }
 
   const stickSize = fullscreen ? 140 : 88
@@ -535,6 +580,7 @@ export default function DroneSimBody({ id }: WidgetProps) {
         turbo={turbo}
         gateCount={gateSetting}
         onGateCount={requestCourseChange}
+        onResetDefaults={() => requestCourseChange('defaults')}
         onNewCourse={() => {
           setSettingsOpen(false)
           requestCourseChange('shuffle')
@@ -543,13 +589,27 @@ export default function DroneSimBody({ id }: WidgetProps) {
 
       <ConfirmDialog
         open={confirmCourse !== null}
-        title={confirmCourse === 'shuffle' ? 'New course?' : 'Change gates?'}
+        title={
+          confirmCourse === 'shuffle'
+            ? 'New course?'
+            : confirmCourse === 'defaults'
+              ? 'Reset settings?'
+              : 'Change gates?'
+        }
         message={
           confirmCourse === 'shuffle'
             ? 'Shuffling the buildings and gates clears your lap count, best time and ghost line for this course.'
-            : 'Changing the lap length clears your lap count, best time and ghost line for this course.'
+            : confirmCourse === 'defaults'
+              ? `Restoring default settings returns the lap to ${DEFAULT_GATES} gates, clearing your lap count, best time and ghost line.`
+              : 'Changing the lap length clears your lap count, best time and ghost line for this course.'
         }
-        confirmLabel={confirmCourse === 'shuffle' ? 'Shuffle' : 'Change'}
+        confirmLabel={
+          confirmCourse === 'shuffle'
+            ? 'Shuffle'
+            : confirmCourse === 'defaults'
+              ? 'Reset'
+              : 'Change'
+        }
         cancelLabel="Keep course"
         onConfirm={() => {
           if (confirmCourse !== null) applyCourseChange(confirmCourse)

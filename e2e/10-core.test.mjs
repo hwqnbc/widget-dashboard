@@ -51,6 +51,7 @@ for (const tid of [
   'dronesim-tune-turbo',
   'dronesim-gate-count',
   'dronesim-new-course',
+  'dronesim-settings-reset',
 ]) {
   const n = await page.locator(`[data-testid="${tid}"]`).count()
   check(`settings panel has ${tid}`, n === 1, `count=${n}`)

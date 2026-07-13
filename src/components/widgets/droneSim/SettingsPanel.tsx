@@ -13,6 +13,7 @@ import {
   Typography,
 } from '@mui/material'
 import ShuffleIcon from '@mui/icons-material/Shuffle'
+import SettingsBackupRestoreIcon from '@mui/icons-material/SettingsBackupRestore'
 import { useAppDispatch } from '../../../app/hooks'
 import { updateWidgetData } from '../../../features/widgets/widgetsSlice'
 import type { FlightMode, Weather } from './flightModel'
@@ -77,6 +78,7 @@ export default function SettingsPanel({
   turbo,
   gateCount,
   onGateCount,
+  onResetDefaults,
   onNewCourse,
 }: {
   id: string
@@ -95,6 +97,7 @@ export default function SettingsPanel({
   turbo: boolean
   gateCount: number
   onGateCount: (n: number) => void
+  onResetDefaults: () => void
   onNewCourse: () => void
 }) {
   const dispatch = useAppDispatch()
@@ -251,8 +254,28 @@ export default function SettingsPanel({
               startIcon={<ShuffleIcon />}
               data-testid="dronesim-new-course"
               onClick={onNewCourse}
+              sx={{ ml: 1.5, flexShrink: 0 }}
             >
               Shuffle
+            </Button>
+          </ListItem>
+        </List>
+        <List dense subheader={<ListSubheader disableGutters>Defaults</ListSubheader>}>
+          <ListItem disableGutters sx={{ py: 0.5 }}>
+            <ListItemText
+              primary="Reset settings"
+              secondary="Restore every setting above to its default. Records, camera view and the course seed are kept — unless the lap length has to revert, which clears lap stats."
+              slotProps={{ primary: { sx: { fontWeight: 600 } }, secondary: { sx: { fontSize: 12 } } }}
+            />
+            <Button
+              size="small"
+              variant="outlined"
+              startIcon={<SettingsBackupRestoreIcon />}
+              data-testid="dronesim-settings-reset"
+              onClick={onResetDefaults}
+              sx={{ ml: 1.5, flexShrink: 0 }}
+            >
+              Reset
             </Button>
           </ListItem>
         </List>

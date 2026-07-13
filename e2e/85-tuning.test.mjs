@@ -12,6 +12,8 @@ import {
   openSettings,
   readers,
   reporter,
+  rootState,
+  setSwitch,
 } from './helpers.mjs'
 
 const { check, finish } = reporter('tuning')
@@ -92,5 +94,36 @@ await openPanel()
 const speedVal = await page.locator('[data-testid="dronesim-tune-speed"] input').inputValue()
 const yawVal = await page.locator('[data-testid="dronesim-tune-yaw"] input').inputValue()
 check('tuning persists across reload', parseFloat(speedVal) === 2 && parseFloat(yawVal) === 2, `speed=${speedVal} yaw=${yawVal}`)
+await closePanel()
+
+// reset-to-defaults restores tuning AND the mode toggles (no best lap here
+// and the gate count is default, so it applies without a confirmation)
+await setSwitch(page, 'dronesim-weather-toggle', true)
+await setSwitch(page, 'dronesim-tune-turbo', true)
+await openPanel()
+await page.locator('[data-testid="dronesim-settings-reset"]').click()
+await page.waitForTimeout(400)
+const rSpeed = await page.locator('[data-testid="dronesim-tune-speed"] input').inputValue()
+const rYaw = await page.locator('[data-testid="dronesim-tune-yaw"] input').inputValue()
+const rExpo = await page.locator('[data-testid="dronesim-tune-expo"] input').inputValue()
+const rTurbo = await page.locator('[data-testid="dronesim-tune-turbo"] input').isChecked()
+check(
+  'reset restores tuning defaults',
+  parseFloat(rSpeed) === 1 && parseFloat(rYaw) === 1 && parseFloat(rExpo) === 0 && !rTurbo,
+  `speed=${rSpeed} yaw=${rYaw} expo=${rExpo} turbo=${rTurbo}`,
+)
+await closePanel()
+check('reset restores the weather toggle too', (await rootState(page, 'data-weather')) === 'clear')
+check('reset keeps the world seed', (await rootState(page, 'data-world-seed')) !== null)
+
+// defaults survive a reload (the reset dispatched persisted state)
+await page.waitForTimeout(1600)
+await page.reload({ waitUntil: 'networkidle' })
+await page.waitForSelector('[data-testid="dronesim-settings"]')
+await openPanel()
+check(
+  'reset settings persist across reload',
+  parseFloat(await page.locator('[data-testid="dronesim-tune-speed"] input').inputValue()) === 1,
+)
 
 await finish(browser)

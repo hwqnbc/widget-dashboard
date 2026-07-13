@@ -39,6 +39,12 @@ one-line description, grouped by concern:
 - **Course**: the gates-per-lap slider (3–6) and the New course action
   button. Both destroy the recorded best (and any lap in progress), so both
   route through the same confirm guard.
+- **Defaults**: a Reset settings button restoring every panel setting to
+  its catalog default (`defaultWidgetData('droneSim')` is the single source
+  of truth). Records (laps/best/ghost/landing best), the camera view and
+  the world seed are deliberately *not* settings and survive the reset —
+  except when the gate count has to revert, which is a course change and
+  goes through the same confirm guard, clearing lap stats.
 
 The panel reads current values as props from `DroneSimBody` and dispatches
 `updateWidgetData` itself. The original per-toggle `data-testid`s moved onto
