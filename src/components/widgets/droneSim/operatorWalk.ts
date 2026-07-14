@@ -25,9 +25,19 @@ export interface OperatorState {
 
 /** Hard walking-speed cap (u/s) — ~18% of the drone's top speed. */
 export const WALK_SPEED = 2.2
-/** Follow hysteresis: start walking beyond START, stop inside STOP. */
-export const FOLLOW_START = 10
+/** Follow hysteresis: start walking beyond START, stop inside STOP. STOP is
+ * the persisted, user-preferred follow distance (a high-hovering drone makes
+ * a close stop a neck-craning look-up); START is always STOP + the band. */
 export const FOLLOW_STOP = 7
+export const FOLLOW_BAND = 3
+export const FOLLOW_START = FOLLOW_STOP + FOLLOW_BAND
+export const MIN_FOLLOW = 5
+export const MAX_FOLLOW = 18
+
+export const coerceFollowDist = (v: unknown): number | undefined =>
+  typeof v === 'number' && Number.isFinite(v)
+    ? Math.min(MAX_FOLLOW, Math.max(MIN_FOLLOW, Math.round(v)))
+    : undefined
 export const PICKUP_DIST = 1.3
 export const OP_RADIUS = 0.4
 /** A dead drone is reachable on foot only at ground level (roofs aren't —
@@ -109,6 +119,7 @@ export function stepOperator(
   stick: Vec2,
   colliders: readonly Collider[],
   hold = false,
+  followDist: number = FOLLOW_STOP,
 ): WalkerEvent | null {
   const step = Math.min(dt, 0.05)
 
@@ -144,8 +155,8 @@ export function stepOperator(
       return null
     }
     const d = Math.hypot(op.x - drone.x, op.z - drone.z)
-    if (op.mode !== 'follow' && d > FOLLOW_START) op.mode = 'follow'
-    else if (op.mode === 'follow' && d <= FOLLOW_STOP) op.mode = 'idle'
+    if (op.mode !== 'follow' && d > followDist + FOLLOW_BAND) op.mode = 'follow'
+    else if (op.mode === 'follow' && d <= followDist) op.mode = 'idle'
     if (op.mode !== 'follow') return null
     tx = drone.x
     tz = drone.z

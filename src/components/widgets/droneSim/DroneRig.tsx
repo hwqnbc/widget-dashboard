@@ -63,6 +63,7 @@ export default function DroneRig({
   view,
   operator,
   operatorHold,
+  followDist,
   minimapOperatorRef,
   onWalkerEvent,
   hudRef,
@@ -99,6 +100,8 @@ export default function DroneRig({
   operator: { current: OperatorState }
   /** Freezes the follow autopilot — stand at the current spot. */
   operatorHold: boolean
+  /** Preferred follow distance (the walker's stop radius). */
+  followDist: number
   minimapOperatorRef: RefObject<SVGGElement | null>
   onWalkerEvent: (event: WalkerEvent) => void
   hudRef: RefObject<HTMLDivElement | null>
@@ -186,6 +189,7 @@ export default function DroneRig({
           controls.right,
           colliders,
           operatorHold,
+          followDist,
         )
         if (walkerEvent === 'place') {
           flight.pos.x = PAD_CENTER.x

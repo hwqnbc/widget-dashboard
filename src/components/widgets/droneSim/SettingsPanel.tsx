@@ -17,6 +17,7 @@ import SettingsBackupRestoreIcon from '@mui/icons-material/SettingsBackupRestore
 import { useAppDispatch } from '../../../app/hooks'
 import { updateWidgetData } from '../../../features/widgets/widgetsSlice'
 import type { FlightMode, Weather } from './flightModel'
+import { MAX_FOLLOW, MIN_FOLLOW } from './operatorWalk'
 import { MAX_GATES, MIN_GATES } from './worldLayout'
 
 function ToggleRow({
@@ -76,6 +77,7 @@ export default function SettingsPanel({
   rateYaw,
   stickExpo,
   turbo,
+  followDist,
   gateCount,
   onGateCount,
   onResetDefaults,
@@ -95,6 +97,7 @@ export default function SettingsPanel({
   rateYaw: number
   stickExpo: number
   turbo: boolean
+  followDist: number
   gateCount: number
   onGateCount: (n: number) => void
   onResetDefaults: () => void
@@ -223,6 +226,23 @@ export default function SettingsPanel({
             checked={turbo}
             onChange={(next) => set({ turbo: next })}
           />
+        </List>
+        <List dense subheader={<ListSubheader disableGutters>Pilot</ListSubheader>}>
+          <Stack sx={{ px: 0.5 }}>
+            <Typography variant="caption" color="text.secondary">
+              {`Follow distance: ${followDist} — how far the walking pilot stands back from the drone (larger = less neck-craning under a high hover)`}
+            </Typography>
+            <Slider
+              data-testid="dronesim-follow-dist"
+              size="small"
+              min={MIN_FOLLOW}
+              max={MAX_FOLLOW}
+              step={1}
+              marks
+              value={followDist}
+              onChangeCommitted={(_, v) => set({ followDist: v as number })}
+            />
+          </Stack>
         </List>
         <List dense subheader={<ListSubheader disableGutters>Course</ListSubheader>}>
           <Stack sx={{ px: 0.5 }}>

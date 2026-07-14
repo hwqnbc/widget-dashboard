@@ -8,10 +8,13 @@
 import {
   ARTIFACTS_DIR,
   addDroneWidget,
+  closeSettings,
   createPilot,
   launch,
+  openSettings,
   readers,
   reporter,
+  rootState,
   setSwitch,
 } from './helpers.mjs'
 import { buildWorldLayout, DEFAULT_SEED } from './.bundle/worldLayout.js'
@@ -110,6 +113,32 @@ const tHover = await telemetry()
 const stopGap = arrived ? Math.hypot(tHover.x - arrived.x, tHover.z - arrived.z) : NaN
 check('op arrives and idles inside the follow band', arrived !== null && stopGap <= FOLLOW_START, `gap=${stopGap.toFixed(1)}`)
 await page.screenshot({ path: `${ARTIFACTS_DIR}walker-follow.png` })
+
+// --- configurable follow distance: a larger preference keeps the op put ---
+const setFollowSlider = async (value) => {
+  await openSettings(page)
+  const slider = page.locator('[data-testid="dronesim-follow-dist"]')
+  await slider.scrollIntoViewIfNeeded()
+  const box = await slider.boundingBox()
+  await page.mouse.click(box.x + (box.width * (value - 5)) / 13, box.y + box.height / 2)
+  await page.waitForTimeout(250)
+  await closeSettings(page)
+}
+await setFollowSlider(15)
+check('follow-distance slider persists to the root', (await rootState(page, 'data-follow-dist')) === '15')
+const opNear = await opState()
+await pilot.flyTo({ x: opNear.x + 12, y: CRUISE_ALT, z: opNear.z }, { tol: 1.5 })
+await pilot.touch(0, 0, 0, 0)
+await page.waitForTimeout(2500)
+const opFar = await opState()
+check(
+  'gap 12 with preference 15: op stays put (default would follow)',
+  Math.hypot(opFar.x - opNear.x, opFar.z - opNear.z) < 0.3 && opFar.mode === 'idle',
+  JSON.stringify(opFar),
+)
+await setFollowSlider(7)
+await page.waitForTimeout(1500)
+check('restoring the default resumes the follow at gap 12', (await opState()).mode === 'follow')
 
 // --- hold position: op stands at the new spot while the drone leaves ---
 const holdBtn = page.locator('[data-testid="dronesim-op-hold"]')

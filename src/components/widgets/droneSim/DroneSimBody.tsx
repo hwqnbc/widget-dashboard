@@ -50,7 +50,11 @@ import LandingPads from './LandingPads'
 import Minimap from './Minimap'
 import OperatorFigure from './OperatorFigure'
 import type { WalkerEvent } from './operatorWalk'
-import { createOperatorState, resetOperatorState } from './operatorWalk'
+import {
+  coerceFollowDist,
+  createOperatorState,
+  resetOperatorState,
+} from './operatorWalk'
 import SettingsPanel from './SettingsPanel'
 import VirtualJoystick from './VirtualJoystick'
 
@@ -65,6 +69,7 @@ const SETTING_KEYS = [
   'weather',
   'richWorld',
   'minimap',
+  'followDist',
   'rateSpeed',
   'rateYaw',
   'stickExpo',
@@ -138,6 +143,7 @@ export default function DroneSimBody({ id }: WidgetProps) {
   const minimapDroneRef = useRef<SVGGElement>(null)
   const minimapOperatorRef = useRef<SVGGElement>(null)
   const operatorRef = useRef(createOperatorState())
+  const followDist = useWidgetField(id, 'followDist', 7, coerceFollowDist)
   // Hold position: freezes the walking pilot's follow autopilot so the op
   // stands wherever it is (transient, like the op position itself).
   const [opHold, setOpHold] = useState(false)
@@ -369,6 +375,7 @@ export default function DroneSimBody({ id }: WidgetProps) {
       data-minimap={minimap ? 'on' : 'off'}
       data-turbo={turbo ? 'on' : 'off'}
       data-op-hold={opHold ? 'on' : 'off'}
+      data-follow-dist={followDist}
       onMouseDown={(e) => e.stopPropagation()}
       onTouchStart={(e) => e.stopPropagation()}
       sx={{
@@ -408,6 +415,7 @@ export default function DroneSimBody({ id }: WidgetProps) {
             view={view}
             operator={operatorRef}
             operatorHold={opHold}
+            followDist={followDist}
             minimapOperatorRef={minimapOperatorRef}
             onWalkerEvent={onWalkerEvent}
             hudRef={hudRef}
@@ -684,6 +692,7 @@ export default function DroneSimBody({ id }: WidgetProps) {
         rateYaw={rateYaw}
         stickExpo={stickExpo}
         turbo={turbo}
+        followDist={followDist}
         gateCount={gateSetting}
         onGateCount={requestCourseChange}
         onResetDefaults={() => requestCourseChange('defaults')}

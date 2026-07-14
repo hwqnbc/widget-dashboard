@@ -37,6 +37,9 @@ one-line description, grouped by concern:
 - **Environment**: Storm weather, Rich scenery, Minimap.
 - **Tuning**: the speed/yaw/expo sliders and the Turbo switch (formerly a
   separate popover).
+- **Pilot**: the follow-distance slider (5–18, default 7) — how far the
+  walking pilot stands back from the drone. No confirm guard; nothing is
+  destroyed.
 - **Course**: the gates-per-lap slider (3–6) and the New course action
   button. Both destroy the recorded best (and any lap in progress), so both
   route through the same confirm guard.
@@ -285,9 +288,12 @@ The view button cycles `tp → fp → los → tp` (persisted `view`):
   eyes.
 - **`walk` walking pilot**: the same operator, on the move. A pure
   mutate-in-place module (`operatorWalk.ts`, the `lapTimer` pattern) steps
-  the op each frame: beyond `FOLLOW_START` (10) it walks toward the drone's
-  ground position, stopping inside `FOLLOW_STOP` (7) — hysteresis, no
-  jitter. **`WALK_SPEED` is hard-capped at 2.2 u/s** (~18 % of the drone's
+  the op each frame: beyond the follow distance + `FOLLOW_BAND` (3) it
+  walks toward the drone's ground position, stopping inside the follow
+  distance — hysteresis, no jitter. The stop radius is the persisted
+  `followDist` (5–18, default 7, the Pilot slider in settings): a high
+  hover close-up is a neck-craning look-up, so stand further back if you
+  prefer the wider angle. **`WALK_SPEED` is hard-capped at 2.2 u/s** (~18 % of the drone's
   top speed): losing sight of a fast drone is the intended trade-off, not a
   bug. The op slides along building walls (the collision push-out on x/z,
   point + `OP_RADIUS`) — no pathfinding. The camera is the `los` eye at the
