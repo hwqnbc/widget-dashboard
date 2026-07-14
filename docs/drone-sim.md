@@ -149,6 +149,13 @@ imperative DOM manipulation and doesn't fit React):
 - Each stick captures **its own pointer id** with `setPointerCapture` and
   filters every event on it, so two thumbs drive both sticks simultaneously;
   mouse input flows through the same unified pointer path.
+- Release doesn't rely solely on a local `pointerup`/`pointercancel`/
+  `lostpointercapture` reaching the element: a window-level capture-phase
+  `pointerup`/`pointercancel` fallback, plus `blur`/`visibilitychange`
+  handlers, force-release the stick if the tab loses focus mid-drag or the
+  browser drops the event — otherwise a missed release event sticks the
+  knob forever and locks that stick out of further input (see
+  `docs/lessons.md` #39).
 - `touchAction: 'none'` on the stick hit areas only — swiping the 3D scenery
   still scrolls the page.
 - Deadzone (0.08) is rescaled so output is continuous from the deadzone edge.

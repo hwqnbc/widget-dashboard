@@ -1,4 +1,4 @@
-import { useCallback, useRef } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import { Box, Typography, alpha, useTheme } from '@mui/material'
 import type { SxProps, Theme } from '@mui/material'
 import { DEADZONE } from './flightModel'
@@ -77,13 +77,49 @@ export default function VirtualJoystick({
     onChange(0, 0)
   }, [onChange])
 
+  // Belt-and-suspenders release: the local pointer handlers below assume the
+  // browser always delivers a pointerup/pointercancel/lostpointercapture for
+  // the captured pointer, but that's not guaranteed if the tab loses focus
+  // mid-drag (blur/visibilitychange are the only events the spec promises in
+  // that case) or if a synthetic dispatch gets dropped. Without this, a
+  // missed release event sticks the knob forever and the down-handler guard
+  // then rejects every future touch on this stick too.
+  useEffect(() => {
+    const onWindowPointerUp = (e: PointerEvent) => {
+      if (e.pointerId === pointerIdRef.current) releasePointer()
+    }
+    const onWindowPointerCancel = (e: PointerEvent) => {
+      if (e.pointerId === pointerIdRef.current) releasePointer()
+    }
+    const onBlur = () => {
+      if (pointerIdRef.current !== null) releasePointer()
+    }
+    const onVisibilityChange = () => {
+      if (document.hidden && pointerIdRef.current !== null) releasePointer()
+    }
+    window.addEventListener('pointerup', onWindowPointerUp, true)
+    window.addEventListener('pointercancel', onWindowPointerCancel, true)
+    window.addEventListener('blur', onBlur)
+    document.addEventListener('visibilitychange', onVisibilityChange)
+    return () => {
+      window.removeEventListener('pointerup', onWindowPointerUp, true)
+      window.removeEventListener('pointercancel', onWindowPointerCancel, true)
+      window.removeEventListener('blur', onBlur)
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+    }
+  }, [releasePointer])
+
   return (
     <Box
       data-testid={testId}
       onPointerDown={(e) => {
         if (pointerIdRef.current !== null) return
+        try {
+          e.currentTarget.setPointerCapture(e.pointerId)
+        } catch {
+          return
+        }
         pointerIdRef.current = e.pointerId
-        e.currentTarget.setPointerCapture(e.pointerId)
         const knob = knobRef.current
         if (knob) knob.style.transition = 'none'
         apply(e.clientX, e.clientY)

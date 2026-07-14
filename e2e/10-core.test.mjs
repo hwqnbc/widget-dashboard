@@ -81,6 +81,38 @@ await page.waitForTimeout(500)
 const hold2 = (await telemetry()).alt
 check('altitude holds after release', Math.abs(hold2 - hold1) < 0.3, `${hold1} vs ${hold2}`)
 
+// joystick recovery: a window blur mid-drag (tab backgrounded, no pointerup/
+// pointercancel guaranteed) must force-release the stick rather than leaving
+// it stuck driving stale input and dead to further touches
+await page.mouse.move(lc.x, lc.y)
+await page.mouse.down()
+await page.mouse.move(lc.x, lc.y - 40, { steps: 5 })
+await page.waitForTimeout(1200)
+const altClimbing = (await telemetry()).alt
+await page.evaluate(() => window.dispatchEvent(new Event('blur')))
+await page.waitForTimeout(900)
+const altAfterBlur1 = (await telemetry()).alt
+await page.waitForTimeout(500)
+const altAfterBlur2 = (await telemetry()).alt
+check(
+  'blur mid-drag stops the climb (force-released)',
+  Math.abs(altAfterBlur2 - altAfterBlur1) < 0.3,
+  `climbing=${altClimbing} then ${altAfterBlur1} vs ${altAfterBlur2}`,
+)
+await page.mouse.up() // reconcile Playwright's own mouse-button bookkeeping
+await page.mouse.move(lc.x, lc.y)
+await page.mouse.down()
+await page.mouse.move(lc.x, lc.y - 40, { steps: 5 })
+await page.waitForTimeout(1200)
+const altFreshDrag = (await telemetry()).alt
+check(
+  'stick responds to a fresh touch after blur (not stuck dead)',
+  altFreshDrag > altAfterBlur2 + 1.5,
+  `alt ${altAfterBlur2} -> ${altFreshDrag}`,
+)
+await page.mouse.up()
+await page.waitForTimeout(900)
+
 // right stick up via mouse: speed, then inertia braking
 const rc = await stickCenter(page, 'dronesim-joystick-right')
 await page.mouse.move(rc.x, rc.y)
