@@ -288,3 +288,24 @@ feature rounds (flight, collision, gates, time trial, courses, weather, crash).
     (`data-boom`) — camera behaviour is otherwise invisible to DOM-level
     tests. E2E sub-lesson: steering yaw continuously off 150 ms-stale
     telemetry overshoots; align with short nudge → settle → re-read rounds.
+
+39. **A captured-pointer-id gate is not a complete release guarantee.**
+    The drone sim's virtual joystick tracked one `pointerId` per stick and
+    reset it only on `pointerup`/`pointercancel`/`lostpointercapture` for
+    that id — but the spec doesn't require any of those to fire when a tab
+    loses focus or is backgrounded mid-drag, only `blur`/`visibilitychange`
+    are guaranteed. A single missed release event stuck the knob at its
+    last position forever *and* the down-handler's "already tracking"
+    guard then rejected every future touch on that stick too, since it only
+    checked whether something was tracked, not whether it was stale. Fix:
+    add a window-level `blur`/`visibilitychange` fallback (plus a
+    capture-phase window `pointerup`/`pointercancel` listener as
+    defense-in-depth against a dropped local dispatch) that force-calls the
+    same release path. Any other imperative pointer-capture input in this
+    codebase needs the same fallback or it can wedge itself the same way.
+    E2E sub-lesson: reproduce with `page.evaluate(() =>
+    window.dispatchEvent(new Event('blur')))` mid-drag, then assert both
+    that the stat stops moving *and* that a fresh touch on the same stick
+    still drives it — the second assertion is the one that actually catches
+    the "stuck forever" failure mode, since a plain reset-on-blur check
+    can pass even while the down-guard is still wedged shut.

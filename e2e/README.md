@@ -32,7 +32,7 @@ mode state from the widget root's `data-*` attributes via
 
 | Suite | Covers |
 |---|---|
-| `10-core` | element presence, climb + altitude hold, inertia braking, simultaneous multi-touch, reset, camera cycle (tp/fp/los) + persistence, grid-drag isolation |
+| `10-core` | element presence, climb + altitude hold, inertia braking, joystick recovery on window blur mid-drag, simultaneous multi-touch, reset, camera cycle (tp/fp/los) + persistence, grid-drag isolation |
 | `15-chasecam` | chase-boom wall avoidance: full extension in open sky, clamps against a wall behind the drone (`data-boom`), re-extends in the clear |
 | `20-collision` | closed-loop rooftop landing: rests on the roof, stays in the footprint, no tunneling under sustained descent |
 | `30-timetrial` | full lap (pad → gates 1-3 → pad): timer start/finish, TO PAD phase, banner, laps/best bookkeeping, mid-lap reset, persistence, ghost render |
