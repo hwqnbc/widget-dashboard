@@ -7,7 +7,7 @@
  * is down). Deliberately slow: WALK_SPEED is a human pace — losing sight of
  * a fast drone is the intended trade-off of the mode, not a bug.
  */
-import type { Collider, Vec2 } from './flightModel'
+import type { Collider, ControlInput } from './flightModel'
 import { DRONE_RADIUS, OPERATOR, SPAWN, WORLD_HALF } from './flightModel'
 import { PAD_CENTER, PAD_START_RADIUS } from './lapTimer'
 
@@ -18,6 +18,8 @@ export interface OperatorState {
   z: number
   /** Facing, drone-yaw convention (-Z forward at 0). */
   heading: number
+  /** Look up/down while walking manually (rad, clamped ±MAX_PITCH). */
+  pitch: number
   mode: OperatorMode
   /** Total distance walked — drives the figure/camera bob. */
   walkPhase: number
@@ -40,6 +42,12 @@ export const coerceFollowDist = (v: unknown): number | undefined =>
     : undefined
 export const PICKUP_DIST = 1.3
 export const OP_RADIUS = 0.4
+/** Manual (FPS) walking: left stick turns/pitches the look, right stick
+ * strafes/walks — body-relative, same yaw sign convention as the drone. */
+export const OP_TURN_RATE = 2.2
+export const OP_PITCH_RATE = 1.6
+export const MAX_PITCH = 1.0
+const MANUAL_DEADZONE = 0.12
 /** A dead drone is reachable on foot only at ground level (roofs aren't —
  * reset remains the rescue there). */
 export const GROUND_EPS = 0.15
@@ -68,6 +76,7 @@ export function createOperatorState(): OperatorState {
     x: OPERATOR.x,
     z: OPERATOR.z,
     heading: INITIAL_HEADING,
+    pitch: 0,
     mode: 'idle',
     walkPhase: 0,
   }
@@ -77,6 +86,7 @@ export function resetOperatorState(op: OperatorState): void {
   op.x = OPERATOR.x
   op.z = OPERATOR.z
   op.heading = INITIAL_HEADING
+  op.pitch = 0
   op.mode = 'idle'
   op.walkPhase = 0
 }
@@ -106,17 +116,21 @@ function resolveOperator(op: OperatorState, colliders: readonly Collider[]): voi
 /**
  * Advance the operator one frame. Returns 'pickup' the frame the dead drone
  * is grabbed, 'place' the frame it is set down on the pad, else null.
- * `stick` is the right-stick vector — while the drone is down it steers the
- * walk (world-aligned: y = -Z/"up the map", x = +X) instead of the autopilot.
- * `hold` freezes the FOLLOW autopilot (stand at the current spot); a rescue
- * (retrieve/carry) deliberately overrides it — fetching the drone is why
- * you walked out here.
+ *
+ * `hold` is the walk-view person button. While the drone flies it freezes
+ * the FOLLOW autopilot (stand at the current spot — the sticks keep flying
+ * the drone). During a rescue (retrieve/carry — the drone's own sticks are
+ * DEAD_INPUT) it means MANUAL WALK instead: first-person controls, left
+ * stick turns (X, drone yaw convention) and pitches the look (Y), right
+ * stick walks along the facing (Y) and strafes (X); pickup/place still
+ * trigger by proximity, so you can grab and deliver the drone yourself —
+ * or just tour the world with it.
  */
 export function stepOperator(
   op: OperatorState,
   dt: number,
   drone: DroneSummary,
-  stick: Vec2,
+  input: ControlInput,
   colliders: readonly Collider[],
   hold = false,
   followDist: number = FOLLOW_STOP,
@@ -133,22 +147,55 @@ export function stepOperator(
     op.mode = 'follow' // revived / respawned mid-walk
   }
 
+  const rescuing = op.mode === 'retrieve' || op.mode === 'carry'
+
+  // Proximity triggers fire in both auto and manual walking.
+  if (op.mode === 'carry') {
+    if (Math.hypot(op.x - PAD_CENTER.x, op.z - PAD_CENTER.z) <= PAD_START_RADIUS - 0.4) {
+      op.mode = 'follow'
+      return 'place'
+    }
+  } else if (op.mode === 'retrieve') {
+    if (Math.hypot(op.x - drone.x, op.z - drone.z) <= PICKUP_DIST) {
+      op.mode = 'carry'
+      return 'pickup'
+    }
+  }
+
+  if (rescuing && hold) {
+    // MANUAL WALK (first-person).
+    op.heading -= input.left.x * OP_TURN_RATE * step
+    op.pitch = Math.max(
+      -MAX_PITCH,
+      Math.min(MAX_PITCH, op.pitch + input.left.y * OP_PITCH_RATE * step),
+    )
+    const fwd = Math.abs(input.right.y) > MANUAL_DEADZONE ? input.right.y : 0
+    const strafe = Math.abs(input.right.x) > MANUAL_DEADZONE ? input.right.x : 0
+    const mag = Math.hypot(fwd, strafe)
+    if (mag < 1e-6) return null
+    const scale = (WALK_SPEED * step * Math.min(1, mag)) / mag
+    const sin = Math.sin(op.heading)
+    const cos = Math.cos(op.heading)
+    // forward = (-sin, -cos); body-right = (cos, -sin)
+    const moveX = (fwd * -sin + strafe * cos) * scale
+    const moveZ = (fwd * -cos + strafe * -sin) * scale
+    op.x += moveX
+    op.z += moveZ
+    op.walkPhase += Math.hypot(moveX, moveZ)
+    op.x = Math.max(-WORLD_HALF, Math.min(WORLD_HALF, op.x))
+    op.z = Math.max(-WORLD_HALF, Math.min(WORLD_HALF, op.z))
+    resolveOperator(op, colliders)
+    return null
+  }
+
   let tx: number
   let tz: number
   if (op.mode === 'carry') {
     tx = PAD_CENTER.x
     tz = PAD_CENTER.z
-    if (Math.hypot(op.x - tx, op.z - tz) <= PAD_START_RADIUS - 0.4) {
-      op.mode = 'follow'
-      return 'place'
-    }
   } else if (op.mode === 'retrieve') {
     tx = drone.x
     tz = drone.z
-    if (Math.hypot(op.x - tx, op.z - tz) <= PICKUP_DIST) {
-      op.mode = 'carry'
-      return 'pickup'
-    }
   } else {
     if (hold) {
       op.mode = 'idle'
@@ -162,26 +209,19 @@ export function stepOperator(
     tz = drone.z
   }
 
-  let dirX: number
-  let dirZ: number
-  const stickMag = Math.hypot(stick.x, stick.y)
-  if ((op.mode === 'carry' || op.mode === 'retrieve') && stickMag > 0.15) {
-    dirX = stick.x / stickMag
-    dirZ = -stick.y / stickMag
-  } else {
-    const dx = tx - op.x
-    const dz = tz - op.z
-    const d = Math.hypot(dx, dz)
-    if (d < 1e-6) return null
-    dirX = dx / d
-    dirZ = dz / d
-  }
+  const dx = tx - op.x
+  const dz = tz - op.z
+  const d = Math.hypot(dx, dz)
+  if (d < 1e-6) return null
+  const dirX = dx / d
+  const dirZ = dz / d
 
   const move = WALK_SPEED * step
   op.x += dirX * move
   op.z += dirZ * move
   op.walkPhase += move
   op.heading = Math.atan2(-dirX, -dirZ)
+  op.pitch = 0 // autopilot looks level; the camera handles the drone-look
   op.x = Math.max(-WORLD_HALF, Math.min(WORLD_HALF, op.x))
   op.z = Math.max(-WORLD_HALF, Math.min(WORLD_HALF, op.z))
   resolveOperator(op, colliders)

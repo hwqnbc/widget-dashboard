@@ -64,6 +64,7 @@ export default function DroneRig({
   operator,
   operatorHold,
   followDist,
+  pilotChipRef,
   minimapOperatorRef,
   onWalkerEvent,
   hudRef,
@@ -102,6 +103,9 @@ export default function DroneRig({
   operatorHold: boolean
   /** Preferred follow distance (the walker's stop radius). */
   followDist: number
+  /** Pilot chip (los/walk views) — text + data-pilot written on the tick,
+   * because the rescue/manual state lives in refs and never re-renders. */
+  pilotChipRef: RefObject<HTMLDivElement | null>
   minimapOperatorRef: RefObject<SVGGElement | null>
   onWalkerEvent: (event: WalkerEvent) => void
   hudRef: RefObject<HTMLDivElement | null>
@@ -186,7 +190,7 @@ export default function DroneRig({
             dead: batteryMode && battery.dead,
             grounded: flight.pos.y <= DRONE_RADIUS + GROUND_EPS,
           },
-          controls.right,
+          controls,
           colliders,
           operatorHold,
           followDist,
@@ -389,6 +393,37 @@ export default function DroneRig({
         hud.dataset.opX = op.x.toFixed(2)
         hud.dataset.opZ = op.z.toFixed(2)
         hud.dataset.opMode = op.mode
+        hud.dataset.opHeading = op.heading.toFixed(2)
+      }
+      const chip = pilotChipRef.current
+      if (chip) {
+        const op = operator.current
+        const rescuing = op.mode === 'retrieve' || op.mode === 'carry'
+        const pilot =
+          view === 'los'
+            ? 'standing'
+            : rescuing
+              ? operatorHold
+                ? 'manual-walk'
+                : 'auto-rescue'
+              : operatorHold
+                ? 'holding'
+                : 'walking'
+        if (chip.dataset.pilot !== pilot) {
+          chip.dataset.pilot = pilot
+          chip.textContent =
+            pilot === 'standing'
+              ? 'PILOT · STANDING'
+              : pilot === 'manual-walk'
+                ? 'PILOT · MANUAL WALK (STICKS = MOVE/LOOK)'
+                : pilot === 'auto-rescue'
+                  ? 'PILOT · AUTO RESCUE'
+                  : pilot === 'holding'
+                    ? 'PILOT · HOLDING POSITION'
+                    : 'PILOT · WALKING (FOLLOWS DRONE)'
+          chip.style.color =
+            pilot === 'holding' || pilot === 'manual-walk' ? '#ffab40' : '#b0bec5'
+        }
       }
       const opMarker = minimapOperatorRef.current
       if (opMarker) {

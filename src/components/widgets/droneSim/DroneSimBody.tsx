@@ -144,6 +144,7 @@ export default function DroneSimBody({ id }: WidgetProps) {
   const minimapOperatorRef = useRef<SVGGElement>(null)
   const operatorRef = useRef(createOperatorState())
   const followDist = useWidgetField(id, 'followDist', 7, coerceFollowDist)
+  const pilotChipRef = useRef<HTMLDivElement>(null)
   // Hold position: freezes the walking pilot's follow autopilot so the op
   // stands wherever it is (transient, like the op position itself).
   const [opHold, setOpHold] = useState(false)
@@ -416,6 +417,7 @@ export default function DroneSimBody({ id }: WidgetProps) {
             operator={operatorRef}
             operatorHold={opHold}
             followDist={followDist}
+            pilotChipRef={pilotChipRef}
             minimapOperatorRef={minimapOperatorRef}
             onWalkerEvent={onWalkerEvent}
             hudRef={hudRef}
@@ -449,6 +451,7 @@ export default function DroneSimBody({ id }: WidgetProps) {
             view={view}
             flight={flight}
             operator={operatorRef}
+            operatorHold={opHold}
             colliders={layout.colliders}
             hudRef={hudRef}
           />
@@ -469,6 +472,7 @@ export default function DroneSimBody({ id }: WidgetProps) {
         data-op-x="3.20"
         data-op-z="23.00"
         data-op-mode="idle"
+        data-op-heading="0.57"
         sx={{
           position: 'absolute',
           top: 8,
@@ -559,8 +563,10 @@ export default function DroneSimBody({ id }: WidgetProps) {
 
       {(view === 'los' || view === 'walk') && (
         <Box
+          ref={pilotChipRef}
           data-testid="dronesim-pilot-chip"
-          data-pilot={view === 'los' ? 'standing' : opHold ? 'holding' : 'walking'}
+          // text + data-pilot + colour are written by DroneRig on the
+          // telemetry tick — the rescue/manual state lives in refs.
           sx={{
             position: 'absolute',
             top: 8,
@@ -570,20 +576,14 @@ export default function DroneSimBody({ id }: WidgetProps) {
             py: 0.25,
             borderRadius: 1,
             bgcolor: alpha('#000', 0.4),
-            color: view === 'walk' && opHold ? '#ffab40' : '#b0bec5',
+            color: '#b0bec5',
             fontFamily: 'monospace',
             fontSize: 11,
             letterSpacing: 0.5,
             pointerEvents: 'none',
             whiteSpace: 'nowrap',
           }}
-        >
-          {view === 'los'
-            ? 'PILOT · STANDING'
-            : opHold
-              ? 'PILOT · HOLDING POSITION'
-              : 'PILOT · WALKING (FOLLOWS DRONE)'}
-        </Box>
+        />
       )}
 
       {banner && (
@@ -646,8 +646,8 @@ export default function DroneSimBody({ id }: WidgetProps) {
           <Tooltip
             title={
               opHold
-                ? 'Resume walking (follow the drone)'
-                : 'Hold position (stand here, stop following)'
+                ? 'Resume autopilot (follow the drone / auto rescue)'
+                : 'Autopilot off: hold position — or walk manually with the sticks while the drone is down'
             }
           >
             <IconButton

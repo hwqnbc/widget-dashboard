@@ -171,6 +171,11 @@ await pilot.brake()
 await pilot.touch(0, 0, 0, 0)
 await pilot.touchEnd()
 await setSwitch(page, 'dronesim-battery-toggle', true)
+// Engage the toggle now: a harmless hold while the drone still flies, and
+// MANUAL WALK the moment it dies — proving the same button covers both.
+await holdBtn.click()
+await page.waitForTimeout(300)
+check('toggle engaged: holding while the drone still flies', (await chip.getAttribute('data-pilot')) === 'holding')
 await pilot.touchStart()
 // descend to a low hover first so the dead drone lands quickly
 await pilot.flyTo({ x: SPOT.x, y: 6, z: SPOT.z }, { maxForward: 0.4, tol: 1.5 })
@@ -193,6 +198,40 @@ while (Date.now() < groundDeadline) {
   await page.waitForTimeout(400)
 }
 check('dead drone auto-landed', (await telemetry()).alt < 0.5, `alt=${(await telemetry()).alt}`)
+
+// --- manual walk: toggle held, so no auto-approach; sticks drive the op ---
+await page.waitForTimeout(500)
+check('chip: MANUAL WALK once the drone is down', (await chip.getAttribute('data-pilot')) === 'manual-walk')
+const mw0 = await opState()
+await page.waitForTimeout(2000)
+const mw1 = await opState()
+check(
+  'manual: op does not auto-approach the dead drone',
+  Math.hypot(mw1.x - mw0.x, mw1.z - mw0.z) < 0.3 && mw1.mode === 'retrieve',
+  JSON.stringify(mw1),
+)
+const heading0 = parseFloat(await hud.getAttribute('data-op-heading'))
+await pilot.touchStart()
+await pilot.touch(1, 0, 0, 0) // left stick right = turn right
+await page.waitForTimeout(1000)
+await pilot.touch(0, 0, 0, 0)
+await page.waitForTimeout(300)
+const heading1 = parseFloat(await hud.getAttribute('data-op-heading'))
+check('left stick turns the op', heading1 < heading0 - 1, `${heading0} -> ${heading1}`)
+const w0 = await opState()
+await pilot.touch(0, 0, 0, 1) // right stick forward = walk along the facing
+await page.waitForTimeout(1500)
+await pilot.touch(0, 0, 0, 0)
+await pilot.touchEnd()
+const w1 = await opState()
+const wd = Math.hypot(w1.x - w0.x, w1.z - w0.z)
+const dot = wd > 0 ? ((w1.x - w0.x) * -Math.sin(heading1) + (w1.z - w0.z) * -Math.cos(heading1)) / wd : 0
+check('right stick walks along the facing', wd > 1.5 && dot > 0.9, `moved=${wd.toFixed(1)} dot=${dot.toFixed(2)}`)
+await page.screenshot({ path: `${ARTIFACTS_DIR}walker-manual.png` })
+// hand the job back to the autopilot for the rest of the rescue
+await holdBtn.click()
+await page.waitForTimeout(300)
+check('chip: AUTO RESCUE after disengaging', (await chip.getAttribute('data-pilot')) === 'auto-rescue')
 
 const carryDeadline = Date.now() + 30000
 let sawRetrieve = false

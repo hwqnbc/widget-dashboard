@@ -302,22 +302,34 @@ The view button cycles `tp → fp → los → tp` (persisted `view`):
   its spot. HUD publishes `data-op-x/-op-z/-op-mode`; the minimap shows an
   operator dot.
   A **pilot chip** (top centre, `data-pilot`) differentiates the operator
-  views at a glance: `PILOT · STANDING` (los) vs `WALKING (FOLLOWS DRONE)`
-  vs `HOLDING POSITION`. A **hold button** (walk view only, 4th inline
-  button) freezes the follow autopilot so the op stands wherever it
-  currently is — walk somewhere, hold, and you've re-planted the standing
-  pilot at a new spot. Hold is transient (root mirrors `data-op-hold`),
-  cleared by reset, and deliberately overridden by a rescue — fetching the
-  dead drone is why you walked out there.
+  views at a glance: `PILOT · STANDING` (los), `WALKING (FOLLOWS DRONE)`,
+  `HOLDING POSITION`, `AUTO RESCUE` or `MANUAL WALK`. Its text/colour is
+  written by `DroneRig` on the telemetry tick (the timer-chip pattern),
+  because the rescue state lives in refs and never re-renders React.
+  The **autopilot button** (walk view only, 4th inline button, person icon)
+  means two things depending on the drone:
+  - *Drone flying*: **hold position** — the follow autopilot freezes and the
+    op stands wherever it currently is (the sticks keep flying the drone, so
+    you can re-plant the standing pilot at a new vantage and fly from
+    there). Transient (root mirrors `data-op-hold`), cleared by reset.
+  - *Drone down (retrieve/carry)*: **manual walk** — the drone's sticks are
+    `DEAD_INPUT`, so they drive the operator instead, first-person: left
+    stick turns (X, the drone's yaw convention, `OP_TURN_RATE` 2.2) and
+    pitches the look (Y, clamped ±`MAX_PITCH`); right stick walks along the
+    facing (Y) and strafes (X) — body-relative, capped at `WALK_SPEED`. The
+    camera obeys `heading`/`pitch` directly (free FPS look, fov pinned) —
+    tour the world on foot, and pickup/place still fire by proximity, so
+    you can grab the drone and deliver it to the pad yourself. HUD adds
+    `data-op-heading`.
   **Drone rescue**: with battery mode on, when the drone dies *at ground
   level* (roofs are unreachable on foot — reset remains that rescue), the
   walking op switches to `retrieve`, walks over, picks the drone up within
   `PICKUP_DIST` (banner), **carries** it at hand height back to the spawn
-  pad and places it — the ordinary on-pad recharge then revives it. While
-  the drone is down the right stick steers the walk manually (the drone's
-  sticks are dead anyway); auto-walking resumes when released. Once
-  retrieving/carrying, the op finishes the job even if you switch views.
-  While carrying, the camera looks down the walking path (staring at a
+  pad and places it — the ordinary on-pad recharge then revives it. That
+  autopilot runs whenever the toggle is off; engage it any time to take
+  over on foot, disengage to hand the job back. Once retrieving/carrying,
+  the op finishes the job even if you switch views.
+  While auto-carrying, the camera looks down the walking path (staring at a
   drone half a metre from the eyes fills the screen with fuselage), and
   physics is paused for the drone (impact 0, velocity zeroed — no crash,
   landing, or lap side-effects; recharge is disabled in-hand so revival

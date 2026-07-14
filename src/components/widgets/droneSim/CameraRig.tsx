@@ -38,6 +38,7 @@ export default function CameraRig({
   view,
   flight,
   operator,
+  operatorHold,
   colliders,
   hudRef,
 }: {
@@ -45,6 +46,8 @@ export default function CameraRig({
   flight: FlightState
   /** Shared walking-operator state — the los/walk eye position. */
   operator: { current: OperatorState }
+  /** During a rescue this means manual walk: free FPS look. */
+  operatorHold: boolean
   colliders: readonly Collider[]
   /** HUD element; the rig mirrors the live chase-boom length onto its
    * `data-boom` attribute (throttled), same pattern as DroneRig's telemetry. */
@@ -64,6 +67,16 @@ export default function CameraRig({
       const bob =
         view === 'walk' ? Math.abs(Math.sin(op.walkPhase * 4.4)) * 0.05 : 0
       camera.position.set(op.x, OPERATOR_EYE_HEIGHT + bob, op.z)
+      // Manual walk (rescue + hold): free first-person look from the op's
+      // heading/pitch — the sticks steer, the camera obeys, no drone-lookAt.
+      const rescuing = op.mode === 'retrieve' || op.mode === 'carry'
+      if (view === 'walk' && operatorHold && rescuing) {
+        euler.set(op.pitch, op.heading, 0)
+        camera.quaternion.setFromEuler(euler)
+        camera.fov = damp(camera.fov, LOS_FOV_MAX, LOS_FOV_LAMBDA, dt)
+        camera.updateProjectionMatrix()
+        return
+      }
       // Carrying, the drone sits half a metre from the eyes — staring at it
       // fills the screen with fuselage. Look down the walking path instead.
       const carrying = op.mode === 'carry'

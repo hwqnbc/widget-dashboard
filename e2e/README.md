@@ -34,7 +34,7 @@ mode state from the widget root's `data-*` attributes via
 |---|---|
 | `10-core` | element presence, climb + altitude hold, inertia braking, joystick recovery on window blur mid-drag, simultaneous multi-touch, reset, camera cycle (tp/fp/los/walk) + persistence, grid-drag isolation |
 | `15-chasecam` | chase-boom wall avoidance: full extension in open sky, clamps against a wall behind the drone (`data-boom`), re-extends in the clear |
-| `17-walker` | walking pilot: follow on foot (speed hard-capped, drone outruns it, follow-band idle), pilot chip (standing/walking/holding), hold-position toggle + resume, full battery rescue (drain to dead → retrieve → carry → place on pad → recharge revives) via `data-op-*` |
+| `17-walker` | walking pilot: follow on foot (speed hard-capped, drone outruns it, follow-band idle), configurable follow distance, pilot chip (standing/walking/holding/auto-rescue/manual-walk), hold toggle + resume, manual FPS walk while the drone is down (turn + walk-along-facing via sticks), full battery rescue (drain to dead → retrieve → carry → place on pad → recharge revives) via `data-op-*` |
 | `20-collision` | closed-loop rooftop landing: rests on the roof, stays in the footprint, no tunneling under sustained descent |
 | `30-timetrial` | full lap (pad → gates 1-3 → pad): timer start/finish, TO PAD phase, banner, laps/best bookkeeping, mid-lap reset, persistence, ghost render |
 | `40-shuffle` | new-course button: instant shuffle vs ConfirmDialog guard, stat clearing, seed persistence |
