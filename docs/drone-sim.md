@@ -21,9 +21,10 @@ city with twin on-screen thumbsticks, in third-person chase or first-person
 | Right (`MOVE`) | strafe | forward / backward |
 
 Top-right buttons — only three, deliberately: camera cycle (`tp` chase →
-`fp` FPV → `los` pilot view → back; persisted), reset (back to the landing
-pad, transient), and a settings gear that opens the **settings panel**
-(below). Every mode toggle lives in the panel, not in the button row.
+`fp` FPV → `los` standing pilot → `walk` walking pilot → back; persisted),
+reset (back to the landing pad, transient), and a settings gear that opens
+the **settings panel** (below). Every mode toggle lives in the panel, not in
+the button row.
 
 ## Settings panel (`SettingsPanel.tsx`)
 
@@ -279,9 +280,34 @@ The view button cycles `tp → fp → los → tp` (persisted `view`):
   distance (65 → 22 over ~78 u, damped λ = 3) so the drone stays legible
   across the map — the squint-into-the-distance feel of real line-of-sight
   flying. Leaving `los` eases the fov back to 60. The operator figure
-  (`WorldScene`, simple primitives holding an RC transmitter, facing the
-  pad) renders in the other two views and hides in `los` — the camera
-  stands at its eyes.
+  (`OperatorFigure.tsx`, simple primitives holding an RC transmitter)
+  renders in `tp`/`fp` and hides in `los`/`walk` — the camera stands at its
+  eyes.
+- **`walk` walking pilot**: the same operator, on the move. A pure
+  mutate-in-place module (`operatorWalk.ts`, the `lapTimer` pattern) steps
+  the op each frame: beyond `FOLLOW_START` (10) it walks toward the drone's
+  ground position, stopping inside `FOLLOW_STOP` (7) — hysteresis, no
+  jitter. **`WALK_SPEED` is hard-capped at 2.2 u/s** (~18 % of the drone's
+  top speed): losing sight of a fast drone is the intended trade-off, not a
+  bug. The op slides along building walls (the collision push-out on x/z,
+  point + `OP_RADIUS`) — no pathfinding. The camera is the `los` eye at the
+  op's position plus a small step-bob; both views share ONE operator state,
+  so switching views never teleports anyone, and reset returns the op to
+  its spot. HUD publishes `data-op-x/-op-z/-op-mode`; the minimap shows an
+  operator dot.
+  **Drone rescue**: with battery mode on, when the drone dies *at ground
+  level* (roofs are unreachable on foot — reset remains that rescue), the
+  walking op switches to `retrieve`, walks over, picks the drone up within
+  `PICKUP_DIST` (banner), **carries** it at hand height back to the spawn
+  pad and places it — the ordinary on-pad recharge then revives it. While
+  the drone is down the right stick steers the walk manually (the drone's
+  sticks are dead anyway); auto-walking resumes when released. Once
+  retrieving/carrying, the op finishes the job even if you switch views.
+  While carrying, the camera looks down the walking path (staring at a
+  drone half a metre from the eyes fills the screen with fuselage), and
+  physics is paused for the drone (impact 0, velocity zeroed — no crash,
+  landing, or lap side-effects; recharge is disabled in-hand so revival
+  happens on the pad, not mid-carry).
 
 ## Layout / fullscreen
 
@@ -320,8 +346,9 @@ an active landing-challenge pad — the two modes combine into a
 station-hopping game. At `15 %` a one-shot `LOW BATTERY!` warns; at `0 %`
 the sticks die (`DEAD_INPUT`: gentle powered descent, no lateral control),
 the drone auto-lands wherever it is, and it stays dead until recharged on a
-pad (revives at `20 %` with a `RECHARGED!` banner) or rescued by reset
-(which always refills). The state machine (`stepBattery`) is pure and
+pad (revives at `20 %` with a `RECHARGED!` banner), carried back to the pad
+by the walking operator (see the `walk` view — the in-fiction rescue), or
+rescued by reset (which always refills). The state machine (`stepBattery`) is pure and
 transient — a reload starts full, like the rest of the live sim state.
 
 ## Landing challenge

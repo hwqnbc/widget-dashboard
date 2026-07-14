@@ -1,6 +1,6 @@
 import type { RefObject } from 'react'
 import { Box, alpha } from '@mui/material'
-import { SPAWN, WORLD_HALF } from './flightModel'
+import { OPERATOR, SPAWN, WORLD_HALF } from './flightModel'
 import type { BuildingSpec, LandingPadSpec, RingSpec } from './worldLayout'
 import { RING_RADIUS } from './worldLayout'
 
@@ -22,6 +22,7 @@ export default function Minimap({
   bestLapPath,
   landingPads,
   droneRef,
+  operatorRef,
   size,
 }: {
   buildings: readonly BuildingSpec[]
@@ -31,6 +32,8 @@ export default function Minimap({
   /** Empty unless the landing challenge is active. */
   landingPads: readonly LandingPadSpec[]
   droneRef: RefObject<SVGGElement | null>
+  /** Walking-operator dot — transform written on the tick like the drone. */
+  operatorRef: RefObject<SVGGElement | null>
   size: number
 }) {
   const ghostPoints: string[] = []
@@ -113,6 +116,15 @@ export default function Minimap({
             fillOpacity={0.85}
           />
         ))}
+
+        {/* operator dot: transform written by DroneRig on the telemetry tick */}
+        <g
+          ref={operatorRef}
+          data-testid="dronesim-minimap-operator"
+          transform={`translate(${OPERATOR.x} ${OPERATOR.z})`}
+        >
+          <circle r={1.6} fill="#ffab40" stroke="#000" strokeWidth={0.4} />
+        </g>
 
         {/* drone marker: transform written by DroneRig on the telemetry tick */}
         <g ref={droneRef} data-testid="dronesim-minimap-drone">

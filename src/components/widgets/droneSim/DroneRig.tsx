@@ -5,6 +5,7 @@ import type { Group, Mesh, MeshBasicMaterial } from 'three'
 import type {
   Collider,
   ControlInput,
+  DroneView,
   FlightMode,
   FlightState,
   Tuning,
@@ -15,12 +16,15 @@ import {
   CRASH_DURATION,
   CRASH_SPEED,
   DEAD_INPUT,
+  DRONE_RADIUS,
   SPAWN,
   sampleWind,
   stepBattery,
   stepCrash,
   stepFlight,
 } from './flightModel'
+import type { OperatorState, WalkerEvent } from './operatorWalk'
+import { CARRY_HEIGHT, CARRY_REACH, GROUND_EPS, stepOperator } from './operatorWalk'
 import type { Gate, LandingPadSpec } from './worldLayout'
 import { crossedGate, scoreLanding } from './worldLayout'
 import type { LapState } from './lapTimer'
@@ -56,6 +60,10 @@ export interface CrashState {
 export default function DroneRig({
   controls,
   flight,
+  view,
+  operator,
+  minimapOperatorRef,
+  onWalkerEvent,
   hudRef,
   timerRef,
   minimapDroneRef,
@@ -85,6 +93,11 @@ export default function DroneRig({
 }: {
   controls: ControlInput
   flight: FlightState
+  view: DroneView
+  /** The walking operator (shared with CameraRig/OperatorFigure/Minimap). */
+  operator: { current: OperatorState }
+  minimapOperatorRef: RefObject<SVGGElement | null>
+  onWalkerEvent: (event: WalkerEvent) => void
   hudRef: RefObject<HTMLDivElement | null>
   timerRef: RefObject<HTMLDivElement | null>
   /** Minimap drone marker — transform is written here, never via React. */
@@ -152,9 +165,39 @@ export default function DroneRig({
         onCrashEnd()
       }
     } else {
-      // Battery bookkeeping first — a dead battery kills the sticks and the
-      // drone descends where it is until rescued (pad recharge or reset).
+      // Walking operator: steps in walk view; once retrieving or carrying it
+      // sees the rescue through in any view. 'place' sets the drone down on
+      // the pad — the ordinary on-pad recharge then revives it.
+      const op = operator.current
       const battery = batteryRef.current
+      if (view === 'walk' || op.mode === 'retrieve' || op.mode === 'carry') {
+        const walkerEvent = stepOperator(
+          op,
+          dt,
+          {
+            x: flight.pos.x,
+            z: flight.pos.z,
+            dead: batteryMode && battery.dead,
+            grounded: flight.pos.y <= DRONE_RADIUS + GROUND_EPS,
+          },
+          controls.right,
+          colliders,
+        )
+        if (walkerEvent === 'place') {
+          flight.pos.x = PAD_CENTER.x
+          flight.pos.y = DRONE_RADIUS
+          flight.pos.z = PAD_CENTER.z
+          flight.vel.x = 0
+          flight.vel.y = 0
+          flight.vel.z = 0
+        }
+        if (walkerEvent) onWalkerEvent(walkerEvent)
+      }
+      const carried = op.mode === 'carry'
+
+      // Battery bookkeeping first — a dead battery kills the sticks and the
+      // drone descends where it is until rescued (pad recharge, the walking
+      // operator's carry, or reset).
       let effectiveControls = controls
       if (batteryMode) {
         const activity = Math.max(
@@ -163,7 +206,9 @@ export default function DroneRig({
           Math.abs(controls.right.x),
           Math.abs(controls.right.y),
         )
+        // No recharging in the operator's hands — only set down on a pad.
         const onSpawnPad =
+          !carried &&
           flight.pos.y < 1.2 &&
           Math.hypot(flight.pos.x - PAD_CENTER.x, flight.pos.z - PAD_CENTER.z) <=
             PAD_START_RADIUS
@@ -184,15 +229,30 @@ export default function DroneRig({
         if (battery.dead) effectiveControls = DEAD_INPUT
       }
 
-      const impact = stepFlight(
-        flight,
-        effectiveControls,
-        dt,
-        colliders,
-        weather === 'storm' ? wind : undefined,
-        flightMode,
-        tuning,
-      )
+      if (carried) {
+        // The drone rides in the operator's hands: physics paused, pose set
+        // directly. impact stays 0 so crash/landing/haptics stay silent, and
+        // zeroed velocity keeps the lap logic from seeing self-propulsion.
+        flight.pos.x = op.x - Math.sin(op.heading) * CARRY_REACH
+        flight.pos.z = op.z - Math.cos(op.heading) * CARRY_REACH
+        flight.pos.y = CARRY_HEIGHT
+        flight.vel.x = 0
+        flight.vel.y = 0
+        flight.vel.z = 0
+        flight.tiltPitch = 0
+        flight.tiltRoll = 0
+      }
+      const impact = carried
+        ? 0
+        : stepFlight(
+            flight,
+            effectiveControls,
+            dt,
+            colliders,
+            weather === 'storm' ? wind : undefined,
+            flightMode,
+            tuning,
+          )
       if (crashMode && impact >= CRASH_SPEED) {
         crash.active = true
         crash.until = clock.elapsedTime + CRASH_DURATION
@@ -317,6 +377,18 @@ export default function DroneRig({
         hud.dataset.x = flight.pos.x.toFixed(2)
         hud.dataset.z = flight.pos.z.toFixed(2)
         hud.dataset.yaw = flight.yaw.toFixed(3)
+        const op = operator.current
+        hud.dataset.opX = op.x.toFixed(2)
+        hud.dataset.opZ = op.z.toFixed(2)
+        hud.dataset.opMode = op.mode
+      }
+      const opMarker = minimapOperatorRef.current
+      if (opMarker) {
+        const op = operator.current
+        opMarker.setAttribute(
+          'transform',
+          `translate(${op.x.toFixed(2)} ${op.z.toFixed(2)})`,
+        )
       }
       const bar = batteryBarRef.current
       if (bar) {

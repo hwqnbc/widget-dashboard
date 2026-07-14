@@ -309,3 +309,15 @@ feature rounds (flight, collision, gates, time trial, courses, weather, crash).
     still drives it — the second assertion is the one that actually catches
     the "stuck forever" failure mode, since a plain reset-on-blur check
     can pass even while the down-guard is still wedged shut.
+
+39. **Give a world actor exactly one shared state object across every system
+    that reads it.** The walking operator is one mutable `OperatorState` ref
+    read by the sim loop (stepping), two camera modes (the eye), the world
+    figure (the mesh), the minimap (the dot) and the HUD (telemetry) —
+    switching views can never teleport anyone because there is nothing to
+    disagree about. Related camera lesson: when the camera-holder CARRIES
+    the subject, stop looking at the subject — half a metre from the eyes
+    it fills the frame with fuselage; look down the walking path instead.
+    And pause physics for a held object explicitly (zero velocity, impact
+    0) so crash/landing/lap triggers see nothing, rather than fighting the
+    integrator with position overwrites.

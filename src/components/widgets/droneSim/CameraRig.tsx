@@ -4,7 +4,8 @@ import { useFrame, useThree } from '@react-three/fiber'
 import { Euler, Vector3 } from 'three'
 import type { PerspectiveCamera } from 'three'
 import type { Collider, DroneView, FlightState } from './flightModel'
-import { OPERATOR, OPERATOR_EYE_HEIGHT, boomClipT, damp } from './flightModel'
+import { OPERATOR_EYE_HEIGHT, boomClipT, damp } from './flightModel'
+import type { OperatorState } from './operatorWalk'
 
 const UP = new Vector3(0, 1, 0)
 /** Chase camera sits behind/above the drone in its body frame (+Z = behind). */
@@ -36,11 +37,14 @@ const LOS_FOV_LAMBDA = 3
 export default function CameraRig({
   view,
   flight,
+  operator,
   colliders,
   hudRef,
 }: {
   view: DroneView
   flight: FlightState
+  /** Shared walking-operator state — the los/walk eye position. */
+  operator: { current: OperatorState }
   colliders: readonly Collider[]
   /** HUD element; the rig mirrors the live chase-boom length onto its
    * `data-boom` attribute (throttled), same pattern as DroneRig's telemetry. */
@@ -53,21 +57,31 @@ export default function CameraRig({
   const lastBoomWrite = useRef(0)
 
   useFrame((_, dt) => {
-    if (view === 'los') {
-      camera.position.set(OPERATOR.x, OPERATOR_EYE_HEIGHT, OPERATOR.z)
-      lookTarget.x = damp(lookTarget.x, flight.pos.x, LOS_LOOK_LAMBDA, dt)
-      lookTarget.y = damp(lookTarget.y, flight.pos.y, LOS_LOOK_LAMBDA, dt)
-      lookTarget.z = damp(lookTarget.z, flight.pos.z, LOS_LOOK_LAMBDA, dt)
+    if (view === 'los' || view === 'walk') {
+      // Eye at the operator: stationary in los, on the move in walk (with a
+      // small step-bob driven by distance walked).
+      const op = operator.current
+      const bob =
+        view === 'walk' ? Math.abs(Math.sin(op.walkPhase * 4.4)) * 0.05 : 0
+      camera.position.set(op.x, OPERATOR_EYE_HEIGHT + bob, op.z)
+      // Carrying, the drone sits half a metre from the eyes — staring at it
+      // fills the screen with fuselage. Look down the walking path instead.
+      const carrying = op.mode === 'carry'
+      const lookX = carrying ? op.x - Math.sin(op.heading) * 12 : flight.pos.x
+      const lookY = carrying ? OPERATOR_EYE_HEIGHT : flight.pos.y
+      const lookZ = carrying ? op.z - Math.cos(op.heading) * 12 : flight.pos.z
+      lookTarget.x = damp(lookTarget.x, lookX, LOS_LOOK_LAMBDA, dt)
+      lookTarget.y = damp(lookTarget.y, lookY, LOS_LOOK_LAMBDA, dt)
+      lookTarget.z = damp(lookTarget.z, lookZ, LOS_LOOK_LAMBDA, dt)
       camera.lookAt(lookTarget)
       const dist = Math.hypot(
-        flight.pos.x - OPERATOR.x,
+        flight.pos.x - op.x,
         flight.pos.y - OPERATOR_EYE_HEIGHT,
-        flight.pos.z - OPERATOR.z,
+        flight.pos.z - op.z,
       )
-      const targetFov = Math.min(
-        LOS_FOV_MAX,
-        Math.max(LOS_FOV_MIN, LOS_FOV_MAX - dist * 0.55),
-      )
+      const targetFov = carrying
+        ? LOS_FOV_MAX
+        : Math.min(LOS_FOV_MAX, Math.max(LOS_FOV_MIN, LOS_FOV_MAX - dist * 0.55))
       camera.fov = damp(camera.fov, targetFov, LOS_FOV_LAMBDA, dt)
       camera.updateProjectionMatrix()
       return

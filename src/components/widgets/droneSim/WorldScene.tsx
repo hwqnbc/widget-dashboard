@@ -3,10 +3,7 @@ import { Color, Matrix4 } from 'three'
 import type { InstancedMesh } from 'three'
 import type { WorldPalette } from './palettes'
 import type { BuildingSpec } from './worldLayout'
-import { OPERATOR, SPAWN } from './flightModel'
-
-/** The operator figure faces the pad (its -Z looks along operator→pad). */
-const OPERATOR_YAW = Math.atan2(OPERATOR.x - SPAWN.x, OPERATOR.z - SPAWN.z)
+import { SPAWN } from './flightModel'
 
 /**
  * The static world: sky, fog, lights, ground, an instanced-mesh city (one
@@ -17,12 +14,9 @@ const OPERATOR_YAW = Math.atan2(OPERATOR.x - SPAWN.x, OPERATOR.z - SPAWN.z)
 export default function WorldScene({
   palette,
   buildings,
-  showOperator,
 }: {
   palette: WorldPalette
   buildings: readonly BuildingSpec[]
-  /** Hidden in line-of-sight view — the camera stands at the figure's eyes. */
-  showOperator: boolean
 }) {
   const buildingsRef = useRef<InstancedMesh>(null)
 
@@ -69,28 +63,6 @@ export default function WorldScene({
         <cylinderGeometry args={[2.2, 2.2, 0.1, 32]} />
         <meshStandardMaterial color={palette.pad} />
       </mesh>
-
-      {showOperator && (
-        <group position={[OPERATOR.x, 0, OPERATOR.z]} rotation-y={OPERATOR_YAW}>
-          <mesh position={[0, 0.65, 0]}>
-            <cylinderGeometry args={[0.2, 0.26, 1.3, 10]} />
-            <meshStandardMaterial color="#37474f" />
-          </mesh>
-          <mesh position={[0, 1.46, 0]}>
-            <sphereGeometry args={[0.16, 12, 10]} />
-            <meshStandardMaterial color="#e0ac69" />
-          </mesh>
-          <mesh position={[0, 1.56, 0]}>
-            <cylinderGeometry args={[0.17, 0.17, 0.07, 12]} />
-            <meshStandardMaterial color="#e53935" />
-          </mesh>
-          {/* RC transmitter held out in front */}
-          <mesh position={[0, 1.0, -0.32]} rotation-x={-0.5}>
-            <boxGeometry args={[0.34, 0.08, 0.2]} />
-            <meshStandardMaterial color="#263238" />
-          </mesh>
-        </group>
-      )}
     </>
   )
 }

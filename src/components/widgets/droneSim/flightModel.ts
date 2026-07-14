@@ -48,12 +48,13 @@ export interface Collider {
   top: number
 }
 
-/** Camera modes: third-person chase, first-person FPV, and line-of-sight —
- * the view of an operator standing beside the pad watching the drone fly. */
-export type DroneView = 'tp' | 'fp' | 'los'
+/** Camera modes: third-person chase, first-person FPV, line-of-sight (the
+ * view of an operator standing beside the pad watching the drone fly), and
+ * walking pilot (the same operator, but following the drone on foot). */
+export type DroneView = 'tp' | 'fp' | 'los' | 'walk'
 
 export const coerceView = (v: unknown): DroneView | undefined =>
-  v === 'tp' || v === 'fp' || v === 'los' ? v : undefined
+  v === 'tp' || v === 'fp' || v === 'los' || v === 'walk' ? v : undefined
 
 export type Weather = 'clear' | 'storm'
 

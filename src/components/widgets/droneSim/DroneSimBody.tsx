@@ -46,6 +46,9 @@ import RainField from './RainField'
 import RichWorld from './RichWorld'
 import LandingPads from './LandingPads'
 import Minimap from './Minimap'
+import OperatorFigure from './OperatorFigure'
+import type { WalkerEvent } from './operatorWalk'
+import { createOperatorState, resetOperatorState } from './operatorWalk'
 import SettingsPanel from './SettingsPanel'
 import VirtualJoystick from './VirtualJoystick'
 
@@ -131,6 +134,8 @@ export default function DroneSimBody({ id }: WidgetProps) {
   const batteryRef = useRef<BatteryState>(createBatteryState())
   const batteryBarRef = useRef<HTMLDivElement>(null)
   const minimapDroneRef = useRef<SVGGElement>(null)
+  const minimapOperatorRef = useRef<SVGGElement>(null)
+  const operatorRef = useRef(createOperatorState())
   const rateSpeed = useWidgetField(id, 'rateSpeed', 1, coerceRate)
   const rateYaw = useWidgetField(id, 'rateYaw', 1, coerceRate)
   const stickExpo = useWidgetField(id, 'stickExpo', 0, coerceExpo)
@@ -197,6 +202,7 @@ export default function DroneSimBody({ id }: WidgetProps) {
     resetFlightState(flight)
     resetLapState(lap)
     resetBatteryState(batteryRef.current)
+    resetOperatorState(operatorRef.current)
     crashRef.current.active = false
     setActiveGate(0)
     setBanner(null)
@@ -235,6 +241,16 @@ export default function DroneSimBody({ id }: WidgetProps) {
   const onCrashEnd = useCallback(() => {
     resetFlightState(flight) // respawn on the pad; jump guard covers the leap
   }, [flight])
+
+  const onWalkerEvent = useCallback(
+    (event: WalkerEvent) => {
+      vibrate(GATE_PULSE)
+      showBanner(
+        event === 'pickup' ? 'DRONE PICKED UP — CARRYING TO PAD' : 'DRONE PLACED ON PAD',
+      )
+    },
+    [showBanner],
+  )
 
   const onLanding = useCallback(
     (points: number) => {
@@ -299,12 +315,18 @@ export default function DroneSimBody({ id }: WidgetProps) {
   const stickSize = fullscreen ? 140 : 88
   const stickInset = fullscreen ? 16 : 0
 
-  // Cycle chase -> FPV -> line-of-sight (standing operator) -> chase.
-  const NEXT_VIEW: Record<DroneView, DroneView> = { tp: 'fp', fp: 'los', los: 'tp' }
+  // Cycle chase -> FPV -> standing pilot -> walking pilot -> chase.
+  const NEXT_VIEW: Record<DroneView, DroneView> = {
+    tp: 'fp',
+    fp: 'los',
+    los: 'walk',
+    walk: 'tp',
+  }
   const VIEW_TOOLTIP: Record<DroneView, string> = {
     tp: 'Switch to first person (FPV)',
     fp: 'Switch to pilot view (stand at the pad)',
-    los: 'Switch to third person (chase)',
+    los: 'Switch to walking pilot (follows the drone)',
+    walk: 'Switch to third person (chase)',
   }
   const toggleView = () =>
     dispatch(updateWidgetData({ id, data: { view: NEXT_VIEW[view] } }))
@@ -356,10 +378,10 @@ export default function DroneSimBody({ id }: WidgetProps) {
           dpr={[1, 1.75]}
           camera={{ fov: 60, near: 0.1, far: 400, position: [0, 4, 26] }}
         >
-          <WorldScene
-            palette={palette}
-            buildings={layout.buildings}
-            showOperator={view !== 'los'}
+          <WorldScene palette={palette} buildings={layout.buildings} />
+          <OperatorFigure
+            operator={operatorRef}
+            visible={view === 'tp' || view === 'fp'}
           />
           {richWorld && <RichWorld layout={layout} />}
           {landing && <LandingPads pads={layout.landingPads} />}
@@ -376,6 +398,10 @@ export default function DroneSimBody({ id }: WidgetProps) {
           <DroneRig
             controls={controls}
             flight={flight}
+            view={view}
+            operator={operatorRef}
+            minimapOperatorRef={minimapOperatorRef}
+            onWalkerEvent={onWalkerEvent}
             hudRef={hudRef}
             timerRef={timerRef}
             minimapDroneRef={minimapDroneRef}
@@ -406,6 +432,7 @@ export default function DroneSimBody({ id }: WidgetProps) {
           <CameraRig
             view={view}
             flight={flight}
+            operator={operatorRef}
             colliders={layout.colliders}
             hudRef={hudRef}
           />
@@ -423,6 +450,9 @@ export default function DroneSimBody({ id }: WidgetProps) {
         data-wind="0"
         data-crash-state="none"
         data-boom="6.5"
+        data-op-x="3.20"
+        data-op-z="23.00"
+        data-op-mode="idle"
         sx={{
           position: 'absolute',
           top: 8,
@@ -641,6 +671,7 @@ export default function DroneSimBody({ id }: WidgetProps) {
           bestLapPath={bestLapPath}
           landingPads={landing ? layout.landingPads : []}
           droneRef={minimapDroneRef}
+          operatorRef={minimapOperatorRef}
           size={fullscreen ? 140 : 100}
         />
       )}
