@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas } from '@react-three/fiber'
 import { Box, IconButton, Tooltip, alpha, useTheme } from '@mui/material'
 import CameraswitchIcon from '@mui/icons-material/Cameraswitch'
+import DirectionsWalkIcon from '@mui/icons-material/DirectionsWalk'
+import ManIcon from '@mui/icons-material/Man'
 import RestartAltIcon from '@mui/icons-material/RestartAlt'
 import SettingsIcon from '@mui/icons-material/Settings'
 import { useAppDispatch } from '../../../app/hooks'
@@ -136,6 +138,9 @@ export default function DroneSimBody({ id }: WidgetProps) {
   const minimapDroneRef = useRef<SVGGElement>(null)
   const minimapOperatorRef = useRef<SVGGElement>(null)
   const operatorRef = useRef(createOperatorState())
+  // Hold position: freezes the walking pilot's follow autopilot so the op
+  // stands wherever it is (transient, like the op position itself).
+  const [opHold, setOpHold] = useState(false)
   const rateSpeed = useWidgetField(id, 'rateSpeed', 1, coerceRate)
   const rateYaw = useWidgetField(id, 'rateYaw', 1, coerceRate)
   const stickExpo = useWidgetField(id, 'stickExpo', 0, coerceExpo)
@@ -203,6 +208,7 @@ export default function DroneSimBody({ id }: WidgetProps) {
     resetLapState(lap)
     resetBatteryState(batteryRef.current)
     resetOperatorState(operatorRef.current)
+    setOpHold(false)
     crashRef.current.active = false
     setActiveGate(0)
     setBanner(null)
@@ -362,6 +368,7 @@ export default function DroneSimBody({ id }: WidgetProps) {
       data-rich={richWorld ? 'on' : 'off'}
       data-minimap={minimap ? 'on' : 'off'}
       data-turbo={turbo ? 'on' : 'off'}
+      data-op-hold={opHold ? 'on' : 'off'}
       onMouseDown={(e) => e.stopPropagation()}
       onTouchStart={(e) => e.stopPropagation()}
       sx={{
@@ -400,6 +407,7 @@ export default function DroneSimBody({ id }: WidgetProps) {
             flight={flight}
             view={view}
             operator={operatorRef}
+            operatorHold={opHold}
             minimapOperatorRef={minimapOperatorRef}
             onWalkerEvent={onWalkerEvent}
             hudRef={hudRef}
@@ -541,6 +549,35 @@ export default function DroneSimBody({ id }: WidgetProps) {
         </Box>
       )}
 
+      {(view === 'los' || view === 'walk') && (
+        <Box
+          data-testid="dronesim-pilot-chip"
+          data-pilot={view === 'los' ? 'standing' : opHold ? 'holding' : 'walking'}
+          sx={{
+            position: 'absolute',
+            top: 8,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            px: 1,
+            py: 0.25,
+            borderRadius: 1,
+            bgcolor: alpha('#000', 0.4),
+            color: view === 'walk' && opHold ? '#ffab40' : '#b0bec5',
+            fontFamily: 'monospace',
+            fontSize: 11,
+            letterSpacing: 0.5,
+            pointerEvents: 'none',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {view === 'los'
+            ? 'PILOT · STANDING'
+            : opHold
+              ? 'PILOT · HOLDING POSITION'
+              : 'PILOT · WALKING (FOLLOWS DRONE)'}
+        </Box>
+      )}
+
       {banner && (
         <Box
           data-testid="dronesim-lap-banner"
@@ -597,6 +634,29 @@ export default function DroneSimBody({ id }: WidgetProps) {
             <RestartAltIcon fontSize="small" />
           </IconButton>
         </Tooltip>
+        {view === 'walk' && (
+          <Tooltip
+            title={
+              opHold
+                ? 'Resume walking (follow the drone)'
+                : 'Hold position (stand here, stop following)'
+            }
+          >
+            <IconButton
+              size="small"
+              data-testid="dronesim-op-hold"
+              aria-pressed={opHold}
+              onClick={() => setOpHold((h) => !h)}
+              sx={{ color: opHold ? '#ffab40' : '#fff' }}
+            >
+              {opHold ? (
+                <ManIcon fontSize="small" />
+              ) : (
+                <DirectionsWalkIcon fontSize="small" />
+              )}
+            </IconButton>
+          </Tooltip>
+        )}
         <Tooltip title="Settings (modes, environment, tuning)">
           <IconButton
             size="small"

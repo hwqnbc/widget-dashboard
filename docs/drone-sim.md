@@ -295,6 +295,14 @@ The view button cycles `tp → fp → los → tp` (persisted `view`):
   so switching views never teleports anyone, and reset returns the op to
   its spot. HUD publishes `data-op-x/-op-z/-op-mode`; the minimap shows an
   operator dot.
+  A **pilot chip** (top centre, `data-pilot`) differentiates the operator
+  views at a glance: `PILOT · STANDING` (los) vs `WALKING (FOLLOWS DRONE)`
+  vs `HOLDING POSITION`. A **hold button** (walk view only, 4th inline
+  button) freezes the follow autopilot so the op stands wherever it
+  currently is — walk somewhere, hold, and you've re-planted the standing
+  pilot at a new spot. Hold is transient (root mirrors `data-op-hold`),
+  cleared by reset, and deliberately overridden by a rescue — fetching the
+  dead drone is why you walked out there.
   **Drone rescue**: with battery mode on, when the drone dies *at ground
   level* (roofs are unreachable on foot — reset remains that rescue), the
   walking op switches to `retrieve`, walks over, picks the drone up within

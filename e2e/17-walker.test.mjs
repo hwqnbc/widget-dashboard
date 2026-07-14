@@ -64,8 +64,16 @@ const op0 = await opState()
 check('operator starts at the pad-side spot, idle', Math.abs(op0.x - HOME.x) < 0.1 && Math.abs(op0.z - HOME.z) < 0.1 && op0.mode === 'idle', JSON.stringify(op0))
 check('minimap shows the operator dot', (await page.locator('[data-testid="dronesim-minimap-operator"]').count()) === 1)
 
+// pilot chip differentiates standing vs walking
+const chip = page.locator('[data-testid="dronesim-pilot-chip"]')
+check('no pilot chip in tp view', (await chip.count()) === 0)
+await setView('los')
+check('chip reads STANDING in los', (await chip.getAttribute('data-pilot')) === 'standing')
+check('no hold button in los (standing never walks)', (await page.locator('[data-testid="dronesim-op-hold"]').count()) === 0)
+
 // --- follow on foot, speed-capped ---
 await setView('walk')
+check('chip reads WALKING in walk view', (await chip.getAttribute('data-pilot')) === 'walking')
 await pilot.touchStart()
 await pilot.flyTo({ x: SPOT.x, y: CRUISE_ALT, z: SPOT.z }, { tol: 2 })
 await pilot.brake()
@@ -103,7 +111,34 @@ const stopGap = arrived ? Math.hypot(tHover.x - arrived.x, tHover.z - arrived.z)
 check('op arrives and idles inside the follow band', arrived !== null && stopGap <= FOLLOW_START, `gap=${stopGap.toFixed(1)}`)
 await page.screenshot({ path: `${ARTIFACTS_DIR}walker-follow.png` })
 
+// --- hold position: op stands at the new spot while the drone leaves ---
+const holdBtn = page.locator('[data-testid="dronesim-op-hold"]')
+check('hold button present in walk view', (await holdBtn.count()) === 1)
+await holdBtn.click()
+await page.waitForTimeout(200)
+check('chip flips to HOLDING', (await chip.getAttribute('data-pilot')) === 'holding')
+check('root mirrors data-op-hold', (await page.locator('[data-testid="dronesim-root"]').getAttribute('data-op-hold')) === 'on')
+await pilot.flyTo({ x: PAD.x, y: CRUISE_ALT, z: PAD.z }, { tol: 2 }) // drone leaves
+const heldA = await opState()
+await page.waitForTimeout(2000)
+const heldB = await opState()
+check(
+  'held op stands at the new spot (drone far away)',
+  Math.hypot(heldB.x - heldA.x, heldB.z - heldA.z) < 0.3 && heldB.mode === 'idle',
+  `${JSON.stringify(heldA)} vs ${JSON.stringify(heldB)}`,
+)
+await holdBtn.click()
+await page.waitForTimeout(1500)
+const resumed = await opState()
+check(
+  'releasing hold resumes the follow',
+  resumed.mode === 'follow' && Math.hypot(resumed.x - heldB.x, resumed.z - heldB.z) > 1,
+  JSON.stringify(resumed),
+)
+
 // --- rescue: drain to dead, walk over, carry home, recharge ---
+await pilot.flyTo({ x: SPOT.x, y: CRUISE_ALT, z: SPOT.z }, { tol: 2 }) // back out for the drain
+await pilot.brake()
 await pilot.touch(0, 0, 0, 0)
 await pilot.touchEnd()
 await setSwitch(page, 'dronesim-battery-toggle', true)

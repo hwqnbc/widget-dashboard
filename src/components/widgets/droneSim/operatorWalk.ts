@@ -98,6 +98,9 @@ function resolveOperator(op: OperatorState, colliders: readonly Collider[]): voi
  * is grabbed, 'place' the frame it is set down on the pad, else null.
  * `stick` is the right-stick vector — while the drone is down it steers the
  * walk (world-aligned: y = -Z/"up the map", x = +X) instead of the autopilot.
+ * `hold` freezes the FOLLOW autopilot (stand at the current spot); a rescue
+ * (retrieve/carry) deliberately overrides it — fetching the drone is why
+ * you walked out here.
  */
 export function stepOperator(
   op: OperatorState,
@@ -105,6 +108,7 @@ export function stepOperator(
   drone: DroneSummary,
   stick: Vec2,
   colliders: readonly Collider[],
+  hold = false,
 ): WalkerEvent | null {
   const step = Math.min(dt, 0.05)
 
@@ -135,6 +139,10 @@ export function stepOperator(
       return 'pickup'
     }
   } else {
+    if (hold) {
+      op.mode = 'idle'
+      return null
+    }
     const d = Math.hypot(op.x - drone.x, op.z - drone.z)
     if (op.mode !== 'follow' && d > FOLLOW_START) op.mode = 'follow'
     else if (op.mode === 'follow' && d <= FOLLOW_STOP) op.mode = 'idle'

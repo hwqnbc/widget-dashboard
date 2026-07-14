@@ -62,6 +62,7 @@ export default function DroneRig({
   flight,
   view,
   operator,
+  operatorHold,
   minimapOperatorRef,
   onWalkerEvent,
   hudRef,
@@ -96,6 +97,8 @@ export default function DroneRig({
   view: DroneView
   /** The walking operator (shared with CameraRig/OperatorFigure/Minimap). */
   operator: { current: OperatorState }
+  /** Freezes the follow autopilot — stand at the current spot. */
+  operatorHold: boolean
   minimapOperatorRef: RefObject<SVGGElement | null>
   onWalkerEvent: (event: WalkerEvent) => void
   hudRef: RefObject<HTMLDivElement | null>
@@ -182,6 +185,7 @@ export default function DroneRig({
           },
           controls.right,
           colliders,
+          operatorHold,
         )
         if (walkerEvent === 'place') {
           flight.pos.x = PAD_CENTER.x
