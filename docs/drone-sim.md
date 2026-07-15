@@ -159,7 +159,15 @@ imperative DOM manipulation and doesn't fit React):
   handlers, force-release the stick if the tab loses focus mid-drag or the
   browser drops the event — otherwise a missed release event sticks the
   knob forever and locks that stick out of further input (see
-  `docs/lessons.md` #39).
+  `docs/lessons.md` #39). None of those cover a foregrounded mobile tab
+  where OS gesture arbitration (a long-press callout, or scroll/rubber-band
+  arbitration at the `touch-action` boundary) silently drops capture with
+  *no* event at all — a 400ms interval polls the ground-truth
+  `Element.hasPointerCapture(pointerId)` and force-releases if it ever goes
+  false while still tracked, with no false-positive risk for a long,
+  stationary hold. The hit area also sets `WebkitTouchCallout: 'none'` and
+  suppresses `contextmenu` to stop the long-press callout from triggering
+  in the first place (see `docs/lessons.md` #40).
 - `touchAction: 'none'` on the stick hit areas only — swiping the 3D scenery
   still scrolls the page.
 - Deadzone (0.08) is rescaled so output is continuous from the deadzone edge.

@@ -310,7 +310,33 @@ feature rounds (flight, collision, gates, time trial, courses, weather, crash).
     the "stuck forever" failure mode, since a plain reset-on-blur check
     can pass even while the down-guard is still wedged shut.
 
-39. **Give a world actor exactly one shared state object across every system
+40. **Waiting on named events to recover pointer-capture state is still
+    incomplete — poll the ground truth instead.** #39's blur/visibilitychange
+    fallback fixed the tab-switch case but the same joystick kept sticking
+    on real mobile touchscreens: a foregrounded tab never fires blur, and
+    mobile OS gesture arbitration (a long-press callout, or scroll/
+    rubber-band arbitration right at the stick's `touch-action: 'none'`
+    boundary) can drop pointer capture without firing `pointerup`,
+    `pointercancel`, or `lostpointercapture` either. No amount of
+    additional event listeners closes that gap, because the browser simply
+    never dispatches one. The fix that actually closes it: poll
+    `Element.hasPointerCapture(pointerId)` — a synchronous, non-throwing
+    ground-truth check — on a short interval (400ms) and force-release the
+    moment it goes false while still "tracked." This has no false-positive
+    risk for a legitimate long, stationary hold (capture stays true for the
+    whole press regardless of movement), unlike an idle/no-movement
+    timeout, which was considered and rejected for exactly that reason.
+    Pair it with prevention, not just recovery: `WebkitTouchCallout: 'none'`
+    plus an `onContextMenu` preventDefault stops the long-press callout
+    from ever hijacking the touch in the first place. E2E sub-lesson: a
+    real silent capture loss can't be synthesized in headless
+    Chromium — calling `releasePointerCapture` yourself still fires
+    `lostpointercapture` per spec, so it only re-tests the already-covered
+    event path. Instead monkey-patch the element's `hasPointerCapture` to
+    return `false` for the duration of the drag; that isolates and proves
+    the polling path specifically, independent of every other fallback.
+
+41. **Give a world actor exactly one shared state object across every system
     that reads it.** The walking operator is one mutable `OperatorState` ref
     read by the sim loop (stepping), two camera modes (the eye), the world
     figure (the mesh), the minimap (the dot) and the HUD (telemetry) —
