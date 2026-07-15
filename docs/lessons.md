@@ -181,6 +181,15 @@ before drawing a new character.
     separate renders — the rest pose can be posed independently of the animation's
     endpoints.
 
+28. **Face-forward figures chop *forward*, not sideways.** A chop that sweeps the
+    blade out to the side (a rotating windmill) looks comical on a figure that faces
+    the viewer. Strike **down in front** instead: tween each sword-hand between a
+    raised windup and a forward strike (hand in front of the chest, blade driven down
+    toward centre), and **crossfade the forearm** between its two paths — a CSS
+    `transition` on `transform`/`opacity` (the DarkArin tween-and-fade idiom), toggled
+    on an interval, reads as a smooth motion-trail. See `frak/FrakFigure.tsx`
+    (`phase` 0/1) + `FrakCelebration`.
+
 ## 3D / WebGL (Drone Sim)
 
 The first three.js/R3F widget. These carried across every one of its six
