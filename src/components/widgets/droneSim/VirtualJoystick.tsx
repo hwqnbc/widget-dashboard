@@ -28,6 +28,7 @@ export default function VirtualJoystick({
   sx,
 }: VirtualJoystickProps) {
   const theme = useTheme()
+  const hitAreaRef = useRef<HTMLDivElement>(null)
   const baseRef = useRef<HTMLDivElement>(null)
   const knobRef = useRef<HTMLDivElement>(null)
   const pointerIdRef = useRef<number | null>(null)
@@ -109,9 +110,28 @@ export default function VirtualJoystick({
     }
   }, [releasePointer])
 
+  // Mobile OS gesture arbitration (a long-press callout, or scroll/rubber-band
+  // arbitration near the hit area's touch-action boundary) can silently drop
+  // pointer capture on real touchscreens without ever firing pointerup,
+  // pointercancel, blur, or visibilitychange — none of which the tab-switch
+  // fallback above covers, since the tab never loses focus. hasPointerCapture
+  // is a synchronous, non-throwing ground-truth check, so polling it needs no
+  // event and can't misfire on a legitimate long, stationary hold (capture
+  // stays true for the whole duration of a real uninterrupted press).
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      const pid = pointerIdRef.current
+      const el = hitAreaRef.current
+      if (pid !== null && el && !el.hasPointerCapture(pid)) releasePointer()
+    }, 400)
+    return () => window.clearInterval(id)
+  }, [releasePointer])
+
   return (
     <Box
+      ref={hitAreaRef}
       data-testid={testId}
+      onContextMenu={(e) => e.preventDefault()}
       onPointerDown={(e) => {
         if (pointerIdRef.current !== null) return
         try {
@@ -149,6 +169,9 @@ export default function VirtualJoystick({
           gap: 0.5,
           touchAction: 'none',
           userSelect: 'none',
+          WebkitTouchCallout: 'none',
+          WebkitUserSelect: 'none',
+          WebkitTapHighlightColor: 'transparent',
           cursor: 'pointer',
         },
         ...(Array.isArray(sx) ? sx : [sx]),

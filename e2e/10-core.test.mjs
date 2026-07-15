@@ -114,6 +114,48 @@ check(
 await page.mouse.up()
 await page.waitForTimeout(900)
 
+// joystick recovery: silent capture loss (mobile OS gesture arbitration —
+// a long-press callout, or scroll arbitration near the touch-action
+// boundary — can drop capture without ever firing pointerup/pointercancel/
+// lostpointercapture/blur). Force hasPointerCapture to lie so only the
+// hasPointerCapture watchdog, not any of the event-based fallbacks, can
+// recover the stick.
+await page.evaluate((tid) => {
+  const el = document.querySelector(`[data-testid="${tid}"]`)
+  el.hasPointerCapture = () => false
+}, 'dronesim-joystick-left')
+await page.mouse.move(lc.x, lc.y)
+await page.mouse.down()
+await page.mouse.move(lc.x, lc.y - 40, { steps: 5 })
+await page.waitForTimeout(1200)
+const altClimbing2 = (await telemetry()).alt
+await page.waitForTimeout(700) // watchdog polls every 400ms
+const altAfterWatchdog1 = (await telemetry()).alt
+await page.waitForTimeout(500)
+const altAfterWatchdog2 = (await telemetry()).alt
+check(
+  'silent capture loss is caught by the hasPointerCapture watchdog',
+  Math.abs(altAfterWatchdog2 - altAfterWatchdog1) < 0.3,
+  `climbing=${altClimbing2} then ${altAfterWatchdog1} vs ${altAfterWatchdog2}`,
+)
+await page.mouse.up() // reconcile Playwright's own mouse-button bookkeeping
+await page.evaluate((tid) => {
+  const el = document.querySelector(`[data-testid="${tid}"]`)
+  delete el.hasPointerCapture // restore the real method for subsequent drags
+}, 'dronesim-joystick-left')
+await page.mouse.move(lc.x, lc.y)
+await page.mouse.down()
+await page.mouse.move(lc.x, lc.y - 40, { steps: 5 })
+await page.waitForTimeout(1200)
+const altFreshDrag2 = (await telemetry()).alt
+check(
+  'stick responds to a fresh touch after silent capture loss (not stuck dead)',
+  altFreshDrag2 > altAfterWatchdog2 + 1.5,
+  `alt ${altAfterWatchdog2} -> ${altFreshDrag2}`,
+)
+await page.mouse.up()
+await page.waitForTimeout(900)
+
 // right stick up via mouse: speed, then inertia braking
 const rc = await stickCenter(page, 'dronesim-joystick-right')
 await page.mouse.move(rc.x, rc.y)
