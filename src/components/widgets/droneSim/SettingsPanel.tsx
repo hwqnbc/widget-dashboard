@@ -78,6 +78,7 @@ export default function SettingsPanel({
   stickExpo,
   turbo,
   followDist,
+  fpvPolish,
   gateCount,
   onGateCount,
   onResetDefaults,
@@ -98,6 +99,7 @@ export default function SettingsPanel({
   stickExpo: number
   turbo: boolean
   followDist: number
+  fpvPolish: boolean
   gateCount: number
   onGateCount: (n: number) => void
   onResetDefaults: () => void
@@ -243,6 +245,15 @@ export default function SettingsPanel({
               onChangeCommitted={(_, v) => set({ followDist: v as number })}
             />
           </Stack>
+          <ToggleRow
+            testId="dronesim-fpv-toggle"
+            stateAttr="data-fpv"
+            stateValue={fpvPolish ? 'on' : 'off'}
+            label="FPV feel"
+            description="First person only: camera banks with turns, subtle speed shake, artificial-horizon line."
+            checked={fpvPolish}
+            onChange={(next) => set({ fpvPolish: next })}
+          />
         </List>
         <List dense subheader={<ListSubheader disableGutters>Course</ListSubheader>}>
           <Stack sx={{ px: 0.5 }}>

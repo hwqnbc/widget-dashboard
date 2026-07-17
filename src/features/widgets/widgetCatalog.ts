@@ -160,6 +160,7 @@ export function defaultWidgetData(type: WidgetType): Record<string, unknown> {
         landingBest: 0,
         battery: false,
         followDist: 7,
+        fpvPolish: false,
       }
     case 'clock':
     default:

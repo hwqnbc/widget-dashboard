@@ -77,6 +77,7 @@ const SETTING_KEYS = [
   'richWorld',
   'minimap',
   'followDist',
+  'fpvPolish',
   'rateSpeed',
   'rateYaw',
   'stickExpo',
@@ -151,6 +152,8 @@ export default function DroneSimBody({ id }: WidgetProps) {
   const minimapOperatorRef = useRef<SVGGElement>(null)
   const operatorRef = useRef(createOperatorState())
   const followDist = useWidgetField(id, 'followDist', 7, coerceFollowDist)
+  const fpvPolish = useWidgetField(id, 'fpvPolish', false)
+  const horizonRef = useRef<HTMLDivElement>(null)
   const pilotChipRef = useRef<HTMLDivElement>(null)
   // External input: gamepad is polled in the sim loop, keyboard listens
   // below — both share this ownership state so a polled source can't stomp
@@ -434,6 +437,7 @@ export default function DroneSimBody({ id }: WidgetProps) {
       data-turbo={turbo ? 'on' : 'off'}
       data-op-hold={opHold ? 'on' : 'off'}
       data-follow-dist={followDist}
+      data-fpv={fpvPolish ? 'on' : 'off'}
       onMouseDown={(e) => e.stopPropagation()}
       onTouchStart={(e) => e.stopPropagation()}
       sx={{
@@ -510,6 +514,8 @@ export default function DroneSimBody({ id }: WidgetProps) {
             flight={flight}
             operator={operatorRef}
             operatorHold={opHold}
+            fpvPolish={fpvPolish}
+            horizonRef={horizonRef}
             colliders={layout.colliders}
             hudRef={hudRef}
           />
@@ -618,6 +624,36 @@ export default function DroneSimBody({ id }: WidgetProps) {
             sx={{ height: '100%', width: '100%', bgcolor: '#66bb6a' }}
           />
         </Box>
+      )}
+
+      {view === 'fp' && fpvPolish && (
+        <Box
+          ref={horizonRef}
+          data-testid="dronesim-horizon"
+          data-roll="0.0"
+          // transform (roll/pitch) is written by CameraRig every frame
+          sx={{
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            width: '46%',
+            height: 0,
+            borderTop: `1px solid ${alpha('#fff', 0.55)}`,
+            pointerEvents: 'none',
+            '&::before': {
+              content: '""',
+              position: 'absolute',
+              left: '50%',
+              top: -3,
+              width: 6,
+              height: 6,
+              marginLeft: '-3px',
+              borderRadius: '50%',
+              border: `1px solid ${alpha('#fff', 0.7)}`,
+            },
+          }}
+        />
       )}
 
       {(view === 'los' || view === 'walk') && (
@@ -752,6 +788,7 @@ export default function DroneSimBody({ id }: WidgetProps) {
         stickExpo={stickExpo}
         turbo={turbo}
         followDist={followDist}
+        fpvPolish={fpvPolish}
         gateCount={gateSetting}
         onGateCount={requestCourseChange}
         onResetDefaults={() => requestCourseChange('defaults')}

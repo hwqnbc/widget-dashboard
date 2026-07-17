@@ -55,8 +55,9 @@ one-line description, grouped by concern:
 - **Tuning**: the speed/yaw/expo sliders and the Turbo switch (formerly a
   separate popover).
 - **Pilot**: the follow-distance slider (5–18, default 7) — how far the
-  walking pilot stands back from the drone. No confirm guard; nothing is
-  destroyed.
+  walking pilot stands back from the drone — and the FPV-feel switch
+  (camera bank + shake + horizon in first person, default off). No confirm
+  guard; nothing is destroyed.
 - **Course**: the gates-per-lap slider (3–6) and the New course action
   button. Both destroy the recorded best (and any lap in progress), so both
   route through the same confirm guard.
@@ -300,6 +301,13 @@ The view button cycles `tp → fp → los → tp` (persisted `view`):
   `Euler(tiltPitch·0.6, yaw, 0, 'YXZ')` — partial pitch for feel, **no
   roll** (nausea). Switching modes needs no snap handling: `tp` re-converges
   through its own damping.
+  **FPV feel** (persisted `fpvPolish`, default OFF — the roll-free default
+  stays the nausea-safe one): with the Pilot-group switch on, the fp camera
+  banks with the drone (`roll = −tiltRoll·0.8`), gains a subtle speed-scaled
+  shake (sum-of-sines pseudo-noise, no `Math.random`), and a DOM
+  **artificial-horizon** overlay (`dronesim-horizon`, mounted only in
+  fp+on) counter-rolls/pitches against the camera — its transform and
+  `data-roll` are written by `CameraRig` every frame, never via React.
 - **`los` pilot view (line of sight)**: you *are* the operator — the eye is
   planted at a figure standing beside the pad (`OPERATOR` (3.2, 0, 23),
   eye 1.55; the spot sits inside the spawn-corridor / tree / road exclusion
@@ -511,8 +519,6 @@ from the enhancement menu, with the integration point each would build on.
 *(empty — gamepad + keyboard shipped)*
 
 ### Camera & visuals
-- **FPV polish** — subtle throttle shake, optional roll in FPV (acro feel),
-  horizon indicator.
 - **Rain streaks** — upgrade `RainField` points to short line segments.
 
 ### Gameplay

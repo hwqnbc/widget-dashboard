@@ -14,6 +14,11 @@ const CHASE_OFFSET = new Vector3(0, 2.4, 6)
 const FPV_OFFSET = new Vector3(0, 0.06, -0.35)
 const CHASE_LAMBDA = 4
 const BASE_FOV = 60
+/** FPV polish (opt-in): bank the camera with the drone, add a subtle
+ * speed-scaled shake, and drive the DOM artificial-horizon overlay. */
+const FPV_ROLL_GAIN = 0.8
+const FPV_SHAKE_MAX = 0.03
+const HORIZON_PITCH_PX = 90
 /** Boom clamp: stop short of the wall so the near plane (0.1) never clips it,
  * but never pull all the way into the drone. */
 const BOOM_MARGIN = 0.4
@@ -39,6 +44,8 @@ export default function CameraRig({
   flight,
   operator,
   operatorHold,
+  fpvPolish,
+  horizonRef,
   colliders,
   hudRef,
 }: {
@@ -48,6 +55,11 @@ export default function CameraRig({
   operator: { current: OperatorState }
   /** During a rescue this means manual walk: free FPS look. */
   operatorHold: boolean
+  /** Opt-in FPV feel: camera roll, throttle shake, horizon overlay. */
+  fpvPolish: boolean
+  /** The artificial-horizon line (mounted only in fp + polish) — its
+   * transform/data-roll are written here every frame, never via React. */
+  horizonRef: RefObject<HTMLDivElement | null>
   colliders: readonly Collider[]
   /** HUD element; the rig mirrors the live chase-boom length onto its
    * `data-boom` attribute (throttled), same pattern as DroneRig's telemetry. */
@@ -150,8 +162,31 @@ export default function CameraRig({
         flight.pos.y + desired.y,
         flight.pos.z + desired.z,
       )
-      euler.set(flight.tiltPitch * 0.6, flight.yaw, 0)
-      camera.quaternion.setFromEuler(euler)
+      if (fpvPolish) {
+        // Bank with the drone, and shake a little with speed — sum-of-sines
+        // pseudo-noise (deterministic, allocation-free, no Math.random).
+        const t = performance.now() / 1000
+        const speed = Math.hypot(flight.vel.x, flight.vel.y, flight.vel.z)
+        const amp = Math.min(FPV_SHAKE_MAX, 0.002 + speed * 0.0018)
+        camera.position.x += Math.sin(t * 53.7) * amp
+        camera.position.y += Math.sin(t * 61.3 + 1.7) * amp
+        const roll = -flight.tiltRoll * FPV_ROLL_GAIN
+        euler.set(flight.tiltPitch * 0.6, flight.yaw, roll)
+        camera.quaternion.setFromEuler(euler)
+        const horizon = horizonRef.current
+        if (horizon) {
+          // The world horizon counter-rotates against the camera roll and
+          // shifts with pitch; the line mimics it.
+          const rollDeg = (roll * 180) / Math.PI
+          horizon.style.transform = `translate(-50%, -50%) rotate(${rollDeg.toFixed(1)}deg) translateY(${(
+            flight.tiltPitch * 0.6 * HORIZON_PITCH_PX
+          ).toFixed(1)}px)`
+          horizon.dataset.roll = rollDeg.toFixed(1)
+        }
+      } else {
+        euler.set(flight.tiltPitch * 0.6, flight.yaw, 0)
+        camera.quaternion.setFromEuler(euler)
+      }
     }
   })
 
