@@ -20,6 +20,23 @@ city with twin on-screen thumbsticks, in third-person chase or first-person
 | Left (`THR · YAW`) | yaw rate (right = nose right) | vertical velocity (up = climb) |
 | Right (`MOVE`) | strafe | forward / backward |
 
+**Keyboard** (desktop) mirrors the sticks digitally: `W`/`S` climb/descend,
+`A`/`D` yaw, arrow keys forward/back + strafe (`KeyboardEvent.code`, so
+layouts don't matter). Keys aimed at an editable element (another widget's
+text field) are ignored, and arrows don't scroll the page while flying.
+**Gamepad** (standard layout) maps left stick → throttle/yaw and right
+stick → strafe/forward, deadzone 0.12 rescaled from the edge like the
+on-screen sticks, polled every frame in the sim loop.
+
+All three sources write the same shared `ControlInput` ref
+(`externalInput.ts`), so the flight model, acro mode, tuning and the manual
+operator walk take every source for free. Arbitration is **last active
+source wins**: an external source only writes while past its deadzone /
+keys held, and on going idle writes zeros exactly once and hands back to
+touch — a polled-but-idle pad can never stomp the joysticks. The HUD
+reports the live source as `data-input-source` (`touch`/`keyboard`/
+`gamepad`).
+
 Top-right buttons — only three, deliberately: camera cycle (`tp` chase →
 `fp` FPV → `los` standing pilot → `walk` walking pilot → back; persisted),
 reset (back to the landing pad, transient), and a settings gear that opens
@@ -491,9 +508,7 @@ Everything above is shipped. The backlog below tracks the remaining ideas
 from the enhancement menu, with the integration point each would build on.
 
 ### Controls & feel
-- **Gamepad support** — poll the Gamepad API in the sim loop and map axes
-  onto the same `ControlInput` ref; zero changes to the flight model.
-- **Keyboard controls** — WASD + arrows writing the same ref (desktop).
+*(empty — gamepad + keyboard shipped)*
 
 ### Camera & visuals
 - **FPV polish** — subtle throttle shake, optional roll in FPV (acro feel),

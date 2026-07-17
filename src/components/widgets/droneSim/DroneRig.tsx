@@ -25,6 +25,8 @@ import {
 } from './flightModel'
 import type { OperatorState, WalkerEvent } from './operatorWalk'
 import { CARRY_HEIGHT, CARRY_REACH, GROUND_EPS, stepOperator } from './operatorWalk'
+import type { ExternalState } from './externalInput'
+import { pollGamepad } from './externalInput'
 import type { Gate, LandingPadSpec } from './worldLayout'
 import { crossedGate, scoreLanding } from './worldLayout'
 import type { LapState } from './lapTimer'
@@ -64,6 +66,7 @@ export default function DroneRig({
   operator,
   operatorHold,
   followDist,
+  external,
   pilotChipRef,
   minimapOperatorRef,
   onWalkerEvent,
@@ -103,6 +106,8 @@ export default function DroneRig({
   operatorHold: boolean
   /** Preferred follow distance (the walker's stop radius). */
   followDist: number
+  /** External-input ownership (gamepad polled here, keyboard in the body). */
+  external: { current: ExternalState }
   /** Pilot chip (los/walk views) — text + data-pilot written on the tick,
    * because the rescue/manual state lives in refs and never re-renders. */
   pilotChipRef: RefObject<HTMLDivElement | null>
@@ -151,6 +156,10 @@ export default function DroneRig({
   const airborneRef = useRef(true)
 
   useFrame(({ clock }, dt) => {
+    // Gamepad first: it can only be polled, and the ownership rule keeps an
+    // idle pad from stomping touch/keyboard input.
+    pollGamepad(external.current, controls)
+
     const wind = windRef.current
     if (weather === 'storm') {
       sampleWind(clock.elapsedTime, wind)
@@ -394,6 +403,7 @@ export default function DroneRig({
         hud.dataset.opZ = op.z.toFixed(2)
         hud.dataset.opMode = op.mode
         hud.dataset.opHeading = op.heading.toFixed(2)
+        hud.dataset.inputSource = external.current.owner ?? 'touch'
       }
       const chip = pilotChipRef.current
       if (chip) {

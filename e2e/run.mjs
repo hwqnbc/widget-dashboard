@@ -29,6 +29,7 @@ const bundle = spawnSync(
     'src/components/widgets/droneSim/worldLayout.ts',
     'src/components/widgets/droneSim/lapTimer.ts',
     'src/components/widgets/droneSim/operatorWalk.ts',
+    'src/components/widgets/droneSim/externalInput.ts',
     '--bundle',
     '--format=esm',
     `--outdir=${join(here, '.bundle')}`,

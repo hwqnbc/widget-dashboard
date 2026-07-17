@@ -49,6 +49,13 @@ import RichWorld from './RichWorld'
 import LandingPads from './LandingPads'
 import Minimap from './Minimap'
 import OperatorFigure from './OperatorFigure'
+import {
+  DRONE_KEYS,
+  applyExternal,
+  createExternalSample,
+  createExternalState,
+  keySetToSample,
+} from './externalInput'
 import type { WalkerEvent } from './operatorWalk'
 import {
   coerceFollowDist,
@@ -145,6 +152,10 @@ export default function DroneSimBody({ id }: WidgetProps) {
   const operatorRef = useRef(createOperatorState())
   const followDist = useWidgetField(id, 'followDist', 7, coerceFollowDist)
   const pilotChipRef = useRef<HTMLDivElement>(null)
+  // External input: gamepad is polled in the sim loop, keyboard listens
+  // below — both share this ownership state so a polled source can't stomp
+  // the touch sticks, and the HUD can report the live source.
+  const externalRef = useRef(createExternalState())
   // Hold position: freezes the walking pilot's follow autopilot so the op
   // stands wherever it is (transient, like the op position itself).
   const [opHold, setOpHold] = useState(false)
@@ -157,6 +168,52 @@ export default function DroneSimBody({ id }: WidgetProps) {
   useEffect(() => {
     resetBatteryState(batteryRef.current)
   }, [battery])
+  // Keyboard flying (desktop): W/S climb+descend, A/D yaw, arrows move —
+  // digital ±1 into the same shared ControlInput the sticks write. Typing
+  // in other widgets (Notes etc.) must keep its keys, so anything targeting
+  // an editable element is ignored.
+  useEffect(() => {
+    const keys = new Set<string>()
+    const sample = createExternalSample()
+    const isTyping = (t: EventTarget | null) =>
+      t instanceof HTMLElement &&
+      (t.tagName === 'INPUT' ||
+        t.tagName === 'TEXTAREA' ||
+        t.tagName === 'SELECT' ||
+        t.isContentEditable)
+    const push = () => {
+      keySetToSample(keys, sample)
+      applyExternal(externalRef.current, 'keyboard', sample, controls)
+    }
+    const onDown = (e: KeyboardEvent) => {
+      if (!DRONE_KEYS.has(e.code)) return
+      if (e.ctrlKey || e.metaKey || e.altKey || isTyping(e.target)) return
+      e.preventDefault() // arrows scroll the page otherwise
+      if (keys.has(e.code)) return // key auto-repeat
+      keys.add(e.code)
+      push()
+    }
+    const onUp = (e: KeyboardEvent) => {
+      if (!keys.delete(e.code)) return
+      push()
+    }
+    const onBlur = () => {
+      // Backgrounded mid-press: force-release (the joystick blur lesson).
+      if (keys.size > 0) {
+        keys.clear()
+        push()
+      }
+    }
+    window.addEventListener('keydown', onDown)
+    window.addEventListener('keyup', onUp)
+    window.addEventListener('blur', onBlur)
+    return () => {
+      window.removeEventListener('keydown', onDown)
+      window.removeEventListener('keyup', onUp)
+      window.removeEventListener('blur', onBlur)
+      onBlur()
+    }
+  }, [controls])
   const tuning = useMemo<Tuning>(() => {
     const boost = turbo ? TURBO_BOOST : 1
     return {
@@ -417,6 +474,7 @@ export default function DroneSimBody({ id }: WidgetProps) {
             operator={operatorRef}
             operatorHold={opHold}
             followDist={followDist}
+            external={externalRef}
             pilotChipRef={pilotChipRef}
             minimapOperatorRef={minimapOperatorRef}
             onWalkerEvent={onWalkerEvent}
@@ -473,6 +531,7 @@ export default function DroneSimBody({ id }: WidgetProps) {
         data-op-z="23.00"
         data-op-mode="idle"
         data-op-heading="0.57"
+        data-input-source="touch"
         sx={{
           position: 'absolute',
           top: 8,

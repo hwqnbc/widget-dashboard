@@ -356,3 +356,15 @@ feature rounds (flight, collision, gates, time trial, courses, weather, crash).
     And pause physics for a held object explicitly (zero velocity, impact
     0) so crash/landing/lap triggers see nothing, rather than fighting the
     integrator with position overwrites.
+
+40. **Stub the hardware API at the page level and E2E-test "untestable"
+    input.** Gamepads cannot exist in headless CI, but the code only ever
+    sees `navigator.getGamepads()` — an `addInitScript` that replaces it
+    with a fake pad whose `axes` read from a window global makes the whole
+    path (per-frame poll, deadzone, mapping, release) drivable from the
+    test via `page.evaluate`. Same idea as the `navigator.vibrate` recorder
+    in the haptics suite: the boundary you stub is the browser API, not
+    your own code. Companion input lesson: when multiple sources feed one
+    shared control state, polled sources must claim/release ownership
+    (write zeros exactly ONCE on going idle) — a per-frame poll that
+    writes unconditionally stomps event-driven sources with zeros.
