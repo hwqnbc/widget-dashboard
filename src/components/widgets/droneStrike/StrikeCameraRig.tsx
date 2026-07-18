@@ -5,7 +5,7 @@ import type { PerspectiveCamera } from 'three'
 import type { Collider, FlightState } from '../droneSim/flightModel'
 import { boomClipT, damp } from '../droneSim/flightModel'
 import type { AimOffset, StrikeView } from './aimModel'
-import { FPV_PITCH_GAIN } from './aimModel'
+import { BASE_FOV, ZOOM_FOV, fpvPitchGain } from './aimModel'
 
 const UP = new Vector3(0, 1, 0)
 const CHASE_OFFSET = new Vector3(0, 2.4, 6)
@@ -15,6 +15,8 @@ const BOOM_MARGIN = 0.4
 const MIN_BOOM = 0.8
 /** Recoil recovery rate. */
 const RECOIL_LAMBDA = 9
+/** ADS zoom ease-in/out rate. */
+const ZOOM_LAMBDA = 8
 
 /**
  * Drives the camera each frame. FPV is rigid at the nose — yaw + a gentle
@@ -26,11 +28,14 @@ export default function StrikeCameraRig({
   flight,
   aimRef,
   colliders,
+  zoom,
 }: {
   view: StrikeView
   flight: FlightState
   aimRef: { current: AimOffset }
   colliders: readonly Collider[]
+  /** ADS: ease the fov to the scoped value (FPV only). */
+  zoom: boolean
 }) {
   const camera = useThree((s) => s.camera) as PerspectiveCamera
   const desired = useRef(new Vector3()).current
@@ -40,6 +45,13 @@ export default function StrikeCameraRig({
   useFrame((_, dt) => {
     const aim = aimRef.current
     aim.recoil = damp(aim.recoil, 0, RECOIL_LAMBDA, dt)
+    // ADS: ease toward the scoped fov in FPV, back to base otherwise.
+    const targetFov = view === 'fp' && zoom ? ZOOM_FOV : BASE_FOV
+    if (Math.abs(camera.fov - targetFov) > 0.01) {
+      camera.fov = damp(camera.fov, targetFov, ZOOM_LAMBDA, dt)
+      if (Math.abs(camera.fov - targetFov) < 0.05) camera.fov = targetFov
+      camera.updateProjectionMatrix()
+    }
     if (view === 'tp') {
       desired.copy(CHASE_OFFSET).applyAxisAngle(UP, flight.yaw)
       desired.x += flight.pos.x
@@ -75,7 +87,7 @@ export default function StrikeCameraRig({
       flight.pos.z + desired.z,
     )
     euler.set(
-      flight.tiltPitch * FPV_PITCH_GAIN + aim.pitch + aim.recoil,
+      flight.tiltPitch * fpvPitchGain(zoom) + aim.pitch + aim.recoil,
       flight.yaw + aim.yaw,
       0,
     )

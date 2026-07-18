@@ -176,8 +176,8 @@ model, 1st/3rd-person camera rig, and the ref-based zero-render input path).
 See `docs/drone-strike.md` for the Drone Strike widget (FPV wave shooter on
 the Drone Sim's flight model and city — fly-to-aim reticle, fire button +
 auto-fire, aim assist with target leading, segment-swept tracer bolts,
-seeded waves with enemy AI drones, optional gyro fine-aim, and the recorded
-hitscan/ballistic weapon variants).
+seeded waves with enemy AI drones, ADS zoom with three gyro fine-aim modes,
+and the recorded hitscan/ballistic weapon variants).
 See `docs/avatars.md` for the avatar system (seat-vs-avatar model, the per-avatar
 character folders, the catalog/registry split, the Settings picker, and how to add
 a new figure). See `docs/fullscreen.md` for full-screen mode (the WidgetCard

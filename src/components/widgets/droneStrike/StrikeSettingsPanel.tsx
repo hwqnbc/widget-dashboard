@@ -21,6 +21,7 @@ import { useAppDispatch } from '../../../app/hooks'
 import { updateWidgetData } from '../../../features/widgets/widgetsSlice'
 import type { Weather } from '../droneSim/flightModel'
 import type { AimAssistLevel } from './combatModel'
+import type { GyroMode } from './gyroAim'
 import { gyroNeedsPermission, gyroSupported, requestGyroPermission } from './gyroAim'
 
 function ToggleRow({
@@ -84,7 +85,7 @@ export default function StrikeSettingsPanel({
   onClose: () => void
   autoFire: boolean
   aimAssist: AimAssistLevel
-  gyroAim: boolean
+  gyroAim: GyroMode
   weather: Weather
   richWorld: boolean
   minimap: boolean
@@ -99,12 +100,12 @@ export default function StrikeSettingsPanel({
     dispatch(updateWidgetData({ id, data }))
   const [gyroDenied, setGyroDenied] = useState(false)
 
-  const toggleGyro = async (next: boolean) => {
-    if (!next) {
-      set({ gyroAim: false })
+  const setGyroMode = async (next: GyroMode) => {
+    if (next === 'off') {
+      set({ gyroAim: 'off' })
       return
     }
-    // The switch tap is the user gesture iOS needs for the sensor prompt.
+    // The button tap is the user gesture iOS needs for the sensor prompt.
     if (gyroNeedsPermission()) {
       const verdict = await requestGyroPermission()
       if (verdict !== 'granted') {
@@ -113,7 +114,7 @@ export default function StrikeSettingsPanel({
       }
     }
     setGyroDenied(false)
-    set({ gyroAim: true })
+    set({ gyroAim: next })
   }
 
   return (
@@ -156,17 +157,37 @@ export default function StrikeSettingsPanel({
             </ToggleButtonGroup>
           </ListItem>
           {gyroSupported() && (
-            <ToggleRow
-              testId="strike-gyro-toggle"
-              label="Gyro fine-aim"
-              description={
-                gyroDenied
-                  ? 'Motion access was denied — allow it in the browser settings and try again.'
-                  : 'Tilt the device to nudge the reticle a few degrees on top of stick flight.'
-              }
-              checked={gyroAim}
-              onChange={(next) => void toggleGyro(next)}
-            />
+            <ListItem disableGutters sx={{ py: 0.5 }}>
+              <ListItemText
+                primary="Gyro fine-aim"
+                secondary={
+                  gyroDenied
+                    ? 'Motion access was denied — allow it in the browser settings and try again.'
+                    : 'Tilt the device to nudge the reticle. "Zoom" = only while scoped (the classic scope-gyro).'
+                }
+                slotProps={{ primary: { sx: { fontWeight: 600 } }, secondary: { sx: { fontSize: 12 } } }}
+              />
+              <ToggleButtonGroup
+                size="small"
+                exclusive
+                data-testid="strike-gyro"
+                value={gyroAim}
+                onChange={(_, v) => {
+                  if (v) void setGyroMode(v as GyroMode)
+                }}
+                sx={{ ml: 1.5, flexShrink: 0 }}
+              >
+                <ToggleButton value="off" data-testid="strike-gyro-off">
+                  Off
+                </ToggleButton>
+                <ToggleButton value="zoom" data-testid="strike-gyro-zoom">
+                  Zoom
+                </ToggleButton>
+                <ToggleButton value="always" data-testid="strike-gyro-always">
+                  Always
+                </ToggleButton>
+              </ToggleButtonGroup>
+            </ListItem>
           )}
         </List>
         <List dense subheader={<ListSubheader disableGutters>Flight</ListSubheader>}>

@@ -14,9 +14,10 @@ shooter layout — PUBG/CoD Mobile style), with full desktop support.
 | --- | --- | --- |
 | Throttle / yaw | left stick | `W S` / `A D` |
 | Move (pitch/strafe) | right stick | arrow keys |
-| Fire | **fire button** above the right stick (hold = continuous) | `Space`, mouse button on the scene, or gamepad RT/RB |
+| Fire | **fire button** above the right stick (hold = continuous) | `Space`, left mouse on the scene, or gamepad RT/RB |
+| ADS / zoom | **scope button** above the fire button (tap = toggle) | hold `Shift` or right mouse; gamepad LT (hold) |
 | Aim | fly: yaw + altitude put the reticle on target | same |
-| Fine aim (optional) | **gyro**: tilt the device a few degrees | — |
+| Fine aim (optional) | **gyro**: tilt the device a few degrees — Off / Zoom only / Always | — |
 
 Key decisions:
 
@@ -37,16 +38,30 @@ Key decisions:
   target leading (`leadPoint`). Magnetism bends the **bolt**, never the
   camera — the player never feels steering theft. The reticle turns amber
   and expands on lock.
-- **Gyro fine-aim** (settings, mobile only): device tilt writes a clamped
+- **ADS / zoom** (FPV only, transient — never persisted): a fixed 2× scope.
+  Tap-to-toggle on touch (the PUBG/CoD convention — no third held finger);
+  hold Shift / right-mouse / gamepad LT on desktop. Scoped: the camera
+  eases `BASE_FOV` 60° → `ZOOM_FOV` 30°, yaw rate and the FPV pitch follow
+  halve (`ZOOM_SENS` — a 2× view magnifies motion), and the assist cone
+  swaps to the ~half-size `AIM_CONE_RAD_ZOOM` row. The camera and the fire
+  path both go through `fpvPitchGain(zoom)` so the bolt always goes exactly
+  where the reticle points. The reticle grows a heavier scoped ring;
+  leaving FPV drops the scope.
+- **Gyro fine-aim** (settings, mobile only) — three modes: **Off / Zoom
+  only / Always**. "Zoom only" attaches the sensor just while scoped (the
+  classic beginner scope-gyro). Device tilt writes a clamped
   (`GYRO_MAX_OFFSET` 0.15 rad) yaw/pitch offset into the shared `AimOffset`
   read by both the camera and the fire path, on top of stick flight. It is
   never injected into `ControlInput` — that would fight the altitude-hold
   physics and the input-source arbitration. iOS 13+ needs
   `DeviceOrientationEvent.requestPermission()` from a user gesture: the
-  settings switch tap is that gesture; denial disables with helper text;
-  the row hides entirely where the API is missing. The neutral pose creeps
-  toward the current grip, so drift self-recentres. **Not e2e-testable** —
-  verify on a real device (toggle in settings, tilt, watch the reticle).
+  settings mode-button tap is that gesture; denial keeps it off with helper
+  text; the row hides entirely where the API is missing. The persisted
+  field is still the `gyroAim` key — the old boolean coerces (`true` →
+  `'always'`) so existing widgets migrate with no data change. The neutral
+  pose creeps toward the current grip, so drift self-recentres. **Not
+  e2e-testable** — verify on a real device (set a mode, tilt, watch the
+  reticle; in "Zoom only" the tilt must act only while scoped).
 
 ## Gameplay
 
@@ -154,13 +169,13 @@ kind of list).
   stick roles and moves the fire button to the left thumb; mobile-shooter
   research says always offer mirroring. Pure layout work in
   `DroneStrikeBody` (the sticks/`FireButton` are already position-props).
-- **ADS / zoom mode** — hold a second button (or double-tap fire) to
-  narrow the FOV for long shots, with its own lower sensitivity and a
-  tighter assist cone; `StrikeCameraRig` already damps `camera.fov` and the
-  cone is just a different `AIM_CONE_RAD` row. Gyro "aim-only" mode (active
-  only while zoomed) becomes meaningful with this.
+- ~~ADS / zoom mode~~ — **shipped** (scope button / Shift / right mouse /
+  LT, 2× FOV, halved sensitivity, tighter cone, gyro "Zoom only" mode; see
+  Controls above).
 - **Gyro recenter button** — `recenterGyro` is exported and unused so far;
-  surface it next to the gyro switch for players whose grip drifted.
+  surface it next to the gyro mode buttons for players whose grip drifted.
+- **Adjustable zoom power** — the 2× scope is fixed constants
+  (`ZOOM_FOV`/`ZOOM_SENS`); a 1.5–4× slider would scale both together.
 
 ### Weapons
 - **Hitscan laser** — already representable as a `WeaponSpec` (resolve the

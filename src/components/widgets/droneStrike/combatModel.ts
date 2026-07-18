@@ -324,6 +324,14 @@ export const AIM_CONE_RAD: Record<AimAssistLevel, number> = {
   strong: 0.11,
 }
 
+/** The scoped (ADS) cone — about half of the hip cone per level: the 2×
+ * view doubles apparent precision, so the assist demands it back. */
+export const AIM_CONE_RAD_ZOOM: Record<AimAssistLevel, number> = {
+  off: 0.01,
+  mild: 0.03,
+  strong: 0.055,
+}
+
 /** How far the fired bolt bends toward the locked target (0..1). The
  * magnetism bends the bolt, never the camera. */
 export const AIM_BEND: Record<AimAssistLevel, number> = {

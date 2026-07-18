@@ -240,12 +240,19 @@ export function strikeReaders(page) {
   }
 }
 
-/** Wait until the wave state machine reports the given state. */
+/** Wait until the wave state machine reports the given state.
+ * `data-wave-state` is React-owned and flips at commit time, while the
+ * combat telemetry (targets-left, score, …) lags by up to one throttled
+ * 150 ms tick — so after the state matches, settle for two ticks before
+ * returning, letting callers read a consistent snapshot. */
 export async function waitForWaveState(page, state, timeout = 8000) {
   const hud = page.locator('[data-testid="strike-hud"]')
   const deadline = Date.now() + timeout
   while (Date.now() < deadline) {
-    if ((await hud.getAttribute('data-wave-state')) === state) return true
+    if ((await hud.getAttribute('data-wave-state')) === state) {
+      await page.waitForTimeout(350)
+      return true
+    }
     await page.waitForTimeout(150)
   }
   return false

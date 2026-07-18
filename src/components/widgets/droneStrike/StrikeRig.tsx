@@ -19,6 +19,7 @@ import type { AimAssistLevel, CombatState, WeaponSpec } from './combatModel'
 import {
   AIM_BEND,
   AIM_CONE_RAD,
+  AIM_CONE_RAD_ZOOM,
   AUTO_FIRE_HOLD_S,
   ENEMY_BOLT,
   bendAim,
@@ -33,7 +34,7 @@ import { aliveCount, stepDrift } from './waveLayout'
 import type { EnemyAIState } from './enemyAI'
 import { stepEnemy } from './enemyAI'
 import type { AimOffset } from './aimModel'
-import { FPV_PITCH_GAIN, RECOIL_KICK } from './aimModel'
+import { RECOIL_KICK, fpvPitchGain } from './aimModel'
 
 /** Seconds between HUD DOM writes (~7 Hz — no React renders). */
 const HUD_INTERVAL = 0.15
@@ -67,6 +68,16 @@ function gamepadFireHeld(): boolean {
   return false
 }
 
+/** Gamepad left trigger (6) holds ADS zoom. */
+function gamepadZoomHeld(): boolean {
+  if (typeof navigator === 'undefined' || !navigator.getGamepads) return false
+  for (const pad of navigator.getGamepads()) {
+    if (!pad) continue
+    return Boolean(pad.buttons[6]?.pressed)
+  }
+  return false
+}
+
 /**
  * The Drone Strike sim loop. Every frame: poll external input, step the
  * flight model, drift the targets, resolve fire intent (button / keyboard /
@@ -93,8 +104,9 @@ export default function StrikeRig({
   autoFire,
   waveActive,
   wave,
-  waveState,
   hp,
+  zoom,
+  onZoomHold,
   scoreRef,
   onWaveCleared,
   onTargetDown,
@@ -127,9 +139,12 @@ export default function StrikeRig({
   autoFire: boolean
   waveActive: boolean
   wave: number
-  waveState: string
   /** Player hit points this wave attempt (telemetry only — the body owns it). */
   hp: number
+  /** ADS: tighter lock cone + gentler pitch follow on the fire path. */
+  zoom: boolean
+  /** Gamepad left-trigger zoom hold — edge-reported to the body. */
+  onZoomHold: (held: boolean) => void
   /** Session score — runtime-only, rendered via the telemetry tick. */
   scoreRef: { current: number }
   onWaveCleared: () => void
@@ -154,10 +169,19 @@ export default function StrikeRig({
   const lockIdxRef = useRef(-1)
   const lockHold = useRef(0)
   const clearedSent = useRef(false)
+  const padZoomRef = useRef(false)
 
   useFrame(({ clock }, dt) => {
     if (!waveActive) clearedSent.current = false
     pollGamepad(external.current, controls)
+
+    // Gamepad LT holds zoom — edge-detected so React state changes only
+    // when the trigger state actually flips.
+    const padZoom = gamepadZoomHeld()
+    if (padZoom !== padZoomRef.current) {
+      padZoomRef.current = padZoom
+      onZoomHold(padZoom)
+    }
 
     const wind = windRef.current
     if (weather === 'storm') {
@@ -180,7 +204,7 @@ export default function StrikeRig({
     // Aim direction = the FPV camera forward (minus recoil, which is a
     // visual kick only): yaw + gentle tilt follow + the gyro offset.
     const aim = aimRef.current
-    const pitch = flight.tiltPitch * FPV_PITCH_GAIN + aim.pitch
+    const pitch = flight.tiltPitch * fpvPitchGain(zoom) + aim.pitch
     const yaw = flight.yaw + aim.yaw
     const cosP = Math.cos(pitch)
     fireDir.x = -Math.sin(yaw) * cosP
@@ -209,13 +233,14 @@ export default function StrikeRig({
       if (t.hitFlash > 0) t.hitFlash = Math.max(0, t.hitFlash - dt)
     }
 
-    // Reticle lock: nearest angular match inside the assist cone.
+    // Reticle lock: nearest angular match inside the assist cone (the
+    // scoped cone is ~half the hip cone — 2× view, 2× expected precision).
     const lockIdx = findLockTarget(
       flight.pos,
       fireDir,
       targets,
       colliders,
-      AIM_CONE_RAD[assist],
+      (zoom ? AIM_CONE_RAD_ZOOM : AIM_CONE_RAD)[assist],
       weapon.maxRange,
     )
     if (lockIdx !== lockIdxRef.current) {
@@ -338,8 +363,9 @@ export default function StrikeRig({
         hud.dataset.x = flight.pos.x.toFixed(2)
         hud.dataset.z = flight.pos.z.toFixed(2)
         hud.dataset.yaw = flight.yaw.toFixed(3)
-        hud.dataset.wave = String(wave)
-        hud.dataset.waveState = waveState
+        // data-wave / data-wave-state are React-owned (low-frequency props
+        // on the hud element) — writing them here too would create dual
+        // ownership and a stale-attribute window at wave transitions.
         hud.dataset.score = String(scoreRef.current)
         hud.dataset.shots = String(combat.shots)
         hud.dataset.hits = String(combat.hits)
@@ -352,6 +378,7 @@ export default function StrikeRig({
         for (const p of combat.enemy) if (p.active) enemyProj++
         hud.dataset.enemyProj = String(enemyProj)
         hud.dataset.hp = String(hp)
+        hud.dataset.zoom = zoom ? 'on' : 'off'
         hud.dataset.inputSource = external.current.owner ?? 'touch'
         // Nearest alive target — the closed-loop aim beacon for the e2e
         // suites (no window globals; lesson #31).

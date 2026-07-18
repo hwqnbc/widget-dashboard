@@ -17,6 +17,21 @@ export const coerceStrikeView = (v: unknown): StrikeView | undefined =>
  */
 export const FPV_PITCH_GAIN = 0.35
 
+/* ------------------------------ ADS / zoom ------------------------------ */
+
+/** Unzoomed field of view (matches the Canvas camera). */
+export const BASE_FOV = 60
+/** Scoped field of view — a fixed 2× zoom. */
+export const ZOOM_FOV = 30
+/** Sensitivity multiplier while scoped: yaw rate AND the pitch follow —
+ * a 2× view magnifies apparent motion, so aim inputs are halved. */
+export const ZOOM_SENS = 0.5
+
+/** The effective FPV pitch follow. Used by BOTH the camera and the fire
+ * path so the bolt always goes exactly where the reticle points. */
+export const fpvPitchGain = (zoom: boolean) =>
+  FPV_PITCH_GAIN * (zoom ? ZOOM_SENS : 1)
+
 /** How hard a shot kicks the camera pitch (radians). */
 export const RECOIL_KICK = 0.018
 

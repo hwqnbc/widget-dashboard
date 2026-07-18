@@ -12,6 +12,21 @@
  */
 import type { AimOffset } from './aimModel'
 
+/** When the gyro contributes: never, only while scoped, or always. */
+export type GyroMode = 'off' | 'zoom' | 'always'
+
+/** Coerces the persisted value — including the legacy boolean this field
+ * used to be (`true` was the old always-on switch). Same key, no data
+ * migration needed. */
+export const coerceGyroMode = (v: unknown): GyroMode | undefined =>
+  v === 'off' || v === 'zoom' || v === 'always'
+    ? v
+    : v === true
+      ? 'always'
+      : v === false
+        ? 'off'
+        : undefined
+
 /** Max aim offset per axis, radians (~8.6°). */
 export const GYRO_MAX_OFFSET = 0.15
 /** Device tilt (radians) that maps to the full offset — ~25° of tilt. */

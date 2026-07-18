@@ -415,3 +415,25 @@ is itself the meta-lesson: #28–#41 all carried over unchanged.
     HUD tick) is all the closed-loop pilot needs to fly onto targets and
     shoot them down — the suites clear real waves without window globals,
     staying inside the #31 data-* contract.
+
+46. **One owner per data-attribute — React props and imperative telemetry
+    must not share one, and tests must expect the tick lag between the two
+    groups.** `data-wave-state` (React-owned, flips at commit) and
+    `data-targets-left` (rig-owned, written on the throttled 150 ms tick)
+    briefly disagree at every wave transition: the state says `active`
+    while the count still shows the previous tick's `0`. The dual-written
+    `data-wave-state` made it worse. Fix on both sides: each attribute gets
+    exactly one owner (low-frequency values → React props; per-frame values
+    → the telemetry tick), and the e2e wait helper settles for two ticks
+    after a React-owned state flips before reading tick-owned attributes.
+    Found by suite 101 failing deterministically — after the code around it
+    changed timing, not behaviour, which is exactly what saved suites are
+    for.
+
+47. **Migrate a persisted field's type through its coercer, on the same
+    key.** The gyro setting grew from a boolean to `'off' | 'zoom' |
+    'always'`: `coerceGyroMode` simply maps the legacy `true`/`false` to
+    `'always'`/`'off'`, so every existing widget instance upgrades on read —
+    no redux-persist migration, no new key, and the settings reset keeps
+    working because `defaultWidgetData` is still the single source of
+    truth.

@@ -42,7 +42,7 @@ import {
 import { ENEMY_FIRE_WAVE, buildWave, createTargetStates, loadWave } from './waveLayout'
 import { createEnemyAIStates, seedEnemyAIStates } from './enemyAI'
 import type { StrikeView } from './aimModel'
-import { coerceStrikeView, createAimOffset } from './aimModel'
+import { ZOOM_SENS, coerceStrikeView, createAimOffset } from './aimModel'
 import StrikeCameraRig from './StrikeCameraRig'
 import StrikeRig from './StrikeRig'
 import Targets from './Targets'
@@ -54,7 +54,9 @@ import type { HitMarker } from './HitMarkers'
 import HitMarkers from './HitMarkers'
 import StrikeMinimap from './StrikeMinimap'
 import StrikeSettingsPanel from './StrikeSettingsPanel'
-import { attachGyro, createGyroState } from './gyroAim'
+import ScopeButton from './ScopeButton'
+import type { GyroMode } from './gyroAim'
+import { attachGyro, coerceGyroMode, createGyroState } from './gyroAim'
 
 const clampNum = (lo: number, hi: number) => (v: unknown) =>
   typeof v === 'number' && Number.isFinite(v)
@@ -118,7 +120,7 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
   const bestScore = useWidgetField(id, 'bestScore', 0)
   const autoFire = useWidgetField(id, 'autoFire', false)
   const aimAssist = useWidgetField<AimAssistLevel>(id, 'aimAssist', 'mild', coerceAimAssist)
-  const gyroAim = useWidgetField(id, 'gyroAim', false)
+  const gyroMode = useWidgetField<GyroMode>(id, 'gyroAim', 'off', coerceGyroMode)
   const richWorld = useWidgetField(id, 'richWorld', true)
   const rateSpeed = useWidgetField(id, 'rateSpeed', 1, coerceRate)
   const rateYaw = useWidgetField(id, 'rateYaw', 1, coerceRate)
@@ -152,14 +154,24 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
   const [hp, setHp] = useState(PLAYER_HP)
   const [markers, setMarkers] = useState<HitMarker[]>([])
   const [settingsOpen, setSettingsOpen] = useState(false)
+  // ADS zoom — transient, FPV-only. Toggled by the scope button, held by
+  // Shift / right mouse / gamepad LT.
+  const [zoom, setZoom] = useState(false)
   const gyroRef = useRef(createGyroState())
 
-  // Gyro fine-aim: while enabled, device tilt writes the shared aim offset
-  // (detaching zeroes it, so the reticle snaps straight when turned off).
+  // ADS is an FPV feature: leaving the gun cam drops the scope.
   useEffect(() => {
-    if (!gyroAim) return
-    return attachGyro(gyroRef.current, aimRef.current)
-  }, [gyroAim])
+    if (view !== 'fp') setZoom(false)
+  }, [view])
+
+  // Gyro fine-aim: device tilt writes the shared aim offset while the mode
+  // says so — 'always', or 'zoom' only while scoped (the classic
+  // scope-gyro). Detaching zeroes the offset, so the reticle snaps straight.
+  useEffect(() => {
+    if (gyroMode === 'always' || (gyroMode === 'zoom' && zoom)) {
+      return attachGyro(gyroRef.current, aimRef.current)
+    }
+  }, [gyroMode, zoom])
 
   // Wave state machine: intro (banner) → active (targets live) → cleared
   // (banner) → next intro; a failed wave (hp 0) restarts itself with fresh
@@ -279,6 +291,10 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
         fireHeldRef.current = true
         return
       }
+      if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') {
+        setZoom(true) // hold-to-scope on desktop
+        return
+      }
       if (!DRONE_KEYS.has(e.code)) return
       e.preventDefault()
       if (keys.has(e.code)) return
@@ -290,11 +306,16 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
         fireHeldRef.current = false
         return
       }
+      if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') {
+        setZoom(false)
+        return
+      }
       if (!keys.delete(e.code)) return
       push()
     }
     const onBlur = () => {
       fireHeldRef.current = false
+      setZoom(false)
       if (keys.size > 0) {
         keys.clear()
         push()
@@ -311,9 +332,14 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
     }
   }, [controls])
 
+  // Scoped aim is slower (2× view magnifies motion); flight speed untouched.
   const tuning = useMemo<Tuning>(
-    () => ({ speed: rateSpeed, yaw: rateYaw, expo: stickExpo }),
-    [rateSpeed, rateYaw, stickExpo],
+    () => ({
+      speed: rateSpeed,
+      yaw: rateYaw * (zoom ? ZOOM_SENS : 1),
+      expo: stickExpo,
+    }),
+    [rateSpeed, rateYaw, stickExpo, zoom],
   )
 
   const toggleView = () =>
@@ -347,8 +373,9 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
       data-view={view}
       data-auto-fire={autoFire ? 'on' : 'off'}
       data-aim-assist={aimAssist}
-      data-gyro={gyroAim ? 'on' : 'off'}
+      data-gyro={gyroMode}
       data-minimap={minimap ? 'on' : 'off'}
+      data-zoom={zoom ? 'on' : 'off'}
       data-weather={weather}
       data-rich={richWorld ? 'on' : 'off'}
       onMouseDown={(e) => e.stopPropagation()}
@@ -364,17 +391,25 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
       <Box
         data-testid="strike-canvas"
         sx={{ position: 'absolute', inset: 0 }}
-        // Desktop convenience: the mouse fires directly on the scene. Touch
-        // uses the dedicated button only (a stray palm must not shoot).
+        // Desktop convenience: left mouse fires, right mouse holds the
+        // scope. Touch uses the dedicated buttons only (a stray palm must
+        // not shoot or zoom).
         onPointerDown={(e) => {
-          if (e.pointerType === 'mouse' && e.button === 0) fireHeldRef.current = true
+          if (e.pointerType !== 'mouse') return
+          if (e.button === 0) fireHeldRef.current = true
+          else if (e.button === 2) setZoom(true)
         }}
         onPointerUp={(e) => {
-          if (e.pointerType === 'mouse') fireHeldRef.current = false
+          if (e.pointerType !== 'mouse') return
+          if (e.button === 0) fireHeldRef.current = false
+          else if (e.button === 2) setZoom(false)
         }}
         onPointerLeave={(e) => {
-          if (e.pointerType === 'mouse') fireHeldRef.current = false
+          if (e.pointerType !== 'mouse') return
+          fireHeldRef.current = false
+          setZoom(false)
         }}
+        onContextMenu={(e) => e.preventDefault()}
       >
         <Canvas
           frameloop="always"
@@ -406,8 +441,9 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
             autoFire={autoFire}
             waveActive={phase === 'active'}
             wave={wave}
-            waveState={phase}
             hp={hp}
+            zoom={zoom}
+            onZoomHold={setZoom}
             scoreRef={scoreRef}
             onWaveCleared={onWaveCleared}
             onTargetDown={onTargetDown}
@@ -423,6 +459,7 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
             flight={flight}
             aimRef={aimRef}
             colliders={layout.colliders}
+            zoom={zoom}
           />
         </Canvas>
       </Box>
@@ -554,7 +591,7 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
         </Box>
       )}
 
-      {view === 'fp' && <Reticle ref={reticleRef} />}
+      {view === 'fp' && <Reticle ref={reticleRef} zoom={zoom} />}
 
       <HitMarkers markers={markers} />
 
@@ -617,7 +654,7 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
         onClose={() => setSettingsOpen(false)}
         autoFire={autoFire}
         aimAssist={aimAssist}
-        gyroAim={gyroAim}
+        gyroAim={gyroMode}
         weather={weather}
         richWorld={richWorld}
         minimap={minimap}
@@ -679,6 +716,20 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
             : stickSize + 56,
         }}
       />
+      {view === 'fp' && (
+        <ScopeButton
+          size={fullscreen ? 56 : 40}
+          zoom={zoom}
+          onToggle={() => setZoom((z) => !z)}
+          sx={{
+            position: 'absolute',
+            right: stickInset + 16,
+            bottom: fullscreen
+              ? `calc(max(${stickInset}px, env(safe-area-inset-bottom)) + ${stickSize + 64 + fireSize + 40}px)`
+              : stickSize + 56 + fireSize + 32,
+          }}
+        />
+      )}
     </Box>
   )
 }

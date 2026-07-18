@@ -179,7 +179,7 @@ export function defaultWidgetData(type: WidgetType): Record<string, unknown> {
         view: 'fp',
         autoFire: false,
         aimAssist: 'mild',
-        gyroAim: false,
+        gyroAim: 'off',
         minimap: true,
         richWorld: true,
         weather: 'clear',
