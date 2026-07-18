@@ -256,6 +256,29 @@ export async function fireCenter(page) {
   return await stickCenter(page, 'strike-fire')
 }
 
+/** Open/close the strike settings dialog. */
+export async function openStrikeSettings(page) {
+  await page.locator('[data-testid="strike-settings"]').click()
+  await page.waitForSelector('[data-testid="strike-settings-panel"]')
+  await page.waitForTimeout(250) // dialog enter transition
+}
+
+export async function closeStrikeSettings(page) {
+  await page.keyboard.press('Escape')
+  await page.waitForTimeout(350) // dialog exit transition
+}
+
+/** Set a strike settings switch to the desired state (opens/closes panel). */
+export async function setStrikeSwitch(page, testId, desired) {
+  await openStrikeSettings(page)
+  const input = page.locator(`[data-testid="${testId}"] input`)
+  if ((await input.isChecked()) !== desired) {
+    await input.click()
+    await page.waitForTimeout(150)
+  }
+  await closeStrikeSettings(page)
+}
+
 /** Tap the fire button once via CDP touch (independent of the stick rig). */
 export async function tapFire(page, context, holdMs = 120) {
   const c = await fireCenter(page)
@@ -332,7 +355,7 @@ export async function createStrikePilot(page, context) {
    * Close on the beacon target, hold altitude on it, keep the yaw error
    * inside the lock cone and fire until `data-targets-left` drops.
    */
-  const engage = async ({ timeout = 45000 } = {}) => {
+  const engage = async ({ timeout = 45000, manualFire = true } = {}) => {
     const start = (await combat()).targetsLeft
     if (start === 0) return true
     const deadline = Date.now() + timeout
@@ -355,12 +378,14 @@ export async function createStrikePilot(page, context) {
         const fwd = Math.abs(err) < 0.4 && dxz > 30 ? clamp(dxz * 0.08, 0, 0.8) : 0
         await touch(yawInput, climb, 0, fwd)
         const onTarget = Math.abs(err) < 0.1 && Math.abs(dy) < 1.5 && dxz < 60
-        if (onTarget && !firing) {
-          await page.keyboard.down('Space')
-          firing = true
-        } else if (!onTarget && firing) {
-          await page.keyboard.up('Space')
-          firing = false
+        if (manualFire) {
+          if (onTarget && !firing) {
+            await page.keyboard.down('Space')
+            firing = true
+          } else if (!onTarget && firing) {
+            await page.keyboard.up('Space')
+            firing = false
+          }
         }
         await page.waitForTimeout(140)
       }

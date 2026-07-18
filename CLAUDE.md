@@ -20,8 +20,8 @@ npm run e2e      # Drone Sim end-to-end suites (headless Chromium; see e2e/READM
 
 There is no unit-test runner configured. Verify changes with `npm run build`
 (catches type + bundling errors) and `npm run lint`; changes touching the
-Drone Sim widget should also pass `npm run e2e` (filterable, e.g.
-`npm run e2e core`).
+Drone Sim or Drone Strike widgets should also pass `npm run e2e` (filterable,
+e.g. `npm run e2e core`, `npm run e2e strike`).
 
 ## Workflow
 
@@ -156,6 +156,11 @@ first to 5 hits; reuses the heads, PlayerBadge, TurnBanner and WinnerCelebration
 See `docs/drone-sim.md` for the Drone Sim widget (the first WebGL widget —
 three.js/R3F lazy chunk, twin-stick touch joysticks, the altitude-hold flight
 model, 1st/3rd-person camera rig, and the ref-based zero-render input path).
+See `docs/drone-strike.md` for the Drone Strike widget (FPV wave shooter on
+the Drone Sim's flight model and city — fly-to-aim reticle, fire button +
+auto-fire, aim assist with target leading, segment-swept tracer bolts,
+seeded waves with enemy AI drones, optional gyro fine-aim, and the recorded
+hitscan/ballistic weapon variants).
 See `docs/avatars.md` for the avatar system (seat-vs-avatar model, the per-avatar
 character folders, the catalog/registry split, the Settings picker, and how to add
 a new figure). See `docs/fullscreen.md` for full-screen mode (the WidgetCard

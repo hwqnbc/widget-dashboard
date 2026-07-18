@@ -3,9 +3,11 @@ import { Canvas } from '@react-three/fiber'
 import { Box, IconButton, Tooltip, alpha, useTheme } from '@mui/material'
 import CameraswitchIcon from '@mui/icons-material/Cameraswitch'
 import RestartAltIcon from '@mui/icons-material/RestartAlt'
+import SettingsIcon from '@mui/icons-material/Settings'
 import { useAppDispatch } from '../../../app/hooks'
 import { updateWidgetData } from '../../../features/widgets/widgetsSlice'
 import { useWidgetField } from '../../../features/widgets/useWidgetField'
+import { defaultWidgetData } from '../../../features/widgets/widgetCatalog'
 import { usePresentation } from '../../fullscreen/presentation'
 import type { WidgetProps } from '../../../registry/widgetRegistry'
 import { DAY_PALETTE, DUSK_PALETTE, NIGHT_PALETTE } from '../droneSim/palettes'
@@ -51,6 +53,8 @@ import FireButton from './FireButton'
 import type { HitMarker } from './HitMarkers'
 import HitMarkers from './HitMarkers'
 import StrikeMinimap from './StrikeMinimap'
+import StrikeSettingsPanel from './StrikeSettingsPanel'
+import { attachGyro, createGyroState } from './gyroAim'
 
 const clampNum = (lo: number, hi: number) => (v: unknown) =>
   typeof v === 'number' && Number.isFinite(v)
@@ -69,6 +73,23 @@ const CLEARED_MS = 2000
 const FAILED_MS = 2500
 /** Enemy-bolt hits the player survives per wave attempt. */
 const PLAYER_HP = 3
+
+/** What "Reset settings" restores — every settings-panel field, sourced
+ * from the catalog defaults. Records, view and the city seed are kept. */
+const SETTING_KEYS = [
+  'autoFire',
+  'aimAssist',
+  'gyroAim',
+  'weather',
+  'richWorld',
+  'minimap',
+  'rateSpeed',
+  'rateYaw',
+  'stickExpo',
+] as const
+const SETTING_DEFAULTS: Record<string, unknown> = Object.fromEntries(
+  SETTING_KEYS.map((k) => [k, defaultWidgetData('droneStrike')[k]]),
+)
 
 /**
  * The FPV shooting game. Same architecture as the drone sim: everything
@@ -97,6 +118,7 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
   const bestScore = useWidgetField(id, 'bestScore', 0)
   const autoFire = useWidgetField(id, 'autoFire', false)
   const aimAssist = useWidgetField<AimAssistLevel>(id, 'aimAssist', 'mild', coerceAimAssist)
+  const gyroAim = useWidgetField(id, 'gyroAim', false)
   const richWorld = useWidgetField(id, 'richWorld', true)
   const rateSpeed = useWidgetField(id, 'rateSpeed', 1, coerceRate)
   const rateYaw = useWidgetField(id, 'rateYaw', 1, coerceRate)
@@ -126,9 +148,18 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
   const [wave, setWave] = useState(1)
   const [phase, setPhase] = useState<WavePhase>('intro')
   const [banner, setBanner] = useState<string | null>(null)
-  const [confirmRestart, setConfirmRestart] = useState(false)
+  const [confirm, setConfirm] = useState<null | 'restart' | 'shuffle'>(null)
   const [hp, setHp] = useState(PLAYER_HP)
   const [markers, setMarkers] = useState<HitMarker[]>([])
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const gyroRef = useRef(createGyroState())
+
+  // Gyro fine-aim: while enabled, device tilt writes the shared aim offset
+  // (detaching zeroes it, so the reticle snaps straight when turned off).
+  useEffect(() => {
+    if (!gyroAim) return
+    return attachGyro(gyroRef.current, aimRef.current)
+  }, [gyroAim])
 
   // Wave state machine: intro (banner) → active (targets live) → cleared
   // (banner) → next intro; a failed wave (hp 0) restarts itself with fresh
@@ -188,7 +219,7 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
   }, [])
 
   const restart = () => {
-    setConfirmRestart(false)
+    setConfirm(null)
     resetFlightState(flight)
     resetCombatState(combat)
     for (const t of targets) t.alive = false
@@ -198,13 +229,32 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
     setPhase('intro')
   }
 
+  const shuffleWorld = () => {
+    dispatch(
+      updateWidgetData({
+        id,
+        data: { worldSeed: Math.floor(Math.random() * 0x100000000) },
+      }),
+    )
+    restart()
+  }
+
+  const hasProgress = () => wave > 1 || scoreRef.current > 0
+
   const requestRestart = () => {
     // Only bother confirming when there's progress to lose.
-    if (wave > 1 || scoreRef.current > 0) {
-      setConfirmRestart(true)
-    } else {
-      restart()
-    }
+    if (hasProgress()) setConfirm('restart')
+    else restart()
+  }
+
+  const requestNewWorld = () => {
+    setSettingsOpen(false)
+    if (hasProgress()) setConfirm('shuffle')
+    else shuffleWorld()
+  }
+
+  const resetDefaults = () => {
+    dispatch(updateWidgetData({ id, data: { ...SETTING_DEFAULTS } }))
   }
 
   // Keyboard: the drone sim's flight keys plus Space to fire. Typing in
@@ -297,6 +347,8 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
       data-view={view}
       data-auto-fire={autoFire ? 'on' : 'off'}
       data-aim-assist={aimAssist}
+      data-gyro={gyroAim ? 'on' : 'off'}
+      data-minimap={minimap ? 'on' : 'off'}
       data-weather={weather}
       data-rich={richWorld ? 'on' : 'off'}
       onMouseDown={(e) => e.stopPropagation()}
@@ -547,16 +599,50 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
             <RestartAltIcon fontSize="small" />
           </IconButton>
         </Tooltip>
+        <Tooltip title="Settings (combat, flight, world)">
+          <IconButton
+            size="small"
+            data-testid="strike-settings"
+            onClick={() => setSettingsOpen(true)}
+            sx={{ color: '#fff' }}
+          >
+            <SettingsIcon fontSize="small" />
+          </IconButton>
+        </Tooltip>
       </Box>
 
+      <StrikeSettingsPanel
+        id={id}
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        autoFire={autoFire}
+        aimAssist={aimAssist}
+        gyroAim={gyroAim}
+        weather={weather}
+        richWorld={richWorld}
+        minimap={minimap}
+        rateSpeed={rateSpeed}
+        rateYaw={rateYaw}
+        stickExpo={stickExpo}
+        onNewWorld={requestNewWorld}
+        onResetDefaults={resetDefaults}
+      />
+
       <ConfirmDialog
-        open={confirmRestart}
-        title="Restart the run?"
-        message="Restarting returns to wave 1 and clears the session score. Your best score and wave are kept."
-        confirmLabel="Restart"
+        open={confirm !== null}
+        title={confirm === 'shuffle' ? 'New city?' : 'Restart the run?'}
+        message={
+          confirm === 'shuffle'
+            ? 'Shuffling the buildings restarts the run from wave 1 and clears the session score. Your best score and wave are kept.'
+            : 'Restarting returns to wave 1 and clears the session score. Your best score and wave are kept.'
+        }
+        confirmLabel={confirm === 'shuffle' ? 'Shuffle' : 'Restart'}
         cancelLabel="Keep playing"
-        onConfirm={restart}
-        onCancel={() => setConfirmRestart(false)}
+        onConfirm={() => {
+          if (confirm === 'shuffle') shuffleWorld()
+          else restart()
+        }}
+        onCancel={() => setConfirm(null)}
       />
 
       <VirtualJoystick
