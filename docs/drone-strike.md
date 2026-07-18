@@ -142,3 +142,71 @@ globals. Chips: `strike-score` (`data-score/-wave/-best-score/-best-wave`),
 E2E: suites `100-strike-core`, `101-strike-waves`, `102-strike-input`
 (see `e2e/README.md`); pure modules are esbuild-bundled for the suites in a
 second flat pass in `run.mjs`.
+
+## Future work (enhancement backlog)
+
+Everything above is shipped. The backlog below tracks remaining ideas, with
+the integration point each would build on (the drone-sim doc keeps the same
+kind of list).
+
+### Controls & feel
+- **Left-handed / mirrored layout** — a settings toggle that swaps the
+  stick roles and moves the fire button to the left thumb; mobile-shooter
+  research says always offer mirroring. Pure layout work in
+  `DroneStrikeBody` (the sticks/`FireButton` are already position-props).
+- **ADS / zoom mode** — hold a second button (or double-tap fire) to
+  narrow the FOV for long shots, with its own lower sensitivity and a
+  tighter assist cone; `StrikeCameraRig` already damps `camera.fov` and the
+  cone is just a different `AIM_CONE_RAD` row. Gyro "aim-only" mode (active
+  only while zoomed) becomes meaningful with this.
+- **Gyro recenter button** — `recenterGyro` is exported and unused so far;
+  surface it next to the gyro switch for players whose grip drifted.
+
+### Weapons
+- **Hitscan laser** — already representable as a `WeaponSpec` (resolve the
+  full `origin→maxRange` segment on the spawn frame); render as a brief
+  beam (`Tracers` instance stretched to the hit point) and balance with a
+  heat meter instead of a cooldown.
+- **Ballistic lob** — `gravity > 0` in the existing integrator; ship it
+  with a trajectory-hint arc (a `GhostLine`-style polyline sampled from the
+  same integration) or it will frustrate on touch.
+- **Weapon switching / pickups** — per-wave weapon crates on rooftops
+  (LandingPads-style discs); the rig already takes `weapon` as a prop, so
+  switching is a state change in the body.
+- **Muzzle flash + impact sparks** — a pooled one-shot particle burst at
+  `HitEvent` coordinates (RainField's single-draw-call Points pattern).
+
+### Enemies & waves
+- **Enemy variety** — a *chaser* that pursues the player (waypoint =
+  player position, capped speed, `resolveCollisions` for safety), a
+  *kamikaze* that dives once locked, a *shielded* drone only hurt from
+  behind (dot product of hit direction vs heading — the `HitEvent` already
+  carries the impact point). Each is one more `stepEnemy` mode.
+- **Boss wave every 5th** — one large multi-HP drone with weak-point
+  spheres (extra `Hittable`s attached to its pose) and a health bar chip.
+- **Combo scoring** — consecutive hits without a miss multiply points;
+  `combat.shots/hits` already tracks the stream, add a decaying multiplier
+  in the rig and show it on the score chip.
+- **Difficulty setting** — Easy/Normal/Hard scaling enemy count, orbit
+  speed and `ENEMY_BOLT` cooldown; all constants already flow from
+  `buildWave`/`enemyAI`, so it's a multiplier argument.
+
+### Camera & visuals
+- **Kill-cam slow-mo** — on the wave-clearing kill, damp the frameloop dt
+  scale briefly and swing the chase camera at the exploding target.
+- **Damage vignette** — a red edge flash on player hit (DOM overlay
+  written from `onPlayerHit`, like the sim's horizon overlay).
+- **Kill explosion** — instanced sprite/particle burst where a target
+  dies (same pooled one-shot system as muzzle flash).
+- **FPV polish reuse** — the sim's opt-in camera bank + speed shake
+  (`fpvPolish`) ports straight into `StrikeCameraRig`.
+
+### Meta
+- **Sound** — Web Audio, no assets: bolt zap pitched by cooldown, balloon
+  pop, enemy-lock warning tone when an enemy is about to fire at you (the
+  AI knows — `fireCooldown` crossing zero), wave-clear sting.
+- **Accuracy stats** — persist per-run accuracy (`hits/shots`) alongside
+  `bestScore`; show on the best chip.
+- **Daily seed run** — a "today's city" mode seeding `worldSeed` from the
+  date (computed in the body, never inside the pure modules) so households
+  can compare scores on the same campaign.
