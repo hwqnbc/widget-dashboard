@@ -51,6 +51,7 @@ for (const tid of [
   'dronesim-tune-turbo',
   'dronesim-follow-dist',
   'dronesim-gate-count',
+  'dronesim-edit-course',
   'dronesim-new-course',
   'dronesim-settings-reset',
 ]) {

@@ -368,3 +368,12 @@ feature rounds (flight, collision, gates, time trial, courses, weather, crash).
     shared control state, polled sources must claim/release ownership
     (write zeros exactly ONCE on going idle) — a per-frame poll that
     writes unconditionally stomps event-driven sources with zeros.
+
+41. **Place-by-playing beats building an editor surface.** The course
+    editor has no placement UI at all: you fly to a spot and press "drop
+    gate" — position, altitude AND heading come from the live flight state,
+    every input method works for free, and any spot you can reach is valid
+    by construction (no building-overlap checks needed). When a game needs
+    user-authored content, first ask whether the existing play verbs can
+    BE the editor. Also: keep authored content out of "settings" — a reset
+    button must not delete somebody's hand-built course.

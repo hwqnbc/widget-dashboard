@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas } from '@react-three/fiber'
-import { Box, IconButton, Tooltip, alpha, useTheme } from '@mui/material'
+import { Box, Button, IconButton, Tooltip, Typography, alpha, useTheme } from '@mui/material'
 import CameraswitchIcon from '@mui/icons-material/Cameraswitch'
+import CloseIcon from '@mui/icons-material/Close'
+import UndoIcon from '@mui/icons-material/Undo'
 import DirectionsWalkIcon from '@mui/icons-material/DirectionsWalk'
 import ManIcon from '@mui/icons-material/Man'
 import RestartAltIcon from '@mui/icons-material/RestartAlt'
@@ -33,7 +35,19 @@ const clampNum = (lo: number, hi: number) => (v: unknown) =>
     : undefined
 const coerceRate = clampNum(0.5, 2)
 const coerceExpo = clampNum(0, 0.8)
-import { DEFAULT_SEED, buildWorldLayout, coerceGateCount } from './worldLayout'
+import type { CourseMode, RingSpec } from './worldLayout'
+import {
+  DEFAULT_SEED,
+  MAX_CUSTOM_GATES,
+  MIN_CUSTOM_GATES,
+  buildWorldLayout,
+  coerceCourseMode,
+  coerceGateCount,
+  packRings,
+  parseRings,
+  ringsToGates,
+  validateGateDrop,
+} from './worldLayout'
 import { createLapState, fmtLap, resetLapState } from './lapTimer'
 import { CRASH_PULSE, GATE_PULSE, LAP_PULSE, vibrate } from './haptics'
 import ConfirmDialog from '../ConfirmDialog'
@@ -90,6 +104,8 @@ const SETTING_DEFAULTS: Record<string, unknown> = Object.fromEntries(
 const DEFAULT_GATES = coerceGateCount(SETTING_DEFAULTS.gateCount) ?? 3
 
 const EMPTY_PATH: number[] = []
+/** While the course editor is open, gate scoring/lap logic sees no gates. */
+const EMPTY_GATES: import('./worldLayout').Gate[] = []
 const coercePath = (v: unknown): number[] | undefined =>
   Array.isArray(v) && v.every((n) => typeof n === 'number')
     ? (v as number[])
@@ -118,10 +134,18 @@ export default function DroneSimBody({ id }: WidgetProps) {
   const bestLapPath = useWidgetField<number[]>(id, 'bestLapPath', EMPTY_PATH, coercePath)
   const worldSeed = useWidgetField(id, 'worldSeed', DEFAULT_SEED)
   const gateSetting = useWidgetField(id, 'gateCount', 3, coerceGateCount)
-  const layout = useMemo(
-    () => buildWorldLayout(worldSeed, gateSetting),
-    [worldSeed, gateSetting],
-  )
+  const courseMode = useWidgetField<CourseMode>(id, 'courseMode', 'seed', coerceCourseMode)
+  const customRings = useWidgetField<number[]>(id, 'customRings', EMPTY_PATH, coercePath)
+  // The world (buildings/colliders/scenery/pads) is always seed-driven; a
+  // hand-placed custom course overrides only the rings + derived gates.
+  const layout = useMemo(() => {
+    const base = buildWorldLayout(worldSeed, gateSetting)
+    if (courseMode === 'custom') {
+      const rings = parseRings(customRings)
+      if (rings) return { ...base, rings, gates: ringsToGates(rings) }
+    }
+    return base
+  }, [worldSeed, gateSetting, courseMode, customRings])
   const gateCount = layout.gates.length
 
   const controls = useRef(createControlInput()).current
@@ -232,8 +256,15 @@ export default function DroneSimBody({ id }: WidgetProps) {
   const [banner, setBanner] = useState<string | null>(null)
   // Pending course change awaiting confirmation: 'shuffle' re-rolls the
   // seed, a number is a new gate count, 'defaults' restores all settings
-  // (guarded only when that reverts the gate count). All clear laps/best/ghost.
-  const [confirmCourse, setConfirmCourse] = useState<'shuffle' | 'defaults' | number | null>(null)
+  // (guarded only when that reverts the gate count), 'custom-save' commits
+  // the editor draft, 'use-seed'/'use-custom' switch the course source.
+  // All clear laps/best/ghost.
+  const [confirmCourse, setConfirmCourse] = useState<
+    'shuffle' | 'defaults' | 'custom-save' | 'use-seed' | 'use-custom' | number | null
+  >(null)
+  // Course editor (fly & drop): transient draft of hand-placed rings.
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState<RingSpec[]>([])
   const bannerTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   useEffect(
     () => () => {
@@ -339,7 +370,15 @@ export default function DroneSimBody({ id }: WidgetProps) {
     [dispatch, id, landingBest],
   )
 
-  const applyCourseChange = (change: 'shuffle' | 'defaults' | number) => {
+  type CourseChange =
+    | 'shuffle'
+    | 'defaults'
+    | 'custom-save'
+    | 'use-seed'
+    | 'use-custom'
+    | number
+
+  const applyCourseChange = (change: CourseChange) => {
     setConfirmCourse(null)
     if (change === 'defaults') {
       const courseChanges = gateSetting !== DEFAULT_GATES
@@ -362,27 +401,69 @@ export default function DroneSimBody({ id }: WidgetProps) {
         id,
         data: {
           ...(change === 'shuffle'
-            ? { worldSeed: Math.floor(Math.random() * 0x100000000) }
-            : { gateCount: change }),
+            ? // Shuffling always races the re-rolled SEEDED course.
+              { worldSeed: Math.floor(Math.random() * 0x100000000), courseMode: 'seed' }
+            : change === 'custom-save'
+              ? { courseMode: 'custom', customRings: packRings(draft) }
+              : change === 'use-seed'
+                ? { courseMode: 'seed' }
+                : change === 'use-custom'
+                  ? { courseMode: 'custom' }
+                  : { gateCount: change }),
           score: 0,
           bestLapMs: 0,
           bestLapPath: [],
         },
       }),
     )
+    if (change === 'custom-save') setEditing(false)
     resetSim()
   }
 
-  const requestCourseChange = (change: 'shuffle' | 'defaults' | number) => {
+  const requestCourseChange = (change: CourseChange) => {
     if (typeof change === 'number' && change === gateSetting) return
     // Destroys a recorded best (or an in-progress lap) — confirm first.
-    // Resetting settings only rebuilds the course when the gate count moves.
+    // Resetting settings only rebuilds the course when the gate count moves;
+    // saving from the editor ignores the (gate-less) editing "lap".
     const changesCourse = change !== 'defaults' || gateSetting !== DEFAULT_GATES
-    if (changesCourse && (bestLapMs > 0 || lap.status === 'running')) {
+    const lapRunning = change !== 'custom-save' && lap.status === 'running'
+    if (changesCourse && (bestLapMs > 0 || lapRunning)) {
       setConfirmCourse(change)
     } else {
       applyCourseChange(change)
     }
+  }
+
+  // --- course editor (fly & drop) ---
+  const enterEditor = () => {
+    setSettingsOpen(false)
+    setDraft(courseMode === 'custom' ? (parseRings(customRings) ?? []) : [])
+    resetLapState(lap)
+    setActiveGate(0)
+    setEditing(true)
+    showBanner('COURSE EDITOR — FLY SOMEWHERE AND DROP GATES', 3500)
+  }
+
+  const dropGate = () => {
+    if (draft.length >= MAX_CUSTOM_GATES) {
+      showBanner(`MAX ${MAX_CUSTOM_GATES} GATES`)
+      return
+    }
+    const verdict = validateGateDrop(draft, flight.pos.x, flight.pos.y, flight.pos.z)
+    if (verdict !== 'ok') {
+      showBanner(
+        verdict === 'pad'
+          ? 'TOO CLOSE TO THE PAD'
+          : verdict === 'gate'
+            ? 'TOO CLOSE TO A GATE'
+            : 'GATE HEIGHT MUST BE 2–30m',
+      )
+      return
+    }
+    setDraft((d) => [
+      ...d,
+      { x: flight.pos.x, y: flight.pos.y, z: flight.pos.z, yaw: flight.yaw },
+    ])
   }
 
   const stickSize = fullscreen ? 140 : 88
@@ -438,6 +519,8 @@ export default function DroneSimBody({ id }: WidgetProps) {
       data-op-hold={opHold ? 'on' : 'off'}
       data-follow-dist={followDist}
       data-fpv={fpvPolish ? 'on' : 'off'}
+      data-course={courseMode}
+      data-editing={editing ? 'on' : 'off'}
       onMouseDown={(e) => e.stopPropagation()}
       onTouchStart={(e) => e.stopPropagation()}
       sx={{
@@ -463,8 +546,8 @@ export default function DroneSimBody({ id }: WidgetProps) {
           {landing && <LandingPads pads={layout.landingPads} />}
           <GateRings
             palette={palette}
-            rings={layout.rings}
-            activeGate={activeGate}
+            rings={editing ? draft : layout.rings}
+            activeGate={editing ? -1 : activeGate}
             flashRef={flashRef}
           />
           <GhostLine path={bestLapPath} color={palette.ring} />
@@ -486,7 +569,7 @@ export default function DroneSimBody({ id }: WidgetProps) {
             timerRef={timerRef}
             minimapDroneRef={minimapDroneRef}
             colliders={layout.colliders}
-            gates={layout.gates}
+            gates={editing ? EMPTY_GATES : layout.gates}
             weather={weather}
             flightMode={flightMode}
             tuning={tuning}
@@ -623,6 +706,76 @@ export default function DroneSimBody({ id }: WidgetProps) {
             data-level="100"
             sx={{ height: '100%', width: '100%', bgcolor: '#66bb6a' }}
           />
+        </Box>
+      )}
+
+      {editing && (
+        <Box
+          data-testid="dronesim-editor"
+          data-count={draft.length}
+          sx={{
+            position: 'absolute',
+            top: 40,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 0.5,
+            px: 1,
+            py: 0.5,
+            borderRadius: 1,
+            bgcolor: alpha('#000', 0.55),
+            zIndex: 2,
+          }}
+        >
+          <Typography
+            variant="caption"
+            sx={{ color: '#ffca28', fontFamily: 'monospace', mr: 0.5, whiteSpace: 'nowrap' }}
+          >
+            {`GATES ${draft.length}/${MAX_CUSTOM_GATES}`}
+          </Typography>
+          <Button
+            size="small"
+            variant="contained"
+            data-testid="dronesim-drop-gate"
+            onClick={dropGate}
+            sx={{ whiteSpace: 'nowrap' }}
+          >
+            Drop gate
+          </Button>
+          <Tooltip title="Remove the last gate">
+            <span>
+              <IconButton
+                size="small"
+                data-testid="dronesim-edit-undo"
+                disabled={draft.length === 0}
+                onClick={() => setDraft((d) => d.slice(0, -1))}
+                sx={{ color: '#fff' }}
+              >
+                <UndoIcon fontSize="small" />
+              </IconButton>
+            </span>
+          </Tooltip>
+          <Button
+            size="small"
+            variant="outlined"
+            data-testid="dronesim-edit-save"
+            disabled={draft.length < MIN_CUSTOM_GATES}
+            onClick={() => requestCourseChange('custom-save')}
+            sx={{ color: '#fff', borderColor: alpha('#fff', 0.5) }}
+          >
+            Save
+          </Button>
+          <Tooltip title="Exit without saving">
+            <IconButton
+              size="small"
+              data-testid="dronesim-edit-cancel"
+              onClick={() => setEditing(false)}
+              sx={{ color: '#fff' }}
+            >
+              <CloseIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
         </Box>
       )}
 
@@ -790,7 +943,14 @@ export default function DroneSimBody({ id }: WidgetProps) {
         followDist={followDist}
         fpvPolish={fpvPolish}
         gateCount={gateSetting}
+        courseMode={courseMode}
+        hasCustom={customRings.length > 0}
         onGateCount={requestCourseChange}
+        onEditCourse={enterEditor}
+        onCourseSource={(mode) => {
+          setSettingsOpen(false)
+          requestCourseChange(mode === 'seed' ? 'use-seed' : 'use-custom')
+        }}
         onResetDefaults={() => requestCourseChange('defaults')}
         onNewCourse={() => {
           setSettingsOpen(false)
@@ -805,21 +965,33 @@ export default function DroneSimBody({ id }: WidgetProps) {
             ? 'New course?'
             : confirmCourse === 'defaults'
               ? 'Reset settings?'
-              : 'Change gates?'
+              : confirmCourse === 'custom-save'
+                ? 'Save custom course?'
+                : confirmCourse === 'use-seed' || confirmCourse === 'use-custom'
+                  ? 'Switch course?'
+                  : 'Change gates?'
         }
         message={
           confirmCourse === 'shuffle'
             ? 'Shuffling the buildings and gates clears your lap count, best time and ghost line for this course.'
             : confirmCourse === 'defaults'
               ? `Restoring default settings returns the lap to ${DEFAULT_GATES} gates, clearing your lap count, best time and ghost line.`
-              : 'Changing the lap length clears your lap count, best time and ghost line for this course.'
+              : confirmCourse === 'custom-save'
+                ? 'Saving the hand-placed course clears your lap count, best time and ghost line.'
+                : confirmCourse === 'use-seed' || confirmCourse === 'use-custom'
+                  ? 'Switching courses clears your lap count, best time and ghost line.'
+                  : 'Changing the lap length clears your lap count, best time and ghost line for this course.'
         }
         confirmLabel={
           confirmCourse === 'shuffle'
             ? 'Shuffle'
             : confirmCourse === 'defaults'
               ? 'Reset'
-              : 'Change'
+              : confirmCourse === 'custom-save'
+                ? 'Save'
+                : confirmCourse === 'use-seed' || confirmCourse === 'use-custom'
+                  ? 'Switch'
+                  : 'Change'
         }
         cancelLabel="Keep course"
         onConfirm={() => {
@@ -831,8 +1003,8 @@ export default function DroneSimBody({ id }: WidgetProps) {
       {minimap && (
         <Minimap
           buildings={layout.buildings}
-          rings={layout.rings}
-          activeGate={activeGate}
+          rings={editing ? draft : layout.rings}
+          activeGate={editing ? -1 : activeGate}
           bestLapPath={bestLapPath}
           landingPads={landing ? layout.landingPads : []}
           droneRef={minimapDroneRef}

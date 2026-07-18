@@ -147,6 +147,8 @@ export function defaultWidgetData(type: WidgetType): Record<string, unknown> {
         bestLapPath: [],
         worldSeed: DEFAULT_SEED,
         gateCount: 3,
+        courseMode: 'seed',
+        customRings: [],
         weather: 'clear',
         crashes: true,
         flightMode: 'hold',

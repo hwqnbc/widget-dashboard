@@ -71,11 +71,13 @@ check('minimap shows the operator dot', (await page.locator('[data-testid="drone
 const chip = page.locator('[data-testid="dronesim-pilot-chip"]')
 check('no pilot chip in tp view', (await chip.count()) === 0)
 await setView('los')
+await page.waitForTimeout(500) // chip text arrives on the ~150ms tick
 check('chip reads STANDING in los', (await chip.getAttribute('data-pilot')) === 'standing')
 check('no hold button in los (standing never walks)', (await page.locator('[data-testid="dronesim-op-hold"]').count()) === 0)
 
 // --- follow on foot, speed-capped ---
 await setView('walk')
+await page.waitForTimeout(500) // chip text arrives on the ~150ms tick
 check('chip reads WALKING in walk view', (await chip.getAttribute('data-pilot')) === 'walking')
 await pilot.touchStart()
 await pilot.flyTo({ x: SPOT.x, y: CRUISE_ALT, z: SPOT.z }, { tol: 2 })
@@ -144,7 +146,7 @@ check('restoring the default resumes the follow at gap 12', (await opState()).mo
 const holdBtn = page.locator('[data-testid="dronesim-op-hold"]')
 check('hold button present in walk view', (await holdBtn.count()) === 1)
 await holdBtn.click()
-await page.waitForTimeout(200)
+await page.waitForTimeout(500)
 check('chip flips to HOLDING', (await chip.getAttribute('data-pilot')) === 'holding')
 check('root mirrors data-op-hold', (await page.locator('[data-testid="dronesim-root"]').getAttribute('data-op-hold')) === 'on')
 await pilot.flyTo({ x: PAD.x, y: CRUISE_ALT, z: PAD.z }, { tol: 2 }) // drone leaves

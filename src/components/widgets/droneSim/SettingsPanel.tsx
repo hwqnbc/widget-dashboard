@@ -12,8 +12,11 @@ import {
   Switch,
   Typography,
 } from '@mui/material'
+import EditIcon from '@mui/icons-material/Edit'
 import ShuffleIcon from '@mui/icons-material/Shuffle'
 import SettingsBackupRestoreIcon from '@mui/icons-material/SettingsBackupRestore'
+import SwapHorizIcon from '@mui/icons-material/SwapHoriz'
+import type { CourseMode } from './worldLayout'
 import { useAppDispatch } from '../../../app/hooks'
 import { updateWidgetData } from '../../../features/widgets/widgetsSlice'
 import type { FlightMode, Weather } from './flightModel'
@@ -80,7 +83,11 @@ export default function SettingsPanel({
   followDist,
   fpvPolish,
   gateCount,
+  courseMode,
+  hasCustom,
   onGateCount,
+  onEditCourse,
+  onCourseSource,
   onResetDefaults,
   onNewCourse,
 }: {
@@ -101,7 +108,12 @@ export default function SettingsPanel({
   followDist: number
   fpvPolish: boolean
   gateCount: number
+  courseMode: CourseMode
+  /** Whether a hand-placed course is stored (enables switching back). */
+  hasCustom: boolean
   onGateCount: (n: number) => void
+  onEditCourse: () => void
+  onCourseSource: (mode: CourseMode) => void
   onResetDefaults: () => void
   onNewCourse: () => void
 }) {
@@ -258,7 +270,9 @@ export default function SettingsPanel({
         <List dense subheader={<ListSubheader disableGutters>Course</ListSubheader>}>
           <Stack sx={{ px: 0.5 }}>
             <Typography variant="caption" color="text.secondary">
-              {`Gates per lap: ${gateCount}`}
+              {courseMode === 'custom'
+                ? 'Gates per lap: set by your custom course'
+                : `Gates per lap: ${gateCount}`}
             </Typography>
             <Slider
               data-testid="dronesim-gate-count"
@@ -268,11 +282,48 @@ export default function SettingsPanel({
               step={1}
               marks
               value={gateCount}
+              disabled={courseMode === 'custom'}
               // Committed only — changing lap length rebuilds the course and
               // may need a stats-clearing confirmation; mid-drag would spam it.
               onChangeCommitted={(_, v) => onGateCount(v as number)}
             />
           </Stack>
+          <ListItem disableGutters sx={{ py: 0.5 }}>
+            <ListItemText
+              primary="Course editor"
+              secondary="Build a course by flying: hover anywhere and drop gates at the drone's position, height and heading."
+              slotProps={{ primary: { sx: { fontWeight: 600 } }, secondary: { sx: { fontSize: 12 } } }}
+            />
+            <Button
+              size="small"
+              variant="outlined"
+              startIcon={<EditIcon />}
+              data-testid="dronesim-edit-course"
+              onClick={onEditCourse}
+              sx={{ ml: 1.5, flexShrink: 0 }}
+            >
+              Edit
+            </Button>
+          </ListItem>
+          {hasCustom && (
+            <ListItem disableGutters sx={{ py: 0.5 }}>
+              <ListItemText
+                primary={courseMode === 'custom' ? 'Racing: custom course' : 'Racing: seeded course'}
+                secondary="Switch between the seeded course and your saved hand-placed one (clears lap stats)."
+                slotProps={{ primary: { sx: { fontWeight: 600 } }, secondary: { sx: { fontSize: 12 } } }}
+              />
+              <Button
+                size="small"
+                variant="outlined"
+                startIcon={<SwapHorizIcon />}
+                data-testid="dronesim-course-source"
+                onClick={() => onCourseSource(courseMode === 'custom' ? 'seed' : 'custom')}
+                sx={{ ml: 1.5, flexShrink: 0 }}
+              >
+                {courseMode === 'custom' ? 'Use seeded' : 'Use custom'}
+              </Button>
+            </ListItem>
+          )}
           <ListItem disableGutters sx={{ py: 0.5 }}>
             <ListItemText
               primary="New course"

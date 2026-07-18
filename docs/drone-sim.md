@@ -58,9 +58,12 @@ one-line description, grouped by concern:
   walking pilot stands back from the drone — and the FPV-feel switch
   (camera bank + shake + horizon in first person, default off). No confirm
   guard; nothing is destroyed.
-- **Course**: the gates-per-lap slider (3–6) and the New course action
-  button. Both destroy the recorded best (and any lap in progress), so both
-  route through the same confirm guard.
+- **Course**: the gates-per-lap slider (3–6, seeded courses only — disabled
+  while a custom course is active), the **Course editor** button (below),
+  the seeded↔custom source switcher (shown once a custom course exists),
+  and the New course action button. Everything that rebuilds the course
+  destroys the recorded best (and any lap in progress), so it all routes
+  through the same confirm guard.
 - **Defaults**: a Reset settings button restoring every panel setting to
   its catalog default (`defaultWidgetData('droneSim')` is the single source
   of truth). Records (laps/best/ghost/landing best), the camera view and
@@ -227,6 +230,39 @@ in refs (`FlightState`, `ControlInput`).
   counter-rotate and spin up with throttle. Pose is split: outer group takes
   position + yaw, inner group takes tilt, so the camera math only cares
   about the outer transform.
+
+## Course editor (hand-placed custom courses)
+
+**Fly & drop**: the editor has no placement UI of its own — you build the
+course by flying it. The Course-group **Edit** button closes the panel and
+opens a top-centre toolbar (`dronesim-editor`, `data-count`): fly anywhere
+with any input source and press **Drop gate** — a ring appears at the
+drone's exact position, altitude and heading (`flight.pos`/`yaw` from the
+live ref). Undo removes the last gate; Save needs 2–8 gates; Cancel
+discards the draft.
+
+- **Validation on drop** (`validateGateDrop`, pure): ≥ 6 from the spawn
+  pad, ≥ 5 from every other draft gate, height 2–30 — rejects show a
+  banner and add nothing. Buildings are NOT checked: you flew there, so
+  the gate is reachable by construction.
+- **While editing**: the draft renders through the ordinary `GateRings`
+  (all rings "upcoming", `activeGate = -1`) and the minimap; `DroneRig`
+  receives an empty gates array, so nothing scores and the 0-gate "lap"
+  falls into the silent re-arm rule.
+- **Data model**: persisted `courseMode: 'seed' | 'custom'` +
+  `customRings` (flat x,y,z,yaw quadruples rounded 0.1 — the
+  `bestLapPath` style, junk-safe via `parseRings`). A custom course
+  overrides only `rings` + derived `gates` (`ringsToGates`, shared with
+  the seeded path); buildings, colliders, scenery and landing pads stay
+  seed-driven. Course data is not a "setting": Reset settings leaves it
+  alone.
+- **Interplay**: saving, switching source, and the seed shuffle (which
+  always returns to the seeded course) all clear laps/best/ghost through
+  the shared confirm guard; the gate-count slider applies to seeded
+  courses only and is disabled under custom. The stored custom course
+  survives switching away, so seeded↔custom flips freely. Everything
+  downstream (chip `GATE n/N`, minimap, sequencing, return-to-pad,
+  best-lap ghost) keys on `gates.length` and needed no changes.
 
 ## Time trial (gates + lap timer + ghost)
 
@@ -526,9 +562,6 @@ from the enhancement menu, with the integration point each would build on.
   racing you; `bestLapPath` already carries the positions, add per-sample
   timestamps (or rely on the fixed 150 ms cadence) and lerp along it in
   `useFrame`.
-- **Course editor** — hand-placed custom courses; the gate-count setting
-  shipped, and `RINGS`/`GATES` stay plain data, so an editor only needs a
-  way to author ring specs.
 
 ### Simulation depth
 *(empty — acro mode and ground effect shipped)*

@@ -416,11 +416,7 @@ export function buildWorldLayout(
     maxZ: b.z + b.d / 2 + DRONE_RADIUS,
     top: b.h + DRONE_RADIUS,
   }))
-  const gates: Gate[] = rings.map((r) => ({
-    center: { x: r.x, y: r.y, z: r.z },
-    normal: { x: Math.sin(r.yaw), y: 0, z: Math.cos(r.yaw) },
-    passRadius: RING_RADIUS - 0.3,
-  }))
+  const gates = ringsToGates(rings)
   return {
     buildings,
     rings,
@@ -433,6 +429,76 @@ export function buildWorldLayout(
     roofs,
     landingPads,
   }
+}
+
+/** Derive the pass-detection gates from ring specs — shared by the seeded
+ * layout and hand-placed custom courses. */
+export function ringsToGates(rings: readonly RingSpec[]): Gate[] {
+  return rings.map((r) => ({
+    center: { x: r.x, y: r.y, z: r.z },
+    normal: { x: Math.sin(r.yaw), y: 0, z: Math.cos(r.yaw) },
+    passRadius: RING_RADIUS - 0.3,
+  }))
+}
+
+/* ---------------- Course editor (hand-placed custom courses) ------------ */
+
+export type CourseMode = 'seed' | 'custom'
+export const coerceCourseMode = (v: unknown): CourseMode | undefined =>
+  v === 'seed' || v === 'custom' ? v : undefined
+
+export const MIN_CUSTOM_GATES = 2
+export const MAX_CUSTOM_GATES = 8
+export const EDIT_MIN_FROM_PAD = 6
+export const EDIT_MIN_GAP = 5
+export const EDIT_MIN_Y = 2
+export const EDIT_MAX_Y = 30
+
+/** Serialize rings as flat x,y,z,yaw quadruples rounded to 0.1 (the
+ * bestLapPath persistence style). */
+export function packRings(rings: readonly RingSpec[]): number[] {
+  const out: number[] = []
+  for (const r of rings) {
+    out.push(
+      Math.round(r.x * 10) / 10,
+      Math.round(r.y * 10) / 10,
+      Math.round(r.z * 10) / 10,
+      Math.round(r.yaw * 100) / 100,
+    )
+  }
+  return out
+}
+
+/** Parse persisted flat quadruples; null when the data is junk. */
+export function parseRings(flat: unknown): RingSpec[] | null {
+  if (
+    !Array.isArray(flat) ||
+    flat.length === 0 ||
+    flat.length % 4 !== 0 ||
+    !flat.every((n) => typeof n === 'number' && Number.isFinite(n))
+  ) {
+    return null
+  }
+  const rings: RingSpec[] = []
+  for (let i = 0; i < flat.length; i += 4) {
+    rings.push({ x: flat[i], y: flat[i + 1], z: flat[i + 2], yaw: flat[i + 3] })
+  }
+  return rings
+}
+
+/** Can a gate be dropped at (x, y, z) given the draft so far? */
+export function validateGateDrop(
+  draft: readonly RingSpec[],
+  x: number,
+  y: number,
+  z: number,
+): 'ok' | 'pad' | 'gate' | 'height' {
+  if (y < EDIT_MIN_Y || y > EDIT_MAX_Y) return 'height'
+  if (Math.hypot(x - SPAWN.x, z - SPAWN.z) < EDIT_MIN_FROM_PAD) return 'pad'
+  if (draft.some((r) => Math.hypot(x - r.x, z - r.z) < EDIT_MIN_GAP)) {
+    return 'gate'
+  }
+  return 'ok'
 }
 
 /**
