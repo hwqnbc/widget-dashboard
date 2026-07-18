@@ -377,3 +377,41 @@ feature rounds (flight, collision, gates, time trial, courses, weather, crash).
     user-authored content, first ask whether the existing play verbs can
     BE the editor. Also: keep authored content out of "settings" — a reset
     button must not delete somebody's hand-built course.
+
+## FPV shooter (Drone Strike)
+
+The second WebGL widget — built almost entirely from Drone Sim parts, which
+is itself the meta-lesson: #28–#41 all carried over unchanged.
+
+42. **Fast projectiles must be swept as segments, never point-tested.** A
+    bolt at 55 u/s covers 2.75 m in one `MAX_DT` step — bigger than every
+    target and most walls, so a position-in-shape test tunnels constantly.
+    Test the segment prev→pos each frame instead: the camera-boom slab test
+    (`boomClipT`) already IS a ray-vs-world query, and a segment-vs-sphere
+    quadratic covers targets; earliest hit fraction wins and even gives the
+    impact point for free. Same reasoning as #34's tunneling bound, but for
+    objects far faster than the drone.
+
+43. **Every additional touch control needs the joystick's full
+    release-hardening, not just its own pointerup.** The fire button is a
+    second finger alongside two sticks; a silently dropped capture (#39/#40)
+    would leave `fireHeldRef` stuck true — an *invisible* failure that just
+    drains shots forever. Own pointer id + window-level fallbacks + the
+    `hasPointerCapture` poll, exactly like the stick. Corollary: keyboard
+    fire (Space) deliberately bypasses the stick ownership arbitration — a
+    boolean side-channel lets tests (and desktop players) fire without
+    stealing the sticks from touch.
+
+44. **Encode an actor's whole motion envelope into its placement data.**
+    Wave targets carry their drift amplitude — and enemies their orbit
+    radius — in the same seeded spec fields, and the rejection sampler
+    includes that reach in the building-clearance test. Result: drifting
+    targets and orbiting enemies can never intersect the world at runtime,
+    with zero per-frame NPC collision work. Cheaper and more robust than
+    resolving collisions for things that don't need physics.
+
+45. **Publish an aiming beacon in the telemetry and e2e can play the
+    game.** `data-tgt-x/-y/-z/-kind` (nearest alive target, written on the
+    HUD tick) is all the closed-loop pilot needs to fly onto targets and
+    shoot them down — the suites clear real waves without window globals,
+    staying inside the #31 data-* contract.

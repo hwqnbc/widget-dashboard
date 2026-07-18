@@ -86,6 +86,13 @@ export const WIDGET_CATALOG: WidgetMeta[] = [
     defaultSize: { w: 6, h: 6, minW: 5, minH: 5 },
     preferredOrientation: 'landscape',
   },
+  {
+    type: 'droneStrike',
+    title: 'Drone Strike',
+    description: 'FPV drone shooting game — fly to aim, clear the waves',
+    defaultSize: { w: 6, h: 6, minW: 5, minH: 5 },
+    preferredOrientation: 'landscape',
+  },
 ]
 
 export const widgetMetaByType = Object.fromEntries(
@@ -163,6 +170,22 @@ export function defaultWidgetData(type: WidgetType): Record<string, unknown> {
         battery: false,
         followDist: 7,
         fpvPolish: false,
+      }
+    case 'droneStrike':
+      return {
+        worldSeed: DEFAULT_SEED,
+        bestWave: 0,
+        bestScore: 0,
+        view: 'fp',
+        autoFire: false,
+        aimAssist: 'mild',
+        gyroAim: false,
+        minimap: true,
+        richWorld: true,
+        weather: 'clear',
+        rateSpeed: 1,
+        rateYaw: 1,
+        stickExpo: 0,
       }
     case 'clock':
     default:

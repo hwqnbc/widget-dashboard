@@ -38,6 +38,22 @@ const bundle = spawnSync(
 )
 if (bundle.status !== 0) process.exit(bundle.status ?? 1)
 
+// Drone Strike's pure modules, bundled in a second pass so both widgets'
+// outputs stay flat in .bundle/ (one esbuild call would nest per-folder).
+const strikeBundle = spawnSync(
+  'npx',
+  [
+    'esbuild',
+    'src/components/widgets/droneStrike/combatModel.ts',
+    'src/components/widgets/droneStrike/waveLayout.ts',
+    '--bundle',
+    '--format=esm',
+    `--outdir=${join(here, '.bundle')}`,
+  ],
+  { cwd: root, stdio: 'inherit' },
+)
+if (strikeBundle.status !== 0) process.exit(strikeBundle.status ?? 1)
+
 // 2. Start the dev server and wait for it.
 const server = spawn('npx', ['vite', '--port', PORT, '--strictPort'], {
   cwd: root,
