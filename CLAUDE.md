@@ -51,6 +51,10 @@ changes, stash first (`git stash`), rebase, then pop. Re-check before pushing if
 `main` may have moved. A merged branch is finished — restart it from `origin/main`
 rather than stacking new commits on already-merged history.
 
+**Merge directly into `main` (no pull request) once the work is verified** —
+push the feature branch, then fast-forward/merge it into `main` yourself.
+Only raise a PR when explicitly asked to.
+
 **After merging to main, don't wait for or verify the GitHub Pages deploy** —
 the user checks it themselves.
 
