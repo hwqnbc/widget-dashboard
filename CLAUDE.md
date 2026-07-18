@@ -23,6 +23,19 @@ There is no unit-test runner configured. Verify changes with `npm run build`
 Drone Sim or Drone Strike widgets should also pass `npm run e2e` (filterable,
 e.g. `npm run e2e core`, `npm run e2e strike`).
 
+**E2E tests written during development are deliverables, not scaffolding —
+for EVERY new feature or widget, not just the drone ones.** Whenever a
+feature is verified with e2e-style tests while being built, those tests
+must be saved with the feature: committed as a numbered
+`e2e/NN-name.test.mjs` suite (shared setup goes in `e2e/helpers.mjs`,
+pure-module bundling in `e2e/run.mjs`), asserting only on the feature's
+`data-testid`/`data-*` contract, and listed in the `e2e/README.md` suite
+table. The harness is app-generic (headless Chromium + CDP against the real
+dev server), so any widget — a board game, an animation, a form — can and
+should get suites the same way. Never throw verification scripts away after
+the feature passes: saved suites are what keeps the next change from
+silently breaking this one.
+
 ## Workflow
 
 **Always start from the latest `main`.** Before doing any work on a task, sync the
