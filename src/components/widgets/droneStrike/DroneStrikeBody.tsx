@@ -52,6 +52,7 @@ import Reticle from './Reticle'
 import FireButton from './FireButton'
 import type { HitMarker } from './HitMarkers'
 import HitMarkers from './HitMarkers'
+import DamageVignette from './DamageVignette'
 import StrikeMinimap from './StrikeMinimap'
 import StrikeSettingsPanel from './StrikeSettingsPanel'
 import ScopeButton from './ScopeButton'
@@ -92,6 +93,23 @@ const SETTING_KEYS = [
 const SETTING_DEFAULTS: Record<string, unknown> = Object.fromEntries(
   SETTING_KEYS.map((k) => [k, defaultWidgetData('droneStrike')[k]]),
 )
+
+/**
+ * Flash the DamageVignette to full strength and let it ease back to its
+ * resting opacity (0, or the faint low-HP edge). Clearing the transition +
+ * forcing a reflow makes back-to-back hits re-trigger cleanly; restoring
+ * `opacity: ''` hands control back to the stylesheet value. Lives here
+ * (not in DamageVignette.tsx) so that file exports only the component.
+ */
+function flashVignette(el: HTMLDivElement | null): void {
+  if (!el) return
+  el.dataset.flash = String((parseInt(el.dataset.flash ?? '0', 10) || 0) + 1)
+  el.style.transition = 'none'
+  el.style.opacity = '1'
+  void el.offsetWidth // reflow: the fade below starts from 1, not mid-tween
+  el.style.transition = 'opacity 600ms ease-out'
+  el.style.opacity = ''
+}
 
 /**
  * The FPV shooting game. Same architecture as the drone sim: everything
@@ -143,6 +161,7 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
   const hudRef = useRef<HTMLDivElement>(null)
   const reticleRef = useRef<HTMLDivElement>(null)
   const scoreChipRef = useRef<HTMLDivElement>(null)
+  const vignetteRef = useRef<HTMLDivElement>(null)
   const minimapDroneRef = useRef<SVGGElement>(null)
   const minimapTargetRefs = useRef<(SVGCircleElement | null)[]>([])
   const markerId = useRef(0)
@@ -227,6 +246,7 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
   }, [])
 
   const onPlayerHit = useCallback(() => {
+    flashVignette(vignetteRef.current)
     setHp((h) => Math.max(0, h - 1))
   }, [])
 
@@ -463,6 +483,8 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
           />
         </Canvas>
       </Box>
+
+      <DamageVignette ref={vignetteRef} lowHp={hp === 1} />
 
       <Box
         ref={hudRef}

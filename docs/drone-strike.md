@@ -82,6 +82,16 @@ Losing all HP fails the wave — banner, then the same wave restarts with
 fresh targets and HP; the session score survives (arcade-friendly). Restart
 and city-shuffle are confirm-guarded once there is progress.
 
+Taking a hit flashes a red **damage vignette** around the screen edge
+(imperative style writes from the hit path — the horizon-overlay pattern,
+zero React renders), and the last heart keeps a faint constant red edge.
+`data-flash` on `strike-damage` counts the flashes and `data-low-hp`
+mirrors the edge — the live behaviour was verified against real enemy fire
+on a dev build with `ENEMY_WAVE_START`/`ENEMY_FIRE_WAVE` temporarily set
+to 1 (flash count tracked the hp loss exactly, the edge appeared at one
+heart and reset on the wave restart); the committed suites assert the
+at-rest contract, since reaching wave-5 fire closed-loop is impractical.
+
 ## Architecture
 
 `src/components/widgets/droneStrike/` mirrors the Drone Sim architecture:
@@ -209,8 +219,8 @@ kind of list).
 ### Camera & visuals
 - **Kill-cam slow-mo** — on the wave-clearing kill, damp the frameloop dt
   scale briefly and swing the chase camera at the exploding target.
-- **Damage vignette** — a red edge flash on player hit (DOM overlay
-  written from `onPlayerHit`, like the sim's horizon overlay).
+- ~~Damage vignette~~ — **shipped** (red edge flash per hit + constant
+  faint edge on the last heart; see Gameplay above).
 - **Kill explosion** — instanced sprite/particle burst where a target
   dies (same pooled one-shot system as muzzle flash).
 - **FPV polish reuse** — the sim's opt-in camera bank + speed shake

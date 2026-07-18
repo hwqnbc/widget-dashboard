@@ -32,10 +32,17 @@ for (const tid of [
   'strike-joystick-right',
   'strike-view-toggle',
   'strike-restart',
+  'strike-damage',
 ]) {
   const n = await page.locator(`[data-testid="${tid}"]`).count()
   check(`element ${tid} present`, n === 1, `count=${n}`)
 }
+
+// Damage-vignette contract at rest (the live flash needs wave-5 enemy fire
+// — verified on the armed dev build; see docs/drone-strike.md).
+const damage = page.locator('[data-testid="strike-damage"]')
+check('vignette unflashed at rest', (await damage.getAttribute('data-flash')) === '0')
+check('low-hp edge off at full hearts', (await damage.getAttribute('data-low-hp')) === 'off')
 
 const root = page.locator('[data-testid="drone-strike-root"]')
 check(

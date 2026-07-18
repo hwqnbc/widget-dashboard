@@ -53,7 +53,7 @@ mode state from the widget root's `data-*` attributes via
 | `95-richworld` | scenery toggle contract + persistence (generation is unit-covered) |
 | `97-landing` | landing challenge: pad markers, scored touchdown + banner/best, plain-roof no-score, persistence |
 | `98-battery` | battery mode: bar, drain under effort, pad recharge, transient level, persistence |
-| `100-strike-core` | Drone Strike: element presence + root defaults, wave intro→active, seeded wave-1 composition vs the pure module, nearest-target beacon, fire-button tap + cooldown-limited hold, closed-loop engagement (aim onto the beacon, fire, target down, score/hits) |
+| `100-strike-core` | Drone Strike: element presence + root defaults, damage-vignette at-rest contract (`data-flash`/`data-low-hp`), wave intro→active, seeded wave-1 composition vs the pure module, nearest-target beacon, fire-button tap + cooldown-limited hold, closed-loop engagement (aim onto the beacon, fire, target down, score/hits) |
 | `101-strike-waves` | wave progression: full wave-1 clear → cleared → wave 2 with the seeded target count; the difficulty curve (drifters w2, enemies w3 with orbit envelopes, return fire w5) from the pure module; best score/wave persistence across reload |
 | `102-strike-input` | multi-touch (stick climbs while a second finger holds fire), keyboard W + Space with `data-input-source` arbitration, aim-assist/gyro-mode/auto-fire settings round-trips, hands-off auto-fire kill, progress-guarded restart |
 | `103-strike-zoom` | ADS/zoom: scope-button toggle (`data-zoom` on root/HUD/reticle), scoped yaw rate ≈ half measured closed-loop, firing while scoped, hold-Shift zoom, scoped assist cones tighter per level (pure module), gyro "Zoom only" mode, scope hidden + dropped outside FPV |
