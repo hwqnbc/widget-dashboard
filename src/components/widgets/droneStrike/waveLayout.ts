@@ -149,6 +149,8 @@ export function buildWave(
   }
 
   // Enemy drones (wave 3+): placed like targets, moved by the AI at runtime.
+  // The drift fields carry their orbit: amp = orbit radius (so placement
+  // clears the whole envelope), speed = angular rate, phase = start angle.
   const enemies =
     waveIndex >= ENEMY_WAVE_START
       ? Math.min(waveIndex - ENEMY_WAVE_START + 1, 4)
@@ -157,8 +159,8 @@ export function buildWave(
     place({
       kind: 'enemy',
       radius: 0.6,
-      driftAmp: 0,
-      driftSpeed: 0,
+      driftAmp: 4 + rand() * 4,
+      driftSpeed: 0.5 + rand() * 0.4,
       driftPhase: rand() * Math.PI * 2,
       driftAxis: 0,
       hp: 2,

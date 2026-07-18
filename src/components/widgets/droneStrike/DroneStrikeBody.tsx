@@ -30,16 +30,27 @@ import RainField from '../droneSim/RainField'
 import VirtualJoystick from '../droneSim/VirtualJoystick'
 import ConfirmDialog from '../ConfirmDialog'
 import type { AimAssistLevel } from './combatModel'
-import { BOLT, coerceAimAssist, createCombatState, resetCombatState } from './combatModel'
-import { buildWave, createTargetStates, loadWave } from './waveLayout'
+import {
+  BOLT,
+  clearProjectiles,
+  coerceAimAssist,
+  createCombatState,
+  resetCombatState,
+} from './combatModel'
+import { ENEMY_FIRE_WAVE, buildWave, createTargetStates, loadWave } from './waveLayout'
+import { createEnemyAIStates, seedEnemyAIStates } from './enemyAI'
 import type { StrikeView } from './aimModel'
 import { coerceStrikeView, createAimOffset } from './aimModel'
 import StrikeCameraRig from './StrikeCameraRig'
 import StrikeRig from './StrikeRig'
 import Targets from './Targets'
+import EnemyDrones from './EnemyDrones'
 import Tracers from './Tracers'
 import Reticle from './Reticle'
 import FireButton from './FireButton'
+import type { HitMarker } from './HitMarkers'
+import HitMarkers from './HitMarkers'
+import StrikeMinimap from './StrikeMinimap'
 
 const clampNum = (lo: number, hi: number) => (v: unknown) =>
   typeof v === 'number' && Number.isFinite(v)
@@ -48,12 +59,16 @@ const clampNum = (lo: number, hi: number) => (v: unknown) =>
 const coerceRate = clampNum(0.5, 2)
 const coerceExpo = clampNum(0, 0.8)
 
-type WavePhase = 'intro' | 'active' | 'cleared'
+type WavePhase = 'intro' | 'active' | 'cleared' | 'failed'
 
 /** WAVE N banner hold before the targets spawn. */
 const INTRO_MS = 1600
 /** WAVE CLEARED! hold before the next intro. */
 const CLEARED_MS = 2000
+/** WAVE FAILED hold before the same wave restarts. */
+const FAILED_MS = 2500
+/** Enemy-bolt hits the player survives per wave attempt. */
+const PLAYER_HP = 3
 
 /**
  * The FPV shooting game. Same architecture as the drone sim: everything
@@ -77,6 +92,7 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
 
   const worldSeed = useWidgetField(id, 'worldSeed', DEFAULT_SEED)
   const view = useWidgetField<StrikeView>(id, 'view', 'fp', coerceStrikeView)
+  const minimap = useWidgetField(id, 'minimap', true)
   const bestWave = useWidgetField(id, 'bestWave', 0)
   const bestScore = useWidgetField(id, 'bestScore', 0)
   const autoFire = useWidgetField(id, 'autoFire', false)
@@ -94,6 +110,7 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
   const flight = useRef(createFlightState()).current
   const combat = useRef(createCombatState()).current
   const targets = useRef(createTargetStates()).current
+  const enemyAI = useRef(createEnemyAIStates()).current
   const aimRef = useRef(createAimOffset())
   const externalRef = useRef(createExternalState())
   const fireHeldRef = useRef(false)
@@ -102,19 +119,28 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
   const hudRef = useRef<HTMLDivElement>(null)
   const reticleRef = useRef<HTMLDivElement>(null)
   const scoreChipRef = useRef<HTMLDivElement>(null)
+  const minimapDroneRef = useRef<SVGGElement>(null)
+  const minimapTargetRefs = useRef<(SVGCircleElement | null)[]>([])
+  const markerId = useRef(0)
 
   const [wave, setWave] = useState(1)
   const [phase, setPhase] = useState<WavePhase>('intro')
   const [banner, setBanner] = useState<string | null>(null)
   const [confirmRestart, setConfirmRestart] = useState(false)
+  const [hp, setHp] = useState(PLAYER_HP)
+  const [markers, setMarkers] = useState<HitMarker[]>([])
 
   // Wave state machine: intro (banner) → active (targets live) → cleared
-  // (banner) → next intro. Timers cleaned up on every transition/unmount.
+  // (banner) → next intro; a failed wave (hp 0) restarts itself with fresh
+  // targets and hp. Timers cleaned up on every transition/unmount.
   useEffect(() => {
     if (phase === 'intro') {
       setBanner(`WAVE ${wave}`)
+      setHp(PLAYER_HP)
       const t = setTimeout(() => {
+        clearProjectiles(combat)
         loadWave(targets, buildWave(worldSeed, wave, layout))
+        seedEnemyAIStates(enemyAI, targets)
         setPhase('active')
         setBanner(null)
       }, INTRO_MS)
@@ -128,7 +154,17 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
       }, CLEARED_MS)
       return () => clearTimeout(t)
     }
-  }, [phase, wave, worldSeed, layout, targets])
+    if (phase === 'failed') {
+      setBanner('WAVE FAILED — TRY AGAIN')
+      const t = setTimeout(() => setPhase('intro'), FAILED_MS)
+      return () => clearTimeout(t)
+    }
+  }, [phase, wave, worldSeed, layout, targets, combat, enemyAI])
+
+  // Out of hit points mid-wave → the wave is failed.
+  useEffect(() => {
+    if (hp <= 0 && phase === 'active') setPhase('failed')
+  }, [hp, phase])
 
   const onWaveCleared = useCallback(() => {
     const score = scoreRef.current
@@ -139,12 +175,25 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
     setPhase('cleared')
   }, [wave, bestWave, bestScore, dispatch, id])
 
+  const onTargetDown = useCallback((points: number) => {
+    const idNum = ++markerId.current
+    setMarkers((m) => [...m.slice(-3), { id: idNum, points }])
+    window.setTimeout(() => {
+      setMarkers((m) => m.filter((x) => x.id !== idNum))
+    }, 900)
+  }, [])
+
+  const onPlayerHit = useCallback(() => {
+    setHp((h) => Math.max(0, h - 1))
+  }, [])
+
   const restart = () => {
     setConfirmRestart(false)
     resetFlightState(flight)
     resetCombatState(combat)
     for (const t of targets) t.alive = false
     scoreRef.current = 0
+    setMarkers([])
     setWave(1)
     setPhase('intro')
   }
@@ -284,6 +333,7 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
           {richWorld && <RichWorld layout={layout} />}
           {weather === 'storm' && <RainField flight={flight} wind={windRef.current} />}
           <Targets targets={targets} />
+          <EnemyDrones targets={targets} />
           <Tracers combat={combat} tracerLen={BOLT.tracerLen} />
           <StrikeRig
             controls={controls}
@@ -295,6 +345,8 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
             weather={weather}
             windRef={windRef}
             targets={targets}
+            enemyAI={enemyAI}
+            enemiesShoot={wave >= ENEMY_FIRE_WAVE}
             combat={combat}
             aimRef={aimRef}
             weapon={BOLT}
@@ -303,11 +355,16 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
             waveActive={phase === 'active'}
             wave={wave}
             waveState={phase}
+            hp={hp}
             scoreRef={scoreRef}
             onWaveCleared={onWaveCleared}
+            onTargetDown={onTargetDown}
+            onPlayerHit={onPlayerHit}
             hudRef={hudRef}
             reticleRef={reticleRef}
             scoreChipRef={scoreChipRef}
+            minimapDroneRef={minimapDroneRef}
+            minimapTargetRefs={minimapTargetRefs}
           />
           <StrikeCameraRig
             view={view}
@@ -398,6 +455,29 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
         </Box>
       )}
 
+      {wave >= ENEMY_FIRE_WAVE && (
+        <Box
+          data-testid="strike-hp"
+          data-hp={hp}
+          sx={{
+            position: 'absolute',
+            top: bestScore > 0 ? 92 : 64,
+            left: 8,
+            px: 1,
+            py: 0.25,
+            borderRadius: 1,
+            bgcolor: alpha('#000', 0.4),
+            color: '#ef5350',
+            fontFamily: 'monospace',
+            fontSize: 12,
+            letterSpacing: 2,
+            pointerEvents: 'none',
+          }}
+        >
+          {'♥'.repeat(hp) + '♡'.repeat(Math.max(0, PLAYER_HP - hp))}
+        </Box>
+      )}
+
       {banner && (
         <Box
           data-testid="strike-wave"
@@ -423,6 +503,17 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
       )}
 
       {view === 'fp' && <Reticle ref={reticleRef} />}
+
+      <HitMarkers markers={markers} />
+
+      {minimap && (
+        <StrikeMinimap
+          buildings={layout.buildings}
+          droneRef={minimapDroneRef}
+          targetRefs={minimapTargetRefs}
+          size={fullscreen ? 140 : 100}
+        />
+      )}
 
       <Box
         sx={{

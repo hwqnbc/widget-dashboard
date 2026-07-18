@@ -28,7 +28,8 @@ export default function Targets({ targets }: { targets: TargetState[] }) {
     const { matrix, color } = temps
     for (let i = 0; i < targets.length; i++) {
       const t = targets[i]
-      if (t.alive) {
+      // Enemies render as real drone models (see EnemyDrones), not spheres.
+      if (t.alive && t.kind !== 'enemy') {
         matrix.makeScale(t.radius, t.radius, t.radius)
         matrix.setPosition(t.pos.x, t.pos.y, t.pos.z)
         color.copy(KIND_COLORS[t.kind])

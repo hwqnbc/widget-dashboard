@@ -13,13 +13,14 @@ import type {
 import { SPAWN, sampleWind, stepFlight } from '../droneSim/flightModel'
 import type { ExternalState } from '../droneSim/externalInput'
 import { pollGamepad } from '../droneSim/externalInput'
-import { vibrate } from '../droneSim/haptics'
+import { CRASH_PULSE, vibrate } from '../droneSim/haptics'
 import DroneModel from '../droneSim/DroneModel'
 import type { AimAssistLevel, CombatState, WeaponSpec } from './combatModel'
 import {
   AIM_BEND,
   AIM_CONE_RAD,
   AUTO_FIRE_HOLD_S,
+  ENEMY_BOLT,
   bendAim,
   createHitEvents,
   findLockTarget,
@@ -27,8 +28,10 @@ import {
   spawnProjectile,
   stepProjectiles,
 } from './combatModel'
-import type { TargetState } from './waveLayout'
+import type { TargetKind, TargetState } from './waveLayout'
 import { aliveCount, stepDrift } from './waveLayout'
+import type { EnemyAIState } from './enemyAI'
+import { stepEnemy } from './enemyAI'
 import type { AimOffset } from './aimModel'
 import { FPV_PITCH_GAIN, RECOIL_KICK } from './aimModel'
 
@@ -40,6 +43,19 @@ const MUZZLE_OFFSET = 0.45
 const HIT_PULSE = 20
 /** Double tick when a target pops. */
 const KILL_PULSE = [25, 30, 45]
+/** The player drone's hit sphere for enemy bolts — generous on purpose so
+ * dodging is a skill, not a pixel hunt. */
+const PLAYER_HIT_RADIUS = 0.55
+/** Camera jolt when the player takes a hit. */
+const PLAYER_HIT_KICK = 0.05
+/** Minimap blip colours by target kind. */
+const BLIP_COLORS: Record<TargetKind, string> = {
+  balloon: '#ef5350',
+  ringDrone: '#4dd0e1',
+  enemy: '#ff1744',
+}
+/** Enemy bolts never hit other targets (no friendly fire). */
+const NO_TARGETS: TargetState[] = []
 
 /** Standard-layout gamepad: right trigger (7) or right shoulder (5) fires. */
 function gamepadFireHeld(): boolean {
@@ -68,6 +84,8 @@ export default function StrikeRig({
   weather,
   windRef,
   targets,
+  enemyAI,
+  enemiesShoot,
   combat,
   aimRef,
   weapon,
@@ -76,11 +94,16 @@ export default function StrikeRig({
   waveActive,
   wave,
   waveState,
+  hp,
   scoreRef,
   onWaveCleared,
+  onTargetDown,
+  onPlayerHit,
   hudRef,
   reticleRef,
   scoreChipRef,
+  minimapDroneRef,
+  minimapTargetRefs,
 }: {
   controls: ControlInput
   flight: FlightState
@@ -92,6 +115,10 @@ export default function StrikeRig({
   weather: Weather
   windRef: { current: { x: number; y: number } }
   targets: TargetState[]
+  /** Parallel AI slots for the 'enemy' targets. */
+  enemyAI: EnemyAIState[]
+  /** True from ENEMY_FIRE_WAVE — enemies return fire. */
+  enemiesShoot: boolean
   combat: CombatState
   /** Shared aim offset (gyro fine-aim + recoil) — also read by the camera. */
   aimRef: { current: AimOffset }
@@ -101,12 +128,20 @@ export default function StrikeRig({
   waveActive: boolean
   wave: number
   waveState: string
+  /** Player hit points this wave attempt (telemetry only — the body owns it). */
+  hp: number
   /** Session score — runtime-only, rendered via the telemetry tick. */
   scoreRef: { current: number }
   onWaveCleared: () => void
+  /** A target went down (points awarded) — drives the hit-marker pops. */
+  onTargetDown: (points: number) => void
+  /** An enemy bolt connected with the player. */
+  onPlayerHit: () => void
   hudRef: RefObject<HTMLDivElement | null>
   reticleRef: RefObject<HTMLDivElement | null>
   scoreChipRef: RefObject<HTMLDivElement | null>
+  minimapDroneRef: RefObject<SVGGElement | null>
+  minimapTargetRefs: RefObject<(SVGCircleElement | null)[]>
 }) {
   const outerRef = useRef<Group>(null)
   const tiltRef = useRef<Group>(null)
@@ -142,12 +177,6 @@ export default function StrikeRig({
       tuning,
     )
 
-    // Targets drift deterministically off the canvas clock.
-    for (const t of targets) {
-      stepDrift(t, clock.elapsedTime)
-      if (t.hitFlash > 0) t.hitFlash = Math.max(0, t.hitFlash - dt)
-    }
-
     // Aim direction = the FPV camera forward (minus recoil, which is a
     // visual kick only): yaw + gentle tilt follow + the gyro offset.
     const aim = aimRef.current
@@ -157,6 +186,28 @@ export default function StrikeRig({
     fireDir.x = -Math.sin(yaw) * cosP
     fireDir.y = Math.sin(pitch)
     fireDir.z = -Math.cos(yaw) * cosP
+
+    // Gallery targets drift deterministically off the canvas clock; enemies
+    // orbit/evade (and possibly return fire) while the wave is live.
+    for (let i = 0; i < targets.length; i++) {
+      const t = targets[i]
+      stepDrift(t, clock.elapsedTime)
+      if (waveActive && t.kind === 'enemy') {
+        stepEnemy(
+          t,
+          enemyAI[i],
+          i,
+          dt,
+          flight.pos,
+          fireDir,
+          colliders,
+          enemiesShoot,
+          combat.enemy,
+          ENEMY_BOLT,
+        )
+      }
+      if (t.hitFlash > 0) t.hitFlash = Math.max(0, t.hitFlash - dt)
+    }
 
     // Reticle lock: nearest angular match inside the assist cone.
     const lockIdx = findLockTarget(
@@ -222,9 +273,29 @@ export default function StrikeRig({
         t.alive = false
         scoreRef.current += t.points
         vibrate(KILL_PULSE)
+        onTargetDown(t.points)
       } else {
         vibrate(HIT_PULSE)
       }
+    }
+
+    // Sweep the enemy pool against the world + the player drone.
+    events.count = 0
+    stepProjectiles(
+      combat.enemy,
+      ENEMY_BOLT,
+      dt,
+      colliders,
+      NO_TARGETS,
+      waveActive ? flight.pos : null,
+      PLAYER_HIT_RADIUS,
+      events,
+    )
+    for (let i = 0; i < events.count; i++) {
+      if (events.items[i].kind !== 'player') continue
+      vibrate(CRASH_PULSE)
+      aim.recoil += PLAYER_HIT_KICK
+      onPlayerHit()
     }
 
     if (waveActive && !clearedSent.current && aliveCount(targets) === 0) {
@@ -277,6 +348,10 @@ export default function StrikeRig({
         let proj = 0
         for (const p of combat.player) if (p.active) proj++
         hud.dataset.proj = String(proj)
+        let enemyProj = 0
+        for (const p of combat.enemy) if (p.active) enemyProj++
+        hud.dataset.enemyProj = String(enemyProj)
+        hud.dataset.hp = String(hp)
         hud.dataset.inputSource = external.current.owner ?? 'touch'
         // Nearest alive target — the closed-loop aim beacon for the e2e
         // suites (no window globals; lesson #31).
@@ -308,6 +383,32 @@ export default function StrikeRig({
         chip.textContent = `WAVE ${wave} · SCORE ${scoreRef.current}`
         chip.dataset.score = String(scoreRef.current)
         chip.dataset.wave = String(wave)
+      }
+      const marker = minimapDroneRef.current
+      if (marker) {
+        marker.setAttribute(
+          'transform',
+          `translate(${flight.pos.x.toFixed(2)} ${flight.pos.z.toFixed(2)}) rotate(${(
+            (-flight.yaw * 180) /
+            Math.PI
+          ).toFixed(1)})`,
+        )
+      }
+      const blips = minimapTargetRefs.current
+      if (blips) {
+        for (let i = 0; i < targets.length; i++) {
+          const el = blips[i]
+          if (!el) continue
+          const t = targets[i]
+          if (t.alive) {
+            el.setAttribute('cx', t.pos.x.toFixed(1))
+            el.setAttribute('cy', t.pos.z.toFixed(1))
+            el.setAttribute('fill', BLIP_COLORS[t.kind])
+            el.removeAttribute('display')
+          } else {
+            el.setAttribute('display', 'none')
+          }
+        }
       }
     }
   })

@@ -97,11 +97,16 @@ export function createCombatState(): CombatState {
 }
 
 export function resetCombatState(c: CombatState): void {
-  for (const p of c.player) p.active = false
-  for (const p of c.enemy) p.active = false
+  clearProjectiles(c)
   c.cooldown = 0
   c.shots = 0
   c.hits = 0
+}
+
+/** Despawn every bolt in flight (wave transitions) — stats stay. */
+export function clearProjectiles(c: CombatState): void {
+  for (const p of c.player) p.active = false
+  for (const p of c.enemy) p.active = false
 }
 
 /** Anything a bolt can hit: targets and (for enemy fire) the player drone. */
