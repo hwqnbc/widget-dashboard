@@ -183,9 +183,12 @@ export function defaultWidgetData(type: WidgetType): Record<string, unknown> {
         minimap: true,
         richWorld: true,
         weather: 'clear',
+        flightMode: 'hold',
         rateSpeed: 1,
         rateYaw: 1,
         stickExpo: 0,
+        turbo: false,
+        battery: false,
       }
     case 'clock':
     default:

@@ -11,14 +11,20 @@ import { defaultWidgetData } from '../../../features/widgets/widgetCatalog'
 import { usePresentation } from '../../fullscreen/presentation'
 import type { WidgetProps } from '../../../registry/widgetRegistry'
 import { DAY_PALETTE, DUSK_PALETTE, NIGHT_PALETTE } from '../droneSim/palettes'
-import type { Tuning, Weather } from '../droneSim/flightModel'
+import type { BatteryEvent, BatteryState, FlightMode, Tuning, Weather } from '../droneSim/flightModel'
 import {
+  MAX_SPEED_MULT,
+  TURBO_BOOST,
+  coerceFlightMode,
   coerceWeather,
+  createBatteryState,
   createControlInput,
   createFlightState,
+  resetBatteryState,
   resetFlightState,
 } from '../droneSim/flightModel'
 import { DEFAULT_SEED, buildWorldLayout } from '../droneSim/worldLayout'
+import { CRASH_PULSE, GATE_PULSE, LAP_PULSE, vibrate } from '../droneSim/haptics'
 import {
   DRONE_KEYS,
   applyExternal,
@@ -83,12 +89,15 @@ const SETTING_KEYS = [
   'autoFire',
   'aimAssist',
   'gyroAim',
+  'battery',
   'weather',
   'richWorld',
   'minimap',
+  'flightMode',
   'rateSpeed',
   'rateYaw',
   'stickExpo',
+  'turbo',
 ] as const
 const SETTING_DEFAULTS: Record<string, unknown> = Object.fromEntries(
   SETTING_KEYS.map((k) => [k, defaultWidgetData('droneStrike')[k]]),
@@ -143,6 +152,9 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
   const rateSpeed = useWidgetField(id, 'rateSpeed', 1, coerceRate)
   const rateYaw = useWidgetField(id, 'rateYaw', 1, coerceRate)
   const stickExpo = useWidgetField(id, 'stickExpo', 0, coerceExpo)
+  const flightMode = useWidgetField<FlightMode>(id, 'flightMode', 'hold', coerceFlightMode)
+  const turbo = useWidgetField(id, 'turbo', false)
+  const battery = useWidgetField(id, 'battery', false)
 
   // The world is the same seeded city as the drone sim; the course gates are
   // simply unused here (targets come from waveLayout instead).
@@ -162,6 +174,9 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
   const reticleRef = useRef<HTMLDivElement>(null)
   const scoreChipRef = useRef<HTMLDivElement>(null)
   const vignetteRef = useRef<HTMLDivElement>(null)
+  const batteryRef = useRef<BatteryState>(createBatteryState())
+  const batteryBarRef = useRef<HTMLDivElement>(null)
+  const bannerTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const minimapDroneRef = useRef<SVGGElement>(null)
   const minimapTargetRefs = useRef<(SVGCircleElement | null)[]>([])
   const markerId = useRef(0)
@@ -196,6 +211,9 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
   // (banner) → next intro; a failed wave (hp 0) restarts itself with fresh
   // targets and hp. Timers cleaned up on every transition/unmount.
   useEffect(() => {
+    // A pending transient banner (battery events) must not clobber the
+    // phase banner this effect is about to own.
+    if (bannerTimer.current) clearTimeout(bannerTimer.current)
     if (phase === 'intro') {
       setBanner(`WAVE ${wave}`)
       setHp(PLAYER_HP)
@@ -250,10 +268,46 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
     setHp((h) => Math.max(0, h - 1))
   }, [])
 
+  /** Transient banner (battery events) — auto-clears; the wave state
+   * machine cancels it whenever it takes the banner over. */
+  const showBanner = useCallback((text: string, ms = 2500) => {
+    setBanner(text)
+    if (bannerTimer.current) clearTimeout(bannerTimer.current)
+    bannerTimer.current = setTimeout(() => setBanner(null), ms)
+  }, [])
+  useEffect(
+    () => () => {
+      if (bannerTimer.current) clearTimeout(bannerTimer.current)
+    },
+    [],
+  )
+
+  const onBatteryEvent = useCallback(
+    (event: BatteryEvent) => {
+      if (event === 'low') {
+        vibrate(GATE_PULSE)
+        showBanner('LOW BATTERY!')
+      } else if (event === 'died') {
+        vibrate(CRASH_PULSE)
+        showBanner('BATTERY DEAD — AUTO-LANDING')
+      } else {
+        vibrate(LAP_PULSE)
+        showBanner('RECHARGED!')
+      }
+    },
+    [showBanner],
+  )
+
+  // Toggling battery mode always restarts from a full charge.
+  useEffect(() => {
+    resetBatteryState(batteryRef.current)
+  }, [battery])
+
   const restart = () => {
     setConfirm(null)
     resetFlightState(flight)
     resetCombatState(combat)
+    resetBatteryState(batteryRef.current)
     for (const t of targets) t.alive = false
     scoreRef.current = 0
     setMarkers([])
@@ -352,15 +406,16 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
     }
   }, [controls])
 
-  // Scoped aim is slower (2× view magnifies motion); flight speed untouched.
-  const tuning = useMemo<Tuning>(
-    () => ({
-      speed: rateSpeed,
-      yaw: rateYaw * (zoom ? ZOOM_SENS : 1),
+  // Turbo stacks under the hard cap; scoped aim is slower (2× view
+  // magnifies motion) — flight speed untouched by zoom.
+  const tuning = useMemo<Tuning>(() => {
+    const boost = turbo ? TURBO_BOOST : 1
+    return {
+      speed: Math.min(MAX_SPEED_MULT, rateSpeed * boost),
+      yaw: Math.min(MAX_SPEED_MULT, rateYaw * boost) * (zoom ? ZOOM_SENS : 1),
       expo: stickExpo,
-    }),
-    [rateSpeed, rateYaw, stickExpo, zoom],
-  )
+    }
+  }, [rateSpeed, rateYaw, stickExpo, turbo, zoom])
 
   const toggleView = () =>
     dispatch(updateWidgetData({ id, data: { view: view === 'fp' ? 'tp' : 'fp' } }))
@@ -398,6 +453,9 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
       data-zoom={zoom ? 'on' : 'off'}
       data-weather={weather}
       data-rich={richWorld ? 'on' : 'off'}
+      data-mode={flightMode}
+      data-turbo={turbo ? 'on' : 'off'}
+      data-battery={battery ? 'on' : 'off'}
       onMouseDown={(e) => e.stopPropagation()}
       onTouchStart={(e) => e.stopPropagation()}
       sx={{
@@ -448,9 +506,14 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
             external={externalRef}
             fireHeldRef={fireHeldRef}
             tuning={tuning}
+            flightMode={flightMode}
             colliders={layout.colliders}
             weather={weather}
             windRef={windRef}
+            batteryMode={battery}
+            batteryRef={batteryRef}
+            batteryBarRef={batteryBarRef}
+            onBatteryEvent={onBatteryEvent}
             targets={targets}
             enemyAI={enemyAI}
             enemiesShoot={wave >= ENEMY_FIRE_WAVE}
@@ -480,6 +543,7 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
             aimRef={aimRef}
             colliders={layout.colliders}
             zoom={zoom}
+            flightMode={flightMode}
           />
         </Canvas>
       </Box>
@@ -563,6 +627,31 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
           }}
         >
           {`BEST ${bestScore} · W${bestWave}`}
+        </Box>
+      )}
+
+      {battery && (
+        <Box
+          data-testid="strike-battery"
+          sx={{
+            position: 'absolute',
+            top: bestScore > 0 ? (wave >= ENEMY_FIRE_WAVE ? 120 : 92) : wave >= ENEMY_FIRE_WAVE ? 92 : 64,
+            left: 8,
+            width: 92,
+            height: 8,
+            borderRadius: 1,
+            bgcolor: alpha('#000', 0.45),
+            border: `1px solid ${alpha('#fff', 0.3)}`,
+            overflow: 'hidden',
+            pointerEvents: 'none',
+          }}
+        >
+          <Box
+            ref={batteryBarRef}
+            data-testid="strike-battery-fill"
+            data-level="100"
+            sx={{ height: '100%', width: '100%', bgcolor: '#66bb6a' }}
+          />
         </Box>
       )}
 
@@ -677,12 +766,15 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
         autoFire={autoFire}
         aimAssist={aimAssist}
         gyroAim={gyroMode}
+        battery={battery}
         weather={weather}
         richWorld={richWorld}
         minimap={minimap}
+        flightMode={flightMode}
         rateSpeed={rateSpeed}
         rateYaw={rateYaw}
         stickExpo={stickExpo}
+        turbo={turbo}
         onNewWorld={requestNewWorld}
         onResetDefaults={resetDefaults}
       />

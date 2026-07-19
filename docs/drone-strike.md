@@ -229,7 +229,16 @@ kind of list).
 ### Sim-setting ports
 The Drone Sim's settings were audited for reuse (its storm weather, rich
 scenery, minimap and the three flight-tuning sliders already shipped here).
-Portable and worth porting:
+**Shipped from this audit**: ~~acro flight mode~~ (`flightMode` toggle —
+`stepFlight`'s acro branch; in acro `fpvPitchGain` returns 1.0, so the FPV
+camera follows the real nose and pitching the drone IS the vertical aim),
+~~turbo~~ (`TURBO_BOOST` stacked under the `MAX_SPEED_MULT` clamp), and
+~~battery mode~~ (`stepBattery` + spawn-pad recharge + the sim's bar UI;
+charge carries across waves — recharging on the pad between waves is the
+gameplay — and a dead battery auto-descends via `DEAD_INPUT` **and can't
+power the gun** while enemies keep shooting).
+
+Still open:
 
 - **Crash mode** — hard wall impacts tumble + respawn instead of the
   current bounce. `StrikeRig` already receives the impact speed from
@@ -238,22 +247,6 @@ Portable and worth porting:
   `droneSim/DroneRig.tsx` (tumble spin, controls dead, pad respawn).
   Design decision: does a crash cost a heart, or only the respawn flight
   time while the wave stays live? Suspend fire intent during the tumble.
-- **Acro flight mode** — `stepFlight` already implements `mode: 'acro'`
-  (the rig hardcodes `'hold'`); a settings toggle + persisted `flightMode`
-  ports it directly. In acro, `tiltPitch` IS the flight attitude, so the
-  FPV pitch follow becomes real pitch **aiming** — `fpvPitchGain` likely
-  wants ~1.0 there (camera and fire path already share it), and vertical
-  aim stops depending on altitude alone. Expert mode; pairs naturally with
-  assist `off`.
-- **Turbo** — `TURBO_BOOST` stacked onto the tuning multipliers under the
-  existing `MAX_SPEED_MULT` clamp; one ToggleRow in the Flight group.
-  Balance note: turbo trivialises dodging wave-5 bolts — either accept it
-  as a casual aid or pair it with a score trade-off.
-- **Battery mode** — `stepBattery`/`BatteryState` + the spawn-pad recharge
-  and battery-bar UI from the sim: flying drains charge, the pad recharges,
-  and a dead battery auto-descends (`DEAD_INPUT` override) **while enemies
-  keep shooting** — a survival-pressure option. The largest port of the
-  four (bar UI, control override, recharge zone checks).
 
 Audited and **not** applicable: gate count / course editor / course source
 (racing), the landing challenge, and follow distance + the standing/walking

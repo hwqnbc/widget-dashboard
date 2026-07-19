@@ -28,9 +28,11 @@ export const ZOOM_FOV = 30
 export const ZOOM_SENS = 0.5
 
 /** The effective FPV pitch follow. Used by BOTH the camera and the fire
- * path so the bolt always goes exactly where the reticle points. */
-export const fpvPitchGain = (zoom: boolean) =>
-  FPV_PITCH_GAIN * (zoom ? ZOOM_SENS : 1)
+ * path so the bolt always goes exactly where the reticle points. In acro,
+ * `tiltPitch` IS the flight attitude — the camera follows the real nose
+ * (gain 1) and pitching the drone becomes vertical aim. */
+export const fpvPitchGain = (zoom: boolean, mode: 'hold' | 'acro' = 'hold') =>
+  mode === 'acro' ? 1 : FPV_PITCH_GAIN * (zoom ? ZOOM_SENS : 1)
 
 /** How hard a shot kicks the camera pitch (radians). */
 export const RECOIL_KICK = 0.018

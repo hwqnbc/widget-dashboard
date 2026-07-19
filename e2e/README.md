@@ -57,6 +57,7 @@ mode state from the widget root's `data-*` attributes via
 | `101-strike-waves` | wave progression: full wave-1 clear → cleared → wave 2 with the seeded target count; the difficulty curve (drifters w2, enemies w3 with orbit envelopes, return fire w5) from the pure module; best score/wave persistence across reload |
 | `102-strike-input` | multi-touch (stick climbs while a second finger holds fire), keyboard W + Space with `data-input-source` arbitration, aim-assist/gyro-mode/auto-fire settings round-trips, hands-off auto-fire kill, progress-guarded restart |
 | `103-strike-zoom` | ADS/zoom: scope-button toggle (`data-zoom` on root/HUD/reticle), scoped yaw rate ≈ half measured closed-loop, firing while scoped, hold-Shift zoom, scoped assist cones tighter per level (pure module), gyro "Zoom only" mode, scope hidden + dropped outside FPV |
+| `104-strike-simports` | the sim-ported settings: hold brakes vs acro coasts (closed-loop), turbo ≈ 1.4× top speed, battery bar + effort drain + spawn-pad recharge + near-full transient restart, persistence of all three across reload |
 
 Drone Strike suites steer with the same closed-loop rig (`createStrikePilot`)
 aimed at the HUD's nearest-target beacon (`data-tgt-*`); `engage()` fires via

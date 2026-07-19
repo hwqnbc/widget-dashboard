@@ -2,7 +2,7 @@ import { useRef } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import { Euler, Vector3 } from 'three'
 import type { PerspectiveCamera } from 'three'
-import type { Collider, FlightState } from '../droneSim/flightModel'
+import type { Collider, FlightMode, FlightState } from '../droneSim/flightModel'
 import { boomClipT, damp } from '../droneSim/flightModel'
 import type { AimOffset, StrikeView } from './aimModel'
 import { BASE_FOV, ZOOM_FOV, fpvPitchGain } from './aimModel'
@@ -29,6 +29,7 @@ export default function StrikeCameraRig({
   aimRef,
   colliders,
   zoom,
+  flightMode,
 }: {
   view: StrikeView
   flight: FlightState
@@ -36,6 +37,8 @@ export default function StrikeCameraRig({
   colliders: readonly Collider[]
   /** ADS: ease the fov to the scoped value (FPV only). */
   zoom: boolean
+  /** In acro the camera follows the full flight attitude (pitch = aim). */
+  flightMode: FlightMode
 }) {
   const camera = useThree((s) => s.camera) as PerspectiveCamera
   const desired = useRef(new Vector3()).current
@@ -87,7 +90,7 @@ export default function StrikeCameraRig({
       flight.pos.z + desired.z,
     )
     euler.set(
-      flight.tiltPitch * fpvPitchGain(zoom) + aim.pitch + aim.recoil,
+      flight.tiltPitch * fpvPitchGain(zoom, flightMode) + aim.pitch + aim.recoil,
       flight.yaw + aim.yaw,
       0,
     )

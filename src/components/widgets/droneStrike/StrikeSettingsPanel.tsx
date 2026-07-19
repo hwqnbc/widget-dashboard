@@ -19,7 +19,7 @@ import ShuffleIcon from '@mui/icons-material/Shuffle'
 import SettingsBackupRestoreIcon from '@mui/icons-material/SettingsBackupRestore'
 import { useAppDispatch } from '../../../app/hooks'
 import { updateWidgetData } from '../../../features/widgets/widgetsSlice'
-import type { Weather } from '../droneSim/flightModel'
+import type { FlightMode, Weather } from '../droneSim/flightModel'
 import type { AimAssistLevel } from './combatModel'
 import type { GyroMode } from './gyroAim'
 import { gyroNeedsPermission, gyroSupported, requestGyroPermission } from './gyroAim'
@@ -71,12 +71,15 @@ export default function StrikeSettingsPanel({
   autoFire,
   aimAssist,
   gyroAim,
+  battery,
   weather,
   richWorld,
   minimap,
+  flightMode,
   rateSpeed,
   rateYaw,
   stickExpo,
+  turbo,
   onNewWorld,
   onResetDefaults,
 }: {
@@ -86,12 +89,15 @@ export default function StrikeSettingsPanel({
   autoFire: boolean
   aimAssist: AimAssistLevel
   gyroAim: GyroMode
+  battery: boolean
   weather: Weather
   richWorld: boolean
   minimap: boolean
+  flightMode: FlightMode
   rateSpeed: number
   rateYaw: number
   stickExpo: number
+  turbo: boolean
   onNewWorld: () => void
   onResetDefaults: () => void
 }) {
@@ -189,8 +195,22 @@ export default function StrikeSettingsPanel({
               </ToggleButtonGroup>
             </ListItem>
           )}
+          <ToggleRow
+            testId="strike-battery-toggle"
+            label="Battery"
+            description="Charge drains in flight and carries across waves; land on the spawn pad to recharge. A dead battery auto-descends and can't power the gun."
+            checked={battery}
+            onChange={(next) => set({ battery: next })}
+          />
         </List>
         <List dense subheader={<ListSubheader disableGutters>Flight</ListSubheader>}>
+          <ToggleRow
+            testId="strike-mode-toggle"
+            label="Acro flight mode"
+            description="Real gravity and attitude-based thrust; momentum coasts — and pitching the drone becomes your vertical aim. Off = beginner altitude hold."
+            checked={flightMode === 'acro'}
+            onChange={(next) => set({ flightMode: next ? 'acro' : 'hold' })}
+          />
           <Stack sx={{ px: 0.5 }}>
             <Typography variant="caption" color="text.secondary">
               {`Max speed ×${rateSpeed.toFixed(1)}`}
@@ -229,6 +249,13 @@ export default function StrikeSettingsPanel({
               onChange={(_, v) => set({ stickExpo: v as number })}
             />
           </Stack>
+          <ToggleRow
+            testId="strike-tune-turbo"
+            label="Turbo"
+            description="+40% max speed and yaw rate on top of the sliders — makes dodging return fire easier too."
+            checked={turbo}
+            onChange={(next) => set({ turbo: next })}
+          />
         </List>
         <List dense subheader={<ListSubheader disableGutters>World</ListSubheader>}>
           <ToggleRow

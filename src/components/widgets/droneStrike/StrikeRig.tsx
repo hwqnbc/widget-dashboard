@@ -3,14 +3,18 @@ import type { RefObject } from 'react'
 import { useFrame } from '@react-three/fiber'
 import type { Group, Mesh, MeshBasicMaterial } from 'three'
 import type {
+  BatteryEvent,
+  BatteryState,
   Collider,
   ControlInput,
+  FlightMode,
   FlightState,
   Tuning,
   Vec3,
   Weather,
 } from '../droneSim/flightModel'
-import { SPAWN, sampleWind, stepFlight } from '../droneSim/flightModel'
+import { DEAD_INPUT, SPAWN, sampleWind, stepBattery, stepFlight } from '../droneSim/flightModel'
+import { PAD_CENTER, PAD_START_RADIUS } from '../droneSim/lapTimer'
 import type { ExternalState } from '../droneSim/externalInput'
 import { pollGamepad } from '../droneSim/externalInput'
 import { CRASH_PULSE, vibrate } from '../droneSim/haptics'
@@ -91,9 +95,14 @@ export default function StrikeRig({
   external,
   fireHeldRef,
   tuning,
+  flightMode,
   colliders,
   weather,
   windRef,
+  batteryMode,
+  batteryRef,
+  batteryBarRef,
+  onBatteryEvent,
   targets,
   enemyAI,
   enemiesShoot,
@@ -123,9 +132,16 @@ export default function StrikeRig({
   /** True while the fire button / Space / mouse is held. */
   fireHeldRef: { current: boolean }
   tuning: Tuning
+  /** 'hold' (altitude hold) or 'acro' (attitude + thrust under gravity). */
+  flightMode: FlightMode
   colliders: readonly Collider[]
   weather: Weather
   windRef: { current: { x: number; y: number } }
+  batteryMode: boolean
+  batteryRef: { current: BatteryState }
+  /** Battery bar fill — width/colour/data-level written on the tick. */
+  batteryBarRef: RefObject<HTMLDivElement | null>
+  onBatteryEvent: (event: BatteryEvent) => void
   targets: TargetState[]
   /** Parallel AI slots for the 'enemy' targets. */
   enemyAI: EnemyAIState[]
@@ -191,20 +207,41 @@ export default function StrikeRig({
       wind.y = 0
     }
 
+    // Battery bookkeeping first — a dead battery kills the sticks (gentle
+    // auto-descent) and unpowers the gun until a pad recharge revives it.
+    let effectiveControls = controls
+    const battery = batteryRef.current
+    if (batteryMode) {
+      const activity = Math.max(
+        Math.abs(controls.left.x),
+        Math.abs(controls.left.y),
+        Math.abs(controls.right.x),
+        Math.abs(controls.right.y),
+      )
+      const onSpawnPad =
+        flight.pos.y < 1.2 &&
+        Math.hypot(flight.pos.x - PAD_CENTER.x, flight.pos.z - PAD_CENTER.z) <=
+          PAD_START_RADIUS
+      const event = stepBattery(battery, activity, onSpawnPad, dt)
+      if (event) onBatteryEvent(event)
+      if (battery.dead) effectiveControls = DEAD_INPUT
+    }
+
     stepFlight(
       flight,
-      controls,
+      effectiveControls,
       dt,
       colliders,
       weather === 'storm' ? wind : undefined,
-      'hold',
+      flightMode,
       tuning,
     )
 
     // Aim direction = the FPV camera forward (minus recoil, which is a
-    // visual kick only): yaw + gentle tilt follow + the gyro offset.
+    // visual kick only): yaw + tilt follow + the gyro offset. In acro the
+    // follow is 1:1 — pitching the drone is the vertical aim.
     const aim = aimRef.current
-    const pitch = flight.tiltPitch * fpvPitchGain(zoom) + aim.pitch
+    const pitch = flight.tiltPitch * fpvPitchGain(zoom, flightMode) + aim.pitch
     const yaw = flight.yaw + aim.yaw
     const cosP = Math.cos(pitch)
     fireDir.x = -Math.sin(yaw) * cosP
@@ -259,10 +296,11 @@ export default function StrikeRig({
 
     // Fire intent: held trigger (button/Space/mouse/gamepad) or auto-fire
     // after the lock has held steady. One cooldown for both — auto-fire is a
-    // convenience, not a rate buff.
+    // convenience, not a rate buff. A dead battery can't power the gun.
     combat.cooldown = Math.max(0, combat.cooldown - dt)
     const wantsFire =
       waveActive &&
+      !(batteryMode && battery.dead) &&
       (fireHeldRef.current ||
         gamepadFireHeld() ||
         (autoFire && lockIdx >= 0 && lockHold.current >= AUTO_FIRE_HOLD_S))
@@ -410,6 +448,14 @@ export default function StrikeRig({
         chip.textContent = `WAVE ${wave} · SCORE ${scoreRef.current}`
         chip.dataset.score = String(scoreRef.current)
         chip.dataset.wave = String(wave)
+      }
+      const bar = batteryBarRef.current
+      if (bar) {
+        const level = batteryRef.current.level
+        bar.style.width = `${level}%`
+        bar.style.backgroundColor =
+          level > 40 ? '#66bb6a' : level > 15 ? '#ffb300' : '#ef5350'
+        bar.dataset.level = level.toFixed(0)
       }
       const marker = minimapDroneRef.current
       if (marker) {
