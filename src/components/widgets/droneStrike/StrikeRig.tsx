@@ -50,10 +50,13 @@ import type { AimOffset } from './aimModel'
 import { RECOIL_KICK, ZOOM_SENS, fpvPitchGain } from './aimModel'
 import type { AimAngles, AimMode, GimbalState } from './gimbalModel'
 import {
+  RECENTER_DELAY_MS,
+  RECENTER_RATE,
   TRACK_MULT,
   TRACK_RATE,
   aimAngles,
   dirFromAngles,
+  recenterGimbal,
   stepGimbalRates,
   trackToward,
 } from './gimbalModel'
@@ -167,6 +170,7 @@ export default function StrikeRig({
   onZoomHold,
   aimMode,
   gimbalRef,
+  aimInputRef,
   scoreRef,
   onWaveCleared,
   onTargetDown,
@@ -230,6 +234,9 @@ export default function StrikeRig({
   aimMode: AimMode
   /** The weapon gimbal, shared with the camera rig and the drag input. */
   gimbalRef: { current: GimbalState }
+  /** performance.now() of the last manual aim input (drag) — the rig also
+   * bumps it on hover-stick activity; idle-recenter waits on it. */
+  aimInputRef: { current: number }
   /** Session score — runtime-only, rendered via the telemetry tick. */
   scoreRef: { current: number }
   onWaveCleared: () => void
@@ -364,6 +371,9 @@ export default function StrikeRig({
     // Hover mode: the right stick (touch or arrow keys — both feed the
     // same shared ControlInput) slews the gimbal at a rate.
     if (aimMode === 'hover' && !crash.active) {
+      if (Math.abs(controls.right.x) > 0.02 || Math.abs(controls.right.y) > 0.02) {
+        aimInputRef.current = performance.now()
+      }
       stepGimbalRates(
         gimbal,
         controls.right.x,
@@ -377,17 +387,29 @@ export default function StrikeRig({
     // the led target (error-reducing, arc-clamped, strength per assist) —
     // the sensor-operator's track mode that makes fast evaders hittable.
     const trackMult = TRACK_MULT[assist]
-    if (trackMult > 0 && lockIdxRef.current >= 0 && !crash.active) {
+    const tracking =
+      trackMult > 0 && lockIdxRef.current >= 0 && !crash.active &&
+      targets[lockIdxRef.current]?.alive
+    if (tracking) {
       const t = targets[lockIdxRef.current]
-      if (t && t.alive) {
-        leadPoint(flight.pos, t.pos, t.vel, weapon.speed, aimPoint)
-        const dx = aimPoint.x - flight.pos.x
-        const dy = aimPoint.y - flight.pos.y
-        const dz = aimPoint.z - flight.pos.z
-        const desYaw = wrapAngle(Math.atan2(-dx, -dz) - flight.yaw - aim.yaw)
-        const desPitch = Math.atan2(dy, Math.hypot(dx, dz)) - basePitch - aim.pitch
-        trackToward(gimbal, desYaw, desPitch, TRACK_RATE * trackMult * dt)
-      }
+      leadPoint(flight.pos, t.pos, t.vel, weapon.speed, aimPoint)
+      const dx = aimPoint.x - flight.pos.x
+      const dy = aimPoint.y - flight.pos.y
+      const dz = aimPoint.z - flight.pos.z
+      const desYaw = wrapAngle(Math.atan2(-dx, -dz) - flight.yaw - aim.yaw)
+      const desPitch = Math.atan2(dy, Math.hypot(dx, dz)) - basePitch - aim.pitch
+      trackToward(gimbal, desYaw, desPitch, TRACK_RATE * trackMult * dt)
+    } else if (
+      // Idle: no lock/track and no recent manual aim → ease the gimbal back
+      // to boresight (a gimbal camera resting to centre), unless assist is
+      // off (then the aim is yours to keep). Skip in hover while the stick
+      // is held (that's the aim input).
+      !crash.active &&
+      trackMult > 0 &&
+      lockIdxRef.current < 0 &&
+      performance.now() - aimInputRef.current > RECENTER_DELAY_MS
+    ) {
+      recenterGimbal(gimbal, RECENTER_RATE * dt)
     }
 
     // The single aim composition (fire path, lock cone, reticle, gunner

@@ -35,6 +35,11 @@ export const GIMBAL_PITCH_RATE = 1.3
 export const TRACK_RATE = 1.2
 /** Soft-track strength per aim-assist level. */
 export const TRACK_MULT = { off: 0, mild: 0.5, strong: 1 } as const
+/** Idle return-to-boresight: after this long with no lock and no manual
+ * aim input, the gimbal eases back to centre (a gimbal camera resting to
+ * boresight), at this rate. Assist-off keeps manual aim — see the rig. */
+export const RECENTER_DELAY_MS = 700
+export const RECENTER_RATE = 1.1
 
 export interface GimbalState {
   /** Yaw relative to the drone's heading; + = left (heading convention). */
@@ -85,6 +90,12 @@ export function trackToward(
   const dp = clamp(desiredPitch, GIMBAL_PITCH_MIN, GIMBAL_PITCH_MAX) - g.pitch
   g.yaw += clamp(dy, -maxStep, maxStep)
   g.pitch += clamp(dp, -maxStep, maxStep)
+}
+
+/** Ease the gimbal toward boresight by at most maxStep per axis. */
+export function recenterGimbal(g: GimbalState, maxStep: number): void {
+  g.yaw -= clamp(g.yaw, -maxStep, maxStep)
+  g.pitch -= clamp(g.pitch, -maxStep, maxStep)
 }
 
 export interface AimAngles {

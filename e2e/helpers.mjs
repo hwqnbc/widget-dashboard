@@ -437,7 +437,11 @@ export async function createStrikePilot(page, context) {
         // Close to comfortable gun range, then hover and shoot.
         const fwd = Math.abs(err) < 0.4 && dxz > 30 ? clamp(dxz * 0.08, 0, 0.8) : 0
         await touch(yawInput, climb, 0, fwd)
-        const onTarget = Math.abs(err) < 0.1 && Math.abs(dy) < 1.5 && dxz < 60
+        // Fire when the gun is actually on a target: a real reticle lock
+        // (gimbal + soft-track may aim off the nose), or the nose-bearing
+        // fallback for a centred gimbal in range.
+        const onTarget =
+          c.lock >= 0 || (Math.abs(err) < 0.1 && Math.abs(dy) < 1.5 && dxz < 60)
         if (manualFire) {
           if (onTarget && !firing) {
             await page.keyboard.down('Space')

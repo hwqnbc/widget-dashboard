@@ -224,6 +224,9 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
   const [zoom, setZoom] = useState(false)
   const gyroRef = useRef(createGyroState())
   const gimbalRef = useRef(createGimbalState())
+  // Timestamp of the last manual aim input (drag / hover stick) — the rig's
+  // idle return-to-boresight waits on it. Seeded far in the past.
+  const aimInputRef = useRef(0)
 
   // Switching aim-control modes recenters the gimbal (a fresh start for
   // comparing the modes; centred gimbal = classic fly-to-aim).
@@ -622,6 +625,7 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
             // Drag right aims right (yaw decreases — yaw+ is left); drag
             // up aims up.
             slewGimbal(gimbalRef.current, -dx * sens, -dy * sens)
+            aimInputRef.current = performance.now()
             d.x = e.clientX
             d.y = e.clientY
           }
@@ -710,6 +714,7 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
             onZoomHold={setZoom}
             aimMode={aimMode}
             gimbalRef={gimbalRef}
+            aimInputRef={aimInputRef}
             scoreRef={scoreRef}
             onWaveCleared={onWaveCleared}
             onTargetDown={onTargetDown}

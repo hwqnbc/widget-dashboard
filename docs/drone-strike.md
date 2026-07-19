@@ -48,6 +48,11 @@ Key decisions:
   operator's track mode, which is what actually makes fast-evading enemy
   drones hittable. You still acquire the lock and fire; manual drag layers
   on top; it disengages with the lock. Gyro fine-aim now nudges the gimbal.
+- **Return to boresight.** With assist on, when nothing is locked and you
+  haven't aimed for `RECENTER_DELAY_MS`, the gimbal eases back to centre
+  (`recenterGimbal`) — a gimbal camera resting to boresight, so the reticle
+  never stays stranded in a corner after a tracked kill. Assist `off`
+  leaves the aim entirely yours; a held drag or hover stick counts as aiming.
 - One `aimAngles` composition (flight yaw + tilt follow + gimbal + gyro,
   arc-clamped) feeds the fire path, the lock cone, the reticle projection
   and the gunner camera alike, so bolts land exactly on the reticle in
