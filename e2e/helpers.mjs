@@ -470,7 +470,14 @@ export async function addTankWidget(page) {
   await page.getByRole('button', { name: 'Add widget' }).click()
   await page.getByRole('menuitem', { name: /Tank Battle/ }).click()
   await page.waitForSelector('[data-testid="tank-battle-root"]')
-  await page.waitForTimeout(600)
+  // Dismiss the first-run "How to play" overlay (suite 114 covers it).
+  await page.waitForTimeout(400)
+  const helpClose = page.locator('[data-testid="tank-help-close"]')
+  if (await helpClose.isVisible().catch(() => false)) {
+    await helpClose.click()
+    await page.waitForTimeout(400)
+  }
+  await page.waitForTimeout(300)
 }
 
 /** Readers over the tank HUD/chip data-* attributes (the test contract). */

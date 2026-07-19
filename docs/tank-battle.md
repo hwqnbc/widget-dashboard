@@ -55,6 +55,21 @@ Key decisions (the mobile-tank-game conventions):
   Gyro fine-aim is the strike's `gyroAim` plumbing verbatim (shared
   `AimOffset`, camera + fire path, iOS permission flow).
 
+## Help overlay (first-run onboarding)
+
+A playtest question ("how do I aim?") proved the aiming model is
+undiscoverable in-game, so the widget teaches itself:
+`TankHelpDialog` ("How to play") **auto-opens once per widget instance**
+(persisted `helpSeen`, not part of the settings reset) and covers driving
++ auto-turn, aim-with-the-view + automatic elevation, the reticle colour
+legend (amber = locked / white = ground / grey = no shot, with ring
+swatches), terrain-as-cover with the minimap tip, and reload/scope/
+auto-fire. A `?` button (`tank-help`) in the top-right row reopens it any
+time; the root mirrors `data-help-seen`; dialog testids
+`tank-help-panel`/`tank-help-close`. The e2e helper `addTankWidget`
+dismisses it so every other suite starts clean; suite `114-tank-help`
+covers the overlay itself.
+
 ## Terrain (the new core)
 
 `terrain.ts` is a pure seeded **analytic heightfield**: `heightAt(x, z)` =
@@ -162,7 +177,7 @@ targets alive during the current active phase.
 ## Test contract (data-*)
 
 Root `tank-battle-root`: `data-world-seed/-mode/-roughness/-auto-fire/
--auto-turn/-aim-assist/-gyro/-minimap/-zoom/-weather`. HUD `tank-hud` (150 ms tick):
+-auto-turn/-help-seen/-aim-assist/-gyro/-minimap/-zoom/-weather`. HUD `tank-hud` (150 ms tick):
 `data-x/-z/-alt/-speed/-hull-yaw/-turret-yaw/-cam-yaw/-cam-pitch/-pitch/
 -roll/-score/-shots/-hits/-targets-left/-lock/-sol/-reload/-proj/
 -enemy-proj/-hp/-zoom/-input-source` + the nearest-enemy beacon
@@ -174,7 +189,7 @@ Root `tank-battle-root`: `data-world-seed/-mode/-roughness/-auto-fire/
 buttons/sticks/settings testids.
 
 E2E: suites `110-tank-core`, `111-tank-combat`, `112-tank-modes`,
-`113-tank-autoturn` (see
+`113-tank-autoturn`, `114-tank-help` (see
 `e2e/README.md`); the pure modules bundle in a third flat pass in
 `run.mjs`, and `createTankPilot` in `helpers.mjs` drives closed-loop —
 over the contour, driving is part of aiming (no lock until LOS clears).

@@ -15,7 +15,7 @@ gates or hit walls reliably).
 npm run e2e            # all suites (starts its own dev server on :5199)
 npm run e2e crash      # only suites whose filename matches "crash"
 npm run e2e strike     # the Drone Strike suites (100-103)
-npm run e2e tank       # the Tank Battle suites (110-113)
+npm run e2e tank       # the Tank Battle suites (110-114)
 ```
 
 Environment:
@@ -71,6 +71,7 @@ mode state from the widget root's `data-*` attributes via
 | `111-tank-combat` | closed-loop combat: no lock from spawn (terrain cover — the pilot must crest the ridge), two engage-and-kill runs clearing wave 1, wave 2 arrives with the seeded count + armed enemies, sky/ground ballistic-solution reticle contract, best score/wave persistence across reload, progress-guarded mode switch + cancel |
 | `112-tank-modes` | Waves ↔ Roam toggle (direct without progress), roam garrison size + 5-HP pool, terrain roughness reshaping (pure-module amplitude check), settings round-trips on the root, minimap toggle, reset-to-defaults keeps mode/roughness/seed, mode + roughness persistence across reload |
 | `113-tank-autoturn` | auto-turn hull (default on): stationary aiming never swings the hull, hull converges onto the camera heading under throttle alone, stick-X override, toggle off → hull ignores the camera, off persists across reload, settings reset restores it |
+| `114-tank-help` | first-run "How to play" overlay: auto-opens on a fresh widget (`data-help-seen` off), Got-it dismiss persists the flag, no auto-open after reload, ? button reopens + Escape closes, battle state machine unblocked throughout. Other tank suites dismiss it via `addTankWidget` |
 | `120-avatars` | Avatar Actions widget: default selection, every catalogued avatar selectable in order + renders a figure svg, tap plays/stops the celebration (`data-playing`), switching avatar mid-play resets to the static figure, per-widget selection persists across reload while play state resets |
 
 Drone Strike suites steer with the same closed-loop rig (`createStrikePilot`)

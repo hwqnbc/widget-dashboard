@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Canvas } from '@react-three/fiber'
 import { Box, IconButton, Tooltip, alpha, useTheme } from '@mui/material'
+import HelpOutlineIcon from '@mui/icons-material/HelpOutlined'
 import RestartAltIcon from '@mui/icons-material/RestartAlt'
 import SettingsIcon from '@mui/icons-material/Settings'
 import { useAppDispatch } from '../../../app/hooks'
@@ -65,6 +66,7 @@ import EnemyTanks from './EnemyTanks'
 import ShellTracers from './ShellTracers'
 import TankMinimap from './TankMinimap'
 import TankSettingsPanel from './TankSettingsPanel'
+import TankHelpDialog from './TankHelpDialog'
 
 const clampNum = (lo: number, hi: number) => (v: unknown) =>
   typeof v === 'number' && Number.isFinite(v)
@@ -152,6 +154,7 @@ export default function TankBattleBody({ id }: WidgetProps) {
   const bestRoamMs = useWidgetField(id, 'bestRoamMs', 0)
   const autoFire = useWidgetField(id, 'autoFire', false)
   const autoTurn = useWidgetField(id, 'autoTurn', true)
+  const helpSeen = useWidgetField(id, 'helpSeen', false)
   const aimAssist = useWidgetField<AimAssistLevel>(id, 'aimAssist', 'mild', coerceAimAssist)
   const gyroMode = useWidgetField<GyroMode>(id, 'gyroAim', 'off', coerceGyroMode)
   const rateSpeed = useWidgetField(id, 'rateSpeed', 1, coerceRate)
@@ -201,6 +204,9 @@ export default function TankBattleBody({ id }: WidgetProps) {
   const [hp, setHp] = useState(PLAYER_HP_WAVES)
   const [markers, setMarkers] = useState<HitMarker[]>([])
   const [settingsOpen, setSettingsOpen] = useState(false)
+  // First-run onboarding: the aiming model is invisible without it. Opens
+  // once per widget instance; the ? button reopens it any time.
+  const [helpOpen, setHelpOpen] = useState(() => !helpSeen)
   const [zoom, setZoom] = useState(false)
 
   const enemiesShoot = battleMode === 'roam' || wave >= ENEMY_FIRE_WAVE
@@ -370,6 +376,11 @@ export default function TankBattleBody({ id }: WidgetProps) {
     dispatch(updateWidgetData({ id, data: { ...SETTING_DEFAULTS } }))
   }
 
+  const closeHelp = () => {
+    setHelpOpen(false)
+    if (!helpSeen) dispatch(updateWidgetData({ id, data: { helpSeen: true } }))
+  }
+
   // Keyboard: WASD drives the hull, arrows aim, Space fires, Shift scopes.
   useEffect(() => {
     const keys = new Set<string>()
@@ -475,6 +486,7 @@ export default function TankBattleBody({ id }: WidgetProps) {
       data-roughness={roughness}
       data-auto-fire={autoFire ? 'on' : 'off'}
       data-auto-turn={autoTurn ? 'on' : 'off'}
+      data-help-seen={helpSeen ? 'on' : 'off'}
       data-aim-assist={aimAssist}
       data-gyro={gyroMode}
       data-minimap={minimap ? 'on' : 'off'}
@@ -724,6 +736,16 @@ export default function TankBattleBody({ id }: WidgetProps) {
           bgcolor: alpha('#000', 0.4),
         }}
       >
+        <Tooltip title="How to play">
+          <IconButton
+            size="small"
+            data-testid="tank-help"
+            onClick={() => setHelpOpen(true)}
+            sx={{ color: '#fff' }}
+          >
+            <HelpOutlineIcon fontSize="small" />
+          </IconButton>
+        </Tooltip>
         <Tooltip title={battleMode === 'waves' ? 'Restart from wave 1' : 'Restart the hunt'}>
           <IconButton
             size="small"
@@ -745,6 +767,8 @@ export default function TankBattleBody({ id }: WidgetProps) {
           </IconButton>
         </Tooltip>
       </Box>
+
+      <TankHelpDialog open={helpOpen} onClose={closeHelp} />
 
       <TankSettingsPanel
         id={id}

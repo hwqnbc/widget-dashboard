@@ -217,6 +217,7 @@ export function defaultWidgetData(type: WidgetType): Record<string, unknown> {
         rateSpeed: 1,
         rateTraverse: 1,
         stickExpo: 0,
+        helpSeen: false,
       }
     case 'clock':
     default:
