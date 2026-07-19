@@ -32,6 +32,15 @@ Key decisions:
   fires whenever the reticle holds a lock ≥120 ms, so casual players never
   lift a thumb. Both share one cooldown — auto-fire is a convenience, not a
   rate buff.
+- **Responsive control layout.** The stick/fire/scope sizes derive from the
+  widget's measured height (ResizeObserver on the root; `stick =
+  clamp(72, 0.28·h, 88|140)`, fire/scope proportional), and fire + scope
+  sit in a column **inward of the right stick** — the layout consumes
+  width (which landscape always has), never height. The original fixed
+  fullscreen sizes stacked the fire button onto the top toolbar on an
+  iPhone's ~330 px landscape viewport and pushed the scope button
+  off-screen; suite `106-strike-mobile` pins the fix on a phone-sized
+  viewport.
 - **Aim assist** (off/mild/strong) sets the lock cone (`AIM_CONE_RAD`,
   widened by each target's angular size, occlusion-checked) and how far a
   fired bolt bends toward the locked target (`bendAim`) after first-order

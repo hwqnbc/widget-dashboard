@@ -188,6 +188,20 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
   const minimapTargetRefs = useRef<(SVGCircleElement | null)[]>([])
   const markerId = useRef(0)
 
+  // Live root height (ResizeObserver) — drives the touch-control sizing.
+  // Resize/rotate/fullscreen transitions only; never per-frame.
+  const rootRef = useRef<HTMLDivElement>(null)
+  const [rootH, setRootH] = useState(0)
+  useEffect(() => {
+    const el = rootRef.current
+    if (!el) return
+    const ro = new ResizeObserver((entries) => {
+      setRootH(Math.round(entries[0].contentRect.height))
+    })
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+
   const [wave, setWave] = useState(1)
   const [phase, setPhase] = useState<WavePhase>('intro')
   const [banner, setBanner] = useState<string | null>(null)
@@ -463,15 +477,31 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
     [controls],
   )
 
-  const stickSize = fullscreen ? 140 : 88
+  // Touch-control sizing is responsive to the widget's REAL height — a
+  // phone in landscape fullscreen has ~330 CSS px, where the old fixed
+  // fullscreen sizes stacked the fire button onto the top toolbar and
+  // pushed the scope button off-screen entirely.
+  const stickMax = fullscreen ? 140 : 88
+  const stickSize =
+    rootH > 0 ? Math.round(Math.min(stickMax, Math.max(72, rootH * 0.28))) : stickMax
   const stickInset = fullscreen ? 16 : 0
-  const fireSize = fullscreen ? 96 : 64
+  const fireSize = Math.max(48, Math.round(stickSize * 0.72))
+  const scopeSize = Math.max(36, Math.round(stickSize * 0.46))
+  // Fire + scope sit in a column INWARD of the right stick (mobile-shooter
+  // convention) — the layout consumes width, which landscape always has,
+  // instead of height, which a phone doesn't.
+  const bottomBase = fullscreen ? `max(${stickInset}px, env(safe-area-inset-bottom))` : '0px'
+  const fireRight = stickInset + stickSize + 40
+  const fireBottom = Math.round(stickSize * 0.35)
+  const scopeRight = fireRight + Math.round((fireSize + 24 - scopeSize - 16) / 2)
+  const scopeBottom = fireBottom + fireSize + 30
   // Hearts matter from the first wall once crashes cost one — show the row
   // whenever it can change (crash mode on, or enemies shooting).
   const hpVisible = crashes || wave >= ENEMY_FIRE_WAVE
 
   return (
     <Box
+      ref={rootRef}
       className="widget-no-drag"
       data-testid="drone-strike-root"
       data-widget-id={id}
@@ -873,7 +903,7 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
         sx={{
           position: 'absolute',
           left: stickInset,
-          bottom: fullscreen ? `max(${stickInset}px, env(safe-area-inset-bottom))` : 0,
+          bottom: bottomBase === '0px' ? 0 : bottomBase,
         }}
       />
       <VirtualJoystick
@@ -884,7 +914,7 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
         sx={{
           position: 'absolute',
           right: stickInset,
-          bottom: fullscreen ? `max(${stickInset}px, env(safe-area-inset-bottom))` : 0,
+          bottom: bottomBase === '0px' ? 0 : bottomBase,
         }}
       />
       <FireButton
@@ -893,23 +923,19 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
         testId="strike-fire"
         sx={{
           position: 'absolute',
-          right: stickInset + 8,
-          bottom: fullscreen
-            ? `calc(max(${stickInset}px, env(safe-area-inset-bottom)) + ${stickSize + 64}px)`
-            : stickSize + 56,
+          right: fireRight,
+          bottom: `calc(${bottomBase} + ${fireBottom}px)`,
         }}
       />
       {view === 'fp' && (
         <ScopeButton
-          size={fullscreen ? 56 : 40}
+          size={scopeSize}
           zoom={zoom}
           onToggle={() => setZoom((z) => !z)}
           sx={{
             position: 'absolute',
-            right: stickInset + 16,
-            bottom: fullscreen
-              ? `calc(max(${stickInset}px, env(safe-area-inset-bottom)) + ${stickSize + 64 + fireSize + 40}px)`
-              : stickSize + 56 + fireSize + 32,
+            right: scopeRight,
+            bottom: `calc(${bottomBase} + ${scopeBottom}px)`,
           }}
         />
       )}

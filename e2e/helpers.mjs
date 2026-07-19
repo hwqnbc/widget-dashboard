@@ -33,15 +33,16 @@ export function reporter(suite) {
   }
 }
 
-/** Headless Chromium with a software-WebGL fallback (no GPU in CI). */
-export async function launch() {
+/** Headless Chromium with a software-WebGL fallback (no GPU in CI).
+ * Pass `viewport` to emulate other screens (e.g. a phone in landscape). */
+export async function launch({ viewport } = {}) {
   const browser = await chromium.launch({
     executablePath: CHROMIUM_PATH,
     headless: true,
     args: ['--enable-unsafe-swiftshader', '--use-angle=swiftshader'],
   })
   const context = await browser.newContext({
-    viewport: { width: 1280, height: 900 },
+    viewport: viewport ?? { width: 1280, height: 900 },
     hasTouch: true,
   })
   const page = await context.newPage()
