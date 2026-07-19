@@ -60,6 +60,7 @@ import FireButton from './FireButton'
 import type { HitMarker } from './HitMarkers'
 import HitMarkers from './HitMarkers'
 import DamageVignette from './DamageVignette'
+import SafePadRing from './SafePadRing'
 import StrikeMinimap from './StrikeMinimap'
 import StrikeSettingsPanel from './StrikeSettingsPanel'
 import ScopeButton from './ScopeButton'
@@ -180,6 +181,8 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
   const batteryRef = useRef<BatteryState>(createBatteryState())
   const batteryBarRef = useRef<HTMLDivElement>(null)
   const crashRef = useRef<CrashState>({ active: false, until: 0, spinX: 0, spinZ: 0 })
+  const padStateRef = useRef<'idle' | 'active'>('idle')
+  const padChipRef = useRef<HTMLDivElement>(null)
   const bannerTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const minimapDroneRef = useRef<SVGGElement>(null)
   const minimapTargetRefs = useRef<(SVGCircleElement | null)[]>([])
@@ -524,6 +527,7 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
           camera={{ fov: 60, near: 0.1, far: 400, position: [0, 4, 26] }}
         >
           <WorldScene palette={palette} buildings={layout.buildings} />
+          <SafePadRing stateRef={padStateRef} />
           {richWorld && <RichWorld layout={layout} />}
           {weather === 'storm' && <RainField flight={flight} wind={windRef.current} />}
           <Targets targets={targets} />
@@ -549,6 +553,8 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
             onCrashEnd={onCrashEnd}
             canHeal={phase === 'active' && hp > 0 && hp < PLAYER_HP}
             onHeal={onHeal}
+            padStateRef={padStateRef}
+            padChipRef={padChipRef}
             targets={targets}
             enemyAI={enemyAI}
             enemiesShoot={wave >= ENEMY_FIRE_WAVE}
@@ -603,6 +609,7 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
         data-proj="0"
         data-hp="3"
         data-crash-state="none"
+        data-safe="off"
         data-tgt-kind="none"
         data-input-source="touch"
         sx={{
@@ -714,6 +721,30 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
           {'♥'.repeat(hp) + '♡'.repeat(Math.max(0, PLAYER_HP - hp))}
         </Box>
       )}
+
+      <Box
+        ref={padChipRef}
+        data-testid="strike-pad-chip"
+        data-pad-state="off"
+        // display/text/state are written by StrikeRig on the telemetry tick
+        sx={{
+          display: 'none',
+          position: 'absolute',
+          top: 40,
+          left: '50%',
+          transform: 'translateX(-50%)',
+          px: 1,
+          py: 0.25,
+          borderRadius: 1,
+          bgcolor: alpha('#000', 0.5),
+          color: '#69f0ae',
+          fontFamily: 'monospace',
+          fontSize: 11,
+          letterSpacing: 0.5,
+          pointerEvents: 'none',
+          whiteSpace: 'nowrap',
+        }}
+      />
 
       {banner && (
         <Box

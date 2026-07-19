@@ -88,8 +88,24 @@ controls and gun dead, no enemy-bolt hits while tumbling), **costs one
 heart**, and respawns it on the pad. The counterweight is the pad itself:
 **resting on the spawn pad mid-wave restores one heart per 3 s** — the
 survival valve for the harder waves, since fast-evading enemies make
-clean sweeps difficult. The hearts row shows whenever hearts can change
-(crash mode on, or enemies shooting from wave 5).
+clean sweeps difficult. Healing works on **every wave** (not just the
+armed ones); it needs a missing heart, a live wave, and actually resting
+on the pad (altitude < 1.2 inside the pad circle). The hearts row shows
+whenever hearts can change (crash mode on, or enemies shooting from
+wave 5).
+
+**The pad is a marked safe zone.** A pulsing ring + light column
+(`SafePadRing`, driven by a shared state ref — cyan breathing when idle,
+green and faster while occupied) makes the pad read as live, and a status
+chip appears while resting: `SAFE ZONE · WEAPONS OFF · ♥ CHARGING/FULL`.
+While resting there, **enemies hold their fire and bolts already in
+flight pass through you — but your own gun is offline too** (the pad is
+for resting, not sniping). All of it keys off one `onPad` predicate in
+the rig (`data-safe` on the HUD, `data-pad-state` on the chip). The
+enemy-fire immunity was verified against a live armed build (ENEMY
+constants temporarily 1): immune + weapons off on the pad, hit within
+seconds off it, healed while immune on return; the committed suites
+assert the safe-zone contract itself.
 
 Taking a hit flashes a red **damage vignette** around the screen edge
 (imperative style writes from the hit path — the horizon-overlay pattern,

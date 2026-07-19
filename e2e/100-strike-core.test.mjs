@@ -37,6 +37,7 @@ for (const tid of [
   'strike-view-toggle',
   'strike-restart',
   'strike-damage',
+  'strike-pad-chip',
 ]) {
   const n = await page.locator(`[data-testid="${tid}"]`).count()
   check(`element ${tid} present`, n === 1, `count=${n}`)
@@ -47,6 +48,12 @@ for (const tid of [
 const damage = page.locator('[data-testid="strike-damage"]')
 check('vignette unflashed at rest', (await damage.getAttribute('data-flash')) === '0')
 check('low-hp edge off at full hearts', (await damage.getAttribute('data-low-hp')) === 'off')
+check(
+  'pad chip dormant off the pad',
+  (await page
+    .locator('[data-testid="strike-pad-chip"]')
+    .getAttribute('data-pad-state')) === 'off',
+)
 
 const root = page.locator('[data-testid="drone-strike-root"]')
 check(

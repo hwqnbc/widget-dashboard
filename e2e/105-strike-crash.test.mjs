@@ -112,6 +112,35 @@ while (Date.now() < healDeadline) {
 }
 check('pad rest restores the heart', healed)
 
+// Still parked on the pad — the safe-zone contract. (Immunity to live
+// enemy fire needs a wave-5 armed build; verified on the dev build, see
+// docs/drone-strike.md.)
+check('safe zone reported on the pad', (await hud.getAttribute('data-safe')) === 'on')
+const padChip = page.locator('[data-testid="strike-pad-chip"]')
+check(
+  'pad chip shows full after the heal',
+  (await padChip.getAttribute('data-pad-state')) === 'safe',
+)
+const shotsOnPad = parseInt(await hud.getAttribute('data-shots'), 10)
+await page.keyboard.down('Space')
+await page.waitForTimeout(800)
+await page.keyboard.up('Space')
+check(
+  'weapons offline while resting',
+  parseInt(await hud.getAttribute('data-shots'), 10) === shotsOnPad,
+)
+await pilot.touchStart()
+await pilot.touch(0, 1, 0, 0)
+await page.waitForTimeout(1200)
+await pilot.touch(0, 0, 0, 0)
+await pilot.touchEnd()
+await page.waitForTimeout(500)
+check('leaving the pad drops the safe zone', (await hud.getAttribute('data-safe')) === 'off')
+check(
+  'pad chip hides off the pad',
+  (await padChip.getAttribute('data-pad-state')) === 'off',
+)
+
 // Safe mode: the same ram only pins against the wall.
 await setStrikeSwitch(page, 'strike-crash-toggle', false)
 await pilot.touchStart()

@@ -73,6 +73,15 @@ const NO_TARGETS: TargetState[] = []
 /** Seconds resting on the spawn pad to restore one heart. */
 const HEART_RECHARGE_S = 3
 
+/** Resting inside the pad zone: essentially landed, within the pad circle. */
+function onPad(flight: FlightState): boolean {
+  return (
+    flight.pos.y < 1.2 &&
+    Math.hypot(flight.pos.x - PAD_CENTER.x, flight.pos.z - PAD_CENTER.z) <=
+      PAD_START_RADIUS
+  )
+}
+
 /** Transient crash-tumble state, owned by the body, mutated here (the
  * body creates the literal — same split as the sim's DroneRig). */
 export interface CrashState {
@@ -130,6 +139,8 @@ export default function StrikeRig({
   onCrashEnd,
   canHeal,
   onHeal,
+  padStateRef,
+  padChipRef,
   targets,
   enemyAI,
   enemiesShoot,
@@ -179,6 +190,10 @@ export default function StrikeRig({
   /** Resting on the spawn pad restores hearts while this is true. */
   canHeal: boolean
   onHeal: () => void
+  /** Safe-pad visual state, read by SafePadRing inside the canvas. */
+  padStateRef: { current: 'idle' | 'active' }
+  /** Pad status chip — display/text/state written when it changes. */
+  padChipRef: RefObject<HTMLDivElement | null>
   targets: TargetState[]
   /** Parallel AI slots for the 'enemy' targets. */
   enemyAI: EnemyAIState[]
@@ -261,10 +276,7 @@ export default function StrikeRig({
     } else {
       // The spawn pad is the service station: it recharges the battery and
       // (while a wave is live) restores hearts.
-      const onSpawnPad =
-        flight.pos.y < 1.2 &&
-        Math.hypot(flight.pos.x - PAD_CENTER.x, flight.pos.z - PAD_CENTER.z) <=
-          PAD_START_RADIUS
+      const onSpawnPad = onPad(flight)
 
       // Battery bookkeeping first — a dead battery kills the sticks (gentle
       // auto-descent) and unpowers the gun until a pad recharge revives it.
@@ -311,6 +323,12 @@ export default function StrikeRig({
       }
     }
 
+    // Safe zone: resting on the pad (post-step position). Enemies hold
+    // their fire, bolts in flight pass through, and the player's own gun
+    // goes offline — the pad is for resting, not sniping.
+    const playerSafe = !crash.active && onPad(flight)
+    padStateRef.current = playerSafe ? 'active' : 'idle'
+
     // Aim direction = the FPV camera forward (minus recoil, which is a
     // visual kick only): yaw + tilt follow + the gyro offset. In acro the
     // follow is 1:1 — pitching the drone is the vertical aim.
@@ -336,7 +354,7 @@ export default function StrikeRig({
           flight.pos,
           fireDir,
           colliders,
-          enemiesShoot,
+          enemiesShoot && !playerSafe,
           combat.enemy,
           ENEMY_BOLT,
         )
@@ -375,6 +393,7 @@ export default function StrikeRig({
     const wantsFire =
       waveActive &&
       !crash.active &&
+      !playerSafe &&
       !(batteryMode && battery.dead) &&
       (fireHeldRef.current ||
         gamepadFireHeld() ||
@@ -426,7 +445,7 @@ export default function StrikeRig({
       dt,
       colliders,
       NO_TARGETS,
-      waveActive && !crash.active ? flight.pos : null,
+      waveActive && !crash.active && !playerSafe ? flight.pos : null,
       PLAYER_HIT_RADIUS,
       events,
     )
@@ -494,6 +513,7 @@ export default function StrikeRig({
         hud.dataset.enemyProj = String(enemyProj)
         hud.dataset.hp = String(hp)
         hud.dataset.crashState = crash.active ? 'tumbling' : 'none'
+        hud.dataset.safe = playerSafe ? 'on' : 'off'
         hud.dataset.zoom = zoom ? 'on' : 'off'
         hud.dataset.inputSource = external.current.owner ?? 'touch'
         // Nearest alive target — the closed-loop aim beacon for the e2e
@@ -526,6 +546,18 @@ export default function StrikeRig({
         chip.textContent = `WAVE ${wave} · SCORE ${scoreRef.current}`
         chip.dataset.score = String(scoreRef.current)
         chip.dataset.wave = String(wave)
+      }
+      const padChip = padChipRef.current
+      if (padChip) {
+        const state = playerSafe ? (canHeal ? 'charging' : 'safe') : 'off'
+        if (padChip.dataset.padState !== state) {
+          padChip.dataset.padState = state
+          padChip.style.display = state === 'off' ? 'none' : 'block'
+          padChip.textContent =
+            state === 'charging'
+              ? 'SAFE ZONE · WEAPONS OFF · ♥ CHARGING'
+              : 'SAFE ZONE · WEAPONS OFF · ♥ FULL'
+        }
       }
       const bar = batteryBarRef.current
       if (bar) {
