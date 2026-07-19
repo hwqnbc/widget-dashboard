@@ -46,9 +46,27 @@ const reticleLeft = async () =>
     .evaluate((el) => el.style.left)
 
 check('wave 1 goes active', await waitForWaveState(page, 'active'))
-check('reticle (gimbal) mode by default', (await root.getAttribute('data-aim-mode')) === 'gimbal')
+
+// --- Classic is the default: original fly-to-aim, gimbal frozen ---
+check('classic mode by default', (await root.getAttribute('data-aim-mode')) === 'classic')
+await dragAim(page, context, 120, 120)
+await page.waitForTimeout(300)
+const gc = await gimbal()
+check(
+  'classic ignores drag (gimbal frozen at boresight)',
+  Math.abs(gc.yaw) < 0.01 && Math.abs(gc.pitch) < 0.01,
+  `yaw=${gc.yaw} pitch=${gc.pitch}`,
+)
+check('classic reticle stays centred', (await reticleLeft()) === '')
+
+// Switch to Reticle (gimbal) for the drag/track/reticle tests below.
+await openStrikeSettings(page)
+await page.locator('[data-testid="strike-aimmode-gimbal"]').click()
+await page.waitForTimeout(150)
+await closeStrikeSettings(page)
+check('reticle (gimbal) mode set', (await root.getAttribute('data-aim-mode')) === 'gimbal')
 const g0 = await gimbal()
-check('gimbal centred at start', Math.abs(g0.yaw) < 0.01 && Math.abs(g0.pitch) < 0.01)
+check('gimbal centred on entry', Math.abs(g0.yaw) < 0.01 && Math.abs(g0.pitch) < 0.01)
 
 // Drag right → aim right (yaw negative), reticle element moves right.
 await dragAim(page, context, 90, 0)
@@ -216,6 +234,6 @@ check('right stick slews the gimbal up', gh1.pitch > gh0.pitch + 0.2, `${gh0.pit
 // --- persistence ---
 await page.reload({ waitUntil: 'networkidle' })
 await page.waitForSelector('[data-testid="drone-strike-root"]')
-check('aim mode persists across reload', (await root.getAttribute('data-aim-mode')) === 'hover')
+check('aim mode persists across reload (hover)', (await root.getAttribute('data-aim-mode')) === 'hover')
 
 await finish(browser)

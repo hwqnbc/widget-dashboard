@@ -160,7 +160,7 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
   const autoFire = useWidgetField(id, 'autoFire', false)
   const aimAssist = useWidgetField<AimAssistLevel>(id, 'aimAssist', 'mild', coerceAimAssist)
   const gyroMode = useWidgetField<GyroMode>(id, 'gyroAim', 'off', coerceGyroMode)
-  const aimMode = useWidgetField<AimMode>(id, 'aimMode', 'gimbal', coerceAimMode)
+  const aimMode = useWidgetField<AimMode>(id, 'aimMode', 'classic', coerceAimMode)
   const richWorld = useWidgetField(id, 'richWorld', true)
   const rateSpeed = useWidgetField(id, 'rateSpeed', 1, coerceRate)
   const rateYaw = useWidgetField(id, 'rateYaw', 1, coerceRate)
@@ -621,11 +621,15 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
           const dy = e.clientY - d.y
           if (!d.moved && Math.hypot(dx, dy) > 6) d.moved = true
           if (d.moved) {
-            const sens = DRAG_SENS * (zoom ? 0.5 : 1)
-            // Drag right aims right (yaw decreases — yaw+ is left); drag
-            // up aims up.
-            slewGimbal(gimbalRef.current, -dx * sens, -dy * sens)
-            aimInputRef.current = performance.now()
+            // Classic mode has no gimbal — drag doesn't aim (a mouse click
+            // still fires; the drag just tracks so it isn't a stray shot).
+            if (aimMode !== 'classic') {
+              const sens = DRAG_SENS * (zoom ? 0.5 : 1)
+              // Drag right aims right (yaw decreases — yaw+ is left); drag
+              // up aims up.
+              slewGimbal(gimbalRef.current, -dx * sens, -dy * sens)
+              aimInputRef.current = performance.now()
+            }
             d.x = e.clientX
             d.y = e.clientY
           }

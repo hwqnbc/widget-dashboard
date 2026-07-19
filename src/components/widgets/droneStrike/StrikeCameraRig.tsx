@@ -100,7 +100,9 @@ export default function StrikeCameraRig({
     // Gunner/hover: the camera IS the gimbal view (sensor-operator screen);
     // gimbal mode keeps the camera flight-locked and the reticle moves.
     const gimbal = gimbalRef.current
-    const camGimbal = aimMode === 'gimbal' ? 0 : 1
+    // Only Gunner/Hover slew the camera; Classic and Reticle keep it
+    // flight-locked (Classic's gimbal is 0 anyway).
+    const camGimbal = aimMode === 'gunner' || aimMode === 'hover' ? 1 : 0
     const pitch = Math.min(
       GIMBAL_PITCH_MAX,
       Math.max(

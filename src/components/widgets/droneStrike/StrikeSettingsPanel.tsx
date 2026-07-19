@@ -143,7 +143,7 @@ export default function StrikeSettingsPanel({
           <ListItem disableGutters sx={{ py: 0.5 }}>
             <ListItemText
               primary="Aim control"
-              secondary="How the gun gimbal is aimed. Reticle: drag the scene, the reticle moves in your view. Gunner: dragging slews the camera itself. Hover: the right stick aims while the drone holds position. Double-tap the scene to recenter."
+              secondary="Classic: original fly-to-aim, gun fixed straight ahead. Reticle: drag the scene, the reticle moves in your view. Gunner: dragging slews the camera. Hover: the right stick aims while the drone holds position. (The gimbal modes add soft target tracking; double-tap the scene to recenter.)"
               slotProps={{ primary: { sx: { fontWeight: 600 } }, secondary: { sx: { fontSize: 12 } } }}
             />
             <ToggleButtonGroup
@@ -157,6 +157,9 @@ export default function StrikeSettingsPanel({
               }}
               sx={{ ml: 1.5, flexShrink: 0 }}
             >
+              <ToggleButton value="classic" data-testid="strike-aimmode-classic">
+                Classic
+              </ToggleButton>
               <ToggleButton value="gimbal" data-testid="strike-aimmode-gimbal">
                 Reticle
               </ToggleButton>

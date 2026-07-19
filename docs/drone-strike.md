@@ -30,11 +30,16 @@ Key decisions:
   yaw ±60°, pitch **+20°…−70°** (the deep look-down that makes ground
   targets and fast movers reachable — impossible with the old tiny FPV
   pitch follow). Dragging the free scene area slews it (`DRAG_SENS`, halved
-  while scoped); double-tap/double-click recenters (a centred gimbal is
-  exactly the old fly-to-aim, so nothing was taken away). Settings' **Aim
-  control** switches three modes to compare (persisted `aimMode`, default
-  Reticle):
-  - **Reticle** (default): the camera stays flight-locked and the reticle
+  while scoped); double-tap/double-click recenters. Settings' **Aim
+  control** switches four modes to compare (persisted `aimMode`, default
+  Classic):
+  - **Classic** (default): the original fly-to-aim — the gimbal is frozen
+    at boresight, drag does nothing, and neither soft-track nor
+    idle-recenter run. The gun points straight out the nose, reticle fixed
+    dead-centre. Aim assist still does its original work (wider lock cone +
+    bolt-bend on a locked shot); it just never moves the reticle. The
+    calmest, most predictable feel — nothing grabs your aim.
+  - **Reticle**: the camera stays flight-locked and the reticle
     moves across the view to where the gun points — you keep full sight of
     where you're flying.
   - **Gunner**: the camera itself slews with the gimbal (the sensor-operator
@@ -42,8 +47,9 @@ Key decisions:
   - **Hover**: gunner camera + the right stick becomes the gimbal aim while
     the drone holds position (altitude-hold) — the two-crew feel, one
     control at a time.
-- **Soft track on lock.** Once the reticle acquires a lock (and aim assist
-  ≠ off), the gimbal gently follows the velocity-led target within its arc
+- **Soft track on lock** (gimbal modes only — not Classic). Once the
+  reticle acquires a lock (and aim assist ≠ off), the gimbal gently follows
+  the velocity-led target within its arc
   (`trackToward`, `TRACK_RATE`×`{mild .5, strong 1}`) — the sensor
   operator's track mode, which is what actually makes fast-evading enemy
   drones hittable. You still acquire the lock and fire; manual drag layers

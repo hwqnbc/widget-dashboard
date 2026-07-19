@@ -14,10 +14,15 @@
  *    control while lateral flight input is ignored (altitude-hold hovers).
  */
 
-export type AimMode = 'gimbal' | 'gunner' | 'hover'
+/** 'classic' = the original fly-to-aim (gimbal frozen at boresight, no
+ * drag, no soft-track — the pre-gimbal behaviour) and the default. The
+ * other three are the gimbal modes. */
+export type AimMode = 'classic' | 'gimbal' | 'gunner' | 'hover'
 
 export const coerceAimMode = (v: unknown): AimMode | undefined =>
-  v === 'gimbal' || v === 'gunner' || v === 'hover' ? v : undefined
+  v === 'classic' || v === 'gimbal' || v === 'gunner' || v === 'hover'
+    ? v
+    : undefined
 
 /** Yaw arc, radians (±60°) relative to the nose. */
 export const GIMBAL_YAW_MAX = 1.05

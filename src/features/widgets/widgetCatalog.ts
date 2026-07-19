@@ -187,7 +187,7 @@ export function defaultWidgetData(type: WidgetType): Record<string, unknown> {
         view: 'fp',
         autoFire: false,
         aimAssist: 'mild',
-        aimMode: 'gimbal',
+        aimMode: 'classic',
         gyroAim: 'off',
         minimap: true,
         richWorld: true,

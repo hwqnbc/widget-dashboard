@@ -368,6 +368,10 @@ export default function StrikeRig({
     const gimbal = gimbalRef.current
     const basePitch = flight.tiltPitch * fpvPitchGain(zoom, flightMode)
 
+    // Classic (default) is the original fly-to-aim: the gimbal stays frozen
+    // at boresight — no hover-stick slew, no soft-track, no idle-recenter.
+    const gimballed = aimMode !== 'classic'
+
     // Hover mode: the right stick (touch or arrow keys — both feed the
     // same shared ControlInput) slews the gimbal at a rate.
     if (aimMode === 'hover' && !crash.active) {
@@ -386,7 +390,7 @@ export default function StrikeRig({
     // Soft track: while last frame's lock is alive, the gimbal slews toward
     // the led target (error-reducing, arc-clamped, strength per assist) —
     // the sensor-operator's track mode that makes fast evaders hittable.
-    const trackMult = TRACK_MULT[assist]
+    const trackMult = gimballed ? TRACK_MULT[assist] : 0
     const tracking =
       trackMult > 0 && lockIdxRef.current >= 0 && !crash.active &&
       targets[lockIdxRef.current]?.alive
