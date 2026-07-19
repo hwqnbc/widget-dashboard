@@ -66,6 +66,17 @@ feature's design note (`docs/drone-sim.md` or the relevant `docs/*.md`),
 whenever the round produced a reusable lesson (a recurring refinement, a
 debugging insight, a pattern worth repeating).
 
+**Every new game widget ships with a gameplay backlog.** Whenever a new
+game widget is created (and whenever a round ships a feature to one), its
+design note ends with a **"Future work (enhancement backlog)"** section —
+an enhancement menu proposing gameplay modes, settings, enemies/AI,
+controls & feel, and meta ideas, each with the integration point it would
+build on (see `docs/drone-sim.md`, `docs/drone-strike.md`,
+`docs/tank-battle.md` for the pattern). Keep it current: mark items
+~~shipped~~ (moving the detail into the doc body) as they land, and add
+new ideas discovered while building. The backlog is what the user picks
+the next round from — never leave a new game without one.
+
 ## Stack
 
 - Vite 8 + React 19 + TypeScript (strict, `verbatimModuleSyntax` — use

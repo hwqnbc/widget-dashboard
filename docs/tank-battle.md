@@ -171,32 +171,100 @@ over the contour, driving is part of aiming (no lock until LOS clears).
 
 ## Future work (enhancement backlog)
 
+Everything above is shipped. The backlog below is the enhancement menu for
+future rounds, with the integration point each idea would build on (the
+drone docs keep the same kind of list).
+
+### Gameplay & modes
+- **Difficulty setting** (Easy/Normal/Hard) — scale enemy count, aim
+  scatter (`aimErr`), reload stagger and `ENGAGE_RANGE`; every constant
+  already flows from `buildTankWave`/`tankAI`, so it's one multiplier
+  argument plus a settings ToggleButtonGroup (the same shape the strike
+  backlog planned).
+- **Boss wave every 5th** — one fortress heavy with a slow one-shot gun
+  and weak-point spheres (extra `TankHittable`s attached to its pose — the
+  sweep loop already takes an arbitrary target list) and a health-bar chip.
+- **Capture zones in roam** — 2–3 seeded flat discs (`LandingPads`-style
+  pulsing rings); holding one drains a capture meter while enemies inside
+  `ENGAGE_RANGE` contest it. An alternative win condition to killing the
+  whole garrison.
+- **Convoy escort** — a scripted friendly truck follows a seeded
+  waypoint path (`operatorWalk`-style pure stepper on `heightAt`); waves
+  spawn along the route; it ends when the truck arrives or dies.
+- **Checkpoint circuit (time trial on tracks)** — the drone sim's lap
+  machine over ground gates: seeded flag pairs, `lapTimer` reuse nearly
+  verbatim, best lap persisted. Driving-only mode — the contour is the
+  course.
+- **Repair / ammo crates** — seeded rooftop-pad-style discs granting +1 HP
+  or a reload-speed buff for a wave; touch detection is one distance check
+  in the rig.
+- **Smoke screen ability** — a button that spawns a `RainField`-pattern
+  particle puff and suppresses `tankLOS` through its sphere for ~8 s;
+  breaks enemy locks, creates flanking play. Cooldown-gated.
+- **Daily seed battle** — "today's battlefield": seed `worldSeed` from the
+  date (computed in the body, never in the pure modules) so households
+  compare scores on the same map.
+
+### Enemies & AI
+- **Enemy variety** — a *scout* (fast, weak, circles to your flank — a
+  patrol circle centred on YOU), a *tank destroyer* (long range, heavy
+  damage, but no turret: it must halt and pivot its whole hull — telegraphed
+  and punishable), an *SPG* (lobs from far beyond `ENGAGE_RANGE` on a long
+  cooldown with a ground-marker warning where the shell will land). Each is
+  one more branch in `stepEnemyTank` + a spec flag.
+- **Flanking pairs** — when two enemies engage the same player position,
+  offset their approach headings ±40° (they currently converge head-on);
+  pure geometry in the engage branch.
+- **Retreat & repair** — under 1 HP, disengage to the anchor and slowly
+  heal; punishes half-finished fights, rewards pushes.
+
 ### Controls & feel
 - **Auto-turn hull** — hull follows the camera heading while driving (the
   WoT Blitz convenience); a settings switch feeding the hull-yaw target.
-- **Left-handed mirror** — swap stick roles + move fire/scope left.
+- **Left-handed mirror** — swap stick roles + move fire/scope left; the
+  sticks/buttons are already position-props.
 - **Mouse-look** — pointer-lock camera on desktop; today the mouse only
   fires/scopes and arrows aim.
+- **Adjustable zoom power** — the 2.1× scope is fixed constants
+  (`TANK_ZOOM_FOV`/`ZOOM_SENS`); a 1.5–4× slider scales both together
+  (shared idea with the strike backlog).
+- **Engine feel** — subtle speed-scaled camera shake + a gear-shift pause
+  in `TANK_ACCEL` at half throttle; pure cosmetics in the camera rig.
 
-### Combat
-- **Weapon variety** — `ShellSpec` is pure config: an MG (fast, hitscanish,
-  no splash) or artillery (high arc, big splash, long reload) are data +
-  a selector.
+### Combat & weapons
+- **Weapon variety** — `ShellSpec` is pure config: an MG (fast, near-flat,
+  no splash, heat meter instead of reload) or artillery (high arc, big
+  splash, long reload) are data + a selector; the integrator and sweeps
+  need no changes.
 - **Armour facing** — the `ShellHit` carries the impact point; dot it with
-  the hull heading for front/side/rear damage multipliers.
+  the hull heading for front/side/rear damage multipliers, and show
+  RICOCHET on a bounced front hit. Makes the enemy hull-turn in engage
+  meaningful.
 - **Trajectory hint** — sample the shell integrator into a ghost polyline
-  while aiming (the drone GhostLine pattern); would soften the arc's
-  learning curve.
+  while aiming (the drone `GhostLine` pattern); would soften the arc's
+  learning curve, especially for max-arc lobs past the greyed reticle.
+- **Impact effects** — pooled one-shot dirt-plume particles at `ShellHit`
+  coordinates (the RainField single-draw-call Points pattern) + a scorch
+  decal circle.
 
-### World & modes
-- **Objectives in roam** — capture zones or a convoy escort on top of the
-  garrison hunt.
+### World & settings
 - **Bridges / water** — a below-zero water plane with drowning damage
   would make basins matter; needs a ford-depth rule in `stepTank`.
-- **Night battle** — the NIGHT_PALETTE exists; add a headlight spot.
+- **Night battle** — the `NIGHT_PALETTE` exists; add a headlight spotlight
+  cone and tighter fog. A settings switch, not theme-driven.
+- **Radar realism toggle** — minimap blips only for enemies you currently
+  hold LOS to (the `tankLOS` result is already computed per enemy per
+  frame); turns the minimap from wallhack into recon.
+- **Trees as soft cover** — trees currently ghost; making them shell-
+  blocking (segment-vs-cylinder) but tank-passable (drive-through crunch +
+  falling tree) is one more sweep target and a scenery animation.
 
 ### Meta
-- **Sound** — engine hum pitched by speed, shell whistle, impact thud
-  (Web Audio, no assets).
+- **Sound** — Web Audio, no assets: engine hum pitched by speed, shell
+  whistle scaled by arc time, impact thud, reload clunk, enemy-shot warning
+  whistle (the AI knows — `fireCooldown` crossing zero).
 - **Kill cam / hit direction indicator** — the damage vignette flashes
-  uniformly; a directional arc toward the shooter is one transform.
+  uniformly; a directional arc toward the shooter is one transform from
+  the enemy-shell hit event.
+- **Accuracy stats** — persist per-run accuracy (`hits/shots`) beside
+  `bestScore`, shown on the best chip.
