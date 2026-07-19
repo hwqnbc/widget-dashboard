@@ -9,12 +9,12 @@ import { Box } from '@mui/material'
  * re-renders React. `data-flash` counts the flashes (the e2e-observable
  * side of the effect).
  */
-const DamageVignette = forwardRef<HTMLDivElement, { lowHp: boolean }>(
-  function DamageVignette({ lowHp }, ref) {
+const DamageVignette = forwardRef<HTMLDivElement, { lowHp: boolean; testId?: string }>(
+  function DamageVignette({ lowHp, testId = 'strike-damage' }, ref) {
     return (
       <Box
         ref={ref}
-        data-testid="strike-damage"
+        data-testid={testId}
         data-flash="0"
         data-low-hp={lowHp ? 'on' : 'off'}
         sx={{

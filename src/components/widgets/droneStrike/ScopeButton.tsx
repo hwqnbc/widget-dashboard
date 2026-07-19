@@ -13,15 +13,17 @@ export default function ScopeButton({
   zoom,
   onToggle,
   sx,
+  testId = 'strike-zoom',
 }: {
   size: number
   zoom: boolean
   onToggle: () => void
   sx?: SxProps<Theme>
+  testId?: string
 }) {
   return (
     <Box
-      data-testid="strike-zoom"
+      data-testid={testId}
       data-zoom={zoom ? 'on' : 'off'}
       onContextMenu={(e) => e.preventDefault()}
       onClick={onToggle}

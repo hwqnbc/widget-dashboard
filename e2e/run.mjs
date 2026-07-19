@@ -54,6 +54,24 @@ const strikeBundle = spawnSync(
 )
 if (strikeBundle.status !== 0) process.exit(strikeBundle.status ?? 1)
 
+// Tank Battle's pure modules — third flat pass, same reasoning.
+const tankBundle = spawnSync(
+  'npx',
+  [
+    'esbuild',
+    'src/components/widgets/tankBattle/terrain.ts',
+    'src/components/widgets/tankBattle/tankModel.ts',
+    'src/components/widgets/tankBattle/shellModel.ts',
+    'src/components/widgets/tankBattle/battleLayout.ts',
+    'src/components/widgets/tankBattle/tankAI.ts',
+    '--bundle',
+    '--format=esm',
+    `--outdir=${join(here, '.bundle')}`,
+  ],
+  { cwd: root, stdio: 'inherit' },
+)
+if (tankBundle.status !== 0) process.exit(tankBundle.status ?? 1)
+
 // 2. Start the dev server and wait for it.
 const server = spawn('npx', ['vite', '--port', PORT, '--strictPort'], {
   cwd: root,

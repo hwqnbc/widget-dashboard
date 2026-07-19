@@ -1,6 +1,7 @@
 import type { WidgetType } from './types'
-// Data-only module (no components/React) — safe for the catalog to import.
+// Data-only modules (no components/React) — safe for the catalog to import.
 import { DEFAULT_SEED } from '../../components/widgets/droneSim/worldLayout'
+import { DEFAULT_TANK_SEED } from '../../components/widgets/tankBattle/terrain'
 
 /**
  * Static metadata about each widget type. Kept free of component imports so
@@ -90,6 +91,13 @@ export const WIDGET_CATALOG: WidgetMeta[] = [
     type: 'droneStrike',
     title: 'Drone Strike',
     description: 'FPV drone shooting game — fly to aim, clear the waves',
+    defaultSize: { w: 6, h: 6, minW: 5, minH: 5 },
+    preferredOrientation: 'landscape',
+  },
+  {
+    type: 'tankBattle',
+    title: 'Tank Battle',
+    description: 'Drive a tank over contoured terrain — hunt enemy armour',
     defaultSize: { w: 6, h: 6, minW: 5, minH: 5 },
     preferredOrientation: 'landscape',
   },
@@ -189,6 +197,23 @@ export function defaultWidgetData(type: WidgetType): Record<string, unknown> {
         stickExpo: 0,
         turbo: false,
         battery: false,
+      }
+    case 'tankBattle':
+      return {
+        worldSeed: DEFAULT_TANK_SEED,
+        battleMode: 'waves',
+        roughness: 'rolling',
+        bestWave: 0,
+        bestScore: 0,
+        bestRoamMs: 0,
+        autoFire: false,
+        aimAssist: 'mild',
+        gyroAim: 'off',
+        minimap: true,
+        weather: 'clear',
+        rateSpeed: 1,
+        rateTraverse: 1,
+        stickExpo: 0,
       }
     case 'clock':
     default:

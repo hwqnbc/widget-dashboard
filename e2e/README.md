@@ -1,4 +1,4 @@
-# Drone Sim + Drone Strike end-to-end suites
+# Drone Sim + Drone Strike + Tank Battle end-to-end suites
 
 Headless-Chromium tests that drive the real app and assert on the widgets'
 public test contract — `data-testid` hooks and the `data-*` telemetry the HUD
@@ -10,7 +10,8 @@ walls reliably).
 ```bash
 npm run e2e            # all suites (starts its own dev server on :5199)
 npm run e2e crash      # only suites whose filename matches "crash"
-npm run e2e strike     # the Drone Strike suites (100-102)
+npm run e2e strike     # the Drone Strike suites (100-103)
+npm run e2e tank       # the Tank Battle suites (110-112)
 ```
 
 Environment:
@@ -21,8 +22,9 @@ Environment:
 - `E2E_PORT` — dev-server port (default 5199).
 
 The runner bundles the widgets' pure modules (`flightModel`, `worldLayout`,
-`lapTimer`, and Drone Strike's `combatModel`/`waveLayout` in a second flat
-pass) with esbuild into `e2e/.bundle/` so suites can compute waypoints and
+`lapTimer`, Drone Strike's `combatModel`/`waveLayout`, and Tank Battle's
+`terrain`/`tankModel`/`shellModel`/`battleLayout`/`tankAI` in later flat
+passes) with esbuild into `e2e/.bundle/` so suites can compute waypoints and
 expected wave compositions from the real (seeded, deterministic) layouts.
 Screenshots land in `e2e/.artifacts/`. Both directories are gitignored.
 
@@ -58,10 +60,17 @@ mode state from the widget root's `data-*` attributes via
 | `102-strike-input` | multi-touch (stick climbs while a second finger holds fire), keyboard W + Space with `data-input-source` arbitration, aim-assist/gyro-mode/auto-fire settings round-trips, hands-off auto-fire kill, progress-guarded restart |
 | `103-strike-zoom` | ADS/zoom: scope-button toggle (`data-zoom` on root/HUD/reticle), scoped yaw rate ≈ half measured closed-loop, firing while scoped, hold-Shift zoom, scoped assist cones tighter per level (pure module), gyro "Zoom only" mode, scope hidden + dropped outside FPV |
 | `104-strike-simports` | the sim-ported settings: hold brakes vs acro coasts (closed-loop), turbo ≈ 1.4× top speed, battery bar + effort drain + spawn-pad recharge + near-full transient restart, persistence of all three across reload |
+| `110-tank-core` | Tank Battle: element presence + root defaults, seeded wave-1 composition vs the pure module, terrain grounding (live `data-alt` matches the bundled `heightAt`), throttle/turn driving, camera-independent hull, turret traverse lag + settle, fire-button shot + reload gating, ADS zoom toggle |
+| `111-tank-combat` | closed-loop combat: no lock from spawn (terrain cover — the pilot must crest the ridge), two engage-and-kill runs clearing wave 1, wave 2 arrives with the seeded count + armed enemies, sky/ground ballistic-solution reticle contract, best score/wave persistence across reload, progress-guarded mode switch + cancel |
+| `112-tank-modes` | Waves ↔ Roam toggle (direct without progress), roam garrison size + 5-HP pool, terrain roughness reshaping (pure-module amplitude check), settings round-trips on the root, minimap toggle, reset-to-defaults keeps mode/roughness/seed, mode + roughness persistence across reload |
 
 Drone Strike suites steer with the same closed-loop rig (`createStrikePilot`)
 aimed at the HUD's nearest-target beacon (`data-tgt-*`); `engage()` fires via
 keyboard Space so the trigger never disturbs the sticks' touch ownership.
+Tank Battle suites use `createTankPilot` (left stick drives the hull, right
+stick steers the camera aim); its `engage()` drives INTO terrain line of
+sight first — over the contour there is usually no lock until the pilot
+crests the ridge — then fires on lock + ballistic solution.
 
 Routes must respect the game rules: laps only start under the drone's own
 power, and fast legs cruise **above** the skyline (24 — waypoint tolerance

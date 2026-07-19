@@ -437,3 +437,41 @@ is itself the meta-lesson: #28–#41 all carried over unchanged.
     no redux-persist migration, no new key, and the settings reset keeps
     working because `defaultWidgetData` is still the single source of
     truth.
+
+## Terrain tank game (Tank Battle)
+
+The third WebGL widget — a heightfield instead of a flat city. #28–#46
+carried over; these are the new ones.
+
+48. **The R3F canvas is a separate React root with its own prop schedule —
+    never synchronously mutate shared game state that a stale canvas prop
+    can misread.** `restart()` emptied the enemy pool in the click handler;
+    the rig inside `<Canvas>` still held `battleActive=true` for a frame
+    (its props lag the body's commit) and saw "battle active, zero enemies
+    alive" — a phantom wave-clear that overrode the restart's own phase
+    change. Two-sided fix: don't empty the pool at all (the next load
+    replaces it — prefer replace-over-clear for pooled state), and make
+    the trigger transition-based (the clear check only arms after the
+    current active phase has actually SEEN targets alive). Corollary of
+    #28: props crossing the canvas bridge aren't just contexts that don't
+    reach — they're also a frame stale.
+
+49. **Give every physics/render/AI/test consumer the same analytic ground
+    function, and terrain becomes cheap.** One pure seeded `heightAt(x,z)`
+    (sines + gaussian hills) drives the displaced mesh, four-corner tank
+    grounding (y from the corner average, pitch/roll from the differences,
+    damped), grade-limited driving, shell sweeps, enemy line of sight, the
+    camera's ground clamp and the e2e suites' predictions — no raycasts,
+    no physics engine, no image heightmap, and rendering can never
+    disagree with collision. Flatten the spawn area with an envelope
+    factor rather than special-casing, so every seed starts level.
+
+50. **Realistic constants can be unplayable at game scale — tune limits to
+    the terrain you actually generate, and never let a limit eat the
+    trigger.** The gun's scale-realistic −8° depression made every
+    downhill shot unsolvable on hills the generator produces constantly
+    (the closed-loop pilot found it: permanent `sol=none` at a valid
+    lock). Widened to −22° AND the trigger fires a max-arc lob even
+    without a solution — greying the reticle is feedback, refusing the
+    button press reads as a broken control (auto-fire still demands a
+    real solution, so assists never lob into a hill).

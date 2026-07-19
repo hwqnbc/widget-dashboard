@@ -180,6 +180,12 @@ the Drone Sim's flight model and city — fly-to-aim reticle, fire button +
 auto-fire, aim assist with target leading, segment-swept tracer bolts,
 seeded waves with enemy AI drones, ADS zoom with three gyro fine-aim modes,
 and the recorded hitscan/ballistic weapon variants).
+See `docs/tank-battle.md` for the Tank Battle widget (the third WebGL
+widget — seeded analytic heightfield terrain with four-corner tank
+grounding and grade limits, WoT-style controls: left stick drives the hull,
+right stick orbits the camera with the turret chasing it, automatic gun
+elevation via a ballistic solver, Waves/Roam mode toggle, patrol/engage/
+attack enemy tank AI with terrain line of sight).
 See `docs/avatars.md` for the avatar system (seat-vs-avatar model, the per-avatar
 character folders, the catalog/registry split, the Settings picker, and how to add
 a new figure). See `docs/fullscreen.md` for full-screen mode (the WidgetCard

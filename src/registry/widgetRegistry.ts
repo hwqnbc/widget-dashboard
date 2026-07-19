@@ -12,6 +12,7 @@ import MemoryWidget from '../components/widgets/MemoryWidget'
 import ArcheryWidget from '../components/widgets/ArcheryWidget'
 import DroneSimWidget from '../components/widgets/droneSim/DroneSimWidget'
 import DroneStrikeWidget from '../components/widgets/droneStrike/DroneStrikeWidget'
+import TankBattleWidget from '../components/widgets/tankBattle/TankBattleWidget'
 
 /** Props every widget component receives. */
 export interface WidgetProps {
@@ -32,4 +33,5 @@ export const widgetComponents: Record<WidgetType, ComponentType<WidgetProps>> = 
   archery: ArcheryWidget,
   droneSim: DroneSimWidget,
   droneStrike: DroneStrikeWidget,
+  tankBattle: TankBattleWidget,
 }

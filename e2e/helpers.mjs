@@ -286,9 +286,9 @@ export async function setStrikeSwitch(page, testId, desired) {
   await closeStrikeSettings(page)
 }
 
-/** Tap the fire button once via CDP touch (independent of the stick rig). */
-export async function tapFire(page, context, holdMs = 120) {
-  const c = await fireCenter(page)
+/** Tap a fire button once via CDP touch (independent of the stick rig). */
+export async function tapFire(page, context, holdMs = 120, testId = 'strike-fire') {
+  const c = await stickCenter(page, testId)
   const cdp = await context.newCDPSession(page)
   await cdp.send('Input.dispatchTouchEvent', {
     type: 'touchStart',
@@ -403,4 +403,211 @@ export async function createStrikePilot(page, context) {
   }
 
   return { touch, touchStart, touchEnd, flyTo, brake, engage, sticks: { L, R } }
+}
+
+/* ------------------------- Tank Battle (3D tanks) ------------------------ */
+
+/** Fresh dashboard with one Tank Battle widget, sim loop warmed up. */
+export async function addTankWidget(page) {
+  await page.goto(BASE_URL, { waitUntil: 'networkidle' })
+  await page.getByRole('button', { name: 'Add widget' }).click()
+  await page.getByRole('menuitem', { name: /Tank Battle/ }).click()
+  await page.waitForSelector('[data-testid="tank-battle-root"]')
+  await page.waitForTimeout(600)
+}
+
+/** Readers over the tank HUD/chip data-* attributes (the test contract). */
+export function tankReaders(page) {
+  const hud = page.locator('[data-testid="tank-hud"]')
+  const scoreChip = page.locator('[data-testid="tank-score"]')
+  return {
+    hud,
+    scoreChip,
+    telemetry: async () => ({
+      x: parseFloat(await hud.getAttribute('data-x')),
+      z: parseFloat(await hud.getAttribute('data-z')),
+      alt: parseFloat(await hud.getAttribute('data-alt')),
+      speed: parseFloat(await hud.getAttribute('data-speed')),
+      hullYaw: parseFloat(await hud.getAttribute('data-hull-yaw')),
+      turretYaw: parseFloat(await hud.getAttribute('data-turret-yaw')),
+      camYaw: parseFloat(await hud.getAttribute('data-cam-yaw')),
+      camPitch: parseFloat(await hud.getAttribute('data-cam-pitch')),
+      pitch: parseFloat(await hud.getAttribute('data-pitch')),
+      roll: parseFloat(await hud.getAttribute('data-roll')),
+    }),
+    combat: async () => ({
+      wave: parseInt(await hud.getAttribute('data-wave'), 10),
+      waveState: await hud.getAttribute('data-wave-state'),
+      score: parseInt(await hud.getAttribute('data-score'), 10),
+      shots: parseInt(await hud.getAttribute('data-shots'), 10),
+      hits: parseInt(await hud.getAttribute('data-hits'), 10),
+      targetsLeft: parseInt(await hud.getAttribute('data-targets-left'), 10),
+      lock: parseInt(await hud.getAttribute('data-lock'), 10),
+      sol: await hud.getAttribute('data-sol'),
+      reload: parseFloat(await hud.getAttribute('data-reload')),
+      hp: parseInt(await hud.getAttribute('data-hp'), 10),
+      enemyProj: parseInt((await hud.getAttribute('data-enemy-proj')) ?? '0', 10),
+    }),
+    target: async () => {
+      const kind = await hud.getAttribute('data-tgt-kind')
+      if (!kind || kind === 'none') return null
+      return {
+        kind,
+        x: parseFloat(await hud.getAttribute('data-tgt-x')),
+        y: parseFloat(await hud.getAttribute('data-tgt-y')),
+        z: parseFloat(await hud.getAttribute('data-tgt-z')),
+      }
+    },
+  }
+}
+
+/** Wait for the battle state machine, then settle two telemetry ticks
+ * (lesson #46 — React-owned state flips ahead of tick-owned counters). */
+export async function waitForTankState(page, state, timeout = 10000) {
+  const hud = page.locator('[data-testid="tank-hud"]')
+  const deadline = Date.now() + timeout
+  while (Date.now() < deadline) {
+    if ((await hud.getAttribute('data-wave-state')) === state) {
+      await page.waitForTimeout(350)
+      return true
+    }
+    await page.waitForTimeout(150)
+  }
+  return false
+}
+
+export async function openTankSettings(page) {
+  await page.locator('[data-testid="tank-settings"]').click()
+  await page.waitForSelector('[data-testid="tank-settings-panel"]')
+  await page.waitForTimeout(250)
+}
+
+export async function closeTankSettings(page) {
+  await page.keyboard.press('Escape')
+  await page.waitForTimeout(350)
+}
+
+export async function setTankSwitch(page, testId, desired) {
+  await openTankSettings(page)
+  const input = page.locator(`[data-testid="${testId}"] input`)
+  if ((await input.isChecked()) !== desired) {
+    await input.click()
+    await page.waitForTimeout(150)
+  }
+  await closeTankSettings(page)
+}
+
+/**
+ * Tank pilot: twin-stick CDP rig for the tank controls. Left stick drives
+ * the hull, right stick steers the camera aim (the turret chases it).
+ * `engage()` closes into terrain line of sight on the HUD's nearest-enemy
+ * beacon — over the contour, driving is PART of aiming: spawn usually has
+ * no lock until the pilot crests the ridge — then holds fire (keyboard
+ * Space) whenever locked with a ballistic solution, until a target drops.
+ */
+export async function createTankPilot(page, context) {
+  const L = await stickCenter(page, 'tank-joystick-left')
+  const R = await stickCenter(page, 'tank-joystick-right')
+  const REACH = 40
+  const cdp = await context.newCDPSession(page)
+  const { telemetry, combat, target } = tankReaders(page)
+  const wrapA = (a) => Math.atan2(Math.sin(a), Math.cos(a))
+  const clampV = (v, lo, hi) => Math.min(hi, Math.max(lo, v))
+
+  const touch = (lx, ly, rx, ry) =>
+    cdp.send('Input.dispatchTouchEvent', {
+      type: 'touchMove',
+      touchPoints: [
+        { x: L.x + lx * REACH, y: L.y - ly * REACH, id: 1 },
+        { x: R.x + rx * REACH, y: R.y - ry * REACH, id: 2 },
+      ],
+    })
+  const touchStart = () =>
+    cdp.send('Input.dispatchTouchEvent', {
+      type: 'touchStart',
+      touchPoints: [
+        { x: L.x, y: L.y, id: 1 },
+        { x: R.x, y: R.y, id: 2 },
+      ],
+    })
+  const touchEnd = () =>
+    cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
+
+  /** Drive the hull to a ground waypoint (x, z). */
+  const driveTo = async (wp, { tol = 3, timeout = 45000 } = {}) => {
+    const deadline = Date.now() + timeout
+    while (Date.now() < deadline) {
+      const t = await telemetry()
+      const dx = wp.x - t.x
+      const dz = wp.z - t.z
+      const dxz = Math.hypot(dx, dz)
+      if (dxz < tol) {
+        await touch(0, 0, 0, 0)
+        return true
+      }
+      const err = wrapA(Math.atan2(-dx, -dz) - t.hullYaw)
+      const lx = clampV(-1.6 * err, -1, 1)
+      const ly = Math.abs(err) < 0.5 ? 0.9 : 0
+      await touch(lx, ly, 0, 0)
+      await page.waitForTimeout(140)
+    }
+    return false
+  }
+
+  /**
+   * Hunt the beacon target: drive into range/LOS, keep the reticle on it,
+   * fire on lock+solution. Returns true once `data-targets-left` drops.
+   */
+  const engage = async ({ timeout = 120000 } = {}) => {
+    const start = (await combat()).targetsLeft
+    if (start === 0) return true
+    const deadline = Date.now() + timeout
+    let firing = false
+    const setFire = async (on) => {
+      if (on === firing) return
+      firing = on
+      if (on) await page.keyboard.down('Space')
+      else await page.keyboard.up('Space')
+    }
+    try {
+      while (Date.now() < deadline) {
+        const c = await combat()
+        if (c.waveState !== 'active') {
+          await setFire(false)
+          await touch(0, 0, 0, 0)
+          if (c.targetsLeft < start) return true
+          await page.waitForTimeout(200)
+          continue
+        }
+        if (c.targetsLeft < start) return true
+        const tgt = await target()
+        if (!tgt) {
+          await touch(0, 0, 0, 0)
+          await page.waitForTimeout(200)
+          continue
+        }
+        const t = await telemetry()
+        const dx = tgt.x - t.x
+        const dz = tgt.z - t.z
+        const dxz = Math.hypot(dx, dz)
+        const desiredYaw = Math.atan2(-dx, -dz)
+        const hullErr = wrapA(desiredYaw - t.hullYaw)
+        const wantClose = dxz > 30 || c.lock < 0 || c.sol !== 'ok'
+        const lx = wantClose ? clampV(-1.6 * hullErr, -1, 1) : 0
+        const ly = wantClose && Math.abs(hullErr) < 0.5 ? 0.85 : 0
+        const desiredPitch = Math.atan2(tgt.y - (t.alt + 2.8), dxz)
+        const yawErr = wrapA(desiredYaw - t.camYaw)
+        const rx = clampV(-1.6 * yawErr, -1, 1)
+        const ry = clampV((desiredPitch - t.camPitch) * 2.5, -1, 1)
+        await touch(lx, ly, rx, ry)
+        await setFire(c.lock >= 0 && c.sol === 'ok')
+        await page.waitForTimeout(140)
+      }
+      return false
+    } finally {
+      if (firing) await page.keyboard.up('Space')
+    }
+  }
+
+  return { touch, touchStart, touchEnd, driveTo, engage, sticks: { L, R } }
 }

@@ -8,13 +8,13 @@ import { Box, alpha } from '@mui/material'
  * a low-frequency toggle: scoped, the ring grows and gains a heavier border
  * (the lock styling stays imperative and composes with it).
  */
-const Reticle = forwardRef<HTMLDivElement, { zoom?: boolean }>(
-  function Reticle({ zoom = false }, ref) {
+const Reticle = forwardRef<HTMLDivElement, { zoom?: boolean; testId?: string }>(
+  function Reticle({ zoom = false, testId = 'strike-reticle' }, ref) {
     const d = zoom ? 46 : 34
     return (
       <Box
         ref={ref}
-        data-testid="strike-reticle"
+        data-testid={testId}
         data-lock="-1"
         data-zoom={zoom ? 'on' : 'off'}
         sx={{
