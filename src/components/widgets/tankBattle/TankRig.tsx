@@ -107,6 +107,7 @@ export default function TankRig({
   combat,
   assist,
   autoFire,
+  autoTurn,
   battleActive,
   mode,
   wave,
@@ -138,6 +139,8 @@ export default function TankRig({
   combat: ShellCombat
   assist: AimAssistLevel
   autoFire: boolean
+  /** Hull follows the camera heading while driving (manual steer overrides). */
+  autoTurn: boolean
   battleActive: boolean
   mode: BattleMode
   wave: number
@@ -197,12 +200,28 @@ export default function TankRig({
     const aimSens = tuning.yaw * (zoom ? ZOOM_SENS : 1)
     stepCamAim(camAim, controls, dt, aimSens, tuning.expo)
 
-    // Hull driving (left stick / WASD).
-    const impact = stepTank(tank, controls, dt, terrain, {
-      speed: tuning.speed,
-      yaw: 1,
-      expo: tuning.expo,
-    })
+    // Total aim = stick orbit + gyro offset (recoil stays visual-only).
+    const off = aimOffset.current
+    const totalYaw = camAim.yaw + off.yaw
+    const totalPitch = Math.min(
+      CAM_PITCH_MAX,
+      Math.max(CAM_PITCH_MIN, camAim.pitch + off.pitch),
+    )
+
+    // Hull driving (left stick / WASD); auto-turn feeds the camera heading
+    // as the hull-yaw target while driving forward with no manual steer.
+    const impact = stepTank(
+      tank,
+      controls,
+      dt,
+      terrain,
+      {
+        speed: tuning.speed,
+        yaw: 1,
+        expo: tuning.expo,
+      },
+      autoTurn ? totalYaw : null,
+    )
     thudCooldown.current = Math.max(0, thudCooldown.current - dt)
     if (impact > TANK_THUD_SPEED && thudCooldown.current === 0) {
       thudCooldown.current = THUD_COOLDOWN_S
@@ -211,12 +230,6 @@ export default function TankRig({
 
     // Turret chases the camera yaw (gyro offset included, recoil excluded —
     // recoil is a visual kick only, the strike rule).
-    const off = aimOffset.current
-    const totalYaw = camAim.yaw + off.yaw
-    const totalPitch = Math.min(
-      CAM_PITCH_MAX,
-      Math.max(CAM_PITCH_MIN, camAim.pitch + off.pitch),
-    )
     stepTurret(tank, totalYaw, dt, tuning.yaw)
 
     // The reticle ray: eye behind the pivot, forward along the aim.

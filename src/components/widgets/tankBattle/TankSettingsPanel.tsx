@@ -73,6 +73,7 @@ export default function TankSettingsPanel({
   battleMode,
   onModeChange,
   autoFire,
+  autoTurn,
   aimAssist,
   gyroAim,
   weather,
@@ -92,6 +93,7 @@ export default function TankSettingsPanel({
   /** Routed through the body: switching modes restarts the battle. */
   onModeChange: (next: BattleMode) => void
   autoFire: boolean
+  autoTurn: boolean
   aimAssist: AimAssistLevel
   gyroAim: GyroMode
   weather: Weather
@@ -226,6 +228,13 @@ export default function TankSettingsPanel({
           )}
         </List>
         <List dense subheader={<ListSubheader disableGutters>Driving</ListSubheader>}>
+          <ToggleRow
+            testId="tank-autoturn-toggle"
+            label="Auto-turn hull"
+            description="While driving forward the hull follows your camera heading — steer with throttle alone. The left stick's X always overrides."
+            checked={autoTurn}
+            onChange={(next) => set({ autoTurn: next })}
+          />
           <Stack sx={{ px: 0.5 }}>
             <Typography variant="caption" color="text.secondary">
               {`Tank speed ×${rateSpeed.toFixed(1)}`}

@@ -194,9 +194,10 @@ and the recorded hitscan/ballistic weapon variants).
 See `docs/tank-battle.md` for the Tank Battle widget (the third WebGL
 widget — seeded analytic heightfield terrain with four-corner tank
 grounding and grade limits, WoT-style controls: left stick drives the hull,
-right stick orbits the camera with the turret chasing it, automatic gun
-elevation via a ballistic solver, Waves/Roam mode toggle, patrol/engage/
-attack enemy tank AI with terrain line of sight).
+right stick orbits the camera with the turret chasing it, auto-turn hull
+assist (default on), automatic gun elevation via a ballistic solver,
+Waves/Roam mode toggle, patrol/engage/attack enemy tank AI with terrain
+line of sight).
 See `docs/avatars.md` for the avatar system (seat-vs-avatar model, the per-avatar
 character folders, the catalog/registry split, the Settings picker, and how to add
 a new figure). See `docs/fullscreen.md` for full-screen mode (the WidgetCard

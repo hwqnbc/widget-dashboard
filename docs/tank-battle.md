@@ -19,6 +19,15 @@ copies) picked the controls below instead.
 
 Key decisions (the mobile-tank-game conventions):
 
+- **Auto-turn hull (default ON).** While driving forward with no manual
+  steer, the hull walks toward the camera heading at the normal turn rate
+  (`stepTank`'s `autoTurnYaw` target) — steer with throttle alone, the WoT
+  Blitz convenience. The left stick's X always overrides
+  (`AUTO_TURN_DEADZONE`), and it never engages while stationary or
+  reversing (`AUTO_TURN_MIN_THROTTLE`), so aiming from a hold or backing
+  out of cover never swings the hull. Settings → Driving toggle
+  (`tank-autoturn-toggle`, mirrored as root `data-auto-turn`); reset
+  restores it on.
 - **The turret chases the camera.** The right stick is a rate control on
   the camera aim (`CamAim`); the turret slews toward the camera yaw at a
   rate-limited `TURRET_TRAVERSE` — the visible lag between "where you look"
@@ -153,7 +162,7 @@ targets alive during the current active phase.
 ## Test contract (data-*)
 
 Root `tank-battle-root`: `data-world-seed/-mode/-roughness/-auto-fire/
--aim-assist/-gyro/-minimap/-zoom/-weather`. HUD `tank-hud` (150 ms tick):
+-auto-turn/-aim-assist/-gyro/-minimap/-zoom/-weather`. HUD `tank-hud` (150 ms tick):
 `data-x/-z/-alt/-speed/-hull-yaw/-turret-yaw/-cam-yaw/-cam-pitch/-pitch/
 -roll/-score/-shots/-hits/-targets-left/-lock/-sol/-reload/-proj/
 -enemy-proj/-hp/-zoom/-input-source` + the nearest-enemy beacon
@@ -164,7 +173,8 @@ Root `tank-battle-root`: `data-world-seed/-mode/-roughness/-auto-fire/
 (`data-lock/-sol/-zoom`), `tank-damage` (`data-flash/-low-hp`), plus the
 buttons/sticks/settings testids.
 
-E2E: suites `110-tank-core`, `111-tank-combat`, `112-tank-modes` (see
+E2E: suites `110-tank-core`, `111-tank-combat`, `112-tank-modes`,
+`113-tank-autoturn` (see
 `e2e/README.md`); the pure modules bundle in a third flat pass in
 `run.mjs`, and `createTankPilot` in `helpers.mjs` drives closed-loop —
 over the contour, driving is part of aiming (no lock until LOS clears).
@@ -219,8 +229,8 @@ drone docs keep the same kind of list).
   heal; punishes half-finished fights, rewards pushes.
 
 ### Controls & feel
-- **Auto-turn hull** — hull follows the camera heading while driving (the
-  WoT Blitz convenience); a settings switch feeding the hull-yaw target.
+- ~~Auto-turn hull~~ — **shipped** (default on, manual override, forward
+  throttle only; see Controls above).
 - **Left-handed mirror** — swap stick roles + move fire/scope left; the
   sticks/buttons are already position-props.
 - **Mouse-look** — pointer-lock camera on desktop; today the mouse only

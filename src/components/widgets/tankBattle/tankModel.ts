@@ -46,6 +46,10 @@ export const BARREL_PITCH_MIN = -0.38
 export const BARREL_PITCH_MAX = 0.35
 /** Grade (rise/run) at which the climb stalls completely (~35°). */
 export const MAX_GRADE = 0.7
+/** Manual steer beyond this always overrides auto-turn. */
+export const AUTO_TURN_DEADZONE = 0.05
+/** Auto-turn only engages while actually driving forward. */
+export const AUTO_TURN_MIN_THROTTLE = 0.05
 /** Half-length / half-width of the track footprint (grounding samples). */
 export const TANK_HALF_L = 1.6
 export const TANK_HALF_W = 1.05
@@ -162,13 +166,28 @@ export function stepTank(
   dt: number,
   spec: TerrainSpec,
   tuning: Tuning = NEUTRAL_TUNING,
+  /** Camera heading for auto-turn (the WoT Blitz convenience): while
+   * driving forward with no manual steer, the hull walks toward this yaw
+   * at the normal turn rate. null = auto-turn off. */
+  autoTurnYaw: number | null = null,
 ): number {
   const step = Math.min(dt, MAX_DT)
   const throttle = applyExpo(input.left.y, tuning.expo)
   const turn = applyExpo(input.left.x, tuning.expo)
 
-  // Track steering: stick right turns the hull right (the drone convention).
-  t.hullYaw -= turn * HULL_TURN_RATE * step
+  // Track steering: stick right turns the hull right (the drone
+  // convention). Manual steer always overrides; otherwise auto-turn steers
+  // the hull toward the camera heading while under forward throttle —
+  // stationary aiming or reversing never swings the hull on its own.
+  if (Math.abs(turn) > AUTO_TURN_DEADZONE || autoTurnYaw === null) {
+    t.hullYaw -= turn * HULL_TURN_RATE * step
+  } else if (throttle > AUTO_TURN_MIN_THROTTLE) {
+    const err = wrapAngle(autoTurnYaw - t.hullYaw)
+    const maxStep = HULL_TURN_RATE * step
+    t.hullYaw = wrapAngle(
+      t.hullYaw + Math.min(maxStep, Math.max(-maxStep, err)),
+    )
+  }
   const fx = -Math.sin(t.hullYaw)
   const fz = -Math.cos(t.hullYaw)
 

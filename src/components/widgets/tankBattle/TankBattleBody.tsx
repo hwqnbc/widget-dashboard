@@ -87,6 +87,7 @@ const PLAYER_HP_ROAM = 5
  * and bests are deliberately kept — they're the battlefield, not settings. */
 const SETTING_KEYS = [
   'autoFire',
+  'autoTurn',
   'aimAssist',
   'gyroAim',
   'weather',
@@ -150,6 +151,7 @@ export default function TankBattleBody({ id }: WidgetProps) {
   const bestScore = useWidgetField(id, 'bestScore', 0)
   const bestRoamMs = useWidgetField(id, 'bestRoamMs', 0)
   const autoFire = useWidgetField(id, 'autoFire', false)
+  const autoTurn = useWidgetField(id, 'autoTurn', true)
   const aimAssist = useWidgetField<AimAssistLevel>(id, 'aimAssist', 'mild', coerceAimAssist)
   const gyroMode = useWidgetField<GyroMode>(id, 'gyroAim', 'off', coerceGyroMode)
   const rateSpeed = useWidgetField(id, 'rateSpeed', 1, coerceRate)
@@ -472,6 +474,7 @@ export default function TankBattleBody({ id }: WidgetProps) {
       data-mode={battleMode}
       data-roughness={roughness}
       data-auto-fire={autoFire ? 'on' : 'off'}
+      data-auto-turn={autoTurn ? 'on' : 'off'}
       data-aim-assist={aimAssist}
       data-gyro={gyroMode}
       data-minimap={minimap ? 'on' : 'off'}
@@ -533,6 +536,7 @@ export default function TankBattleBody({ id }: WidgetProps) {
             combat={combat}
             assist={aimAssist}
             autoFire={autoFire}
+            autoTurn={autoTurn}
             battleActive={phase === 'active'}
             mode={battleMode}
             wave={wave}
@@ -749,6 +753,7 @@ export default function TankBattleBody({ id }: WidgetProps) {
         battleMode={battleMode}
         onModeChange={requestMode}
         autoFire={autoFire}
+        autoTurn={autoTurn}
         aimAssist={aimAssist}
         gyroAim={gyroMode}
         weather={weather}
