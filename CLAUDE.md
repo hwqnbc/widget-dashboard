@@ -130,7 +130,8 @@ character folders under `components/widgets/characters/` — `toy/` (`ToyHead`,
 `FireNinjaCelebration`, `fireNinjaPalette`), `darkarin/` (`DarkArinHead`,
 `TwinSwordFigure`, `DarkArinFigure`, `DarkArinCelebration`, `darkArinPalette`),
 `frak/` (`FrakHead`, `FrakFigure`, `FrakCelebration`, `frakPalette`),
-`shared/Hand`, `boy/Boy`.
+`imperium/` (`ImperiumHead`, `ClawFigure`, `ImperiumFigure`, `ImperiumCelebration`,
+`imperiumPalette`), `shared/Hand`, `boy/Boy`.
 
 ## Avatars (players vs seats)
 
