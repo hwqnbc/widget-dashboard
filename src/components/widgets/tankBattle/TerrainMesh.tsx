@@ -3,7 +3,7 @@ import { BufferAttribute, Color, Matrix4, PlaneGeometry, Vector3 } from 'three'
 import type { InstancedMesh } from 'three'
 import type { WorldPalette } from '../droneSim/palettes'
 import type { TerrainSpec } from './terrain'
-import { TANK_SPAWN, TANK_WORLD_HALF, heightAt } from './terrain'
+import { TANK_WORLD_HALF, heightAt } from './terrain'
 
 /** Displaced-plane resolution (segments per side). */
 const SEGMENTS = 96
@@ -108,15 +108,7 @@ export default function TerrainMesh({
         <meshStandardMaterial vertexColors />
       </mesh>
 
-      {/* Spawn pad marker — flat basin, always level. */}
-      <mesh
-        position={[TANK_SPAWN.x, heightAt(spec, TANK_SPAWN.x, TANK_SPAWN.z) + 0.06, TANK_SPAWN.z]}
-        rotation-x={-Math.PI / 2}
-      >
-        <ringGeometry args={[3.2, 4, 40]} />
-        <meshBasicMaterial color={palette.pad} transparent opacity={0.8} />
-      </mesh>
-
+      {/* The spawn basin's safe-zone ring lives in TankSafePad (animated). */}
       <instancedMesh
         key={`rocks-${spec.rocks.length}`}
         ref={rocksRef}

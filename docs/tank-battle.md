@@ -70,6 +70,26 @@ time; the root mirrors `data-help-seen`; dialog testids
 dismisses it so every other suite starts clean; suite `114-tank-help`
 covers the overlay itself.
 
+## Safe zone & repair pad (the spawn basin)
+
+The Drone Strike pad, groundside. Inside `SAFE_ZONE_RADIUS` (8 u) of the
+spawn — marked by `TankSafePad`, the strike's pulsing ring + light column
+ported onto the heightfield (cyan idle, green + faster pulse while you're
+inside) — four rules apply, all gated in the rig off one `inSafeZone`
+check:
+
+- the player's **gun goes offline** (the pad is for resting, not sniping);
+- **enemies hold their fire** (their engage/turret tracking continues);
+- **enemy shells in flight pass through** the player;
+- with hearts missing, **resting repairs** one heart per `HEART_REPAIR_S`
+  (3 s, strike parity), via the body's `onHeal`.
+
+A tick-written pad chip (`tank-pad-chip`, `data-pad-state`
+off|safe|repairing) narrates: `SAFE ZONE · WEAPONS OFF · ♥ REPAIRING` /
+`♥ FULL`; the HUD mirrors `data-safe`. Retreat-to-repair is the tactical
+loop the zone buys: break contact behind a ridge, limp home, roll back
+out. The help overlay teaches it ("The glowing ring is home").
+
 ## Terrain (the new core)
 
 `terrain.ts` is a pure seeded **analytic heightfield**: `heightAt(x, z)` =
@@ -180,16 +200,17 @@ Root `tank-battle-root`: `data-world-seed/-mode/-roughness/-auto-fire/
 -auto-turn/-help-seen/-aim-assist/-gyro/-minimap/-zoom/-weather`. HUD `tank-hud` (150 ms tick):
 `data-x/-z/-alt/-speed/-hull-yaw/-turret-yaw/-cam-yaw/-cam-pitch/-pitch/
 -roll/-score/-shots/-hits/-targets-left/-lock/-sol/-reload/-proj/
--enemy-proj/-hp/-zoom/-input-source` + the nearest-enemy beacon
+-enemy-proj/-hp/-safe/-zoom/-input-source` + the nearest-enemy beacon
 `data-tgt-x/-y/-z/-kind` (lesson #45); `data-wave`/`data-wave-state`
 (intro|active|cleared|failed) are React-owned (lesson #46). Chips:
 `tank-score` (`data-score/-wave/-left/-best-score/-best-wave/
--best-roam-ms`), `tank-hp`, `tank-best`, `tank-reticle`
+-best-roam-ms`), `tank-hp`, `tank-best`, `tank-pad-chip`
+(`data-pad-state` off|safe|repairing), `tank-reticle`
 (`data-lock/-sol/-zoom`), `tank-damage` (`data-flash/-low-hp`), plus the
 buttons/sticks/settings testids.
 
 E2E: suites `110-tank-core`, `111-tank-combat`, `112-tank-modes`,
-`113-tank-autoturn`, `114-tank-help` (see
+`113-tank-autoturn`, `114-tank-help`, `115-tank-safezone` (see
 `e2e/README.md`); the pure modules bundle in a third flat pass in
 `run.mjs`, and `createTankPilot` in `helpers.mjs` drives closed-loop —
 over the contour, driving is part of aiming (no lock until LOS clears).

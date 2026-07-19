@@ -67,6 +67,7 @@ import ShellTracers from './ShellTracers'
 import TankMinimap from './TankMinimap'
 import TankSettingsPanel from './TankSettingsPanel'
 import TankHelpDialog from './TankHelpDialog'
+import TankSafePad from './TankSafePad'
 
 const clampNum = (lo: number, hi: number) => (v: unknown) =>
   typeof v === 'number' && Number.isFinite(v)
@@ -192,6 +193,8 @@ export default function TankBattleBody({ id }: WidgetProps) {
   const reticleRef = useRef<HTMLDivElement>(null)
   const scoreChipRef = useRef<HTMLDivElement>(null)
   const vignetteRef = useRef<HTMLDivElement>(null)
+  const padStateRef = useRef<'idle' | 'active'>('idle')
+  const padChipRef = useRef<HTMLDivElement>(null)
   const minimapTankRef = useRef<SVGGElement>(null)
   const minimapTargetRefs = useRef<(SVGCircleElement | null)[]>([])
   const markerId = useRef(0)
@@ -303,6 +306,11 @@ export default function TankBattleBody({ id }: WidgetProps) {
     flashVignette(vignetteRef.current)
     setHp((h) => Math.max(0, h - 1))
   }, [])
+
+  const maxHp = battleMode === 'waves' ? PLAYER_HP_WAVES : PLAYER_HP_ROAM
+  const onHeal = useCallback(() => {
+    setHp((h) => Math.min(battleMode === 'waves' ? PLAYER_HP_WAVES : PLAYER_HP_ROAM, h + 1))
+  }, [battleMode])
 
   // NOTE: restart deliberately does NOT touch the enemy pool. The canvas is
   // a separate React root whose props lag the body's synchronous mutations
@@ -531,6 +539,7 @@ export default function TankBattleBody({ id }: WidgetProps) {
           {weather === 'storm' && (
             <RainField flight={rainAdapterRef.current} wind={windRef.current} />
           )}
+          <TankSafePad stateRef={padStateRef} terrain={terrain} />
           <EnemyTanks targets={targets} />
           <ShellTracers combat={combat} />
           <TankRig
@@ -550,6 +559,10 @@ export default function TankBattleBody({ id }: WidgetProps) {
             autoFire={autoFire}
             autoTurn={autoTurn}
             battleActive={phase === 'active'}
+            canHeal={hp < maxHp && phase === 'active'}
+            onHeal={onHeal}
+            padStateRef={padStateRef}
+            padChipRef={padChipRef}
             mode={battleMode}
             wave={wave}
             hp={hp}
@@ -595,6 +608,7 @@ export default function TankBattleBody({ id }: WidgetProps) {
         data-sol="ok"
         data-proj="0"
         data-tgt-kind="none"
+        data-safe="on"
         data-input-source="touch"
         sx={{
           position: 'absolute',
@@ -687,6 +701,30 @@ export default function TankBattleBody({ id }: WidgetProps) {
             )}
         </Box>
       )}
+
+      <Box
+        ref={padChipRef}
+        data-testid="tank-pad-chip"
+        data-pad-state="off"
+        // display/text/state are written by TankRig on the telemetry tick
+        sx={{
+          display: 'none',
+          position: 'absolute',
+          top: 8,
+          left: '50%',
+          transform: 'translateX(-50%)',
+          px: 1,
+          py: 0.25,
+          borderRadius: 1,
+          bgcolor: alpha('#000', 0.5),
+          color: '#69f0ae',
+          fontFamily: 'monospace',
+          fontSize: 11,
+          letterSpacing: 0.5,
+          pointerEvents: 'none',
+          whiteSpace: 'nowrap',
+        }}
+      />
 
       {banner && (
         <Box

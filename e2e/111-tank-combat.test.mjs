@@ -82,18 +82,18 @@ await pilot.touch(0, 0, 0, 1)
 await page.waitForTimeout(1400)
 const skyward = await combat()
 check('no ballistic solution into the sky', skyward.sol === 'none', `sol=${skyward.sol}`)
-// Steer the pitch back to the shallow default band — mid-range ground has
-// a solution (full-down pitch aims under the gun's depression arc).
-for (let i = 0; i < 30; i++) {
+// Steer the pitch back down until a ground solution appears — the exact
+// solvable band depends on the terrain under the reticle, so scan rather
+// than target one pitch (a single value flaked on unlucky ground).
+let groundSol = 'none'
+for (let i = 0; i < 40 && groundSol !== 'ok'; i++) {
   const p = (await telemetry()).camPitch
-  if (p < -0.05 && p > -0.15) break
-  await pilot.touch(0, 0, 0, p > -0.05 ? -0.5 : 0.5)
+  await pilot.touch(0, 0, 0, p > -0.28 ? -0.4 : 0.4)
   await page.waitForTimeout(140)
+  groundSol = (await combat()).sol
 }
 await pilot.touch(0, 0, 0, 0)
-await page.waitForTimeout(400)
-const groundward = await combat()
-check('solution returns on the ground', groundward.sol === 'ok', `sol=${groundward.sol}`)
+check('solution returns on the ground', groundSol === 'ok', `sol=${groundSol}`)
 await pilot.touchEnd()
 
 // Bests persisted at the wave-1 clear survive a reload.

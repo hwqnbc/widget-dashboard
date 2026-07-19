@@ -20,8 +20,10 @@ import {
   BARREL_PITCH_MAX,
   TANK_THUD_SPEED,
   TURRET_HEIGHT,
+  HEART_REPAIR_S,
   camForward,
   fireSolution,
+  inSafeZone,
   muzzlePos,
   stepCamAim,
   stepTank,
@@ -109,6 +111,10 @@ export default function TankRig({
   autoFire,
   autoTurn,
   battleActive,
+  canHeal,
+  onHeal,
+  padStateRef,
+  padChipRef,
   mode,
   wave,
   hp,
@@ -142,6 +148,12 @@ export default function TankRig({
   /** Hull follows the camera heading while driving (manual steer overrides). */
   autoTurn: boolean
   battleActive: boolean
+  /** Hearts missing and the battle live — resting in the zone repairs. */
+  canHeal: boolean
+  onHeal: () => void
+  /** Safe-pad visual state, read by TankSafePad inside the canvas. */
+  padStateRef: { current: 'idle' | 'active' }
+  padChipRef: RefObject<HTMLDivElement | null>
   mode: BattleMode
   wave: number
   hp: number
@@ -181,6 +193,7 @@ export default function TankRig({
   const seenAlive = useRef(false)
   const padZoomRef = useRef(false)
   const thudCooldown = useRef(0)
+  const healClock = useRef(0)
 
   useFrame((_, dt) => {
     if (!battleActive) {
@@ -226,6 +239,21 @@ export default function TankRig({
     if (impact > TANK_THUD_SPEED && thudCooldown.current === 0) {
       thudCooldown.current = THUD_COOLDOWN_S
       vibrate(Math.min(60, Math.round(impact * 10)))
+    }
+
+    // Safe zone (the Drone Strike pad, groundside): inside the spawn ring
+    // the player's gun goes offline, enemies hold their fire, shells in
+    // flight pass through, and missing hearts repair on a rest timer.
+    const playerSafe = inSafeZone(tank.pos)
+    padStateRef.current = playerSafe ? 'active' : 'idle'
+    if (playerSafe && canHeal) {
+      healClock.current += dt
+      if (healClock.current >= HEART_REPAIR_S) {
+        healClock.current = 0
+        onHeal()
+      }
+    } else {
+      healClock.current = 0
     }
 
     // Turret chases the camera yaw (gyro offset included, recoil excluded —
@@ -312,6 +340,7 @@ export default function TankRig({
     combat.cooldown = Math.max(0, combat.cooldown - dt)
     const wantsFire =
       battleActive &&
+      !playerSafe &&
       (fireHeldRef.current ||
         gamepadFireHeld() ||
         (autoFire && solution && lockIdx >= 0 && lockHold.current >= AUTO_FIRE_HOLD_S))
@@ -327,7 +356,7 @@ export default function TankRig({
 
     // Enemy tanks: patrol/engage/attack — alive slots only. They keep
     // patrolling between waves; they only shoot while the battle is live.
-    const canShoot = battleActive && enemiesShoot
+    const canShoot = battleActive && enemiesShoot && !playerSafe
     for (let i = 0; i < targets.length; i++) {
       const t = targets[i]
       stepEnemyTank(t, tankAI[i], i, dt, terrain, tank.pos, canShoot, combat.enemy, ENEMY_SHELL)
@@ -371,7 +400,7 @@ export default function TankRig({
       dt,
       terrain,
       NO_TARGETS,
-      battleActive ? tank.pos : null,
+      battleActive && !playerSafe ? tank.pos : null,
       events,
     )
     for (let i = 0; i < events.count; i++) {
@@ -439,6 +468,7 @@ export default function TankRig({
         for (const s of combat.enemy) if (s.active) enemyProj++
         hud.dataset.enemyProj = String(enemyProj)
         hud.dataset.hp = String(hp)
+        hud.dataset.safe = playerSafe ? 'on' : 'off'
         hud.dataset.zoom = zoom ? 'on' : 'off'
         hud.dataset.inputSource = external.current.owner ?? 'touch'
         // Nearest alive enemy — the closed-loop aim beacon (lesson #45).
@@ -459,6 +489,18 @@ export default function TankRig({
           hud.dataset.tgtKind = nearest.heavy ? 'heavy' : 'tank'
         } else {
           hud.dataset.tgtKind = 'none'
+        }
+      }
+      const padChip = padChipRef.current
+      if (padChip) {
+        const state = playerSafe ? (canHeal ? 'repairing' : 'safe') : 'off'
+        if (padChip.dataset.padState !== state) {
+          padChip.dataset.padState = state
+          padChip.style.display = state === 'off' ? 'none' : 'block'
+          padChip.textContent =
+            state === 'repairing'
+              ? 'SAFE ZONE · WEAPONS OFF · ♥ REPAIRING'
+              : 'SAFE ZONE · WEAPONS OFF · ♥ FULL'
         }
       }
       const chip = scoreChipRef.current

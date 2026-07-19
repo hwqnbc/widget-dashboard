@@ -46,6 +46,11 @@ export const BARREL_PITCH_MIN = -0.38
 export const BARREL_PITCH_MAX = 0.35
 /** Grade (rise/run) at which the climb stalls completely (~35°). */
 export const MAX_GRADE = 0.7
+/** Spawn safe zone / repair pad radius (the Drone Strike pad, groundside).
+ * Comfortably wider than the hull so parking anywhere in the basin counts. */
+export const SAFE_ZONE_RADIUS = 8
+/** Seconds resting in the zone per heart repaired (strike parity). */
+export const HEART_REPAIR_S = 3
 /** Manual steer beyond this always overrides auto-turn. */
 export const AUTO_TURN_DEADZONE = 0.05
 /** Auto-turn only engages while actually driving forward. */
@@ -127,6 +132,11 @@ export function resetCamAim(a: CamAim): void {
 
 export const wrapAngle = (a: number): number =>
   Math.atan2(Math.sin(a), Math.cos(a))
+
+/** Inside the spawn safe zone: weapons offline, enemies hold fire, shells
+ * pass through, resting repairs the tank. */
+export const inSafeZone = (pos: Vec3): boolean =>
+  Math.hypot(pos.x - TANK_SPAWN.x, pos.z - TANK_SPAWN.z) < SAFE_ZONE_RADIUS
 
 /** Ground pose under a hull footprint: y from the four-corner average,
  * pitch/roll from the corner differences. Writes into `out`. */

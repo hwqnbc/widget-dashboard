@@ -102,6 +102,14 @@ export default function TankHelpDialog({
             into view — and duck behind hills when they shoot back.
           </Typography>
         </Section>
+        <Section title="The glowing ring is home">
+          <Typography variant="body2">
+            The cyan ring at your spawn is a <b>safe zone</b>: inside it
+            enemies hold their fire and shells pass over you — but your own
+            gun goes offline too. Rest there to <b>repair damage</b>, one
+            heart at a time, then roll back out.
+          </Typography>
+        </Section>
         <Section title="Fire &amp; reload">
           <Typography variant="body2">
             FIRE button, Space or click. Each shot takes a moment to reload —
