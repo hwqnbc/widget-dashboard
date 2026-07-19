@@ -226,6 +226,40 @@ kind of list).
 - **FPV polish reuse** — the sim's opt-in camera bank + speed shake
   (`fpvPolish`) ports straight into `StrikeCameraRig`.
 
+### Sim-setting ports
+The Drone Sim's settings were audited for reuse (its storm weather, rich
+scenery, minimap and the three flight-tuning sliders already shipped here).
+Portable and worth porting:
+
+- **Crash mode** — hard wall impacts tumble + respawn instead of the
+  current bounce. `StrikeRig` already receives the impact speed from
+  `stepFlight` and ignores it; reuse `CRASH_SPEED`, `stepCrash`,
+  `CRASH_DURATION`, `CRASH_PULSE` and the `CrashState` pattern from
+  `droneSim/DroneRig.tsx` (tumble spin, controls dead, pad respawn).
+  Design decision: does a crash cost a heart, or only the respawn flight
+  time while the wave stays live? Suspend fire intent during the tumble.
+- **Acro flight mode** — `stepFlight` already implements `mode: 'acro'`
+  (the rig hardcodes `'hold'`); a settings toggle + persisted `flightMode`
+  ports it directly. In acro, `tiltPitch` IS the flight attitude, so the
+  FPV pitch follow becomes real pitch **aiming** — `fpvPitchGain` likely
+  wants ~1.0 there (camera and fire path already share it), and vertical
+  aim stops depending on altitude alone. Expert mode; pairs naturally with
+  assist `off`.
+- **Turbo** — `TURBO_BOOST` stacked onto the tuning multipliers under the
+  existing `MAX_SPEED_MULT` clamp; one ToggleRow in the Flight group.
+  Balance note: turbo trivialises dodging wave-5 bolts — either accept it
+  as a casual aid or pair it with a score trade-off.
+- **Battery mode** — `stepBattery`/`BatteryState` + the spawn-pad recharge
+  and battery-bar UI from the sim: flying drains charge, the pad recharges,
+  and a dead battery auto-descends (`DEAD_INPUT` override) **while enemies
+  keep shooting** — a survival-pressure option. The largest port of the
+  four (bar UI, control override, recharge zone checks).
+
+Audited and **not** applicable: gate count / course editor / course source
+(racing), the landing challenge, and follow distance + the standing/walking
+pilot views (operator-specific). FPV polish is tracked above under Camera &
+visuals.
+
 ### Meta
 - **Sound** — Web Audio, no assets: bolt zap pitched by cooldown, balloon
   pop, enemy-lock warning tone when an enemy is about to fire at you (the
