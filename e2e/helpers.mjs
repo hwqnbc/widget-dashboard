@@ -59,6 +59,14 @@ export async function addDroneWidget(page) {
   await page.waitForTimeout(600)
 }
 
+/** Fresh dashboard with one Avatar Actions widget. */
+export async function addAvatarWidget(page) {
+  await page.goto(BASE_URL, { waitUntil: 'networkidle' })
+  await page.getByRole('button', { name: 'Add widget' }).click()
+  await page.getByRole('menuitem', { name: /Avatar Actions/ }).click()
+  await page.waitForSelector('[data-testid="avatar-actions"]')
+}
+
 /** Readers over the HUD/chip data-* attributes (the widget's test contract). */
 export function readers(page) {
   const hud = page.locator('[data-testid="dronesim-hud"]')

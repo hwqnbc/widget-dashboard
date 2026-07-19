@@ -35,9 +35,13 @@ the split. Only *rendering* consults the map.
 `components/widgets/characters/` groups each character's pieces physically:
 ```
 shared/Hand.tsx                       cross-character primitive
-toy/   ToyHead, ToyFigure, SixSevenFigure, ToyCelebration, toyParts, toyPalette, index
-ninja/ NinjaHead, SwordNinjaFigure, NinjaFigure, NinjaCelebration, ninjaPalette, index
-boy/   Boy.tsx                        (an ImageToggle figure, not a game avatar)
+toy/       ToyHead, ToyFigure, SixSevenFigure, ToyCelebration, toyParts, toyPalette, index
+ninja/     NinjaHead, SwordNinjaFigure, NinjaFigure, NinjaCelebration, ninjaPalette, index
+fireninja/ FireNinjaHead, FireBladeFigure, FireNinjaFigure, FireNinjaCelebration, fireNinjaPalette, index
+darkarin/  DarkArinHead, TwinSwordFigure, DarkArinFigure, DarkArinCelebration, darkArinPalette, index
+frak/      FrakHead, FrakFigure, FrakCelebration, frakPalette, index
+imperium/  ImperiumHead, ClawFigure, ImperiumFigure, ImperiumCelebration, imperiumPalette, index
+boy/       Boy.tsx                    (an ImageToggle figure, not a game avatar)
 ```
 - **Head** = the standalone `<svg>` chip/mark (`size` prop; default `'100%'`).
 - **Figure** = the static full body (no-prop). `NinjaFigure` is a static
@@ -49,7 +53,11 @@ boy/   Boy.tsx                        (an ImageToggle figure, not a game avatar)
   pick a character, tap to loop its celebration, tap again to return to the static
   `Figure`. Using the one looping `Celebration` (rather than a separate per-avatar
   tap move) keeps the widget's behaviour uniform across every present and future
-  avatar.
+  avatar. The widget publishes a small test contract on its root —
+  `data-testid="avatar-actions"`, `data-avatar` (selected id), `data-playing`
+  (`yes`/`no`) — exercised by `e2e/120-avatars.test.mjs`. Its avatar picker
+  (a `ToggleButtonGroup`) **wraps** (`flexWrap`), so as the roster grows the
+  buttons stack onto more rows instead of overflowing off the small card.
 
 ## Reading a seat's look
 `features/avatars/useSeatAvatars.ts`:
@@ -73,7 +81,10 @@ seat inherits this seat's previous avatar) instead of allowing a duplicate — w
 two avatars today that's a swap, and it generalises as figures are added.
 
 ## Verifying
-`npm run build` + `npm run lint`, then headless Chromium. Default map is a pure
+`npm run build` + `npm run lint`, then `npm run e2e avatars` (the Avatar Actions
+contract: default selection, every catalogued avatar selectable + rendering a
+figure, tap play/stop, switch-resets-play, and selection persistence). Then
+headless Chromium for the seat picker. Default map is a pure
 regression (each game's chips/colours/celebration look identical — check
 `aria-label="Toy figure"/"Ninja figure"` on the expected cells). Then on Settings swap
 Player 1 → Ninja, confirm `persist:testsite` → `ui.avatars` becomes

@@ -1,11 +1,15 @@
-# Drone Sim + Drone Strike + Tank Battle end-to-end suites
+# End-to-end suites
 
 Headless-Chromium tests that drive the real app and assert on the widgets'
-public test contract — `data-testid` hooks and the `data-*` telemetry the HUD
-publishes every 150 ms. Flying is **closed-loop**: a small P-controller in
-`helpers.mjs` reads telemetry and steers the on-screen sticks through CDP
-touch events (open-loop timed input is far too jittery to thread gates or hit
-walls reliably).
+public test contract — `data-testid` hooks and the `data-*` state widgets
+publish. Most suites here cover the Drone Sim, Drone Strike and Tank Battle
+widgets (whose HUD publishes telemetry every 150 ms), but the harness is
+app-generic: any widget can get suites the same way (e.g. `120-avatars` drives
+the Avatar Actions widget's `data-avatar`/`data-playing` contract, no WebGL
+involved). For the WebGL games, flying/driving is **closed-loop**: a small
+P-controller in `helpers.mjs` reads telemetry and steers the on-screen sticks
+through CDP touch events (open-loop timed input is far too jittery to thread
+gates or hit walls reliably).
 
 ```bash
 npm run e2e            # all suites (starts its own dev server on :5199)
@@ -64,6 +68,7 @@ mode state from the widget root's `data-*` attributes via
 | `110-tank-core` | Tank Battle: element presence + root defaults, seeded wave-1 composition vs the pure module, terrain grounding (live `data-alt` matches the bundled `heightAt`), throttle/turn driving, camera-independent hull, turret traverse lag + settle, fire-button shot + reload gating, ADS zoom toggle |
 | `111-tank-combat` | closed-loop combat: no lock from spawn (terrain cover — the pilot must crest the ridge), two engage-and-kill runs clearing wave 1, wave 2 arrives with the seeded count + armed enemies, sky/ground ballistic-solution reticle contract, best score/wave persistence across reload, progress-guarded mode switch + cancel |
 | `112-tank-modes` | Waves ↔ Roam toggle (direct without progress), roam garrison size + 5-HP pool, terrain roughness reshaping (pure-module amplitude check), settings round-trips on the root, minimap toggle, reset-to-defaults keeps mode/roughness/seed, mode + roughness persistence across reload |
+| `120-avatars` | Avatar Actions widget: default selection, every catalogued avatar selectable in order + renders a figure svg, tap plays/stops the celebration (`data-playing`), switching avatar mid-play resets to the static figure, per-widget selection persists across reload while play state resets |
 
 Drone Strike suites steer with the same closed-loop rig (`createStrikePilot`)
 aimed at the HUD's nearest-target beacon (`data-tgt-*`); `engage()` fires via

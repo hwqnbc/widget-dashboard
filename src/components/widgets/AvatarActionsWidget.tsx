@@ -39,6 +39,9 @@ export default function AvatarActionsWidget({ id }: WidgetProps) {
   return (
     <Box
       className="widget-no-drag"
+      data-testid="avatar-actions"
+      data-avatar={avatar}
+      data-playing={active ? 'yes' : 'no'}
       onMouseDown={(e) => e.stopPropagation()}
       onTouchStart={(e) => e.stopPropagation()}
       sx={{ height: '100%', display: 'flex', flexDirection: 'column', gap: 0.5, p: 0.5 }}
@@ -49,6 +52,7 @@ export default function AvatarActionsWidget({ id }: WidgetProps) {
           exclusive
           value={avatar}
           onChange={(_, v) => select(v as AvatarId | null)}
+          sx={{ flexWrap: 'wrap', justifyContent: 'center' }}
         >
           {AVATAR_CATALOG.map((a) => {
             const Head = avatarVisualById[a.id].Head

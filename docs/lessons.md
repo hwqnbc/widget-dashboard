@@ -475,3 +475,24 @@ carried over; these are the new ones.
     without a solution — greying the reticle is feedback, refusing the
     button press reads as a broken control (auto-fire still demands a
     real solution, so assists never lob into a hill).
+
+## Avatar Actions widget
+
+51. **A picker that overflows the default card is unreachable — wrap it.**
+    The Avatar Actions `ToggleButtonGroup` was a single non-wrapping row, so
+    once the roster passed ~4 avatars the leftmost buttons (Toy) slid to a
+    negative x, off the small default card — a real user couldn't select
+    them, and Playwright reported the page container "intercepts pointer
+    events" (a hit-test at off-screen coords). `sx={{ flexWrap: 'wrap' }}`
+    on the group stacks the buttons onto more rows instead; the fix generalises
+    as figures are added. Lesson: any button row whose item count grows with
+    the roster must wrap (or scroll) — assume it won't fit the smallest card.
+
+52. **A pure-SVG widget still gets an e2e suite — assert on a root data-*
+    contract, not pixels.** Avatar Actions has no canvas and no telemetry
+    tick, so `120-avatars` gives the root three stable attributes
+    (`data-testid="avatar-actions"`, `data-avatar`, `data-playing`) and drives
+    the real toggles + tap: selection round-trips and persists, play toggles,
+    switching avatar resets play. Figure *identity* is checked only by "an svg
+    renders" (the art itself is reviewed from screenshots) — the same
+    app-generic harness the drone suites use, minus WebGL.
