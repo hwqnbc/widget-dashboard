@@ -87,7 +87,9 @@ const mid = await telemetry()
 check('throttle drives forward', mid.z < t0.z - 4, `z ${t0.z} → ${mid.z}`)
 check('speed telemetry live', mid.speed > 1, `speed=${mid.speed}`)
 await pilot.touch(0, 0, 0, 0)
-await page.waitForTimeout(1200)
+// Heavy-vehicle inertia decays exponentially (TANK_ACCEL 2.2) — give it
+// enough time that software-GL frame lag can't leave residual speed.
+await page.waitForTimeout(2600)
 const stopped = await telemetry()
 const groundNow = heightAt(terrain, stopped.x, stopped.z)
 check(
