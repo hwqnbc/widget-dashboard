@@ -35,6 +35,18 @@ check(
 
 const pilot = await createStrikePilot(page, context)
 
+// Every sprint leg starts from a "runway" above the skyline (max building
+// 18 + margin) back over the spawn — three low sprints in a row would
+// march the drone across the city into walls/the world border and kill
+// the very momentum the checks measure (the sim suites' cruise-high rule).
+const returnHome = async () => {
+  await pilot.touchStart()
+  const ok = await pilot.flyTo({ x: 0, y: 32, z: 18 }, { tol: 3, timeout: 60000 })
+  await pilot.brake()
+  await pilot.touchEnd()
+  return ok
+}
+
 /** Full-forward sprint, then release; returns [peak speed, coast speed]. */
 const sprintAndRelease = async () => {
   await pilot.touchStart()
@@ -49,10 +61,12 @@ const sprintAndRelease = async () => {
 }
 
 // --- turbo: ~1.4× the hold-mode top speed ---
+check('runway reached (baseline)', await returnHome())
 const [vOff, holdCoast] = await sprintAndRelease()
 check('hold releases brake to a hover', holdCoast < 2, `coast=${holdCoast.toFixed(1)}`)
 await setStrikeSwitch(page, 'strike-tune-turbo', true)
 check('turbo reports on', (await root.getAttribute('data-turbo')) === 'on')
+check('runway reached (turbo)', await returnHome())
 const [vOn] = await sprintAndRelease()
 check(
   'turbo raises the top speed ~1.4×',
@@ -62,12 +76,9 @@ check(
 await setStrikeSwitch(page, 'strike-tune-turbo', false)
 
 // --- acro: momentum coasts instead of braking ---
-// Climb first (hold mode) so the acro sprint has altitude to spare.
-await pilot.touchStart()
-await pilot.touch(0, 1, 0, 0)
-await page.waitForTimeout(1500)
-await pilot.touch(0, 0, 0, 0)
-await pilot.touchEnd()
+// The runway altitude also gives the acro sprint (which sheds height while
+// pitched) room to stay above the skyline through the coast.
+check('runway reached (acro)', await returnHome())
 await setStrikeSwitch(page, 'strike-mode-toggle', true)
 check('acro reports on', (await root.getAttribute('data-mode')) === 'acro')
 const [, acroCoast] = await sprintAndRelease()
