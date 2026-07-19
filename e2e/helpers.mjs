@@ -272,6 +272,50 @@ export async function fireCenter(page) {
   return await stickCenter(page, 'strike-fire')
 }
 
+/** A free-scene point (clear of sticks, buttons, chips and the minimap)
+ * for drag-to-aim gestures. */
+export async function freeScenePoint(page) {
+  return await page
+    .locator('[data-testid="strike-canvas"]')
+    .evaluate((el) => {
+      const r = el.getBoundingClientRect()
+      return { x: r.left + r.width * 0.42, y: r.top + r.height * 0.3 }
+    })
+}
+
+/** Drag-to-aim gesture on the free scene area via CDP touch (moves in
+ * steps so the 6 px drag threshold trips before the aim deltas count). */
+export async function dragAim(page, context, dx, dy, steps = 6) {
+  const p = await freeScenePoint(page)
+  const cdp = await context.newCDPSession(page)
+  await cdp.send('Input.dispatchTouchEvent', {
+    type: 'touchStart',
+    touchPoints: [{ x: p.x, y: p.y, id: 7 }],
+  })
+  for (let i = 1; i <= steps; i++) {
+    await cdp.send('Input.dispatchTouchEvent', {
+      type: 'touchMove',
+      touchPoints: [{ x: p.x + (dx * i) / steps, y: p.y + (dy * i) / steps, id: 7 }],
+    })
+    await page.waitForTimeout(30)
+  }
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
+  await cdp.detach()
+}
+
+/** Quick tap on the free scene area (for double-tap recenter). */
+export async function tapScene(page, context) {
+  const p = await freeScenePoint(page)
+  const cdp = await context.newCDPSession(page)
+  await cdp.send('Input.dispatchTouchEvent', {
+    type: 'touchStart',
+    touchPoints: [{ x: p.x, y: p.y, id: 7 }],
+  })
+  await page.waitForTimeout(60)
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
+  await cdp.detach()
+}
+
 /** Open/close the strike settings dialog. */
 export async function openStrikeSettings(page) {
   await page.locator('[data-testid="strike-settings"]').click()

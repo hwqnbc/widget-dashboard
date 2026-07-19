@@ -1,7 +1,7 @@
 import { useRef } from 'react'
 import type { RefObject } from 'react'
-import { useFrame } from '@react-three/fiber'
-import type { Group, Mesh, MeshBasicMaterial } from 'three'
+import { useFrame, useThree } from '@react-three/fiber'
+import type { Group, Mesh, MeshBasicMaterial, PerspectiveCamera } from 'three'
 import type {
   BatteryEvent,
   BatteryState,
@@ -47,7 +47,16 @@ import { aliveCount, stepDrift } from './waveLayout'
 import type { EnemyAIState } from './enemyAI'
 import { stepEnemy } from './enemyAI'
 import type { AimOffset } from './aimModel'
-import { RECOIL_KICK, fpvPitchGain } from './aimModel'
+import { RECOIL_KICK, ZOOM_SENS, fpvPitchGain } from './aimModel'
+import type { AimAngles, AimMode, GimbalState } from './gimbalModel'
+import {
+  TRACK_MULT,
+  TRACK_RATE,
+  aimAngles,
+  dirFromAngles,
+  stepGimbalRates,
+  trackToward,
+} from './gimbalModel'
 
 /** Seconds between HUD DOM writes (~7 Hz — no React renders). */
 const HUD_INTERVAL = 0.15
@@ -72,6 +81,8 @@ const BLIP_COLORS: Record<TargetKind, string> = {
 const NO_TARGETS: TargetState[] = []
 /** Seconds resting on the spawn pad to restore one heart. */
 const HEART_RECHARGE_S = 3
+
+const wrapAngle = (a: number) => Math.atan2(Math.sin(a), Math.cos(a))
 
 /** Resting inside the pad zone: essentially landed, within the pad circle. */
 function onPad(flight: FlightState): boolean {
@@ -154,6 +165,8 @@ export default function StrikeRig({
   hp,
   zoom,
   onZoomHold,
+  aimMode,
+  gimbalRef,
   scoreRef,
   onWaveCleared,
   onTargetDown,
@@ -213,6 +226,10 @@ export default function StrikeRig({
   zoom: boolean
   /** Gamepad left-trigger zoom hold — edge-reported to the body. */
   onZoomHold: (held: boolean) => void
+  /** Aim-control mode (gimbal reticle / gunner cam / hover gunner). */
+  aimMode: AimMode
+  /** The weapon gimbal, shared with the camera rig and the drag input. */
+  gimbalRef: { current: GimbalState }
   /** Session score — runtime-only, rendered via the telemetry tick. */
   scoreRef: { current: number }
   onWaveCleared: () => void
@@ -226,9 +243,19 @@ export default function StrikeRig({
   minimapDroneRef: RefObject<SVGGElement | null>
   minimapTargetRefs: RefObject<(SVGCircleElement | null)[]>
 }) {
+  const camera = useThree((s) => s.camera) as PerspectiveCamera
   const outerRef = useRef<Group>(null)
   const tiltRef = useRef<Group>(null)
   const shadowRef = useRef<Mesh>(null)
+  const angles = useRef<AimAngles>({ yaw: 0, pitch: 0 }).current
+  // Hover mode: lateral flight input is ignored — the right stick slews
+  // the gimbal instead. `left` aliases the live controls (throttle/yaw
+  // stay flyable); `right` stays zero.
+  const hoverInput = useRef<ControlInput>({
+    left: controls.left,
+    right: { x: 0, y: 0 },
+  }).current
+  const reticlePos = useRef({ x: 50, y: 50 })
   const hudClock = useRef(0)
   const events = useRef(createHitEvents()).current
   const fireDir = useRef<Vec3>({ x: 0, y: 0, z: -1 }).current
@@ -280,7 +307,8 @@ export default function StrikeRig({
 
       // Battery bookkeeping first — a dead battery kills the sticks (gentle
       // auto-descent) and unpowers the gun until a pad recharge revives it.
-      let effectiveControls = controls
+      let effectiveControls: ControlInput =
+        aimMode === 'hover' ? hoverInput : controls
       if (batteryMode) {
         const activity = Math.max(
           Math.abs(controls.left.x),
@@ -329,16 +357,44 @@ export default function StrikeRig({
     const playerSafe = !crash.active && onPad(flight)
     padStateRef.current = playerSafe ? 'active' : 'idle'
 
-    // Aim direction = the FPV camera forward (minus recoil, which is a
-    // visual kick only): yaw + tilt follow + the gyro offset. In acro the
-    // follow is 1:1 — pitching the drone is the vertical aim.
     const aim = aimRef.current
-    const pitch = flight.tiltPitch * fpvPitchGain(zoom, flightMode) + aim.pitch
-    const yaw = flight.yaw + aim.yaw
-    const cosP = Math.cos(pitch)
-    fireDir.x = -Math.sin(yaw) * cosP
-    fireDir.y = Math.sin(pitch)
-    fireDir.z = -Math.cos(yaw) * cosP
+    const gimbal = gimbalRef.current
+    const basePitch = flight.tiltPitch * fpvPitchGain(zoom, flightMode)
+
+    // Hover mode: the right stick (touch or arrow keys — both feed the
+    // same shared ControlInput) slews the gimbal at a rate.
+    if (aimMode === 'hover' && !crash.active) {
+      stepGimbalRates(
+        gimbal,
+        controls.right.x,
+        controls.right.y,
+        zoom ? ZOOM_SENS : 1,
+        dt,
+      )
+    }
+
+    // Soft track: while last frame's lock is alive, the gimbal slews toward
+    // the led target (error-reducing, arc-clamped, strength per assist) —
+    // the sensor-operator's track mode that makes fast evaders hittable.
+    const trackMult = TRACK_MULT[assist]
+    if (trackMult > 0 && lockIdxRef.current >= 0 && !crash.active) {
+      const t = targets[lockIdxRef.current]
+      if (t && t.alive) {
+        leadPoint(flight.pos, t.pos, t.vel, weapon.speed, aimPoint)
+        const dx = aimPoint.x - flight.pos.x
+        const dy = aimPoint.y - flight.pos.y
+        const dz = aimPoint.z - flight.pos.z
+        const desYaw = wrapAngle(Math.atan2(-dx, -dz) - flight.yaw - aim.yaw)
+        const desPitch = Math.atan2(dy, Math.hypot(dx, dz)) - basePitch - aim.pitch
+        trackToward(gimbal, desYaw, desPitch, TRACK_RATE * trackMult * dt)
+      }
+    }
+
+    // The single aim composition (fire path, lock cone, reticle, gunner
+    // camera all share it): flight yaw + tilt follow + gimbal + gyro.
+    // Recoil stays camera-only.
+    aimAngles(flight.yaw, basePitch, gimbal, aim.yaw, aim.pitch, angles)
+    dirFromAngles(angles.yaw, angles.pitch, fireDir)
 
     // Gallery targets drift deterministically off the canvas clock; enemies
     // orbit/evade (and possibly return fire) while the wave is live.
@@ -384,6 +440,39 @@ export default function StrikeRig({
       }
     } else if (lockIdx >= 0) {
       lockHold.current += dt
+    }
+
+    // Gimbal-mode reticle: the camera stays flight-locked, so project the
+    // aim direction into camera space and move the reticle element across
+    // the screen (left/top writes — the lock styling owns transform).
+    const reticleEl = reticleRef.current
+    if (reticleEl) {
+      if (aimMode === 'gimbal') {
+        const dYaw = wrapAngle(angles.yaw - flight.yaw)
+        const dPitch = angles.pitch - basePitch
+        const vHalf = Math.tan((camera.fov * Math.PI) / 360)
+        const hHalf = vHalf * camera.aspect
+        const xPct = Math.min(
+          96,
+          Math.max(4, 50 + (Math.tan(-dYaw) / hHalf) * 50),
+        )
+        const yPct = Math.min(
+          96,
+          Math.max(4, 50 - (Math.tan(dPitch) / vHalf) * 50),
+        )
+        const pos = reticlePos.current
+        if (Math.abs(xPct - pos.x) > 0.15 || Math.abs(yPct - pos.y) > 0.15) {
+          pos.x = xPct
+          pos.y = yPct
+          reticleEl.style.left = `${xPct.toFixed(2)}%`
+          reticleEl.style.top = `${yPct.toFixed(2)}%`
+        }
+      } else if (reticleEl.style.left !== '') {
+        reticleEl.style.left = ''
+        reticleEl.style.top = ''
+        reticlePos.current.x = 50
+        reticlePos.current.y = 50
+      }
     }
 
     // Fire intent: held trigger (button/Space/mouse/gamepad) or auto-fire
@@ -515,6 +604,8 @@ export default function StrikeRig({
         hud.dataset.crashState = crash.active ? 'tumbling' : 'none'
         hud.dataset.safe = playerSafe ? 'on' : 'off'
         hud.dataset.zoom = zoom ? 'on' : 'off'
+        hud.dataset.gimbalYaw = gimbal.yaw.toFixed(3)
+        hud.dataset.gimbalPitch = gimbal.pitch.toFixed(3)
         hud.dataset.inputSource = external.current.owner ?? 'touch'
         // Nearest alive target — the closed-loop aim beacon for the e2e
         // suites (no window globals; lesson #31).

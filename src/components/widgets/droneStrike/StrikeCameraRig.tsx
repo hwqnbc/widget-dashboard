@@ -6,6 +6,8 @@ import type { Collider, FlightMode, FlightState } from '../droneSim/flightModel'
 import { boomClipT, damp } from '../droneSim/flightModel'
 import type { AimOffset, StrikeView } from './aimModel'
 import { BASE_FOV, ZOOM_FOV, fpvPitchGain } from './aimModel'
+import type { AimMode, GimbalState } from './gimbalModel'
+import { GIMBAL_PITCH_MAX, GIMBAL_PITCH_MIN } from './gimbalModel'
 
 const UP = new Vector3(0, 1, 0)
 const CHASE_OFFSET = new Vector3(0, 2.4, 6)
@@ -30,6 +32,8 @@ export default function StrikeCameraRig({
   colliders,
   zoom,
   flightMode,
+  aimMode,
+  gimbalRef,
 }: {
   view: StrikeView
   flight: FlightState
@@ -39,6 +43,10 @@ export default function StrikeCameraRig({
   zoom: boolean
   /** In acro the camera follows the full flight attitude (pitch = aim). */
   flightMode: FlightMode
+  /** 'gunner'/'hover' slew the camera with the gimbal; 'gimbal' keeps the
+   * camera flight-locked (the reticle moves instead). */
+  aimMode: AimMode
+  gimbalRef: { current: GimbalState }
 }) {
   const camera = useThree((s) => s.camera) as PerspectiveCamera
   const desired = useRef(new Vector3()).current
@@ -89,9 +97,22 @@ export default function StrikeCameraRig({
       flight.pos.y + desired.y,
       flight.pos.z + desired.z,
     )
+    // Gunner/hover: the camera IS the gimbal view (sensor-operator screen);
+    // gimbal mode keeps the camera flight-locked and the reticle moves.
+    const gimbal = gimbalRef.current
+    const camGimbal = aimMode === 'gimbal' ? 0 : 1
+    const pitch = Math.min(
+      GIMBAL_PITCH_MAX,
+      Math.max(
+        GIMBAL_PITCH_MIN,
+        flight.tiltPitch * fpvPitchGain(zoom, flightMode) +
+          gimbal.pitch * camGimbal +
+          aim.pitch * camGimbal,
+      ),
+    )
     euler.set(
-      flight.tiltPitch * fpvPitchGain(zoom, flightMode) + aim.pitch + aim.recoil,
-      flight.yaw + aim.yaw,
+      pitch + aim.recoil,
+      flight.yaw + (gimbal.yaw + aim.yaw) * camGimbal,
       0,
     )
     camera.quaternion.setFromEuler(euler)

@@ -23,6 +23,7 @@ import type { FlightMode, Weather } from '../droneSim/flightModel'
 import type { AimAssistLevel } from './combatModel'
 import type { GyroMode } from './gyroAim'
 import { gyroNeedsPermission, gyroSupported, requestGyroPermission } from './gyroAim'
+import type { AimMode } from './gimbalModel'
 
 function ToggleRow({
   testId,
@@ -70,6 +71,7 @@ export default function StrikeSettingsPanel({
   onClose,
   autoFire,
   aimAssist,
+  aimMode,
   gyroAim,
   crashes,
   battery,
@@ -89,6 +91,7 @@ export default function StrikeSettingsPanel({
   onClose: () => void
   autoFire: boolean
   aimAssist: AimAssistLevel
+  aimMode: AimMode
   gyroAim: GyroMode
   crashes: boolean
   battery: boolean
@@ -137,6 +140,34 @@ export default function StrikeSettingsPanel({
             checked={autoFire}
             onChange={(next) => set({ autoFire: next })}
           />
+          <ListItem disableGutters sx={{ py: 0.5 }}>
+            <ListItemText
+              primary="Aim control"
+              secondary="How the gun gimbal is aimed. Reticle: drag the scene, the reticle moves in your view. Gunner: dragging slews the camera itself. Hover: the right stick aims while the drone holds position. Double-tap the scene to recenter."
+              slotProps={{ primary: { sx: { fontWeight: 600 } }, secondary: { sx: { fontSize: 12 } } }}
+            />
+            <ToggleButtonGroup
+              size="small"
+              exclusive
+              orientation="vertical"
+              data-testid="strike-aimmode"
+              value={aimMode}
+              onChange={(_, v) => {
+                if (v) set({ aimMode: v as AimMode })
+              }}
+              sx={{ ml: 1.5, flexShrink: 0 }}
+            >
+              <ToggleButton value="gimbal" data-testid="strike-aimmode-gimbal">
+                Reticle
+              </ToggleButton>
+              <ToggleButton value="gunner" data-testid="strike-aimmode-gunner">
+                Gunner
+              </ToggleButton>
+              <ToggleButton value="hover" data-testid="strike-aimmode-hover">
+                Hover
+              </ToggleButton>
+            </ToggleButtonGroup>
+          </ListItem>
           <ListItem disableGutters sx={{ py: 0.5 }}>
             <ListItemText
               primary="Aim assist"

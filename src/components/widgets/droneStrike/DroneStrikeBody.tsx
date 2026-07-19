@@ -64,6 +64,14 @@ import SafePadRing from './SafePadRing'
 import StrikeMinimap from './StrikeMinimap'
 import StrikeSettingsPanel from './StrikeSettingsPanel'
 import ScopeButton from './ScopeButton'
+import type { AimMode } from './gimbalModel'
+import {
+  DRAG_SENS,
+  coerceAimMode,
+  createGimbalState,
+  resetGimbal,
+  slewGimbal,
+} from './gimbalModel'
 import type { GyroMode } from './gyroAim'
 import { attachGyro, coerceGyroMode, createGyroState } from './gyroAim'
 
@@ -90,6 +98,7 @@ const PLAYER_HP = 3
 const SETTING_KEYS = [
   'autoFire',
   'aimAssist',
+  'aimMode',
   'gyroAim',
   'crashes',
   'battery',
@@ -151,6 +160,7 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
   const autoFire = useWidgetField(id, 'autoFire', false)
   const aimAssist = useWidgetField<AimAssistLevel>(id, 'aimAssist', 'mild', coerceAimAssist)
   const gyroMode = useWidgetField<GyroMode>(id, 'gyroAim', 'off', coerceGyroMode)
+  const aimMode = useWidgetField<AimMode>(id, 'aimMode', 'gimbal', coerceAimMode)
   const richWorld = useWidgetField(id, 'richWorld', true)
   const rateSpeed = useWidgetField(id, 'rateSpeed', 1, coerceRate)
   const rateYaw = useWidgetField(id, 'rateYaw', 1, coerceRate)
@@ -213,6 +223,13 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
   // Shift / right mouse / gamepad LT.
   const [zoom, setZoom] = useState(false)
   const gyroRef = useRef(createGyroState())
+  const gimbalRef = useRef(createGimbalState())
+
+  // Switching aim-control modes recenters the gimbal (a fresh start for
+  // comparing the modes; centred gimbal = classic fly-to-aim).
+  useEffect(() => {
+    resetGimbal(gimbalRef.current)
+  }, [aimMode])
 
   // ADS is an FPV feature: leaving the gun cam drops the scope.
   useEffect(() => {
@@ -344,12 +361,51 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
     showBanner('♥ RESTORED', 1500)
   }, [showBanner])
 
+  // Drag-to-aim (all modes): a pointer on the free scene area slews the
+  // gimbal, PUBG-style. A quick mouse click (no movement) still fires; a
+  // double-tap/double-click recenters the gimbal. The drag pointer gets
+  // the joystick lesson's release hardening — a stuck drag id would block
+  // every future drag.
+  const dragRef = useRef({ id: -1, x: 0, y: 0, moved: false, downMs: 0, lastTapMs: 0 })
+  const canvasBoxRef = useRef<HTMLDivElement>(null)
+  const firePulse = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const releaseDrag = useCallback(() => {
+    dragRef.current.id = -1
+  }, [])
+  useEffect(() => {
+    const onWindowUp = (e: PointerEvent) => {
+      // Genuine fallback only: a pointerup that targets the (capturing)
+      // canvas box reaches its own handler, which owns the tap/double-tap
+      // logic — this capture-phase listener must not release the id first.
+      const el = canvasBoxRef.current
+      if (el && e.target instanceof Node && el.contains(e.target)) return
+      if (e.pointerId === dragRef.current.id) releaseDrag()
+    }
+    const onBlur = () => releaseDrag()
+    window.addEventListener('pointerup', onWindowUp, true)
+    window.addEventListener('pointercancel', onWindowUp, true)
+    window.addEventListener('blur', onBlur)
+    const poll = window.setInterval(() => {
+      const d = dragRef.current
+      const el = canvasBoxRef.current
+      if (d.id !== -1 && el && !el.hasPointerCapture(d.id)) releaseDrag()
+    }, 400)
+    return () => {
+      window.removeEventListener('pointerup', onWindowUp, true)
+      window.removeEventListener('pointercancel', onWindowUp, true)
+      window.removeEventListener('blur', onBlur)
+      window.clearInterval(poll)
+      if (firePulse.current) clearTimeout(firePulse.current)
+    }
+  }, [releaseDrag])
+
   const restart = () => {
     setConfirm(null)
     resetFlightState(flight)
     resetCombatState(combat)
     resetBatteryState(batteryRef.current)
     crashRef.current.active = false
+    resetGimbal(gimbalRef.current)
     for (const t of targets) t.alive = false
     scoreRef.current = 0
     setMarkers([])
@@ -518,6 +574,7 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
       data-turbo={turbo ? 'on' : 'off'}
       data-battery={battery ? 'on' : 'off'}
       data-crashes={crashes ? 'on' : 'off'}
+      data-aim-mode={aimMode}
       onMouseDown={(e) => e.stopPropagation()}
       onTouchStart={(e) => e.stopPropagation()}
       sx={{
@@ -529,25 +586,78 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
       }}
     >
       <Box
+        ref={canvasBoxRef}
         data-testid="strike-canvas"
-        sx={{ position: 'absolute', inset: 0 }}
-        // Desktop convenience: left mouse fires, right mouse holds the
-        // scope. Touch uses the dedicated buttons only (a stray palm must
-        // not shoot or zoom).
+        sx={{ position: 'absolute', inset: 0, touchAction: 'none' }}
+        // The free scene area is the aim surface: drag (touch or left
+        // mouse) slews the gimbal; a quick mouse click still fires; a
+        // double-tap/double-click recenters; right mouse holds the scope.
         onPointerDown={(e) => {
-          if (e.pointerType !== 'mouse') return
-          if (e.button === 0) fireHeldRef.current = true
-          else if (e.button === 2) setZoom(true)
+          if (e.pointerType === 'mouse' && e.button === 2) {
+            setZoom(true)
+            return
+          }
+          if (e.pointerType === 'mouse' && e.button !== 0) return
+          const d = dragRef.current
+          if (d.id !== -1) return
+          try {
+            e.currentTarget.setPointerCapture(e.pointerId)
+          } catch {
+            return
+          }
+          d.id = e.pointerId
+          d.x = e.clientX
+          d.y = e.clientY
+          d.moved = false
+          d.downMs = performance.now()
+        }}
+        onPointerMove={(e) => {
+          const d = dragRef.current
+          if (e.pointerId !== d.id) return
+          const dx = e.clientX - d.x
+          const dy = e.clientY - d.y
+          if (!d.moved && Math.hypot(dx, dy) > 6) d.moved = true
+          if (d.moved) {
+            const sens = DRAG_SENS * (zoom ? 0.5 : 1)
+            // Drag right aims right (yaw decreases — yaw+ is left); drag
+            // up aims up.
+            slewGimbal(gimbalRef.current, -dx * sens, -dy * sens)
+            d.x = e.clientX
+            d.y = e.clientY
+          }
         }}
         onPointerUp={(e) => {
-          if (e.pointerType !== 'mouse') return
-          if (e.button === 0) fireHeldRef.current = false
-          else if (e.button === 2) setZoom(false)
+          if (e.pointerType === 'mouse' && e.button === 2) {
+            setZoom(false)
+            return
+          }
+          const d = dragRef.current
+          if (e.pointerId !== d.id) return
+          const now = performance.now()
+          const tap = !d.moved && now - d.downMs < 400
+          releaseDrag()
+          if (!tap) return
+          if (now - d.lastTapMs < 500) {
+            // Double-tap: recenter the gimbal (back to fly-to-aim).
+            d.lastTapMs = 0
+            resetGimbal(gimbalRef.current)
+          } else {
+            d.lastTapMs = now
+            if (e.pointerType === 'mouse') {
+              // Single click still fires one shot.
+              fireHeldRef.current = true
+              if (firePulse.current) clearTimeout(firePulse.current)
+              firePulse.current = setTimeout(() => {
+                fireHeldRef.current = false
+              }, 120)
+            }
+          }
         }}
-        onPointerLeave={(e) => {
-          if (e.pointerType !== 'mouse') return
-          fireHeldRef.current = false
-          setZoom(false)
+        onPointerCancel={(e) => {
+          if (e.pointerId === dragRef.current.id) releaseDrag()
+        }}
+        onLostPointerCapture={(e) => {
+          if (e.pointerId === dragRef.current.id) releaseDrag()
         }}
         onContextMenu={(e) => e.preventDefault()}
       >
@@ -598,6 +708,8 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
             hp={hp}
             zoom={zoom}
             onZoomHold={setZoom}
+            aimMode={aimMode}
+            gimbalRef={gimbalRef}
             scoreRef={scoreRef}
             onWaveCleared={onWaveCleared}
             onTargetDown={onTargetDown}
@@ -615,6 +727,8 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
             colliders={layout.colliders}
             zoom={zoom}
             flightMode={flightMode}
+            aimMode={aimMode}
+            gimbalRef={gimbalRef}
           />
         </Canvas>
       </Box>
@@ -863,6 +977,7 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
         onClose={() => setSettingsOpen(false)}
         autoFire={autoFire}
         aimAssist={aimAssist}
+        aimMode={aimMode}
         gyroAim={gyroMode}
         crashes={crashes}
         battery={battery}

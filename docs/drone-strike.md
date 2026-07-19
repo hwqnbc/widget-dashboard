@@ -13,19 +13,45 @@ shooter layout — PUBG/CoD Mobile style), with full desktop support.
 | Input | Touch | Desktop |
 | --- | --- | --- |
 | Throttle / yaw | left stick | `W S` / `A D` |
-| Move (pitch/strafe) | right stick | arrow keys |
-| Fire | **fire button** above the right stick (hold = continuous) | `Space`, left mouse on the scene, or gamepad RT/RB |
+| Move (pitch/strafe) | right stick (hover mode: aims the gimbal) | arrow keys |
+| Aim the gun | **drag the scene** to slew the weapon gimbal; double-tap recenters | left-mouse **drag** (a click still fires); double-click recenters |
+| Fire | **fire button** above the right stick (hold = continuous) | `Space`, left-mouse **click**, or gamepad RT/RB |
 | ADS / zoom | **scope button** above the fire button (tap = toggle) | hold `Shift` or right mouse; gamepad LT (hold) |
-| Aim | fly: yaw + altitude put the reticle on target | same |
 | Fine aim (optional) | **gyro**: tilt the device a few degrees — Off / Zoom only / Always | — |
 
 Key decisions:
 
-- **Fly-to-aim, no third stick.** The FPV camera carries a fixed centre
-  reticle; both thumbs stay on the flight sticks. The FPV camera follows
-  only a gentle fraction of the drone's forward tilt (`FPV_PITCH_GAIN`
-  0.35 vs the sim's 0.6) so the reticle stays steady while closing in —
-  vertical aim is mostly altitude.
+- **Gimballed weapon aiming (three modes).** Real armed drones separate
+  flying from aiming — the MQ-9's pilot flies while a sensor operator slews
+  a gimballed targeting turret that can look steeply down ([MQ-9 crew &
+  MTS-B targeting pod](https://en.wikipedia.org/wiki/General_Atomics_MQ-9_Reaper)),
+  and gunship games + the [PUBG-standard "drag the free screen to aim"](https://play.google.com/store/apps/editorial?id=mc_editorial_evergreen_post_install_pubg_mobile_improve_your_controls_now_fcp)
+  follow the same split. The gun rides a virtual gimbal (`gimbalModel.ts`):
+  yaw ±60°, pitch **+20°…−70°** (the deep look-down that makes ground
+  targets and fast movers reachable — impossible with the old tiny FPV
+  pitch follow). Dragging the free scene area slews it (`DRAG_SENS`, halved
+  while scoped); double-tap/double-click recenters (a centred gimbal is
+  exactly the old fly-to-aim, so nothing was taken away). Settings' **Aim
+  control** switches three modes to compare (persisted `aimMode`, default
+  Reticle):
+  - **Reticle** (default): the camera stays flight-locked and the reticle
+    moves across the view to where the gun points — you keep full sight of
+    where you're flying.
+  - **Gunner**: the camera itself slews with the gimbal (the sensor-operator
+    screen), reticle centred.
+  - **Hover**: gunner camera + the right stick becomes the gimbal aim while
+    the drone holds position (altitude-hold) — the two-crew feel, one
+    control at a time.
+- **Soft track on lock.** Once the reticle acquires a lock (and aim assist
+  ≠ off), the gimbal gently follows the velocity-led target within its arc
+  (`trackToward`, `TRACK_RATE`×`{mild .5, strong 1}`) — the sensor
+  operator's track mode, which is what actually makes fast-evading enemy
+  drones hittable. You still acquire the lock and fire; manual drag layers
+  on top; it disengages with the lock. Gyro fine-aim now nudges the gimbal.
+- One `aimAngles` composition (flight yaw + tilt follow + gimbal + gyro,
+  arc-clamped) feeds the fire path, the lock cone, the reticle projection
+  and the gunner camera alike, so bolts land exactly on the reticle in
+  every mode.
 - **Fire button + auto-fire.** The dedicated button (own pointer capture +
   the joystick's full release hardening — a silently stuck trigger would
   drain the gun invisibly) suits skill play; the settings' **auto-fire**
@@ -236,6 +262,12 @@ kind of list).
   `HitEvent` coordinates (RainField's single-draw-call Points pattern).
 
 ### Enemies & waves
+- **Ground-target waves** — now that the gimbal looks steeply down, add
+  ground objects to shoot: parked trucks, AA turrets that shoot up, tents.
+  Placement reuses the `waveLayout` rejection sampler at `y≈0` (clear of
+  building footprints); a turret is just an enemy with a fixed position and
+  the existing `stepEnemy` fire path. This is the payoff the gimbal
+  unlocked.
 - **Enemy variety** — a *chaser* that pursues the player (waypoint =
   player position, capped speed, `resolveCollisions` for safety), a
   *kamikaze* that dives once locked, a *shielded* drone only hurt from
