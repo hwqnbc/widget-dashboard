@@ -10,6 +10,7 @@ import {
   createStrikePilot,
   launch,
   reporter,
+  setStrikeSwitch,
   strikeReaders,
   waitForWaveState,
 } from './helpers.mjs'
@@ -19,6 +20,8 @@ import { buildWave, ENEMY_FIRE_WAVE, ENEMY_WAVE_START } from './.bundle/waveLayo
 const { check, finish } = reporter('strike-waves')
 const { browser, context, page } = await launch()
 await addStrikeWidget(page)
+// Crash-free flying for the closed-loop wave clear (crashes: suite 105).
+await setStrikeSwitch(page, 'strike-crash-toggle', false)
 const { combat } = strikeReaders(page)
 
 check('wave 1 goes active', await waitForWaveState(page, 'active'))

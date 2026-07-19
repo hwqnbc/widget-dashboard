@@ -9,6 +9,7 @@ import {
   createStrikePilot,
   launch,
   reporter,
+  setStrikeSwitch,
   strikeReaders,
   tapFire,
   waitForWaveState,
@@ -19,6 +20,9 @@ import { buildWave } from './.bundle/waveLayout.js'
 const { check, finish } = reporter('strike-core')
 const { browser, context, page } = await launch()
 await addStrikeWidget(page)
+// The closed-loop routes below bump walls at speed; crash mode (default
+// on) would tumble the pilot mid-flight — suite 105 covers crashes.
+await setStrikeSwitch(page, 'strike-crash-toggle', false)
 const { combat, target } = strikeReaders(page)
 
 for (const tid of [

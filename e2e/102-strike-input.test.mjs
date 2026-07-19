@@ -21,6 +21,8 @@ import {
 const { check, finish } = reporter('strike-input')
 const { browser, context, page } = await launch()
 await addStrikeWidget(page)
+// Crash-free flying for the auto-fire engagement leg (crashes: suite 105).
+await setStrikeSwitch(page, 'strike-crash-toggle', false)
 const { hud, telemetry, combat } = strikeReaders(page)
 const root = page.locator('[data-testid="drone-strike-root"]')
 

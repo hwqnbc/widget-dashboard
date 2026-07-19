@@ -82,6 +82,15 @@ Losing all HP fails the wave — banner, then the same wave restarts with
 fresh targets and HP; the session score survives (arcade-friendly). Restart
 and city-shuffle are confirm-guarded once there is progress.
 
+**Crash mode** (on by default, toggleable): a hard wall impact
+(`CRASH_SPEED`, the sim's threshold) tumbles the drone (`stepCrash`,
+controls and gun dead, no enemy-bolt hits while tumbling), **costs one
+heart**, and respawns it on the pad. The counterweight is the pad itself:
+**resting on the spawn pad mid-wave restores one heart per 3 s** — the
+survival valve for the harder waves, since fast-evading enemies make
+clean sweeps difficult. The hearts row shows whenever hearts can change
+(crash mode on, or enemies shooting from wave 5).
+
 Taking a hit flashes a red **damage vignette** around the screen edge
 (imperative style writes from the hit path — the horizon-overlay pattern,
 zero React renders), and the last heart keeps a faint constant red edge.
@@ -238,15 +247,10 @@ charge carries across waves — recharging on the pad between waves is the
 gameplay — and a dead battery auto-descends via `DEAD_INPUT` **and can't
 power the gun** while enemies keep shooting).
 
-Still open:
-
-- **Crash mode** — hard wall impacts tumble + respawn instead of the
-  current bounce. `StrikeRig` already receives the impact speed from
-  `stepFlight` and ignores it; reuse `CRASH_SPEED`, `stepCrash`,
-  `CRASH_DURATION`, `CRASH_PULSE` and the `CrashState` pattern from
-  `droneSim/DroneRig.tsx` (tumble spin, controls dead, pad respawn).
-  Design decision: does a crash cost a heart, or only the respawn flight
-  time while the wave stays live? Suspend fire intent during the tumble.
+~~Crash mode~~ — **shipped** (tumble + pad respawn at the sim's
+`CRASH_SPEED`, costs a heart, fire and enemy hits suspended during the
+tumble; paired with the pad's heart recharge — see Gameplay above). That
+completes the audit's portable list.
 
 Audited and **not** applicable: gate count / course editor / course source
 (racing), the landing challenge, and follow distance + the standing/walking

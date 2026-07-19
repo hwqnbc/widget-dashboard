@@ -13,7 +13,16 @@ import type {
   Vec3,
   Weather,
 } from '../droneSim/flightModel'
-import { DEAD_INPUT, SPAWN, sampleWind, stepBattery, stepFlight } from '../droneSim/flightModel'
+import {
+  CRASH_DURATION,
+  CRASH_SPEED,
+  DEAD_INPUT,
+  SPAWN,
+  sampleWind,
+  stepBattery,
+  stepCrash,
+  stepFlight,
+} from '../droneSim/flightModel'
 import { PAD_CENTER, PAD_START_RADIUS } from '../droneSim/lapTimer'
 import type { ExternalState } from '../droneSim/externalInput'
 import { pollGamepad } from '../droneSim/externalInput'
@@ -61,6 +70,18 @@ const BLIP_COLORS: Record<TargetKind, string> = {
 }
 /** Enemy bolts never hit other targets (no friendly fire). */
 const NO_TARGETS: TargetState[] = []
+/** Seconds resting on the spawn pad to restore one heart. */
+const HEART_RECHARGE_S = 3
+
+/** Transient crash-tumble state, owned by the body, mutated here (the
+ * body creates the literal — same split as the sim's DroneRig). */
+export interface CrashState {
+  active: boolean
+  /** Canvas clock time (s) when the tumble ends and the drone respawns. */
+  until: number
+  spinX: number
+  spinZ: number
+}
 
 /** Standard-layout gamepad: right trigger (7) or right shoulder (5) fires. */
 function gamepadFireHeld(): boolean {
@@ -103,6 +124,12 @@ export default function StrikeRig({
   batteryRef,
   batteryBarRef,
   onBatteryEvent,
+  crashMode,
+  crashRef,
+  onCrash,
+  onCrashEnd,
+  canHeal,
+  onHeal,
   targets,
   enemyAI,
   enemiesShoot,
@@ -142,6 +169,16 @@ export default function StrikeRig({
   /** Battery bar fill — width/colour/data-level written on the tick. */
   batteryBarRef: RefObject<HTMLDivElement | null>
   onBatteryEvent: (event: BatteryEvent) => void
+  /** Hard wall impacts tumble the drone, cost a heart and respawn it. */
+  crashMode: boolean
+  crashRef: { current: CrashState }
+  /** Crash started (the body deducts the heart + banners). */
+  onCrash: () => void
+  /** Tumble over — the body respawns the drone at the pad. */
+  onCrashEnd: () => void
+  /** Resting on the spawn pad restores hearts while this is true. */
+  canHeal: boolean
+  onHeal: () => void
   targets: TargetState[]
   /** Parallel AI slots for the 'enemy' targets. */
   enemyAI: EnemyAIState[]
@@ -186,6 +223,7 @@ export default function StrikeRig({
   const lockHold = useRef(0)
   const clearedSent = useRef(false)
   const padZoomRef = useRef(false)
+  const healClock = useRef(0)
 
   useFrame(({ clock }, dt) => {
     if (!waveActive) clearedSent.current = false
@@ -207,35 +245,71 @@ export default function StrikeRig({
       wind.y = 0
     }
 
-    // Battery bookkeeping first — a dead battery kills the sticks (gentle
-    // auto-descent) and unpowers the gun until a pad recharge revives it.
-    let effectiveControls = controls
+    const crash = crashRef.current
     const battery = batteryRef.current
-    if (batteryMode) {
-      const activity = Math.max(
-        Math.abs(controls.left.x),
-        Math.abs(controls.left.y),
-        Math.abs(controls.right.x),
-        Math.abs(controls.right.y),
-      )
+    if (crash.active) {
+      // Tumble: controls and combat systems dead, gravity wins.
+      stepCrash(flight, dt, colliders)
+      crash.spinX += 6 * dt
+      crash.spinZ += 4.5 * dt
+      if (clock.elapsedTime >= crash.until) {
+        crash.active = false
+        crash.spinX = 0
+        crash.spinZ = 0
+        onCrashEnd()
+      }
+    } else {
+      // The spawn pad is the service station: it recharges the battery and
+      // (while a wave is live) restores hearts.
       const onSpawnPad =
         flight.pos.y < 1.2 &&
         Math.hypot(flight.pos.x - PAD_CENTER.x, flight.pos.z - PAD_CENTER.z) <=
           PAD_START_RADIUS
-      const event = stepBattery(battery, activity, onSpawnPad, dt)
-      if (event) onBatteryEvent(event)
-      if (battery.dead) effectiveControls = DEAD_INPUT
-    }
 
-    stepFlight(
-      flight,
-      effectiveControls,
-      dt,
-      colliders,
-      weather === 'storm' ? wind : undefined,
-      flightMode,
-      tuning,
-    )
+      // Battery bookkeeping first — a dead battery kills the sticks (gentle
+      // auto-descent) and unpowers the gun until a pad recharge revives it.
+      let effectiveControls = controls
+      if (batteryMode) {
+        const activity = Math.max(
+          Math.abs(controls.left.x),
+          Math.abs(controls.left.y),
+          Math.abs(controls.right.x),
+          Math.abs(controls.right.y),
+        )
+        const event = stepBattery(battery, activity, onSpawnPad, dt)
+        if (event) onBatteryEvent(event)
+        if (battery.dead) effectiveControls = DEAD_INPUT
+      }
+
+      const impact = stepFlight(
+        flight,
+        effectiveControls,
+        dt,
+        colliders,
+        weather === 'storm' ? wind : undefined,
+        flightMode,
+        tuning,
+      )
+      if (crashMode && impact >= CRASH_SPEED) {
+        crash.active = true
+        crash.until = clock.elapsedTime + CRASH_DURATION
+        crash.spinX = 0
+        crash.spinZ = 0
+        vibrate(CRASH_PULSE)
+        onCrash()
+      }
+
+      // Heart recharge: rest on the pad for HEART_RECHARGE_S per heart.
+      if (canHeal && onSpawnPad) {
+        healClock.current += dt
+        if (healClock.current >= HEART_RECHARGE_S) {
+          healClock.current = 0
+          onHeal()
+        }
+      } else {
+        healClock.current = 0
+      }
+    }
 
     // Aim direction = the FPV camera forward (minus recoil, which is a
     // visual kick only): yaw + tilt follow + the gyro offset. In acro the
@@ -300,6 +374,7 @@ export default function StrikeRig({
     combat.cooldown = Math.max(0, combat.cooldown - dt)
     const wantsFire =
       waveActive &&
+      !crash.active &&
       !(batteryMode && battery.dead) &&
       (fireHeldRef.current ||
         gamepadFireHeld() ||
@@ -342,7 +417,8 @@ export default function StrikeRig({
       }
     }
 
-    // Sweep the enemy pool against the world + the player drone.
+    // Sweep the enemy pool against the world + the player drone. A drone
+    // already tumbling from a crash is not hit again (no double punishment).
     events.count = 0
     stepProjectiles(
       combat.enemy,
@@ -350,7 +426,7 @@ export default function StrikeRig({
       dt,
       colliders,
       NO_TARGETS,
-      waveActive ? flight.pos : null,
+      waveActive && !crash.active ? flight.pos : null,
       PLAYER_HIT_RADIUS,
       events,
     )
@@ -374,8 +450,9 @@ export default function StrikeRig({
     }
     const tilt = tiltRef.current
     if (tilt) {
-      tilt.rotation.x = flight.tiltPitch
-      tilt.rotation.z = flight.tiltRoll
+      // Crash overrides the aerodynamic tilt with an accelerating tumble.
+      tilt.rotation.x = crash.active ? crash.spinX : flight.tiltPitch
+      tilt.rotation.z = crash.active ? crash.spinZ : flight.tiltRoll
     }
     const shadow = shadowRef.current
     if (shadow) {
@@ -416,6 +493,7 @@ export default function StrikeRig({
         for (const p of combat.enemy) if (p.active) enemyProj++
         hud.dataset.enemyProj = String(enemyProj)
         hud.dataset.hp = String(hp)
+        hud.dataset.crashState = crash.active ? 'tumbling' : 'none'
         hud.dataset.zoom = zoom ? 'on' : 'off'
         hud.dataset.inputSource = external.current.owner ?? 'touch'
         // Nearest alive target — the closed-loop aim beacon for the e2e

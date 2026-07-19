@@ -19,6 +19,8 @@ import {
 const { check, finish } = reporter('strike-simports')
 const { browser, context, page } = await launch()
 await addStrikeWidget(page)
+// Full-speed sprints bump buildings; crash mode is suite 105's subject.
+await setStrikeSwitch(page, 'strike-crash-toggle', false)
 const { telemetry } = strikeReaders(page)
 const root = page.locator('[data-testid="drone-strike-root"]')
 

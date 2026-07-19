@@ -197,6 +197,7 @@ export function defaultWidgetData(type: WidgetType): Record<string, unknown> {
         stickExpo: 0,
         turbo: false,
         battery: false,
+        crashes: true,
       }
     case 'tankBattle':
       return {

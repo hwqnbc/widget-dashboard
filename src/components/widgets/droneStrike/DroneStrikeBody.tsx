@@ -50,6 +50,7 @@ import { createEnemyAIStates, seedEnemyAIStates } from './enemyAI'
 import type { StrikeView } from './aimModel'
 import { ZOOM_SENS, coerceStrikeView, createAimOffset } from './aimModel'
 import StrikeCameraRig from './StrikeCameraRig'
+import type { CrashState } from './StrikeRig'
 import StrikeRig from './StrikeRig'
 import Targets from './Targets'
 import EnemyDrones from './EnemyDrones'
@@ -89,6 +90,7 @@ const SETTING_KEYS = [
   'autoFire',
   'aimAssist',
   'gyroAim',
+  'crashes',
   'battery',
   'weather',
   'richWorld',
@@ -155,6 +157,7 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
   const flightMode = useWidgetField<FlightMode>(id, 'flightMode', 'hold', coerceFlightMode)
   const turbo = useWidgetField(id, 'turbo', false)
   const battery = useWidgetField(id, 'battery', false)
+  const crashes = useWidgetField(id, 'crashes', true)
 
   // The world is the same seeded city as the drone sim; the course gates are
   // simply unused here (targets come from waveLayout instead).
@@ -176,6 +179,7 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
   const vignetteRef = useRef<HTMLDivElement>(null)
   const batteryRef = useRef<BatteryState>(createBatteryState())
   const batteryBarRef = useRef<HTMLDivElement>(null)
+  const crashRef = useRef<CrashState>({ active: false, until: 0, spinX: 0, spinZ: 0 })
   const bannerTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const minimapDroneRef = useRef<SVGGElement>(null)
   const minimapTargetRefs = useRef<(SVGCircleElement | null)[]>([])
@@ -303,11 +307,32 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
     resetBatteryState(batteryRef.current)
   }, [battery])
 
+  // Crash: the tumble costs a heart (same feedback as taking a bolt);
+  // the end of the tumble respawns the drone on the pad.
+  const onCrash = useCallback(() => {
+    flashVignette(vignetteRef.current)
+    setHp((h) => Math.max(0, h - 1))
+    showBanner('CRASHED!')
+  }, [showBanner])
+
+  const onCrashEnd = useCallback(() => {
+    resetFlightState(flight)
+  }, [flight])
+
+  // Resting on the pad mid-wave restores hearts — the survival valve for
+  // the harder waves.
+  const onHeal = useCallback(() => {
+    setHp((h) => Math.min(PLAYER_HP, h + 1))
+    vibrate(GATE_PULSE)
+    showBanner('♥ RESTORED', 1500)
+  }, [showBanner])
+
   const restart = () => {
     setConfirm(null)
     resetFlightState(flight)
     resetCombatState(combat)
     resetBatteryState(batteryRef.current)
+    crashRef.current.active = false
     for (const t of targets) t.alive = false
     scoreRef.current = 0
     setMarkers([])
@@ -438,6 +463,9 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
   const stickSize = fullscreen ? 140 : 88
   const stickInset = fullscreen ? 16 : 0
   const fireSize = fullscreen ? 96 : 64
+  // Hearts matter from the first wall once crashes cost one — show the row
+  // whenever it can change (crash mode on, or enemies shooting).
+  const hpVisible = crashes || wave >= ENEMY_FIRE_WAVE
 
   return (
     <Box
@@ -456,6 +484,7 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
       data-mode={flightMode}
       data-turbo={turbo ? 'on' : 'off'}
       data-battery={battery ? 'on' : 'off'}
+      data-crashes={crashes ? 'on' : 'off'}
       onMouseDown={(e) => e.stopPropagation()}
       onTouchStart={(e) => e.stopPropagation()}
       sx={{
@@ -514,6 +543,12 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
             batteryRef={batteryRef}
             batteryBarRef={batteryBarRef}
             onBatteryEvent={onBatteryEvent}
+            crashMode={crashes}
+            crashRef={crashRef}
+            onCrash={onCrash}
+            onCrashEnd={onCrashEnd}
+            canHeal={phase === 'active' && hp > 0 && hp < PLAYER_HP}
+            onHeal={onHeal}
             targets={targets}
             enemyAI={enemyAI}
             enemiesShoot={wave >= ENEMY_FIRE_WAVE}
@@ -566,6 +601,8 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
         data-targets-left="0"
         data-lock="-1"
         data-proj="0"
+        data-hp="3"
+        data-crash-state="none"
         data-tgt-kind="none"
         data-input-source="touch"
         sx={{
@@ -635,7 +672,7 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
           data-testid="strike-battery"
           sx={{
             position: 'absolute',
-            top: bestScore > 0 ? (wave >= ENEMY_FIRE_WAVE ? 120 : 92) : wave >= ENEMY_FIRE_WAVE ? 92 : 64,
+            top: bestScore > 0 ? (hpVisible ? 120 : 92) : hpVisible ? 92 : 64,
             left: 8,
             width: 92,
             height: 8,
@@ -655,7 +692,7 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
         </Box>
       )}
 
-      {wave >= ENEMY_FIRE_WAVE && (
+      {hpVisible && (
         <Box
           data-testid="strike-hp"
           data-hp={hp}
@@ -766,6 +803,7 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
         autoFire={autoFire}
         aimAssist={aimAssist}
         gyroAim={gyroMode}
+        crashes={crashes}
         battery={battery}
         weather={weather}
         richWorld={richWorld}

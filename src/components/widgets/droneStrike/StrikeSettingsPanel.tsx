@@ -71,6 +71,7 @@ export default function StrikeSettingsPanel({
   autoFire,
   aimAssist,
   gyroAim,
+  crashes,
   battery,
   weather,
   richWorld,
@@ -89,6 +90,7 @@ export default function StrikeSettingsPanel({
   autoFire: boolean
   aimAssist: AimAssistLevel
   gyroAim: GyroMode
+  crashes: boolean
   battery: boolean
   weather: Weather
   richWorld: boolean
@@ -195,6 +197,13 @@ export default function StrikeSettingsPanel({
               </ToggleButtonGroup>
             </ListItem>
           )}
+          <ToggleRow
+            testId="strike-crash-toggle"
+            label="Crash mode"
+            description="Hard wall impacts tumble the drone, cost a heart and respawn it at the pad. Rest on the pad mid-wave to restore hearts."
+            checked={crashes}
+            onChange={(next) => set({ crashes: next })}
+          />
           <ToggleRow
             testId="strike-battery-toggle"
             label="Battery"
