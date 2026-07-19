@@ -30,13 +30,14 @@ function ClawWeapon() {
   )
 }
 
-// The forearm + weapon slash diagonally, pivoting at the ELBOW — a slash along the
-// blade's own axis (tip sweeps up-left ↔ down-left). Amplitude kept modest so the
-// long blade stays within the viewBox.
-const SLASH = 14
+// The forearm + weapon slash diagonally, pivoting at the ELBOW — a wide chop whose
+// tip sweeps from low (down-left) all the way up to face height (up-left). Bigger,
+// higher arc than a wrist flick; the long blade still clears the viewBox at the top.
+const LOW = -18
+const HIGH = 48
 const slash = keyframes`
-  0%, 100% { transform: rotate(-${SLASH}deg); }
-  50%      { transform: rotate(${SLASH}deg); }
+  0%, 100% { transform: rotate(${LOW}deg); }
+  50%      { transform: rotate(${HIGH}deg); }
 `
 const DUR = '0.7s'
 const RELBOW = '168px 236px' // right elbow pivot
