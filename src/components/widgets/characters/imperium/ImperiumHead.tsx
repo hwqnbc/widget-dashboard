@@ -31,10 +31,12 @@ export default function ImperiumHead({ size = '100%' }: { size?: number | string
       <path d="M120 118 L120 145 M104 128 L114 132 M136 128 L126 132" stroke={IM.faceLine} strokeWidth={1.5} fill="none" opacity={0.8} />
       {/* black V-crest */}
       <path d="M101 114 L120 134 L139 114 L131 112 L120 126 L109 112 Z" fill={IM.armor} stroke={IM.armorShade} strokeWidth={1.4} />
-      {/* orange eyes */}
-      <path d="M104 126 L117 130 L116 135 L104 132 Z" fill={IM.eye} stroke={IM.bladeEdge} strokeWidth={1} />
-      <path d="M136 126 L123 130 L124 135 L136 132 Z" fill={IM.eye} stroke={IM.bladeEdge} strokeWidth={1} />
-      <path d="M106 128 L114 131 M134 128 L126 131" stroke={IM.eyeHi} strokeWidth={1.4} opacity={0.9} />
+      {/* orange eyes — four angular slits */}
+      <path d="M103 123 L114 126 L113 130 L103 128 Z" fill={IM.eye} stroke={IM.bladeEdge} strokeWidth={1} />
+      <path d="M137 123 L126 126 L127 130 L137 128 Z" fill={IM.eye} stroke={IM.bladeEdge} strokeWidth={1} />
+      <path d="M106 134 L114 136 L113 140 L106 138 Z" fill={IM.eye} stroke={IM.bladeEdge} strokeWidth={1} />
+      <path d="M134 134 L126 136 L127 140 L134 138 Z" fill={IM.eye} stroke={IM.bladeEdge} strokeWidth={1} />
+      <path d="M104 125 L112 127 M136 125 L128 127" stroke={IM.eyeHi} strokeWidth={1.4} opacity={0.9} />
       {/* mouth-guard vent */}
       <path d="M111 156 L129 156 L127 164 L113 164 Z" fill={IM.gunShade} />
       <path d="M113 159 L127 159" stroke={IM.eye} strokeWidth={1.8} opacity={0.85} />

@@ -17,14 +17,15 @@ function ClawWeapon() {
       <circle cx={2} cy={0} r={4.5} fill={IM.gunShade} stroke={IM.steel} strokeWidth={1} />
       {/* pistol grip (down from origin) */}
       <path d="M-5 2 L7 2 L4 24 L-8 24 Z" fill={IM.gun} stroke={IM.gunShade} strokeWidth={1.5} />
-      {/* broad translucent-orange blade, extending left over the barrel */}
-      <path d="M-14 -30 L-104 -16 L-114 4 L-16 12 Z" fill={IM.blade} opacity={0.62} stroke={IM.bladeEdge} strokeWidth={1.5} />
+      {/* broad translucent-orange blade — flat back on TOP, sharp cutting edge +
+          point on the BOTTOM-left (as outlined) */}
+      <path d="M-10 -26 L-114 -22 L-122 -2 L-104 8 L-12 10 Z" fill={IM.blade} opacity={0.62} stroke={IM.bladeEdge} strokeWidth={1.5} />
       {/* inner glow */}
-      <path d="M-18 -22 L-98 -12 L-104 2 L-20 6 Z" fill={IM.bladeHi} opacity={0.4} />
-      <path d="M-20 -20 L-104 -8" stroke="#fff" strokeWidth={1} opacity={0.6} />
-      {/* two square cut-outs near the base */}
-      <rect x={-40} y={-18} width={9} height={9} rx={1} fill={IM.gun} />
-      <rect x={-26} y={-16} width={9} height={9} rx={1} fill={IM.gun} />
+      <path d="M-14 -21 L-108 -18 L-114 -4 L-16 3 Z" fill={IM.bladeHi} opacity={0.4} />
+      <path d="M-16 -19 L-112 -15" stroke="#fff" strokeWidth={1} opacity={0.6} />
+      {/* two square cut-outs near the top of the base */}
+      <rect x={-46} y={-21} width={9} height={9} rx={1} fill={IM.gun} />
+      <rect x={-31} y={-20} width={9} height={9} rx={1} fill={IM.gun} />
     </g>
   )
 }
@@ -90,21 +91,20 @@ export default function ClawFigure({ slashing = false }: { slashing?: boolean })
         <path d="M120 118 L120 145 M104 128 L114 132 M136 128 L126 132" stroke={IM.faceLine} strokeWidth={1.3} fill="none" opacity={0.8} />
         {/* black V-crest pointing down over the brow */}
         <path d="M101 114 L120 134 L139 114 L131 112 L120 126 L109 112 Z" fill={IM.armor} stroke={IM.armorShade} strokeWidth={1.2} />
-        {/* orange eyes (narrow angular slits) */}
-        <path d="M104 126 L117 130 L116 135 L104 132 Z" fill={IM.eye} stroke={IM.bladeEdge} strokeWidth={0.8} />
-        <path d="M136 126 L123 130 L124 135 L136 132 Z" fill={IM.eye} stroke={IM.bladeEdge} strokeWidth={0.8} />
-        <path d="M106 128 L114 131 M134 128 L126 131" stroke={IM.eyeHi} strokeWidth={1.2} opacity={0.9} />
+        {/* orange eyes — FOUR angular slits (upper + lower pairs) */}
+        <path d="M103 123 L114 126 L113 130 L103 128 Z" fill={IM.eye} stroke={IM.bladeEdge} strokeWidth={0.7} />
+        <path d="M137 123 L126 126 L127 130 L137 128 Z" fill={IM.eye} stroke={IM.bladeEdge} strokeWidth={0.7} />
+        <path d="M106 134 L114 136 L113 140 L106 138 Z" fill={IM.eye} stroke={IM.bladeEdge} strokeWidth={0.7} />
+        <path d="M134 134 L126 136 L127 140 L134 138 Z" fill={IM.eye} stroke={IM.bladeEdge} strokeWidth={0.7} />
+        <path d="M104 125 L112 127 M136 125 L128 127" stroke={IM.eyeHi} strokeWidth={1} opacity={0.9} />
         {/* helmet mouth guard vent (orange slit on the black chin) */}
         <path d="M111 156 L129 156 L127 164 L113 164 Z" fill={IM.gunShade} />
         <path d="M113 159 L127 159" stroke={IM.eye} strokeWidth={1.6} opacity={0.85} />
       </g>
 
-      {/* ---- angular black pauldrons (over both shoulders) ---- */}
-      <path d="M70 202 L104 196 L108 216 L96 224 L72 224 Z" fill={IM.armor} stroke={IM.armorShade} strokeWidth={2} />
-      <path d="M170 202 L136 196 L132 216 L144 224 L168 224 Z" fill={IM.armor} stroke={IM.armorShade} strokeWidth={2} />
-      <path d="M72 210 L100 206 M168 210 L140 206" stroke={IM.armorEdge} strokeWidth={1.6} opacity={0.7} />
-      <path d="M74 224 L94 224 L90 234 L78 234 Z" fill={IM.armor} stroke={IM.armorShade} strokeWidth={1.5} />
-      <path d="M166 224 L146 224 L150 234 L162 234 Z" fill={IM.armor} stroke={IM.armorShade} strokeWidth={1.5} />
+      {/* ---- subtle shoulders (no bladed pauldron — removed per reference) ---- */}
+      <path d="M78 200 C68 202 64 210 66 220 L92 214 L90 198 Z" fill={IM.armor} stroke={IM.armorShade} strokeWidth={1.6} />
+      <path d="M162 200 C172 202 176 210 174 220 L148 214 L150 198 Z" fill={IM.armor} stroke={IM.armorShade} strokeWidth={1.6} />
 
       {/* ---- left arm (gold, resting on hip) ---- */}
       <path d="M84 220 C74 234 74 252 84 264" stroke={IM.gold} strokeWidth={15} strokeLinecap="round" fill="none" />
@@ -116,7 +116,7 @@ export default function ClawFigure({ slashing = false }: { slashing?: boolean })
       <Box component="g" sx={{ transformBox: 'view-box', transformOrigin: RELBOW, ...armSx }}>
         <path d="M168 236 L178 250" stroke={IM.gold} strokeWidth={13} strokeLinecap="round" fill="none" />
         {/* weapon at the grip, tilted so the blade points down-and-left */}
-        <g transform="translate(178 250) rotate(-30)">
+        <g transform="translate(178 250) rotate(-22)">
           <ClawWeapon />
         </g>
         {/* gripping hand (black gauntlet) */}
