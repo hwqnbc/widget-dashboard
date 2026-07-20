@@ -209,8 +209,16 @@ Root `tank-battle-root`: `data-world-seed/-mode/-roughness/-auto-fire/
 (`data-lock/-sol/-zoom`), `tank-damage` (`data-flash/-low-hp`), plus the
 buttons/sticks/settings testids.
 
+Touch-control sizing is responsive (lesson #53, the strike's e8ebe29
+layout ported): a ResizeObserver on the widget root feeds the REAL height,
+sticks clamp to `clamp(72, 0.28·h, 88/140)`, fire/scope scale
+proportionally, and the fire + scope column sits inward of the right
+stick — consuming width, which landscape always has, never height. Suite
+`116-tank-mobile` pins the layout on an 844×390 fullscreen viewport.
+
 E2E: suites `110-tank-core`, `111-tank-combat`, `112-tank-modes`,
-`113-tank-autoturn`, `114-tank-help`, `115-tank-safezone` (see
+`113-tank-autoturn`, `114-tank-help`, `115-tank-safezone`,
+`116-tank-mobile` (see
 `e2e/README.md`); the pure modules bundle in a third flat pass in
 `run.mjs`, and `createTankPilot` in `helpers.mjs` drives closed-loop —
 over the contour, driving is part of aiming (no lock until LOS clears).

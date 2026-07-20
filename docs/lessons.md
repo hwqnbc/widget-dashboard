@@ -496,3 +496,25 @@ carried over; these are the new ones.
     switching avatar resets play. Figure *identity* is checked only by "an svg
     renders" (the art itself is reviewed from screenshots) — the same
     app-generic harness the drone suites use, minus WebGL.
+
+## Responsive touch layout (Drone Strike → Tank Battle)
+
+53. **"Fullscreen" is not "big" — size touch controls from the container's
+    measured height, and grow button clusters sideways, not upward.** Both
+    shooters sized their controls with a mode flag (`fullscreen ? 140 :
+    88`), which encodes a false assumption: an iPhone in landscape
+    fullscreen has ~330–390 CSS px of height, where those "big" sizes
+    stacked the fire button onto the top toolbar and pushed the scope
+    button off-screen entirely. The fix (strike commit, then ported to the
+    tank): (a) measure the widget root with a ResizeObserver and derive
+    sizes from the REAL height with clamps (`stick = clamp(72, 0.28·h,
+    max)`, fire/scope proportional) — resize/rotate/fullscreen frequency,
+    never per-frame; (b) place extra buttons in a column INWARD of the
+    thumb stick — the layout then consumes width, which landscape always
+    has, instead of height, which a phone doesn't; (c) pin it with a
+    viewport-emulating suite (`launch({viewport: {844, 390}})` + fullscreen
+    + rect assertions vs the toolbar), because desktop-sized runs can never
+    catch it. New game widgets should start from the responsive version —
+    the tank copied the strike's layout BEFORE its fix and inherited the
+    bug verbatim, which is exactly how copy-paste propagates a layout
+    assumption.
