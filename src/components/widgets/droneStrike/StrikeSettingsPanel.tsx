@@ -24,6 +24,7 @@ import type { AimAssistLevel } from './combatModel'
 import type { GyroMode } from './gyroAim'
 import { gyroNeedsPermission, gyroSupported, requestGyroPermission } from './gyroAim'
 import type { AimMode } from './gimbalModel'
+import type { Difficulty } from './waveLayout'
 
 function ToggleRow({
   testId,
@@ -72,6 +73,7 @@ export default function StrikeSettingsPanel({
   autoFire,
   aimAssist,
   aimMode,
+  difficulty,
   gyroAim,
   crashes,
   battery,
@@ -92,6 +94,7 @@ export default function StrikeSettingsPanel({
   autoFire: boolean
   aimAssist: AimAssistLevel
   aimMode: AimMode
+  difficulty: Difficulty
   gyroAim: GyroMode
   crashes: boolean
   battery: boolean
@@ -133,6 +136,33 @@ export default function StrikeSettingsPanel({
       <DialogTitle sx={{ pb: 0 }}>Drone Strike settings</DialogTitle>
       <DialogContent data-testid="strike-settings-panel">
         <List dense subheader={<ListSubheader disableGutters>Combat</ListSubheader>}>
+          <ListItem disableGutters sx={{ py: 0.5 }}>
+            <ListItemText
+              primary="Enemy difficulty"
+              secondary="Easy: slower drones, gentler evasion, one-hit kills, fewer of them, later return fire. Hard: faster and more evasive."
+              slotProps={{ primary: { sx: { fontWeight: 600 } }, secondary: { sx: { fontSize: 12 } } }}
+            />
+            <ToggleButtonGroup
+              size="small"
+              exclusive
+              data-testid="strike-difficulty"
+              value={difficulty}
+              onChange={(_, v) => {
+                if (v) set({ difficulty: v as Difficulty })
+              }}
+              sx={{ ml: 1.5, flexShrink: 0 }}
+            >
+              <ToggleButton value="easy" data-testid="strike-difficulty-easy">
+                Easy
+              </ToggleButton>
+              <ToggleButton value="normal" data-testid="strike-difficulty-normal">
+                Normal
+              </ToggleButton>
+              <ToggleButton value="hard" data-testid="strike-difficulty-hard">
+                Hard
+              </ToggleButton>
+            </ToggleButtonGroup>
+          </ListItem>
           <ToggleRow
             testId="strike-autofire-toggle"
             label="Auto-fire"

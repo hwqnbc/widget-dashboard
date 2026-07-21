@@ -188,6 +188,7 @@ export function defaultWidgetData(type: WidgetType): Record<string, unknown> {
         autoFire: false,
         aimAssist: 'mild',
         aimMode: 'classic',
+        difficulty: 'easy',
         gyroAim: 'off',
         minimap: true,
         richWorld: true,

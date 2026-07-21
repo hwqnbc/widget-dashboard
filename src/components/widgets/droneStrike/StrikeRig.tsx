@@ -171,6 +171,7 @@ export default function StrikeRig({
   aimMode,
   gimbalRef,
   aimInputRef,
+  enemyMove,
   scoreRef,
   onWaveCleared,
   onTargetDown,
@@ -237,6 +238,8 @@ export default function StrikeRig({
   /** performance.now() of the last manual aim input (drag) — the rig also
    * bumps it on hover-stick activity; idle-recenter waits on it. */
   aimInputRef: { current: number }
+  /** Difficulty movement scaling for the enemy AI (orbit + evade). */
+  enemyMove: { orbitMult: number; evadeMult: number; evadeTime: number }
   /** Session score — runtime-only, rendered via the telemetry tick. */
   scoreRef: { current: number }
   onWaveCleared: () => void
@@ -439,6 +442,7 @@ export default function StrikeRig({
           enemiesShoot && !playerSafe,
           combat.enemy,
           ENEMY_BOLT,
+          enemyMove,
         )
       }
       if (t.hitFlash > 0) t.hitFlash = Math.max(0, t.hitFlash - dt)

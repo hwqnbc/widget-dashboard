@@ -119,8 +119,28 @@ mulberry32 stream per wave, independent of the world stream):
 | 1 | 6 static balloons |
 | 2 | 7 targets, half drifting (`ringDrone`, sinusoidal, velocity published for leading) |
 | 3–4 | + enemy drones (1 then 2), orbit patrol + evade |
-| 5+ | enemies return fire; player has 3 HP per wave attempt |
+| 5+ | enemies return fire (Normal/Hard); player has 3 HP per wave attempt |
 | scaling | more/smaller/faster targets, up to 4 enemies, `MAX_TARGETS` 14 |
+
+**Enemy difficulty** (settings, persisted `difficulty`, **default Easy**)
+scales only the AI drones — the gallery targets are untouched. The presets
+(`DIFFICULTY` in `waveLayout.ts`) tune orbit speed, the evade burst
+(intensity + duration), enemy HP, enemy count cap and the return-fire
+wave:
+
+| | orbit | evade burst | evade time | HP | cap | return fire |
+| --- | --- | --- | --- | --- | --- | --- |
+| Easy (default) | 0.4× | 1.4× | 0.7 s | 1 | 2 | wave 7 |
+| Normal | 1× | 2.6× | 1.2 s | 2 | 4 | wave 5 |
+| Hard | 1.3× | 3× | 1.4 s | 2 | 4 | wave 4 |
+
+The evade burst is the big lever: pointing your reticle at an enemy within
+~45 u makes it reverse + speed up, which on Normal (2.6×) is what made
+them "impossible" — Easy nearly halves it and shortens it, and one hit
+kills. `buildWave(seed, wave, layout, difficulty)` threads count/HP/
+fire-wave while keeping placement seeded identically; the live orbit/evade
+scaling is applied in `stepEnemy` (so a mid-game difficulty change takes
+effect immediately on movement, and next wave for HP/count).
 
 Scoring: balloon 10, drifter 15, enemy 25 (2 HP). Session score and wave
 are runtime-only; `bestScore`/`bestWave` persist (written at wave-clear).
@@ -289,9 +309,9 @@ kind of list).
 - **Combo scoring** — consecutive hits without a miss multiply points;
   `combat.shots/hits` already tracks the stream, add a decaying multiplier
   in the rig and show it on the score chip.
-- **Difficulty setting** — Easy/Normal/Hard scaling enemy count, orbit
-  speed and `ENEMY_BOLT` cooldown; all constants already flow from
-  `buildWave`/`enemyAI`, so it's a multiplier argument.
+- ~~Difficulty setting~~ — **shipped** (Easy default / Normal / Hard
+  scaling enemy orbit speed, evade burst, HP, count and return-fire wave;
+  `DIFFICULTY` presets in `waveLayout.ts` — see the gameplay section).
 
 ### Camera & visuals
 - **Kill-cam slow-mo** — on the wave-clearing kill, damp the frameloop dt

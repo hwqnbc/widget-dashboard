@@ -21,9 +21,6 @@ import { MAX_TARGETS } from './waveLayout'
 /** Aiming within this half-angle of an enemy (while close) triggers evasion. */
 export const EVADE_CONE = 0.12
 export const EVADE_RANGE = 45
-/** Seconds of reversed, faster orbit per evasion burst. */
-export const EVADE_TIME = 1.2
-const EVADE_SPEED_MULT = 2.6
 const EVADE_JINK = 1.5
 /** Enemies only shoot inside this range (and with clear line of sight). */
 export const ENEMY_FIRE_RANGE = 50
@@ -79,6 +76,8 @@ export function stepEnemy(
   canShoot: boolean,
   enemyPool: Projectile[],
   weapon: WeaponSpec,
+  /** Difficulty movement scaling: how fast the enemy orbits and evades. */
+  move: { orbitMult: number; evadeMult: number; evadeTime: number },
 ): void {
   if (!t.alive || t.kind !== 'enemy') return
 
@@ -91,14 +90,14 @@ export function stepEnemy(
   if (dist > 0 && dist < EVADE_RANGE && ai.evadeTimer <= 0) {
     const dot = (dx * aimDir.x + dy * aimDir.y + dz * aimDir.z) / dist
     if (dot > 0 && Math.acos(Math.min(1, dot)) < EVADE_CONE + Math.atan2(t.radius, dist)) {
-      ai.evadeTimer = EVADE_TIME
+      ai.evadeTimer = move.evadeTime
       ai.dir = ai.dir === 1 ? -1 : 1
     }
   }
 
   const evading = ai.evadeTimer > 0
   if (evading) ai.evadeTimer -= dt
-  const angSpeed = t.driftSpeed * (evading ? EVADE_SPEED_MULT : 1)
+  const angSpeed = t.driftSpeed * move.orbitMult * (evading ? move.evadeMult : 1)
   ai.angle += ai.dir * angSpeed * dt
 
   const prevX = t.pos.x

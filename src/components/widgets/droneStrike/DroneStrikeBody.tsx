@@ -45,7 +45,15 @@ import {
   createCombatState,
   resetCombatState,
 } from './combatModel'
-import { ENEMY_FIRE_WAVE, buildWave, createTargetStates, loadWave } from './waveLayout'
+import type { Difficulty } from './waveLayout'
+import {
+  DIFFICULTY,
+  ENEMY_FIRE_WAVE,
+  buildWave,
+  coerceDifficulty,
+  createTargetStates,
+  loadWave,
+} from './waveLayout'
 import { createEnemyAIStates, seedEnemyAIStates } from './enemyAI'
 import type { StrikeView } from './aimModel'
 import { ZOOM_SENS, coerceStrikeView, createAimOffset } from './aimModel'
@@ -99,6 +107,7 @@ const SETTING_KEYS = [
   'autoFire',
   'aimAssist',
   'aimMode',
+  'difficulty',
   'gyroAim',
   'crashes',
   'battery',
@@ -161,6 +170,7 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
   const aimAssist = useWidgetField<AimAssistLevel>(id, 'aimAssist', 'mild', coerceAimAssist)
   const gyroMode = useWidgetField<GyroMode>(id, 'gyroAim', 'off', coerceGyroMode)
   const aimMode = useWidgetField<AimMode>(id, 'aimMode', 'classic', coerceAimMode)
+  const difficulty = useWidgetField<Difficulty>(id, 'difficulty', 'easy', coerceDifficulty)
   const richWorld = useWidgetField(id, 'richWorld', true)
   const rateSpeed = useWidgetField(id, 'rateSpeed', 1, coerceRate)
   const rateYaw = useWidgetField(id, 'rateYaw', 1, coerceRate)
@@ -260,7 +270,7 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
       setHp(PLAYER_HP)
       const t = setTimeout(() => {
         clearProjectiles(combat)
-        loadWave(targets, buildWave(worldSeed, wave, layout))
+        loadWave(targets, buildWave(worldSeed, wave, layout, difficulty))
         seedEnemyAIStates(enemyAI, targets)
         setPhase('active')
         setBanner(null)
@@ -280,7 +290,7 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
       const t = setTimeout(() => setPhase('intro'), FAILED_MS)
       return () => clearTimeout(t)
     }
-  }, [phase, wave, worldSeed, layout, targets, combat, enemyAI])
+  }, [phase, wave, worldSeed, layout, targets, combat, enemyAI, difficulty])
 
   // Out of hit points mid-wave → the wave is failed.
   useEffect(() => {
@@ -578,6 +588,7 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
       data-battery={battery ? 'on' : 'off'}
       data-crashes={crashes ? 'on' : 'off'}
       data-aim-mode={aimMode}
+      data-difficulty={difficulty}
       onMouseDown={(e) => e.stopPropagation()}
       onTouchStart={(e) => e.stopPropagation()}
       sx={{
@@ -719,6 +730,7 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
             aimMode={aimMode}
             gimbalRef={gimbalRef}
             aimInputRef={aimInputRef}
+            enemyMove={DIFFICULTY[difficulty]}
             scoreRef={scoreRef}
             onWaveCleared={onWaveCleared}
             onTargetDown={onTargetDown}
@@ -987,6 +999,7 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
         autoFire={autoFire}
         aimAssist={aimAssist}
         aimMode={aimMode}
+        difficulty={difficulty}
         gyroAim={gyroMode}
         crashes={crashes}
         battery={battery}

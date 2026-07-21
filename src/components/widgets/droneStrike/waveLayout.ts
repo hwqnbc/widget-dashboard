@@ -39,10 +39,38 @@ export interface WaveSpec {
 
 /** Enemy drones appear from this wave... */
 export const ENEMY_WAVE_START = 3
-/** ...and shoot back from this one. */
+/** ...and shoot back from this one (normal; difficulty shifts it). */
 export const ENEMY_FIRE_WAVE = 5
 /** Hard cap on simultaneous targets (perf budget: one InstancedMesh). */
 export const MAX_TARGETS = 14
+
+/** Enemy difficulty — scales how hard the AI drones are to hit and how
+ * much pressure they apply. Easy is the default (see widgetCatalog). */
+export type Difficulty = 'easy' | 'normal' | 'hard'
+
+export interface DifficultyPreset {
+  /** Orbit angular-speed multiplier. */
+  orbitMult: number
+  /** Evade-burst speed multiplier (normal reproduces the old constant). */
+  evadeMult: number
+  /** Evade-burst duration, seconds. */
+  evadeTime: number
+  /** Enemy hit points. */
+  enemyHp: number
+  /** Max simultaneous enemies at high waves. */
+  enemyCap: number
+  /** Wave from which enemies return fire. */
+  fireWave: number
+}
+
+export const DIFFICULTY: Record<Difficulty, DifficultyPreset> = {
+  easy: { orbitMult: 0.4, evadeMult: 1.4, evadeTime: 0.7, enemyHp: 1, enemyCap: 2, fireWave: 7 },
+  normal: { orbitMult: 1, evadeMult: 2.6, evadeTime: 1.2, enemyHp: 2, enemyCap: 4, fireWave: ENEMY_FIRE_WAVE },
+  hard: { orbitMult: 1.3, evadeMult: 3, evadeTime: 1.4, enemyHp: 2, enemyCap: 4, fireWave: 4 },
+}
+
+export const coerceDifficulty = (v: unknown): Difficulty | undefined =>
+  v === 'easy' || v === 'normal' || v === 'hard' ? v : undefined
 
 export const POINTS: Record<TargetKind, number> = {
   balloon: 10,
@@ -92,7 +120,9 @@ export function buildWave(
   seed: number,
   waveIndex: number,
   layout: WorldLayout,
+  difficulty: Difficulty = 'normal',
 ): WaveSpec {
+  const diff = DIFFICULTY[difficulty]
   const rand = mulberry32((seed ^ Math.imul(waveIndex, 0x9e3779b1)) >>> 0)
   const targets: TargetSpec[] = []
 
@@ -153,7 +183,7 @@ export function buildWave(
   // clears the whole envelope), speed = angular rate, phase = start angle.
   const enemies =
     waveIndex >= ENEMY_WAVE_START
-      ? Math.min(waveIndex - ENEMY_WAVE_START + 1, 4)
+      ? Math.min(waveIndex - ENEMY_WAVE_START + 1, diff.enemyCap)
       : 0
   for (let i = 0; i < enemies; i++) {
     place({
@@ -163,12 +193,12 @@ export function buildWave(
       driftSpeed: 0.5 + rand() * 0.4,
       driftPhase: rand() * Math.PI * 2,
       driftAxis: 0,
-      hp: 2,
+      hp: diff.enemyHp,
       points: POINTS.enemy,
     })
   }
 
-  return { index: waveIndex, targets, enemiesShoot: waveIndex >= ENEMY_FIRE_WAVE }
+  return { index: waveIndex, targets, enemiesShoot: waveIndex >= diff.fireWave }
 }
 
 /* --------------------------- runtime target pool ------------------------- */
