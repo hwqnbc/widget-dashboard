@@ -518,3 +518,23 @@ carried over; these are the new ones.
     the tank copied the strike's layout BEFORE its fix and inherited the
     bug verbatim, which is exactly how copy-paste propagates a layout
     assumption.
+
+54. **In a seeded generator, draw the difficulty-independent items BEFORE
+    the difficulty-gated ones, or their "identical" placement silently
+    drifts.** Drone Strike's `buildWave` shares one `mulberry32` stream
+    across all the placements in a wave. Ground trucks are meant to be
+    fully difficulty-independent (same count AND same positions on
+    Easy/Normal/Hard), but I first appended them *after* the enemy block —
+    whose count varies by difficulty (Easy caps at 2 drones, Normal at 4).
+    Each enemy placement consumes a variable number of `rand()` calls, so
+    by the time the trucks drew, the stream was at a *different offset* per
+    difficulty and their positions shifted — count matched, positions
+    didn't, and suite 108's "gallery unchanged by difficulty" caught it.
+    The fix is ordering: place the difficulty-independent draws (gallery
+    balloons, then trucks) first, then the difficulty-gated draws (enemies,
+    turrets). Anything drawn before the first difficulty-dependent
+    `rand()` is reproducible across difficulties for free; anything after
+    is not. The e2e guard is a JSON-equality check on the
+    difficulty-independent kinds across two difficulties at a high wave —
+    cheap, and it fails loudly the moment a new draw is inserted in the
+    wrong place.

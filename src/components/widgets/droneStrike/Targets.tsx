@@ -28,8 +28,10 @@ export default function Targets({ targets }: { targets: TargetState[] }) {
     const { matrix, color } = temps
     for (let i = 0; i < targets.length; i++) {
       const t = targets[i]
-      // Enemies render as real drone models (see EnemyDrones), not spheres.
-      if (t.alive && t.kind !== 'enemy') {
+      // Only the gallery balloons/ring-drones are spheres. Enemies render as
+      // real drone models (EnemyDrones); ground trucks and AA turrets are
+      // boxes (GroundTargets).
+      if (t.alive && (t.kind === 'balloon' || t.kind === 'ringDrone')) {
         matrix.makeScale(t.radius, t.radius, t.radius)
         matrix.setPosition(t.pos.x, t.pos.y, t.pos.z)
         color.copy(KIND_COLORS[t.kind])

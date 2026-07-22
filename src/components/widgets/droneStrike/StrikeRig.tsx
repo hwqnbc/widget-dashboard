@@ -45,7 +45,7 @@ import {
 import type { TargetKind, TargetState } from './waveLayout'
 import { aliveCount, stepDrift } from './waveLayout'
 import type { EnemyAIState } from './enemyAI'
-import { stepEnemy } from './enemyAI'
+import { stepEnemy, stepTurret } from './enemyAI'
 import type { AimOffset } from './aimModel'
 import { RECOIL_KICK, ZOOM_SENS, fpvPitchGain } from './aimModel'
 import type { AimAngles, AimMode, GimbalState } from './gimbalModel'
@@ -79,6 +79,8 @@ const BLIP_COLORS: Record<TargetKind, string> = {
   balloon: '#ef5350',
   ringDrone: '#4dd0e1',
   enemy: '#ff1744',
+  ground: '#9ccc65',
+  turret: '#ff6e40',
 }
 /** Enemy bolts never hit other targets (no friendly fire). */
 const NO_TARGETS: TargetState[] = []
@@ -443,6 +445,18 @@ export default function StrikeRig({
           combat.enemy,
           ENEMY_BOLT,
           enemyMove,
+        )
+      } else if (waveActive && t.kind === 'turret') {
+        stepTurret(
+          t,
+          enemyAI[i],
+          i,
+          dt,
+          flight.pos,
+          colliders,
+          enemiesShoot && !playerSafe,
+          combat.enemy,
+          ENEMY_BOLT,
         )
       }
       if (t.hitFlash > 0) t.hitFlash = Math.max(0, t.hitFlash - dt)

@@ -8,13 +8,16 @@
  *
  * Difficulty curve: waves 1–2 are a pure shooting gallery (static balloons,
  * then drifting ring-drones); ENEMY_WAVE_START adds patrolling enemy drones
- * and ENEMY_FIRE_WAVE arms them.
+ * and ENEMY_FIRE_WAVE arms them. From wave 2 the gallery also seeds ground
+ * targets — static supply trucks (`ground`, pure points for the gimbal's
+ * look-down) — and from TURRET_WAVE, AA turrets (`turret`, a static ground
+ * enemy that fires back up, difficulty-gated like the drones).
  */
 import type { Vec3 } from '../droneSim/flightModel'
 import { SPAWN, WORLD_HALF } from '../droneSim/flightModel'
 import type { WorldLayout } from '../droneSim/worldLayout'
 
-export type TargetKind = 'balloon' | 'ringDrone' | 'enemy'
+export type TargetKind = 'balloon' | 'ringDrone' | 'enemy' | 'ground' | 'turret'
 
 export interface TargetSpec {
   kind: TargetKind
@@ -41,8 +44,15 @@ export interface WaveSpec {
 export const ENEMY_WAVE_START = 3
 /** ...and shoot back from this one (normal; difficulty shifts it). */
 export const ENEMY_FIRE_WAVE = 5
-/** Hard cap on simultaneous targets (perf budget: one InstancedMesh). */
-export const MAX_TARGETS = 14
+/** Ground supply trucks appear from this wave (static points targets). */
+export const GROUND_WAVE_START = 2
+/** AA turrets (static ground enemies that fire back) appear from this wave. */
+export const TURRET_WAVE = 4
+/** Hard cap on simultaneous targets (perf budget: one InstancedMesh).
+ * Sized for the worst case: gallery balloons + drifters + enemy drones +
+ * ground trucks + AA turrets. Pool + instanced capacity are pre-allocated
+ * so headroom is free. */
+export const MAX_TARGETS = 20
 
 /** Enemy difficulty — scales how hard the AI drones are to hit and how
  * much pressure they apply. Easy is the default (see widgetCatalog). */
@@ -76,6 +86,8 @@ export const POINTS: Record<TargetKind, number> = {
   balloon: 10,
   ringDrone: 15,
   enemy: 25,
+  ground: 20,
+  turret: 30,
 }
 
 /** Same PRNG as the world builder — copied, not exported from worldLayout,
@@ -128,12 +140,15 @@ export function buildWave(
 
   const place = (spec: Omit<TargetSpec, 'x' | 'y' | 'z'>): void => {
     if (targets.length >= MAX_TARGETS) return
+    // Ground targets (trucks, AA turrets) sit on the deck; their hit-sphere
+    // centre rides just above ground rather than in the altitude band.
+    const onDeck = spec.kind === 'ground' || spec.kind === 'turret'
     for (let attempt = 0; attempt < 120; attempt++) {
       const x = (rand() * 2 - 1) * (WORLD_HALF - 8)
       const z = (rand() * 2 - 1) * (WORLD_HALF - 8)
       // Keep the whole drift envelope above the ground band.
       const yLo = ALT_MIN + spec.driftAmp
-      const y = yLo + rand() * Math.max(1, ALT_MAX - yLo)
+      const y = onDeck ? 1 : yLo + rand() * Math.max(1, ALT_MAX - yLo)
       if (Math.hypot(x - SPAWN.x, z - SPAWN.z) < MIN_FROM_SPAWN) continue
       const reach = spec.radius + spec.driftAmp + 0.5
       if (!clearOfBuildings(layout, x, y, z, reach)) continue
@@ -149,12 +164,12 @@ export function buildWave(
       targets.push({ ...spec, x, y, z })
       return
     }
-    // Sampling exhausted (dense seed): stack a fallback ring high above the
-    // pad approach where nothing can occlude it.
+    // Sampling exhausted (dense seed): stack a fallback high (or on the deck
+    // for ground targets) near the pad approach where nothing can occlude it.
     targets.push({
       ...spec,
       x: 0,
-      y: ALT_MAX + 4 + targets.length,
+      y: onDeck ? 1 : ALT_MAX + 4 + targets.length,
       z: -10,
       driftAmp: 0,
     })
@@ -178,6 +193,27 @@ export function buildWave(
     })
   }
 
+  // Ground supply trucks (wave 2+): static points targets rewarding the
+  // gimbal look-down. Fully difficulty-independent (count AND position), so
+  // drawn before the difficulty-gated enemy block keeps their placement
+  // identical across Easy/Normal/Hard — pure target practice.
+  const trucks =
+    waveIndex >= GROUND_WAVE_START
+      ? Math.min(2 + Math.floor(waveIndex / 3), 4)
+      : 0
+  for (let i = 0; i < trucks; i++) {
+    place({
+      kind: 'ground',
+      radius: 1.1,
+      driftAmp: 0,
+      driftSpeed: 0,
+      driftPhase: 0,
+      driftAxis: 0,
+      hp: 1,
+      points: POINTS.ground,
+    })
+  }
+
   // Enemy drones (wave 3+): placed like targets, moved by the AI at runtime.
   // The drift fields carry their orbit: amp = orbit radius (so placement
   // clears the whole envelope), speed = angular rate, phase = start angle.
@@ -195,6 +231,26 @@ export function buildWave(
       driftAxis: 0,
       hp: diff.enemyHp,
       points: POINTS.enemy,
+    })
+  }
+
+  // AA turrets (TURRET_WAVE+): static ground enemies that fire back up.
+  // Gated by difficulty like the drones (count clamped by enemyCap, hp and
+  // return fire follow the preset).
+  const turrets =
+    waveIndex >= TURRET_WAVE
+      ? Math.min(1 + Math.floor((waveIndex - TURRET_WAVE) / 2), 2, diff.enemyCap)
+      : 0
+  for (let i = 0; i < turrets; i++) {
+    place({
+      kind: 'turret',
+      radius: 1,
+      driftAmp: 0,
+      driftSpeed: 0,
+      driftPhase: 0,
+      driftAxis: 0,
+      hp: diff.enemyHp,
+      points: POINTS.turret,
     })
   }
 

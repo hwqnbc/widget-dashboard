@@ -117,10 +117,24 @@ mulberry32 stream per wave, independent of the world stream):
 | Wave | Content |
 | --- | --- |
 | 1 | 6 static balloons |
-| 2 | 7 targets, half drifting (`ringDrone`, sinusoidal, velocity published for leading) |
-| 3–4 | + enemy drones (1 then 2), orbit patrol + evade |
-| 5+ | enemies return fire (Normal/Hard); player has 3 HP per wave attempt |
-| scaling | more/smaller/faster targets, up to 4 enemies, `MAX_TARGETS` 14 |
+| 2 | 7 targets, half drifting (`ringDrone`, sinusoidal, velocity published for leading); + ground supply trucks (2) |
+| 3–4 | + enemy drones (1 then 2), orbit patrol + evade; + more trucks; AA turrets from wave 4 |
+| 5+ | enemies + turrets return fire (Normal/Hard); player has 3 HP per wave attempt |
+| scaling | more/smaller/faster targets, up to 4 enemies, up to 4 trucks + 2 turrets, `MAX_TARGETS` 20 |
+
+**Ground targets** (unlocked by the gimbal's −70° look-down): two static,
+deck-level kinds mixed into the gallery, rendered as one instanced box mesh
+(`GroundTargets`). **Supply trucks** (`ground`, olive, 20 pts, one hit)
+appear from wave 2 — pure points targets that reward aiming down, so
+placement and count are **fully difficulty-independent** (drawn before the
+enemy block so their seeded positions don't shift with difficulty). **AA
+turrets** (`turret`, dark-red, 30 pts) appear from wave 4 — a *static ground
+enemy*: `stepTurret` is the return-fire half of `stepEnemy` with no
+movement, lobbing slow unled bolts up the player's line of sight (dodgeable),
+gated by the same difficulty preset as the drones (HP + the shared
+return-fire wave). Both use the normal pos+radius hit sphere, so the fire
+sweep / lock / scoring paths are unchanged. Ground targets are easiest in
+Reticle/Gunner (the gimbal looks down); in Classic you nose-down or descend.
 
 **Enemy difficulty** (settings, persisted `difficulty`, **default Easy**)
 scales only the AI drones — the gallery targets are untouched. The presets
@@ -142,7 +156,8 @@ fire-wave while keeping placement seeded identically; the live orbit/evade
 scaling is applied in `stepEnemy` (so a mid-game difficulty change takes
 effect immediately on movement, and next wave for HP/count).
 
-Scoring: balloon 10, drifter 15, enemy 25 (2 HP). Session score and wave
+Scoring: balloon 10, drifter 15, ground truck 20, enemy 25 (2 HP), AA
+turret 30. Session score and wave
 are runtime-only; `bestScore`/`bestWave` persist (written at wave-clear).
 Losing all HP fails the wave — banner, then the same wave restarts with
 fresh targets and HP; the session score survives (arcade-friendly). Restart
@@ -225,9 +240,11 @@ New pure modules:
 Components: `StrikeRig` (the `useFrame` loop: input → flight → targets/AI →
 fire intent → sweeps → events → wave-clear → pose → telemetry),
 `StrikeCameraRig` (FPV + chase with the boom clip), `Targets` (one
-InstancedMesh for the whole gallery), `EnemyDrones` (≤4 `DroneModel`s with
-red beacons, slot-assigned per frame), `Tracers` (one InstancedMesh for all
-bolts, oriented along velocity), `Reticle`/`FireButton`/`HitMarkers`/
+InstancedMesh of spheres for the balloon/ring-drone gallery), `GroundTargets`
+(one InstancedMesh of boxes for the deck-level trucks/turrets, per-instance
+colour + scale), `EnemyDrones` (≤4 `DroneModel`s with red beacons,
+slot-assigned per frame), `Tracers` (one InstancedMesh for all bolts,
+oriented along velocity), `Reticle`/`FireButton`/`HitMarkers`/
 `StrikeMinimap`/`StrikeSettingsPanel`.
 
 ### Weapon variants (recorded, not built)
@@ -255,9 +272,9 @@ globals. Chips: `strike-score` (`data-score/-wave/-best-score/-best-wave`),
 `strike-hp`, `strike-reticle` (`data-lock`), `strike-fire`
 (`data-pressed`), joysticks/buttons/settings testids mirror the sim's.
 
-E2E: suites `100-strike-core`, `101-strike-waves`, `102-strike-input`
-(see `e2e/README.md`); pure modules are esbuild-bundled for the suites in a
-second flat pass in `run.mjs`.
+E2E: suites `100-strike-core` … `109-strike-ground` (see `e2e/README.md`);
+pure modules are esbuild-bundled for the suites in a second flat pass in
+`run.mjs`.
 
 ## Future work (enhancement backlog)
 
@@ -293,12 +310,12 @@ kind of list).
   `HitEvent` coordinates (RainField's single-draw-call Points pattern).
 
 ### Enemies & waves
-- **Ground-target waves** — now that the gimbal looks steeply down, add
-  ground objects to shoot: parked trucks, AA turrets that shoot up, tents.
-  Placement reuses the `waveLayout` rejection sampler at `y≈0` (clear of
-  building footprints); a turret is just an enemy with a fixed position and
-  the existing `stepEnemy` fire path. This is the payoff the gimbal
-  unlocked.
+- ~~Ground-target waves~~ — **shipped** (deck-level supply trucks from
+  wave 2 + AA turrets from wave 4 via `GroundTargets`/`stepTurret`; the
+  payoff the gimbal look-down unlocked — see the Gameplay section). Room to
+  extend: **tents/depots** as further static kinds, and **mobile ground
+  units** (a truck that patrols a spline — `stepDrift` on the x/z axes
+  already gives horizontal motion).
 - **Enemy variety** — a *chaser* that pursues the player (waypoint =
   player position, capped speed, `resolveCollisions` for safety), a
   *kamikaze* that dives once locked, a *shielded* drone only hurt from

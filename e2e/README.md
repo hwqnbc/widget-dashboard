@@ -14,7 +14,7 @@ gates or hit walls reliably).
 ```bash
 npm run e2e            # all suites (starts its own dev server on :5199)
 npm run e2e crash      # only suites whose filename matches "crash"
-npm run e2e strike     # the Drone Strike suites (100-103)
+npm run e2e strike     # the Drone Strike suites (100-109)
 npm run e2e tank       # the Tank Battle suites (110-116)
 ```
 
@@ -67,7 +67,8 @@ mode state from the widget root's `data-*` attributes via
 | `105-strike-crash` | crash mode (default on): closed-loop full-speed wall ram → tumble + CRASHED! banner + one heart lost + pad respawn; pad rest restores the heart; safe-zone contract on the pad (`data-safe`, chip states, weapons offline) and clears on lift-off; safe-mode ram only pins; toggle persistence. Suites 100–102/104 disable crash mode after setup — their routes bump walls by design |
 | `106-strike-mobile` | responsive touch layout on an iPhone-landscape viewport (844×390) in fullscreen: every stick/fire/scope control fully on screen, fire/scope column inward of the right stick and clear of the toolbar, sizes scaled to the height, fire still works; `launch({viewport})` emulates the screen |
 | `107-strike-gimbal` | four aim modes (Classic default = fly-to-aim, gimbal frozen; drag ignored, reticle centred), then in Reticle mode: drag-to-aim slews `data-gimbal-yaw/-pitch` (reticle moves in Reticle mode, centred in Gunner), deep ground look-down + arc clamp, double-tap recenter, gimbal+assist kill with flight sticks idle, hover mode re-routes the right stick (drone holds position), `trackToward` soft-track dynamics (pure module), mode persistence |
-| `108-strike-difficulty` | enemy difficulty: Easy default + settings round-trip (Easy/Normal/Hard) + persistence; pure-module presets (orbit easy<normal<hard, gentler/shorter evade, one-hit enemies, delayed return fire) and buildWave threading difficulty into count/hp/fire-wave while keeping gallery placement seeded identically |
+| `108-strike-difficulty` | enemy difficulty: Easy default + settings round-trip (Easy/Normal/Hard) + persistence; pure-module presets (orbit easy<normal<hard, gentler/shorter evade, one-hit enemies, delayed return fire) and buildWave threading difficulty into count/hp/fire-wave while keeping the difficulty-independent targets (balloons/drifters/ground) seeded identically |
+| `109-strike-ground` | ground-target waves: pure-module ground trucks (`ground`) from wave 2 on the deck (low y, one-hit, difficulty-independent count) and AA turrets (`turret`) from `TURRET_WAVE` (static, hp + shared return-fire gate follow the difficulty preset); DOM clears wave 1 closed-loop and confirms wave 2 fields the seeded target count including the trucks (hit model is a normal sphere — covered by 100) |
 | `110-tank-core` | Tank Battle: element presence + root defaults, seeded wave-1 composition vs the pure module, terrain grounding (live `data-alt` matches the bundled `heightAt`), throttle/turn driving, camera-independent hull, turret traverse lag + settle, fire-button shot + reload gating, ADS zoom toggle |
 | `111-tank-combat` | closed-loop combat: no lock from spawn (terrain cover — the pilot must crest the ridge), two engage-and-kill runs clearing wave 1, wave 2 arrives with the seeded count + armed enemies, sky/ground ballistic-solution reticle contract, best score/wave persistence across reload, progress-guarded mode switch + cancel |
 | `112-tank-modes` | Waves ↔ Roam toggle (direct without progress), roam garrison size + 5-HP pool, terrain roughness reshaping (pure-module amplitude check), settings round-trips on the root, minimap toggle, reset-to-defaults keeps mode/roughness/seed, mode + roughness persistence across reload |

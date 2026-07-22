@@ -130,5 +130,41 @@ export function stepEnemy(
   ai.fireCooldown = weapon.cooldown + (index % 3) * 0.4
 }
 
+/**
+ * One frame for one AA turret: static ground emplacement, so no movement —
+ * just the return-fire half of `stepEnemy`. When armed, within range and
+ * with a clear line of sight, it lobs a slow bolt UP at the player (unled,
+ * so a moving drone can dodge it). Shares the `fireCooldown` slot.
+ */
+export function stepTurret(
+  t: TargetState,
+  ai: EnemyAIState,
+  index: number,
+  dt: number,
+  playerPos: Vec3,
+  colliders: readonly Collider[],
+  canShoot: boolean,
+  enemyPool: Projectile[],
+  weapon: WeaponSpec,
+): void {
+  if (!t.alive || t.kind !== 'turret') return
+  if (!canShoot) return
+
+  const dx = t.pos.x - playerPos.x
+  const dy = t.pos.y - playerPos.y
+  const dz = t.pos.z - playerPos.z
+  const dist = Math.hypot(dx, dy, dz)
+
+  ai.fireCooldown -= dt
+  if (ai.fireCooldown > 0 || dist === 0 || dist > ENEMY_FIRE_RANGE) return
+  if (boomClipT(t.pos, playerPos, colliders) < 1) return
+  const inv = 1 / dist
+  FIRE_DIR.x = -dx * inv
+  FIRE_DIR.y = -dy * inv
+  FIRE_DIR.z = -dz * inv
+  spawnProjectile(enemyPool, t.pos, FIRE_DIR, weapon)
+  ai.fireCooldown = weapon.cooldown + (index % 3) * 0.4
+}
+
 /** Scratch vector reused by every return-fire spawn (allocation-free loop). */
 const FIRE_DIR: Vec3 = { x: 0, y: 0, z: -1 }

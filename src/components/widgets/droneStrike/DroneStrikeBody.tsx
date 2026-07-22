@@ -61,6 +61,7 @@ import StrikeCameraRig from './StrikeCameraRig'
 import type { CrashState } from './StrikeRig'
 import StrikeRig from './StrikeRig'
 import Targets from './Targets'
+import GroundTargets from './GroundTargets'
 import EnemyDrones from './EnemyDrones'
 import Tracers from './Tracers'
 import Reticle from './Reticle'
@@ -690,6 +691,7 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
           {richWorld && <RichWorld layout={layout} />}
           {weather === 'storm' && <RainField flight={flight} wind={windRef.current} />}
           <Targets targets={targets} />
+          <GroundTargets targets={targets} />
           <EnemyDrones targets={targets} />
           <Tracers combat={combat} tracerLen={BOLT.tracerLen} />
           <StrikeRig

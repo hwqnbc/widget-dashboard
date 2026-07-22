@@ -71,11 +71,15 @@ check(
   buildWave(DEFAULT_SEED, 5, layout, 'easy').enemiesShoot === false &&
     buildWave(DEFAULT_SEED, 5, layout, 'normal').enemiesShoot === true,
 )
-// The gallery (non-enemy) targets are identical regardless of difficulty.
+// The difficulty-independent targets (gallery balloons/drifters + ground
+// trucks) are identical regardless of difficulty; only enemies and turrets
+// (both difficulty-gated) may differ.
+const diffIndependent = (t) =>
+  t.kind === 'balloon' || t.kind === 'ringDrone' || t.kind === 'ground'
 check(
   'gallery placement unchanged by difficulty',
-  JSON.stringify(w6easy.targets.filter((t) => t.kind !== 'enemy')) ===
-    JSON.stringify(w6normal.targets.filter((t) => t.kind !== 'enemy')),
+  JSON.stringify(w6easy.targets.filter(diffIndependent)) ===
+    JSON.stringify(w6normal.targets.filter(diffIndependent)),
 )
 
 await finish(browser)
