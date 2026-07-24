@@ -53,6 +53,7 @@ mode state from the widget root's `data-*` attributes via
 | `50-weather` | storm toggle: hands-off wind drift vs clear station-hold, HUD wind readout, persistence |
 | `60-crash` | crash mode: full-speed wall hit → tumble + banner + lap void + pad respawn; safe mode → wall pin; toggle persistence |
 | `70-haptics` | vibration recorder stub: contact buzz + cooldown, gate/crash patterns, no-API degradation |
+| `75-sound` | AudioContext recorder stub: off by default (no context constructed), enable builds the graph + starts the twin sawtooth rotor oscs, stick effort pitches the hum above the 85 Hz idle, gate chime, crash thud + rotor muted while tumbling, suspend on disable, toggle persistence |
 | `80-acro` | flight-mode toggle: hold brakes vs acro coasts, gravity fall beats the descent cap, persistence |
 | `85-tuning` | rates/expo panel: speed/yaw sliders scale HUD-observable flight, turbo stacks, persistence, reset-to-defaults restores tuning + toggles |
 | `90-minimap` | inset map: layout contents, marker tracks position/heading, toggle + persistence |

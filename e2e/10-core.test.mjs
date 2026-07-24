@@ -45,6 +45,7 @@ for (const tid of [
   'dronesim-weather-toggle',
   'dronesim-rich-toggle',
   'dronesim-minimap-toggle',
+  'dronesim-sound-toggle',
   'dronesim-tune-speed',
   'dronesim-tune-yaw',
   'dronesim-tune-expo',

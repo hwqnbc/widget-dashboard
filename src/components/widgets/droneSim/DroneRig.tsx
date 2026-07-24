@@ -38,6 +38,7 @@ import {
   contactPulse,
   vibrate,
 } from './haptics'
+import type { SoundEngine } from './sound'
 import DroneModel from './DroneModel'
 import type { GateFlash } from './GateRings'
 
@@ -67,6 +68,7 @@ export default function DroneRig({
   operatorHold,
   followDist,
   external,
+  sound,
   pilotChipRef,
   minimapOperatorRef,
   onWalkerEvent,
@@ -108,6 +110,8 @@ export default function DroneRig({
   followDist: number
   /** External-input ownership (gamepad polled here, keyboard in the body). */
   external: { current: ExternalState }
+  /** Synthesized audio — rotor pitch on the tick, thud on crash. */
+  sound: { current: SoundEngine }
   /** Pilot chip (los/walk views) — text + data-pilot written on the tick,
    * because the rescue/manual state lives in refs and never re-renders. */
   pilotChipRef: RefObject<HTMLDivElement | null>
@@ -280,6 +284,7 @@ export default function DroneRig({
         crash.spinX = 0
         crash.spinZ = 0
         vibrate(CRASH_PULSE)
+        sound.current.crashThud()
         onCrash()
       } else {
         if (
@@ -382,6 +387,21 @@ export default function DroneRig({
     hudClock.current += dt
     if (hudClock.current >= HUD_INTERVAL) {
       hudClock.current = 0
+      // Rotor hum on the same cadence as the HUD: pitched by stick effort or
+      // airspeed (whichever is higher), silent while tumbling or dead.
+      {
+        const activity = Math.max(
+          Math.abs(controls.left.x),
+          Math.abs(controls.left.y),
+          Math.abs(controls.right.x),
+          Math.abs(controls.right.y),
+        )
+        const airspeed = Math.hypot(flight.vel.x, flight.vel.y, flight.vel.z)
+        sound.current.updateRotor(
+          Math.min(1, Math.max(activity, airspeed / 12)),
+          !crash.active && !(batteryMode && batteryRef.current.dead),
+        )
+      }
       const hud = hudRef.current
       if (hud) {
         const alt = flight.pos.y

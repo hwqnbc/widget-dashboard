@@ -51,7 +51,8 @@ one-line description, grouped by concern:
 
 - **Gameplay**: Acro flight mode, Crash & respawn, Landing challenge,
   Battery mode.
-- **Environment**: Storm weather, Rich scenery, Minimap.
+- **Environment**: Storm weather, Rich scenery, Minimap, Sound (synthesized
+  audio, default off — below).
 - **Tuning**: the speed/yaw/expo sliders and the Turbo switch (formerly a
   separate popover).
 - **Pilot**: the follow-distance slider (5–18, default 7) — how far the
@@ -74,7 +75,7 @@ one-line description, grouped by concern:
 The panel reads current values as props from `DroneSimBody` and dispatches
 `updateWidgetData` itself. The original per-toggle `data-testid`s moved onto
 the switch rows unchanged, and the widget root mirrors every mode as
-`data-mode/-crashes/-landing/-battery/-weather/-rich/-minimap/-turbo`
+`data-mode/-crashes/-landing/-battery/-weather/-rich/-minimap/-sound/-turbo`
 attributes — the E2E contract reads state from the root and flips switches
 through the panel. History note: each feature originally added its own
 icon-toggle to the button row; at 11 buttons that stopped scaling (and a
@@ -526,6 +527,36 @@ so there is no toggle and no support checks at call sites:
 The E2E suite stubs `navigator.vibrate` with a recorder via `addInitScript`
 and asserts the exact patterns.
 
+## Sound (`sound.ts`)
+
+Synthesized Web Audio — no asset files — behind a persisted `sound: boolean`
+(default **off**, Environment-group switch, mirrored as `data-sound` on the
+root). `createSoundEngine()` returns a `SoundEngine`
+(`setEnabled / updateRotor / gateChime / crashThud / lapJingle`) held in a
+body ref and threaded to `DroneRig` like the other zero-render refs.
+
+- **Graph**: two sawtooth oscillators detuned ±7 cents → rotor gain (0 at
+  rest) → 420 Hz lowpass → master gain (0.12) → destination. The oscillators
+  start once and run forever; loudness lives entirely in the rotor gain.
+- **Rotor hum**: on the same 150 ms tick as the HUD, `DroneRig` calls
+  `updateRotor(effort, alive)` with `effort = max(stick activity, speed/12)`
+  clamped to 0..1 — pitch glides `85 → 170 Hz` via `setTargetAtTime` (0.12 s
+  constant), so the hum tracks throttle without zipper artifacts. `alive`
+  is false while crash-tumbling or battery-dead, easing the rotor gain to 0
+  — a downed drone is silent.
+- **One-shots**: `gateChime()` (sine 880→1318 Hz), `crashThud()` (sine
+  130→42 Hz + a short square knock), `lapJingle()` (three staggered notes)
+  — all built from one `blip()` helper that only ever schedules with
+  `setValueAtTime` / `linearRampToValueAtTime`, deliberately: the E2E stub
+  records exactly that surface. Chime/jingle fire beside the matching
+  haptics calls in the body; the thud fires in the rig's crash branch.
+- **Lifecycle**: the `AudioContext` is created lazily on the first enable
+  (capability-gated — no-ops where Web Audio is missing) and `suspend()`ed
+  on disable rather than torn down. Autoplay policy: a one-time
+  window-level pointerdown/keydown listener `resume()`s a context the
+  browser refused to start before a gesture — in practice the settings
+  interaction that enables sound is itself that gesture.
+
 ## HUD telemetry (also the test contract)
 
 `DroneRig` writes `ALT x.x m · SPD x.x` (+ `WIND x.x` in storm) into the HUD
@@ -567,7 +598,5 @@ from the enhancement menu, with the integration point each would build on.
 *(empty — acro mode and ground effect shipped)*
 
 ### Meta
-- **Sound** — Web Audio rotor hum pitched by throttle, gate chime, crash
-  thud; no asset files needed.
 - **Per-weather best laps** — storm laps are inherently slower; split
   `bestLapMs` by weather if fairness starts to matter.

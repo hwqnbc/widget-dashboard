@@ -82,6 +82,7 @@ export default function SettingsPanel({
   turbo,
   followDist,
   fpvPolish,
+  soundOn,
   gateCount,
   courseMode,
   hasCustom,
@@ -107,6 +108,7 @@ export default function SettingsPanel({
   turbo: boolean
   followDist: number
   fpvPolish: boolean
+  soundOn: boolean
   gateCount: number
   courseMode: CourseMode
   /** Whether a hand-placed course is stored (enables switching back). */
@@ -190,6 +192,15 @@ export default function SettingsPanel({
             description="Top-down inset with buildings, gates and your heading."
             checked={minimap}
             onChange={(next) => set({ minimap: next })}
+          />
+          <ToggleRow
+            testId="dronesim-sound-toggle"
+            stateAttr="data-sound"
+            stateValue={soundOn ? 'on' : 'off'}
+            label="Sound"
+            description="Synthesized rotor hum pitched by throttle, gate chimes and crash thuds — no audio files."
+            checked={soundOn}
+            onChange={(next) => set({ sound: next })}
           />
         </List>
         <List dense subheader={<ListSubheader disableGutters>Tuning</ListSubheader>}>

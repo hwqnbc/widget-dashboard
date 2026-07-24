@@ -63,6 +63,7 @@ import RichWorld from './RichWorld'
 import LandingPads from './LandingPads'
 import Minimap from './Minimap'
 import OperatorFigure from './OperatorFigure'
+import { createSoundEngine } from './sound'
 import {
   DRONE_KEYS,
   applyExternal,
@@ -92,6 +93,7 @@ const SETTING_KEYS = [
   'minimap',
   'followDist',
   'fpvPolish',
+  'sound',
   'rateSpeed',
   'rateYaw',
   'stickExpo',
@@ -177,6 +179,11 @@ export default function DroneSimBody({ id }: WidgetProps) {
   const operatorRef = useRef(createOperatorState())
   const followDist = useWidgetField(id, 'followDist', 7, coerceFollowDist)
   const fpvPolish = useWidgetField(id, 'fpvPolish', false)
+  const soundOn = useWidgetField(id, 'sound', false)
+  const soundRef = useRef(createSoundEngine())
+  useEffect(() => {
+    soundRef.current.setEnabled(soundOn)
+  }, [soundOn])
   const horizonRef = useRef<HTMLDivElement>(null)
   const pilotChipRef = useRef<HTMLDivElement>(null)
   // External input: gamepad is polled in the sim loop, keyboard listens
@@ -275,12 +282,14 @@ export default function DroneSimBody({ id }: WidgetProps) {
 
   const onGatePass = useCallback(() => {
     vibrate(GATE_PULSE)
+    soundRef.current.gateChime()
     setActiveGate((gate) => Math.min(gate + 1, gateCount))
   }, [gateCount])
 
   const onLapComplete = useCallback(
     (lapMs: number, path: number[]) => {
       vibrate(LAP_PULSE)
+      soundRef.current.lapJingle()
       const isBest = bestLapMs === 0 || lapMs < bestLapMs
       dispatch(
         updateWidgetData({
@@ -519,6 +528,7 @@ export default function DroneSimBody({ id }: WidgetProps) {
       data-op-hold={opHold ? 'on' : 'off'}
       data-follow-dist={followDist}
       data-fpv={fpvPolish ? 'on' : 'off'}
+      data-sound={soundOn ? 'on' : 'off'}
       data-course={courseMode}
       data-editing={editing ? 'on' : 'off'}
       onMouseDown={(e) => e.stopPropagation()}
@@ -562,6 +572,7 @@ export default function DroneSimBody({ id }: WidgetProps) {
             operatorHold={opHold}
             followDist={followDist}
             external={externalRef}
+            sound={soundRef}
             pilotChipRef={pilotChipRef}
             minimapOperatorRef={minimapOperatorRef}
             onWalkerEvent={onWalkerEvent}
@@ -942,6 +953,7 @@ export default function DroneSimBody({ id }: WidgetProps) {
         turbo={turbo}
         followDist={followDist}
         fpvPolish={fpvPolish}
+        soundOn={soundOn}
         gateCount={gateSetting}
         courseMode={courseMode}
         hasCustom={customRings.length > 0}

@@ -538,3 +538,20 @@ carried over; these are the new ones.
     difficulty-independent kinds across two difficulties at a high wave —
     cheap, and it fails loudly the moment a new draw is inserted in the
     wrong place.
+
+55. **When a subsystem's output is unobservable in tests (audio, haptics,
+    GPU), constrain the code to a minimal API surface and make the recorder
+    stub of that surface the whole contract.** The Drone Sim sound engine
+    could have scheduled envelopes with `exponentialRampToValueAtTime`,
+    `cancelScheduledValues`, `OscillatorNode.onended`, buffer sources, etc.
+    — and the e2e `AudioContext` stub would have to faithfully mimic each
+    one or silently miss events. Instead the engine deliberately uses only
+    three AudioParam schedulers (`setValueAtTime`, `linearRampToValueAtTime`,
+    `setTargetAtTime`) plus direct `.value` writes, chosen *while designing
+    the engine* with the stub in mind. The stub is then ~40 lines, records
+    every scheduled value with its oscillator type, and can assert real
+    behaviour (idle 85 Hz vs full-stick 161 Hz, an 880 Hz chime on a real
+    gate pass, rotor gain → 0 during a real crash) with zero risk of the
+    stub lying. Corollary of #40 (stub browser APIs at the page level):
+    don't just stub what the code happens to call — design what the code
+    calls so the stub stays trivially complete.
