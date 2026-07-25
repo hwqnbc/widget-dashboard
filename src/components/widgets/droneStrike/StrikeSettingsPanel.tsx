@@ -85,6 +85,7 @@ export default function StrikeSettingsPanel({
   rateYaw,
   stickExpo,
   turbo,
+  audio,
   onNewWorld,
   onResetDefaults,
 }: {
@@ -106,6 +107,7 @@ export default function StrikeSettingsPanel({
   rateYaw: number
   stickExpo: number
   turbo: boolean
+  audio: boolean
   onNewWorld: () => void
   onResetDefaults: () => void
 }) {
@@ -169,6 +171,13 @@ export default function StrikeSettingsPanel({
             description="The gun fires by itself while the reticle holds on a target — both thumbs stay on the sticks."
             checked={autoFire}
             onChange={(next) => set({ autoFire: next })}
+          />
+          <ToggleRow
+            testId="strike-audio-toggle"
+            label="Sound effects"
+            description="Synthesized bolt, target-pop, incoming-fire and wave-clear cues (no downloads). Starts on your first tap."
+            checked={audio}
+            onChange={(next) => set({ audio: next })}
           />
           <ListItem disableGutters sx={{ py: 0.5 }}>
             <ListItemText

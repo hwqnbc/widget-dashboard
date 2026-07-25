@@ -14,7 +14,7 @@ gates or hit walls reliably).
 ```bash
 npm run e2e            # all suites (starts its own dev server on :5199)
 npm run e2e crash      # only suites whose filename matches "crash"
-npm run e2e strike     # the Drone Strike suites (100-109)
+npm run e2e strike     # the Drone Strike suites (100-109 + 117-audio)
 npm run e2e tank       # the Tank Battle suites (110-116)
 ```
 
@@ -77,6 +77,7 @@ mode state from the widget root's `data-*` attributes via
 | `114-tank-help` | first-run "How to play" overlay: auto-opens on a fresh widget (`data-help-seen` off), Got-it dismiss persists the flag, no auto-open after reload, ? button reopens + Escape closes, battle state machine unblocked throughout. Other tank suites dismiss it via `addTankWidget` |
 | `115-tank-safezone` | spawn safe zone (the strike pad, groundside): `data-safe` + pad-chip contract at spawn, weapons offline inside vs online outside, then the full closed-loop repair run — clear wave 1, bait a real wave-2 hit standing in the open, retreat to the pad (chip REPAIRING, enemies hold fire) and rest until the heart restores |
 | `116-tank-mobile` | responsive touch layout on an iPhone-landscape viewport (844×390) in fullscreen: every stick/fire/scope control fully on screen, fire/scope column inward of the right stick and clear of the toolbar, sizes scaled to the height, fire works after driving clear of the safe zone |
+| `117-strike-audio` | Drone Strike sound effects: AudioContext stubbed with a recorder; default `data-audio` on + per-effect `data-sfx-*` counters; firing bumps sfx-fire and reaches the gesture-unlocked engine (resume + oscillators), kills bump sfx-pop, wave-clear plays the sting; muting from settings freezes the counters + engine while the gun still fires; mute persists across reload; the widget still runs with no Web Audio API at all |
 | `120-avatars` | Avatar Actions widget: default selection, every catalogued avatar selectable in order + renders a figure svg, tap plays/stops the celebration (`data-playing`), switching avatar mid-play resets to the static figure, per-widget selection persists across reload while play state resets |
 
 Drone Strike suites steer with the same closed-loop rig (`createStrikePilot`)

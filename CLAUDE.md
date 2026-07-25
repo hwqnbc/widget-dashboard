@@ -133,7 +133,9 @@ Provider order (`main.tsx`): `Provider` → `PersistGate` → `AppThemeProvider`
 
 Reusable primitives for new widgets: `hooks/useNow` (ticking clock),
 `features/widgets/useWidgetField` (typed persisted-`data` selector),
-`components/widgets/TapStage` (tap-to-animate button), and the per-avatar
+`components/widgets/TapStage` (tap-to-animate button),
+`components/widgets/droneSim/webAudio` (synthesized Web Audio SFX engine —
+`tone`/`noise`/`unlockAudio`, no asset files), and the per-avatar
 character folders under `components/widgets/characters/` — `toy/` (`ToyHead`,
 `ToyFigure`, `SixSevenFigure`, `ToyCelebration`, `toyParts`, `toyPalette`),
 `ninja/` (`NinjaHead`, `SwordNinjaFigure`, `NinjaFigure`, `NinjaCelebration`,
@@ -192,6 +194,7 @@ auto-fire, aim assist with target leading, segment-swept tracer bolts,
 seeded waves with enemy AI drones plus deck-level ground targets (supply
 trucks + AA turrets), four aim modes (Classic/Reticle/Gunner/Hover gimbal),
 Easy/Normal/Hard difficulty, ADS zoom with three gyro fine-aim modes,
+synthesized Web Audio sound effects (no assets),
 and the recorded hitscan/ballistic weapon variants).
 See `docs/tank-battle.md` for the Tank Battle widget (the third WebGL
 widget — seeded analytic heightfield terrain with four-corner tank

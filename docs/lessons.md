@@ -555,3 +555,27 @@ carried over; these are the new ones.
     stub lying. Corollary of #40 (stub browser APIs at the page level):
     don't just stub what the code happens to call — design what the code
     calls so the stub stays trivially complete.
+
+56. **Audio can't be heard in headless, so make its CONTRACT a counter, not
+    the sound.** Web Audio SFX (Drone Strike's `webAudio.ts`/`strikeSounds.ts`)
+    seem untestable — headless Chromium has no audio device and asserting
+    oscillator graphs is brittle. Two moves make them solid: (a) the rig
+    bumps a **monotonic per-effect counter** (`data-sfx-fire/-pop/...`) at
+    each event and publishes it on the telemetry tick — the e2e asserts the
+    *dispatch path* (a shot bumps fire, a kill bumps pop, wave-clear bumps
+    clear), which is the thing that can actually regress; and (b) a
+    `page.addInitScript` **recorder stub** for `AudioContext` counts
+    `resume()`s and `createOscillator()`s, proving the engine really reaches
+    Web Audio when unmuted and stays silent when muted (mirrors suite 70's
+    `navigator.vibrate` stub). The non-vacuous mute assertion is key: fire
+    while muted and check the *gameplay* `shots` counter still advanced while
+    `sfx-fire` stayed flat — otherwise "counter didn't move" also passes when
+    nothing fired at all. Two more gotchas worth reusing: **autoplay policy**
+    means the context must resume from a user gesture, so unlock from a
+    **capture-phase** window `pointerdown`/`keydown`/`touchstart` listener
+    (a child's `stopPropagation` on the sticks otherwise hides every touch,
+    and `keydown` covers the Space-fire path the pilot uses); and gate the
+    counter bump on the mute flag, not on API support, so the counter still
+    tracks intent (and the suite still passes) on a browser with no Web Audio.
+    (Sibling to #55 — that one shapes the engine's API for the stub; this one
+    shapes the widget's data-* so the *dispatch* is assertable at all.)

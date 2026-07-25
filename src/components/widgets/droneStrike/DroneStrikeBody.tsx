@@ -25,6 +25,7 @@ import {
 } from '../droneSim/flightModel'
 import { DEFAULT_SEED, buildWorldLayout } from '../droneSim/worldLayout'
 import { CRASH_PULSE, GATE_PULSE, LAP_PULSE, vibrate } from '../droneSim/haptics'
+import { unlockAudio } from '../droneSim/webAudio'
 import {
   DRONE_KEYS,
   applyExternal,
@@ -120,6 +121,7 @@ const SETTING_KEYS = [
   'rateYaw',
   'stickExpo',
   'turbo',
+  'audio',
 ] as const
 const SETTING_DEFAULTS: Record<string, unknown> = Object.fromEntries(
   SETTING_KEYS.map((k) => [k, defaultWidgetData('droneStrike')[k]]),
@@ -180,6 +182,7 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
   const turbo = useWidgetField(id, 'turbo', false)
   const battery = useWidgetField(id, 'battery', false)
   const crashes = useWidgetField(id, 'crashes', true)
+  const audio = useWidgetField(id, 'audio', true)
 
   // The world is the same seeded city as the drone sim; the course gates are
   // simply unused here (targets come from waveLayout instead).
@@ -249,6 +252,25 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
   useEffect(() => {
     if (view !== 'fp') setZoom(false)
   }, [view])
+
+  // Autoplay policy: an AudioContext can't start without a user gesture, so
+  // resume it on the first interaction of any kind (capture phase, so a
+  // child's stopPropagation on the sticks/buttons never hides it; keydown
+  // covers the keyboard/Space fire path). unlockAudio is idempotent, so we
+  // keep trying until the context is running. Off when sound is muted.
+  useEffect(() => {
+    if (!audio) return
+    const unlock = () => unlockAudio()
+    const opts = { capture: true } as const
+    window.addEventListener('pointerdown', unlock, opts)
+    window.addEventListener('keydown', unlock, opts)
+    window.addEventListener('touchstart', unlock, opts)
+    return () => {
+      window.removeEventListener('pointerdown', unlock, opts)
+      window.removeEventListener('keydown', unlock, opts)
+      window.removeEventListener('touchstart', unlock, opts)
+    }
+  }, [audio])
 
   // Gyro fine-aim: device tilt writes the shared aim offset while the mode
   // says so — 'always', or 'zoom' only while scoped (the classic
@@ -590,6 +612,7 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
       data-crashes={crashes ? 'on' : 'off'}
       data-aim-mode={aimMode}
       data-difficulty={difficulty}
+      data-audio={audio ? 'on' : 'off'}
       onMouseDown={(e) => e.stopPropagation()}
       onTouchStart={(e) => e.stopPropagation()}
       sx={{
@@ -724,6 +747,7 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
             weapon={BOLT}
             assist={aimAssist}
             autoFire={autoFire}
+            audioOn={audio}
             waveActive={phase === 'active'}
             wave={wave}
             hp={hp}
@@ -1013,6 +1037,7 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
         rateYaw={rateYaw}
         stickExpo={stickExpo}
         turbo={turbo}
+        audio={audio}
         onNewWorld={requestNewWorld}
         onResetDefaults={resetDefaults}
       />

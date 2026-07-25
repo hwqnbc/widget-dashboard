@@ -27,6 +27,7 @@ import { PAD_CENTER, PAD_START_RADIUS } from '../droneSim/lapTimer'
 import type { ExternalState } from '../droneSim/externalInput'
 import { pollGamepad } from '../droneSim/externalInput'
 import { CRASH_PULSE, vibrate } from '../droneSim/haptics'
+import { playAlert, playClear, playCrash, playFire, playHit, playPop } from './strikeSounds'
 import DroneModel from '../droneSim/DroneModel'
 import type { AimAssistLevel, CombatState, WeaponSpec } from './combatModel'
 import {
@@ -165,6 +166,7 @@ export default function StrikeRig({
   weapon,
   assist,
   autoFire,
+  audioOn,
   waveActive,
   wave,
   hp,
@@ -225,6 +227,8 @@ export default function StrikeRig({
   weapon: WeaponSpec
   assist: AimAssistLevel
   autoFire: boolean
+  /** Master sound-effects switch (default on; unlocked on first gesture). */
+  audioOn: boolean
   waveActive: boolean
   wave: number
   /** Player hit points this wave attempt (telemetry only — the body owns it). */
@@ -269,6 +273,10 @@ export default function StrikeRig({
   }).current
   const reticlePos = useRef({ x: 50, y: 50 })
   const hudClock = useRef(0)
+  // Monotonic sound-effect counters — one per SfxKind, published on the HUD
+  // tick as data-sfx-* (the e2e audio contract; the actual voices are fired
+  // imperatively at each event via strikeSounds, gated on `audioOn`).
+  const sfx = useRef({ fire: 0, pop: 0, hit: 0, alert: 0, clear: 0, crash: 0 }).current
   const events = useRef(createHitEvents()).current
   const fireDir = useRef<Vec3>({ x: 0, y: 0, z: -1 }).current
   const muzzle = useRef<Vec3>({ x: 0, y: 0, z: 0 }).current
@@ -348,6 +356,10 @@ export default function StrikeRig({
         crash.spinX = 0
         crash.spinZ = 0
         vibrate(CRASH_PULSE)
+        if (audioOn) {
+          sfx.crash++
+          playCrash()
+        }
         onCrash()
       }
 
@@ -428,7 +440,12 @@ export default function StrikeRig({
     dirFromAngles(angles.yaw, angles.pitch, fireDir)
 
     // Gallery targets drift deterministically off the canvas clock; enemies
-    // orbit/evade (and possibly return fire) while the wave is live.
+    // orbit/evade (and possibly return fire) while the wave is live. The AI
+    // loop only ever SPAWNS enemy bolts (never despawns — that's the sweep),
+    // so a rise in the active-enemy-bolt count across the loop means someone
+    // just fired at us → incoming-fire alert.
+    let enemyBoltsBefore = 0
+    for (const p of combat.enemy) if (p.active) enemyBoltsBefore++
     for (let i = 0; i < targets.length; i++) {
       const t = targets[i]
       stepDrift(t, clock.elapsedTime)
@@ -460,6 +477,14 @@ export default function StrikeRig({
         )
       }
       if (t.hitFlash > 0) t.hitFlash = Math.max(0, t.hitFlash - dt)
+    }
+    if (audioOn) {
+      let enemyBoltsAfter = 0
+      for (const p of combat.enemy) if (p.active) enemyBoltsAfter++
+      if (enemyBoltsAfter > enemyBoltsBefore) {
+        sfx.alert++
+        playAlert()
+      }
     }
 
     // Reticle lock: nearest angular match inside the assist cone (the
@@ -545,6 +570,10 @@ export default function StrikeRig({
         combat.cooldown = weapon.cooldown
         combat.shots++
         aim.recoil += RECOIL_KICK
+        if (audioOn) {
+          sfx.fire++
+          playFire(weapon.cooldown)
+        }
       }
     }
 
@@ -563,9 +592,17 @@ export default function StrikeRig({
         t.alive = false
         scoreRef.current += t.points
         vibrate(KILL_PULSE)
+        if (audioOn) {
+          sfx.pop++
+          playPop(t.kind)
+        }
         onTargetDown(t.points)
       } else {
         vibrate(HIT_PULSE)
+        if (audioOn) {
+          sfx.hit++
+          playHit()
+        }
       }
     }
 
@@ -585,12 +622,20 @@ export default function StrikeRig({
     for (let i = 0; i < events.count; i++) {
       if (events.items[i].kind !== 'player') continue
       vibrate(CRASH_PULSE)
+      if (audioOn) {
+        sfx.crash++
+        playCrash()
+      }
       aim.recoil += PLAYER_HIT_KICK
       onPlayerHit()
     }
 
     if (waveActive && !clearedSent.current && aliveCount(targets) === 0) {
       clearedSent.current = true
+      if (audioOn) {
+        sfx.clear++
+        playClear()
+      }
       onWaveCleared()
     }
 
@@ -651,6 +696,14 @@ export default function StrikeRig({
         hud.dataset.gimbalYaw = gimbal.yaw.toFixed(3)
         hud.dataset.gimbalPitch = gimbal.pitch.toFixed(3)
         hud.dataset.inputSource = external.current.owner ?? 'touch'
+        // Sound-effect counters — the audio contract (data-audio lives on the
+        // React-owned root, so it has a single owner; lesson #46).
+        hud.dataset.sfxFire = String(sfx.fire)
+        hud.dataset.sfxPop = String(sfx.pop)
+        hud.dataset.sfxHit = String(sfx.hit)
+        hud.dataset.sfxAlert = String(sfx.alert)
+        hud.dataset.sfxClear = String(sfx.clear)
+        hud.dataset.sfxCrash = String(sfx.crash)
         // Nearest alive target — the closed-loop aim beacon for the e2e
         // suites (no window globals; lesson #31).
         let nearest: TargetState | null = null

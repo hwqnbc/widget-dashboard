@@ -198,6 +198,25 @@ to 1 (flash count tracked the hp loss exactly, the edge appeared at one
 heart and reset on the wave restart); the committed suites assert the
 at-rest contract, since reaching wave-5 fire closed-loop is impractical.
 
+**Sound effects** (settings toggle `audio`, **default on**): synthesized
+with the Web Audio API — **no asset files**. A reusable engine lives in
+`../droneSim/webAudio.ts` (`tone`/`noise`/`unlockAudio`, a shared
+lazy `AudioContext` through a master gain, degrading to a silent no-op when
+the API is missing — the `haptics.ts` pattern), and the strike's palette is
+`strikeSounds.ts`: a **fire** chirp (pitched by the weapon cooldown), a
+**pop** on a kill (airy for balloons, a metallic clank for drones/trucks/
+turrets), a soft **hit** tick on a non-lethal shot, a two-tone **alert** the
+frame an enemy or turret shoots at you, an ascending **clear** sting on
+wave-clear, and a low **crash** thud on a wall hit or a bolt connecting.
+Browsers block audio that starts without a user gesture, so `DroneStrikeBody`
+resumes the context on the first interaction (a capture-phase window
+`pointerdown`/`keydown`/`touchstart` listener, so a child's
+`stopPropagation` on the sticks never hides it). The rig fires each voice
+imperatively at its game event and bumps a monotonic per-effect counter,
+published on the telemetry tick as `data-sfx-fire/-pop/-hit/-alert/-clear/
+-crash`; `data-audio` (on the root) is the mute state. That counter contract
+is what the e2e suite asserts — the dispatch path, not the inaudible output.
+
 ## Architecture
 
 `src/components/widgets/droneStrike/` mirrors the Drone Sim architecture:
@@ -211,7 +230,8 @@ allocation-free, seeded modules (lesson #30).
 by the sim's own e2e suites): `flightModel` (`stepFlight`, `boomClipT` —
 the segment-vs-city slab test doubles as the bullet occlusion ray),
 `worldLayout` (`buildWorldLayout`), `externalInput`, `VirtualJoystick`,
-`haptics`, `palettes`, `WorldScene`, `RichWorld`, `RainField`,
+`haptics`, `webAudio` (the synthesized-SFX engine, first used here),
+`palettes`, `WorldScene`, `RichWorld`, `RainField`,
 `DroneModel`. **Copied/adapted, not imported**: camera rig, sim loop,
 minimap, settings panel — they encode gameplay. If a third drone widget
 ever appears, hoist the shared pure modules to a `shared/` folder then;
@@ -263,18 +283,20 @@ representable with **no rewrite**:
 ## Test contract (data-*)
 
 Root `drone-strike-root`: `data-world-seed/-view/-auto-fire/-aim-assist/
--gyro/-minimap/-weather/-rich`. HUD `strike-hud` (150 ms tick):
+-gyro/-minimap/-weather/-rich/-aim-mode/-difficulty/-audio`. HUD
+`strike-hud` (150 ms tick):
 `data-x/-z/-alt/-yaw/-speed/-wave/-wave-state(intro|active|cleared|failed)/
 -score/-shots/-hits/-targets-left/-lock/-proj/-enemy-proj/-hp/
--input-source` plus the **nearest-alive-target beacon**
-`data-tgt-x/-y/-z/-kind` that lets suites aim closed-loop without window
-globals. Chips: `strike-score` (`data-score/-wave/-best-score/-best-wave`),
+-input-source`, the **sound-effect counters**
+`data-sfx-fire/-pop/-hit/-alert/-clear/-crash`, plus the
+**nearest-alive-target beacon** `data-tgt-x/-y/-z/-kind` that lets suites
+aim closed-loop without window globals. Chips: `strike-score` (`data-score/-wave/-best-score/-best-wave`),
 `strike-hp`, `strike-reticle` (`data-lock`), `strike-fire`
 (`data-pressed`), joysticks/buttons/settings testids mirror the sim's.
 
-E2E: suites `100-strike-core` … `109-strike-ground` (see `e2e/README.md`);
-pure modules are esbuild-bundled for the suites in a second flat pass in
-`run.mjs`.
+E2E: suites `100-strike-core` … `109-strike-ground` plus `117-strike-audio`
+(see `e2e/README.md`); pure modules are esbuild-bundled for the suites in a
+second flat pass in `run.mjs`.
 
 ## Future work (enhancement backlog)
 
@@ -363,9 +385,13 @@ pilot views (operator-specific). FPV polish is tracked above under Camera &
 visuals.
 
 ### Meta
-- **Sound** — Web Audio, no assets: bolt zap pitched by cooldown, balloon
-  pop, enemy-lock warning tone when an enemy is about to fire at you (the
-  AI knows — `fireCooldown` crossing zero), wave-clear sting.
+- ~~Sound~~ — **shipped** (Web Audio, no assets: fire chirp pitched by
+  cooldown, target pop, incoming-fire alert, wave-clear sting, crash thud;
+  `webAudio.ts` engine + `strikeSounds.ts` palette — see the Gameplay
+  section). Room to extend: a throttle-pitched rotor hum (the drone-sim
+  backlog's idea, now that the engine exists), and the pre-warning variant
+  of the alert (fire it as `fireCooldown` crosses a threshold, not at the
+  shot, for genuine reaction time).
 - **Accuracy stats** — persist per-run accuracy (`hits/shots`) alongside
   `bestScore`; show on the best chip.
 - **Daily seed run** — a "today's city" mode seeding `worldSeed` from the
