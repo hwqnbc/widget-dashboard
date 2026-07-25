@@ -48,7 +48,7 @@ import { aliveCount, stepDrift } from './waveLayout'
 import type { EnemyAIState } from './enemyAI'
 import { stepEnemy, stepTurret } from './enemyAI'
 import type { AimOffset } from './aimModel'
-import { RECOIL_KICK, ZOOM_SENS, fpvPitchGain } from './aimModel'
+import { RECOIL_KICK, fpvPitchGain } from './aimModel'
 import type { AimAngles, AimMode, GimbalState } from './gimbalModel'
 import {
   RECENTER_DELAY_MS,
@@ -171,6 +171,7 @@ export default function StrikeRig({
   wave,
   hp,
   zoom,
+  zoomSens,
   onZoomHold,
   aimMode,
   gimbalRef,
@@ -235,6 +236,8 @@ export default function StrikeRig({
   hp: number
   /** ADS: tighter lock cone + gentler pitch follow on the fire path. */
   zoom: boolean
+  /** Scoped aim-sensitivity multiplier for the current zoom power. */
+  zoomSens: number
   /** Gamepad left-trigger zoom hold — edge-reported to the body. */
   onZoomHold: (held: boolean) => void
   /** Aim-control mode (gimbal reticle / gunner cam / hover gunner). */
@@ -383,7 +386,7 @@ export default function StrikeRig({
 
     const aim = aimRef.current
     const gimbal = gimbalRef.current
-    const basePitch = flight.tiltPitch * fpvPitchGain(zoom, flightMode)
+    const basePitch = flight.tiltPitch * fpvPitchGain(zoom, flightMode, zoomSens)
 
     // Classic (default) is the original fly-to-aim: the gimbal stays frozen
     // at boresight — no hover-stick slew, no soft-track, no idle-recenter.
@@ -399,7 +402,7 @@ export default function StrikeRig({
         gimbal,
         controls.right.x,
         controls.right.y,
-        zoom ? ZOOM_SENS : 1,
+        zoom ? zoomSens : 1,
         dt,
       )
     }

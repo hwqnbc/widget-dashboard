@@ -57,7 +57,14 @@ import {
 } from './waveLayout'
 import { createEnemyAIStates, seedEnemyAIStates } from './enemyAI'
 import type { StrikeView } from './aimModel'
-import { ZOOM_SENS, coerceStrikeView, createAimOffset } from './aimModel'
+import {
+  coerceStrikeView,
+  coerceZoomPower,
+  createAimOffset,
+  zoomFovFor,
+  zoomSensFor,
+} from './aimModel'
+import type { ZoomPower } from './aimModel'
 import StrikeCameraRig from './StrikeCameraRig'
 import type { CrashState } from './StrikeRig'
 import StrikeRig from './StrikeRig'
@@ -122,6 +129,7 @@ const SETTING_KEYS = [
   'stickExpo',
   'turbo',
   'audio',
+  'zoomPower',
 ] as const
 const SETTING_DEFAULTS: Record<string, unknown> = Object.fromEntries(
   SETTING_KEYS.map((k) => [k, defaultWidgetData('droneStrike')[k]]),
@@ -183,6 +191,9 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
   const battery = useWidgetField(id, 'battery', false)
   const crashes = useWidgetField(id, 'crashes', true)
   const audio = useWidgetField(id, 'audio', true)
+  const zoomPower = useWidgetField<ZoomPower>(id, 'zoomPower', 2, coerceZoomPower)
+  const zoomFov = zoomFovFor(zoomPower)
+  const zoomSens = zoomSensFor(zoomPower)
 
   // The world is the same seeded city as the drone sim; the course gates are
   // simply unused here (targets come from waveLayout instead).
@@ -540,16 +551,17 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
     }
   }, [controls])
 
-  // Turbo stacks under the hard cap; scoped aim is slower (2× view
-  // magnifies motion) — flight speed untouched by zoom.
+  // Turbo stacks under the hard cap; scoped aim is slower (the zoom
+  // magnifies apparent motion, so yaw scales by 1/power) — flight speed
+  // untouched by zoom.
   const tuning = useMemo<Tuning>(() => {
     const boost = turbo ? TURBO_BOOST : 1
     return {
       speed: Math.min(MAX_SPEED_MULT, rateSpeed * boost),
-      yaw: Math.min(MAX_SPEED_MULT, rateYaw * boost) * (zoom ? ZOOM_SENS : 1),
+      yaw: Math.min(MAX_SPEED_MULT, rateYaw * boost) * (zoom ? zoomSens : 1),
       expo: stickExpo,
     }
-  }, [rateSpeed, rateYaw, stickExpo, turbo, zoom])
+  }, [rateSpeed, rateYaw, stickExpo, turbo, zoom, zoomSens])
 
   const toggleView = () =>
     dispatch(updateWidgetData({ id, data: { view: view === 'fp' ? 'tp' : 'fp' } }))
@@ -604,6 +616,7 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
       data-gyro={gyroMode}
       data-minimap={minimap ? 'on' : 'off'}
       data-zoom={zoom ? 'on' : 'off'}
+      data-zoom-power={zoomPower}
       data-weather={weather}
       data-rich={richWorld ? 'on' : 'off'}
       data-mode={flightMode}
@@ -752,6 +765,7 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
             wave={wave}
             hp={hp}
             zoom={zoom}
+            zoomSens={zoomSens}
             onZoomHold={setZoom}
             aimMode={aimMode}
             gimbalRef={gimbalRef}
@@ -773,6 +787,8 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
             aimRef={aimRef}
             colliders={layout.colliders}
             zoom={zoom}
+            zoomFov={zoomFov}
+            zoomSens={zoomSens}
             flightMode={flightMode}
             aimMode={aimMode}
             gimbalRef={gimbalRef}
@@ -1038,6 +1054,7 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
         stickExpo={stickExpo}
         turbo={turbo}
         audio={audio}
+        zoomPower={zoomPower}
         onNewWorld={requestNewWorld}
         onResetDefaults={resetDefaults}
       />

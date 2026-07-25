@@ -5,7 +5,7 @@ import type { PerspectiveCamera } from 'three'
 import type { Collider, FlightMode, FlightState } from '../droneSim/flightModel'
 import { boomClipT, damp } from '../droneSim/flightModel'
 import type { AimOffset, StrikeView } from './aimModel'
-import { BASE_FOV, ZOOM_FOV, fpvPitchGain } from './aimModel'
+import { BASE_FOV, fpvPitchGain } from './aimModel'
 import type { AimMode, GimbalState } from './gimbalModel'
 import { GIMBAL_PITCH_MAX, GIMBAL_PITCH_MIN } from './gimbalModel'
 
@@ -31,6 +31,8 @@ export default function StrikeCameraRig({
   aimRef,
   colliders,
   zoom,
+  zoomFov,
+  zoomSens,
   flightMode,
   aimMode,
   gimbalRef,
@@ -41,6 +43,10 @@ export default function StrikeCameraRig({
   colliders: readonly Collider[]
   /** ADS: ease the fov to the scoped value (FPV only). */
   zoom: boolean
+  /** Scoped field of view for the current zoom power. */
+  zoomFov: number
+  /** Scoped aim-sensitivity multiplier for the current zoom power. */
+  zoomSens: number
   /** In acro the camera follows the full flight attitude (pitch = aim). */
   flightMode: FlightMode
   /** 'gunner'/'hover' slew the camera with the gimbal; 'gimbal' keeps the
@@ -57,7 +63,7 @@ export default function StrikeCameraRig({
     const aim = aimRef.current
     aim.recoil = damp(aim.recoil, 0, RECOIL_LAMBDA, dt)
     // ADS: ease toward the scoped fov in FPV, back to base otherwise.
-    const targetFov = view === 'fp' && zoom ? ZOOM_FOV : BASE_FOV
+    const targetFov = view === 'fp' && zoom ? zoomFov : BASE_FOV
     if (Math.abs(camera.fov - targetFov) > 0.01) {
       camera.fov = damp(camera.fov, targetFov, ZOOM_LAMBDA, dt)
       if (Math.abs(camera.fov - targetFov) < 0.05) camera.fov = targetFov
@@ -107,7 +113,7 @@ export default function StrikeCameraRig({
       GIMBAL_PITCH_MAX,
       Math.max(
         GIMBAL_PITCH_MIN,
-        flight.tiltPitch * fpvPitchGain(zoom, flightMode) +
+        flight.tiltPitch * fpvPitchGain(zoom, flightMode, zoomSens) +
           gimbal.pitch * camGimbal +
           aim.pitch * camGimbal,
       ),

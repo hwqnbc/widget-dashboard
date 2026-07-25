@@ -84,15 +84,24 @@ Key decisions:
   target leading (`leadPoint`). Magnetism bends the **bolt**, never the
   camera — the player never feels steering theft. The reticle turns amber
   and expands on lock.
-- **ADS / zoom** (FPV only, transient — never persisted): a fixed 2× scope.
-  Tap-to-toggle on touch (the PUBG/CoD convention — no third held finger);
-  hold Shift / right-mouse / gamepad LT on desktop. Scoped: the camera
-  eases `BASE_FOV` 60° → `ZOOM_FOV` 30°, yaw rate and the FPV pitch follow
-  halve (`ZOOM_SENS` — a 2× view magnifies motion), and the assist cone
-  swaps to the ~half-size `AIM_CONE_RAD_ZOOM` row. The camera and the fire
-  path both go through `fpvPitchGain(zoom)` so the bolt always goes exactly
-  where the reticle points. The reticle grows a heavier scoped ring;
+- **ADS / zoom** (FPV only; the scoped state itself is transient — never
+  persisted). Tap-to-toggle on touch (the PUBG/CoD convention — no third
+  held finger); hold Shift / right-mouse / gamepad LT on desktop. Scoped:
+  the camera eases `BASE_FOV` 60° → the scoped FOV, the yaw rate and the FPV
+  pitch follow scale down together, and the assist cone swaps to the
+  ~half-size `AIM_CONE_RAD_ZOOM` row. The camera and the fire path both go
+  through `fpvPitchGain(zoom, mode, zoomSens)` so the bolt always goes
+  exactly where the reticle points. The reticle grows a heavier scoped ring;
   leaving FPV drops the scope.
+  - **Adjustable zoom power** (settings `zoomPower`, persisted, **default
+    2×**; 1.5× / 2× / 3×). The magnification drives both the FOV
+    (`zoomFovFor(p) = BASE_FOV / p` → 40° / 30° / 20°) and the aim
+    sensitivity (`zoomSensFor(p) = 1 / p`), so a stronger zoom sees further
+    and aims proportionally finer while the *feel* (screen-space aim speed)
+    stays constant across powers. `data-zoom-power` on the root is the
+    setting; 2× reproduces the original fixed scope bit-for-bit. The scoped
+    assist cone is independent of power (a lock-leniency concern, not a
+    magnification one).
 - **Gyro fine-aim** (settings, mobile only) — three modes: **Off / Zoom
   only / Always**. "Zoom only" attaches the sensor just while scoped (the
   classic beginner scope-gyro). Device tilt writes a clamped
@@ -283,7 +292,7 @@ representable with **no rewrite**:
 ## Test contract (data-*)
 
 Root `drone-strike-root`: `data-world-seed/-view/-auto-fire/-aim-assist/
--gyro/-minimap/-weather/-rich/-aim-mode/-difficulty/-audio`. HUD
+-gyro/-minimap/-weather/-rich/-aim-mode/-difficulty/-audio/-zoom-power`. HUD
 `strike-hud` (150 ms tick):
 `data-x/-z/-alt/-yaw/-speed/-wave/-wave-state(intro|active|cleared|failed)/
 -score/-shots/-hits/-targets-left/-lock/-proj/-enemy-proj/-hp/
@@ -314,8 +323,11 @@ kind of list).
   Controls above).
 - **Gyro recenter button** — `recenterGyro` is exported and unused so far;
   surface it next to the gyro mode buttons for players whose grip drifted.
-- **Adjustable zoom power** — the 2× scope is fixed constants
-  (`ZOOM_FOV`/`ZOOM_SENS`); a 1.5–4× slider would scale both together.
+- ~~Adjustable zoom power~~ — **shipped** (settings `zoomPower` 1.5× / 2× /
+  3×, default 2×; `zoomFovFor`/`zoomSensFor` scale FOV and sensitivity
+  together — see Controls above). Room to extend: push the top end to 4× for
+  the long-range ground targets, or swap the stepped toggle for a slider if
+  finer control is wanted.
 
 ### Weapons
 - **Hitscan laser** — already representable as a `WeaponSpec` (resolve the

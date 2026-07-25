@@ -2,7 +2,9 @@
  * Drone Strike ADS/zoom suite: the scope button toggle, hold-Shift zoom,
  * the halved yaw sensitivity while scoped (measured closed-loop), firing
  * while zoomed, the tighter scoped assist cones (pure module), the gyro
- * "Zoom only" mode, and the FPV-only surface of the scope button.
+ * "Zoom only" mode, the FPV-only surface of the scope button, and the
+ * adjustable zoom power (default 2×; a stronger power tightens the scoped
+ * aim proportionally, and the setting round-trips + persists).
  */
 import {
   addStrikeWidget,
@@ -34,6 +36,7 @@ check(
 // --- scope button toggles ---
 check('scope button present in FPV', (await scope.count()) === 1)
 check('unzoomed by default', (await root.getAttribute('data-zoom')) === 'off')
+check('default zoom power is 2×', (await root.getAttribute('data-zoom-power')) === '2')
 await scope.click()
 await page.waitForTimeout(300)
 check('tap zooms', (await root.getAttribute('data-zoom')) === 'on')
@@ -108,5 +111,31 @@ await page.waitForTimeout(300)
 check('scope button hidden in chase view', (await scope.count()) === 0)
 check('leaving FPV drops the zoom', (await root.getAttribute('data-zoom')) === 'off')
 await page.locator('[data-testid="strike-view-toggle"]').click()
+await page.waitForTimeout(300)
+
+// --- adjustable zoom power: 3× tightens the scoped aim past the 2× baseline ---
+await openStrikeSettings(page)
+await page.locator('[data-testid="strike-zoompower-3"]').click()
+await page.waitForTimeout(150)
+await closeStrikeSettings(page)
+check('zoom power set to 3×', (await root.getAttribute('data-zoom-power')) === '3')
+await scope.click()
+await page.waitForTimeout(300)
+const ads3 = await yawSweep(1500)
+await scope.click()
+await page.waitForTimeout(200)
+check('3× scoped yaw is tighter than 2×', ads3 < adsSweep, `3x=${ads3.toFixed(2)} 2x=${adsSweep.toFixed(2)}`)
+const ratio3 = ads3 / hipSweep
+check('3× scoped yaw rate is ~a third', ratio3 > 0.15 && ratio3 < 0.55, `ratio=${ratio3.toFixed(2)}`)
+
+// 1.5× round-trips and the setting persists across a reload.
+await openStrikeSettings(page)
+await page.locator('[data-testid="strike-zoompower-1_5"]').click()
+await page.waitForTimeout(150)
+await closeStrikeSettings(page)
+check('zoom power set to 1.5×', (await root.getAttribute('data-zoom-power')) === '1.5')
+await page.reload({ waitUntil: 'networkidle' })
+await page.waitForSelector('[data-testid="drone-strike-root"]')
+check('zoom power persists across reload', (await root.getAttribute('data-zoom-power')) === '1.5')
 
 await finish(browser)

@@ -24,6 +24,8 @@ import type { AimAssistLevel } from './combatModel'
 import type { GyroMode } from './gyroAim'
 import { gyroNeedsPermission, gyroSupported, requestGyroPermission } from './gyroAim'
 import type { AimMode } from './gimbalModel'
+import type { ZoomPower } from './aimModel'
+import { ZOOM_POWERS } from './aimModel'
 import type { Difficulty } from './waveLayout'
 
 function ToggleRow({
@@ -86,6 +88,7 @@ export default function StrikeSettingsPanel({
   stickExpo,
   turbo,
   audio,
+  zoomPower,
   onNewWorld,
   onResetDefaults,
 }: {
@@ -108,6 +111,7 @@ export default function StrikeSettingsPanel({
   stickExpo: number
   turbo: boolean
   audio: boolean
+  zoomPower: ZoomPower
   onNewWorld: () => void
   onResetDefaults: () => void
 }) {
@@ -235,6 +239,33 @@ export default function StrikeSettingsPanel({
               <ToggleButton value="strong" data-testid="strike-assist-strong">
                 Strong
               </ToggleButton>
+            </ToggleButtonGroup>
+          </ListItem>
+          <ListItem disableGutters sx={{ py: 0.5 }}>
+            <ListItemText
+              primary="Zoom power"
+              secondary="Scope magnification (the ADS button). A stronger zoom sees further but aims proportionally slower."
+              slotProps={{ primary: { sx: { fontWeight: 600 } }, secondary: { sx: { fontSize: 12 } } }}
+            />
+            <ToggleButtonGroup
+              size="small"
+              exclusive
+              data-testid="strike-zoompower"
+              value={zoomPower}
+              onChange={(_, v) => {
+                if (v) set({ zoomPower: v as ZoomPower })
+              }}
+              sx={{ ml: 1.5, flexShrink: 0 }}
+            >
+              {ZOOM_POWERS.map((p) => (
+                <ToggleButton
+                  key={p}
+                  value={p}
+                  data-testid={`strike-zoompower-${String(p).replace('.', '_')}`}
+                >
+                  {p}×
+                </ToggleButton>
+              ))}
             </ToggleButtonGroup>
           </ListItem>
           {gyroSupported() && (
