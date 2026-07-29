@@ -127,9 +127,9 @@ mulberry32 stream per wave, independent of the world stream):
 | --- | --- |
 | 1 | 6 static balloons |
 | 2 | 7 targets, half drifting (`ringDrone`, sinusoidal, velocity published for leading); + ground supply trucks (2) |
-| 3–4 | + enemy drones (1 then 2), orbit patrol + evade; + more trucks; AA turrets from wave 4 |
+| 3–4 | + enemy drones (1 then 2), orbit patrol + evade; + more trucks; moving road cars from wave 3; AA turrets from wave 4 |
 | 5+ | enemies + turrets return fire (Normal/Hard); player has 3 HP per wave attempt |
-| scaling | more/smaller/faster targets, up to 4 enemies, up to 4 trucks + 2 turrets, `MAX_TARGETS` 20 |
+| scaling | more/smaller/faster targets, up to 4 enemies, up to 4 trucks + 3 cars + 2 turrets, `MAX_TARGETS` 24 |
 
 **Ground targets** (unlocked by the gimbal's −70° look-down): two static,
 deck-level kinds mixed into the gallery, rendered as one instanced box mesh
@@ -141,9 +141,20 @@ turrets** (`turret`, dark-red, 30 pts) appear from wave 4 — a *static ground
 enemy*: `stepTurret` is the return-fire half of `stepEnemy` with no
 movement, lobbing slow unled bolts up the player's line of sight (dodgeable),
 gated by the same difficulty preset as the drones (HP + the shared
-return-fire wave). Both use the normal pos+radius hit sphere, so the fire
-sweep / lock / scoring paths are unchanged. Ground targets are easiest in
-Reticle/Gunner (the gimbal looks down); in Classic you nose-down or descend.
+return-fire wave). **Cars** (`car`, blue, 25 pts, one hit) appear from
+wave 3 — a *moving* deck target that drives the city's road lanes: each is
+placed on one of the world's seeded `roads`, and `stepDrift`'s `car` branch
+reuses `RichWorld`'s decorative-traffic formula (`along = ((offset +
+dir·speed·t) mod span) − WORLD_HALF` at the road's fixed cross-coord), so it
+rides the visible road at constant speed and wraps at the far edge. Its
+velocity is the constant travel speed (not a per-frame delta), so shot
+leading stays correct across the wrap. Trucks and cars are
+difficulty-independent (drawn before the difficulty-gated enemy block so
+their seeded positions don't shift with difficulty); count and hp of the
+turrets follow the preset. All use the normal pos+radius hit sphere, so the
+fire sweep / lock / scoring paths are unchanged. Ground targets are easiest
+in Reticle/Gunner (the gimbal looks down); in Classic you nose-down or
+descend — and the car needs leading on top.
 
 **Enemy difficulty** (settings, persisted `difficulty`, **default Easy**)
 scales only the AI drones — the gallery targets are untouched. The presets
@@ -345,11 +356,13 @@ kind of list).
 
 ### Enemies & waves
 - ~~Ground-target waves~~ — **shipped** (deck-level supply trucks from
-  wave 2 + AA turrets from wave 4 via `GroundTargets`/`stepTurret`; the
-  payoff the gimbal look-down unlocked — see the Gameplay section). Room to
-  extend: **tents/depots** as further static kinds, and **mobile ground
-  units** (a truck that patrols a spline — `stepDrift` on the x/z axes
-  already gives horizontal motion).
+  wave 2 + AA turrets from wave 4 via `GroundTargets`/`stepTurret`, and
+  road-bound **moving cars** from wave 3 via the `car` kind + `stepDrift`'s
+  road-traffic branch; the payoff the gimbal look-down unlocked — see the
+  Gameplay section). Room to extend: **tents/depots** as further static
+  kinds; a **convoy** (several cars nose-to-tail on one lane, phase-offset);
+  and letting cars **turn at intersections** (hop lanes where two roads
+  cross) instead of a single straight lane.
 - **Enemy variety** — a *chaser* that pursues the player (waypoint =
   player position, capped speed, `resolveCollisions` for safety), a
   *kamikaze* that dives once locked, a *shielded* drone only hurt from

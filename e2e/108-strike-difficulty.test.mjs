@@ -72,10 +72,13 @@ check(
     buildWave(DEFAULT_SEED, 5, layout, 'normal').enemiesShoot === true,
 )
 // The difficulty-independent targets (gallery balloons/drifters + ground
-// trucks) are identical regardless of difficulty; only enemies and turrets
-// (both difficulty-gated) may differ.
+// trucks + road cars) are identical regardless of difficulty; only enemies
+// and turrets (both difficulty-gated) may differ.
 const diffIndependent = (t) =>
-  t.kind === 'balloon' || t.kind === 'ringDrone' || t.kind === 'ground'
+  t.kind === 'balloon' ||
+  t.kind === 'ringDrone' ||
+  t.kind === 'ground' ||
+  t.kind === 'car'
 check(
   'gallery placement unchanged by difficulty',
   JSON.stringify(w6easy.targets.filter(diffIndependent)) ===

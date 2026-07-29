@@ -7,6 +7,7 @@ import { MAX_TARGETS } from './waveLayout'
 
 const TRUCK_COLOR = new Color('#6b8e23') // olive supply truck
 const TURRET_COLOR = new Color('#8b1a1a') // dark-red AA emplacement
+const CAR_COLOR = new Color('#42a5f5') // bright blue road car
 const FLASH_COLOR = new Color('#ffffff')
 const NO_ROT = new Quaternion()
 
@@ -35,13 +36,22 @@ export default function GroundTargets({ targets }: { targets: TargetState[] }) {
     const { matrix, color, pos, scale } = temps
     for (let i = 0; i < targets.length; i++) {
       const t = targets[i]
-      if (t.alive && (t.kind === 'ground' || t.kind === 'turret')) {
+      if (t.alive && (t.kind === 'ground' || t.kind === 'turret' || t.kind === 'car')) {
         if (t.kind === 'ground') {
           scale.set(t.radius * 1.6, t.radius * 0.9, t.radius * 2.2)
           color.copy(TRUCK_COLOR)
-        } else {
+        } else if (t.kind === 'turret') {
           scale.set(t.radius * 1.2, t.radius * 1.9, t.radius * 1.2)
           color.copy(TURRET_COLOR)
+        } else {
+          // Car: a low, longer box with its long side along the road (the
+          // travel axis — driftAxis 0 = x-road, 2 = z-road).
+          const long = t.radius * 1.9
+          const wide = t.radius * 1.0
+          const tall = t.radius * 0.7
+          if (t.driftAxis === 0) scale.set(long, tall, wide)
+          else scale.set(wide, tall, long)
+          color.copy(CAR_COLOR)
         }
         // Seat the box on the deck (hit-sphere centre is at pos.y).
         pos.set(t.pos.x, t.pos.y, t.pos.z)

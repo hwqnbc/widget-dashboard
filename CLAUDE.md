@@ -192,7 +192,8 @@ See `docs/drone-strike.md` for the Drone Strike widget (FPV wave shooter on
 the Drone Sim's flight model and city — fly-to-aim reticle, fire button +
 auto-fire, aim assist with target leading, segment-swept tracer bolts,
 seeded waves with enemy AI drones plus deck-level ground targets (supply
-trucks + AA turrets), four aim modes (Classic/Reticle/Gunner/Hover gimbal),
+trucks + AA turrets + road-bound moving cars), four aim modes
+(Classic/Reticle/Gunner/Hover gimbal),
 Easy/Normal/Hard difficulty, ADS zoom with three gyro fine-aim modes,
 synthesized Web Audio sound effects (no assets),
 and the recorded hitscan/ballistic weapon variants).

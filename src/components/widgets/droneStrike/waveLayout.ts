@@ -17,7 +17,13 @@ import type { Vec3 } from '../droneSim/flightModel'
 import { SPAWN, WORLD_HALF } from '../droneSim/flightModel'
 import type { WorldLayout } from '../droneSim/worldLayout'
 
-export type TargetKind = 'balloon' | 'ringDrone' | 'enemy' | 'ground' | 'turret'
+export type TargetKind =
+  | 'balloon'
+  | 'ringDrone'
+  | 'enemy'
+  | 'ground'
+  | 'turret'
+  | 'car'
 
 export interface TargetSpec {
   kind: TargetKind
@@ -46,13 +52,15 @@ export const ENEMY_WAVE_START = 3
 export const ENEMY_FIRE_WAVE = 5
 /** Ground supply trucks appear from this wave (static points targets). */
 export const GROUND_WAVE_START = 2
+/** Moving cars (road-bound) appear from this wave. */
+export const CAR_WAVE_START = 3
 /** AA turrets (static ground enemies that fire back) appear from this wave. */
 export const TURRET_WAVE = 4
 /** Hard cap on simultaneous targets (perf budget: one InstancedMesh).
  * Sized for the worst case: gallery balloons + drifters + enemy drones +
- * ground trucks + AA turrets. Pool + instanced capacity are pre-allocated
- * so headroom is free. */
-export const MAX_TARGETS = 20
+ * ground trucks + moving cars + AA turrets. Pool + instanced capacity are
+ * pre-allocated so headroom is free. */
+export const MAX_TARGETS = 24
 
 /** Enemy difficulty — scales how hard the AI drones are to hit and how
  * much pressure they apply. Easy is the default (see widgetCatalog). */
@@ -88,6 +96,7 @@ export const POINTS: Record<TargetKind, number> = {
   enemy: 25,
   ground: 20,
   turret: 30,
+  car: 25,
 }
 
 /** Same PRNG as the world builder — copied, not exported from worldLayout,
@@ -214,6 +223,40 @@ export function buildWave(
     })
   }
 
+  // Moving cars (wave 3+): road-bound targets that drive the city's lanes,
+  // reusing the world's road network + the decorative-traffic motion model
+  // (see stepDrift's 'car' branch). Drawn before the difficulty-gated enemy
+  // block so their count and road/speed draws stay difficulty-independent.
+  const cars =
+    layout.roads.length > 0 && waveIndex >= CAR_WAVE_START
+      ? Math.min(1 + Math.floor(waveIndex / 3), 3, layout.roads.length)
+      : 0
+  for (let i = 0; i < cars; i++) {
+    if (targets.length >= MAX_TARGETS) break
+    const road = layout.roads[i % layout.roads.length]
+    const dir = rand() < 0.5 ? 1 : -1
+    const speed = (6 + rand() * 5) * dir
+    const start = rand() * WORLD_HALF * 2
+    // Ride one side of the lane, matching RichWorld's decorative traffic.
+    const lane = road.at + (dir > 0 ? 0.8 : -0.8)
+    const alongX = road.axis === 'x'
+    targets.push({
+      kind: 'car',
+      // The moving axis is overwritten each frame; the fixed axis is the
+      // lane. y ≈ 1 seats the hit sphere just above the deck.
+      x: alongX ? 0 : lane,
+      y: 1,
+      z: alongX ? lane : 0,
+      radius: 1,
+      driftAmp: 0,
+      driftSpeed: speed, // signed → direction of travel
+      driftPhase: start, // start offset along the road
+      driftAxis: alongX ? 0 : 2,
+      hp: 1,
+      points: POINTS.car,
+    })
+  }
+
   // Enemy drones (wave 3+): placed like targets, moved by the AI at runtime.
   // The drift fields carry their orbit: amp = orbit radius (so placement
   // clears the whole envelope), speed = angular rate, phase = start angle.
@@ -330,7 +373,32 @@ export function loadWave(states: TargetState[], wave: WaveSpec): void {
 /** Deterministic sinusoidal drift around the anchor; also writes the
  * velocity derivative so shot leading sees the real motion. */
 export function stepDrift(t: TargetState, timeS: number): void {
-  if (!t.alive || t.driftAmp === 0 || t.kind === 'enemy') return
+  if (!t.alive) return
+  // Cars drive along a road lane at constant speed, wrapping at the world
+  // edge — the same pure linear-wrap the decorative traffic uses (RichWorld),
+  // so the target rides the visible road. Velocity is the constant travel
+  // speed (not a pos delta), so the once-per-lap wrap never spikes leading.
+  if (t.kind === 'car') {
+    const span = WORLD_HALF * 2
+    const raw = t.driftPhase + t.driftSpeed * timeS
+    const along = (((raw % span) + span) % span) - WORLD_HALF
+    t.pos.y = t.base.y
+    if (t.driftAxis === 0) {
+      t.pos.x = along
+      t.pos.z = t.base.z
+      t.vel.x = t.driftSpeed
+      t.vel.y = 0
+      t.vel.z = 0
+    } else {
+      t.pos.z = along
+      t.pos.x = t.base.x
+      t.vel.x = 0
+      t.vel.y = 0
+      t.vel.z = t.driftSpeed
+    }
+    return
+  }
+  if (t.driftAmp === 0 || t.kind === 'enemy') return
   const phase = timeS * t.driftSpeed + t.driftPhase
   const offset = Math.sin(phase) * t.driftAmp
   const deriv = Math.cos(phase) * t.driftAmp * t.driftSpeed

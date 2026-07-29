@@ -82,6 +82,7 @@ const BLIP_COLORS: Record<TargetKind, string> = {
   enemy: '#ff1744',
   ground: '#9ccc65',
   turret: '#ff6e40',
+  car: '#42a5f5',
 }
 /** Enemy bolts never hit other targets (no friendly fire). */
 const NO_TARGETS: TargetState[] = []
