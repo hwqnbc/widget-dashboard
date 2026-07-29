@@ -162,6 +162,10 @@ export default function AvatarActionsWidget({ id }: WidgetProps) {
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
+              // The figures render a full-width wrapper div whose inline svg
+              // is narrower (width:auto below): centre it. TapStage got this
+              // for free from <button>'s UA default text-align:center.
+              textAlign: 'center',
               '& svg': { maxHeight: '100%', width: 'auto' },
             }}
           >

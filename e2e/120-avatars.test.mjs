@@ -35,6 +35,15 @@ const stage = root.locator('[data-testid="avatar-stage"]')
 const avatarAttr = () => root.getAttribute('data-avatar')
 const playingAttr = () => root.getAttribute('data-playing')
 const figureCount = () => stage.locator('svg').count()
+// The figure svg must sit centred in the stage — the plain-div stage lost
+// <button>'s UA text-align:center once TapStage was removed, which slid the
+// svg to the left edge (user-reported).
+const svgCentered = async () => {
+  const s = await stage.boundingBox()
+  const f = await stage.locator('svg').first().boundingBox()
+  if (!s || !f) return false
+  return Math.abs(f.x + f.width / 2 - (s.x + s.width / 2)) < 4
+}
 
 // defaults
 check('default avatar is toy', (await avatarAttr()) === 'toy')
@@ -42,6 +51,7 @@ check('not playing by default', (await playingAttr()) === 'no')
 check('one toggle per catalogued avatar', (await toggles.count()) === AVATARS.length)
 check('celebration toggle has Idle and Celebrate', (await celebration.count()) === 2)
 check('a figure svg is rendered', (await figureCount()) >= 1)
+check('idle figure is horizontally centred', await svgCentered())
 
 // every avatar selectable, in catalog order, each renders a figure
 for (let i = 0; i < AVATARS.length; i++) {
@@ -58,6 +68,7 @@ await celebration.nth(1).click()
 await page.waitForTimeout(150)
 check('Celebrate starts the celebration', (await playingAttr()) === 'yes')
 check('celebration still shows a figure svg', (await figureCount()) >= 1)
+check('celebrating figure is horizontally centred', await svgCentered())
 await celebration.nth(0).click()
 await page.waitForTimeout(150)
 check('Idle stops the celebration', (await playingAttr()) === 'no')

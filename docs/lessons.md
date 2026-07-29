@@ -529,7 +529,15 @@ carried over; these are the new ones.
     — a control that would do nothing visible is the same bug again), and
     when a widget's main surface stops being a button, keep the test
     contract on data-* attributes so only the suites' *interaction* lines
-    change, not the assertions.
+    change, not the assertions. Follow-up bite: swapping the `<button>`
+    wrapper for a plain div silently dropped a UA default the layout was
+    leaning on — `text-align: center` — and the figure's inline svg (made
+    narrower than its full-width wrapper by the stage's `width:auto` rule)
+    slid to the left edge (user-reported). When replacing a semantic
+    element, re-state every UA default the layout relied on
+    (`textAlign: 'center'` on the stage now), and pin visual centring with
+    a bounding-box e2e check (`|svg centre − stage centre| < 4px`), since
+    presence-only svg assertions can't see alignment.
 
 ## Responsive touch layout (Drone Strike → Tank Battle)
 
