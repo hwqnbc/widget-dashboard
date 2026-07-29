@@ -1,7 +1,8 @@
 /**
  * Operator-avatar suite: the Drone Sim's RC operator renders Player 1's
  * (seat 'toy') selected avatar as its 3D model when the avatar carries a
- * `Model3D`, and falls back to the basic primitive figure otherwise.
+ * `Model3D` (toy, ninja), and falls back to the basic primitive figure
+ * otherwise (fireninja).
  *
  * Contract on the widget root (React-owned): `data-op-avatar` (Player 1's
  * avatar id from the persisted seat map) and `data-op-figure`
@@ -23,37 +24,41 @@ const opAttrs = async () => ({
   figure: await root.getAttribute('data-op-figure'),
 })
 
-// default seat map: Player 1 = toy, the avatar with a Model3D
+// Swap Player 1's avatar on the Settings page, then return to the dashboard.
+// Player 1 is the FIRST seat row; match the button TEXT (the head svg's
+// aria-label pollutes the accessible name).
+const swapPlayer1 = async (name) => {
+  await page.goto(`${BASE_URL}settings`, { waitUntil: 'networkidle' })
+  await page.locator('button').filter({ hasText: new RegExp(`^${name}$`) }).first().click()
+  await page.waitForTimeout(300) // let redux-persist flush
+  await page.goto(BASE_URL, { waitUntil: 'networkidle' })
+  await page.waitForSelector('[data-testid="dronesim-root"]')
+  await page.waitForTimeout(600)
+}
+
+// default seat map: Player 1 = toy, an avatar with a Model3D
 let op = await opAttrs()
 check('operator avatar is toy by default', op.avatar === 'toy')
 check('toy operator uses the avatar 3D model', op.figure === 'avatar')
 const t0 = await readers(page).telemetry()
 check('telemetry alive with the avatar operator in-world', Number.isFinite(t0.alt))
 
-// swap Player 1 → Ninja on the Settings page (ninja has no Model3D yet)
-await page.goto(`${BASE_URL}settings`, { waitUntil: 'networkidle' })
-// Player 1 is the FIRST seat row; each row has one toggle per avatar. Match
-// the button TEXT (the head svg's aria-label pollutes the accessible name).
-await page.locator('button').filter({ hasText: /^Ninja$/ }).first().click()
-await page.waitForTimeout(300) // let redux-persist flush
-await page.goto(BASE_URL, { waitUntil: 'networkidle' })
-await page.waitForSelector('[data-testid="dronesim-root"]')
-await page.waitForTimeout(600)
-
+// swap Player 1 → Fire Ninja (no Model3D yet → basic figure)
+await swapPlayer1('Fire Ninja')
 op = await opAttrs()
-check('operator follows the swapped avatar', op.avatar === 'ninja')
+check('operator follows the swapped avatar', op.avatar === 'fireninja')
 check('no Model3D → basic primitive figure', op.figure === 'basic')
 const t1 = await readers(page).telemetry()
 check('sim still runs with the basic operator', Number.isFinite(t1.alt))
 
-// swap back to Toy — the avatar model returns
-await page.goto(`${BASE_URL}settings`, { waitUntil: 'networkidle' })
-await page.locator('button').filter({ hasText: /^Toy$/ }).first().click()
-await page.waitForTimeout(300)
-await page.goto(BASE_URL, { waitUntil: 'networkidle' })
-await page.waitForSelector('[data-testid="dronesim-root"]')
-await page.waitForTimeout(600)
+// swap to Ninja — its Model3D stands in as the operator too
+await swapPlayer1('Ninja')
+op = await opAttrs()
+check('ninja becomes the operator', op.avatar === 'ninja')
+check('ninja operator uses the avatar 3D model', op.figure === 'avatar')
 
+// and back to Toy
+await swapPlayer1('Toy')
 op = await opAttrs()
 check('swap back restores the toy avatar', op.avatar === 'toy')
 check('avatar 3D model returns', op.figure === 'avatar')

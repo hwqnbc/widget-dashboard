@@ -356,7 +356,7 @@ The view button cycles `tp → fp → los → tp` (persisted `view`):
   (`OperatorFigure.tsx`) renders in `tp`/`fp` and hides in `los`/`walk` —
   the camera stands at its eyes. **The operator is Player 1's avatar**: when
   the avatar chosen for seat `'toy'` on the Settings page carries a
-  mesh-level `Model3D` (see `docs/avatars.md` — toy has one), that lazy 3D
+  mesh-level `Model3D` (see `docs/avatars.md` — toy and ninja have one), that lazy 3D
   figure stands in the world (turned to the drone-yaw heading convention,
   scaled to the ~1.7 u human size); avatars without one fall back to the
   original primitive figure, which is also the `<Suspense>` fallback while
@@ -600,8 +600,8 @@ from the enhancement menu, with the integration point each would build on.
   `playing`; flip it on for a few seconds on a new best lap (the lap-complete
   event in `DroneSimBody` is the hook) so your figure celebrates the record.
 - **More avatar operators** — every avatar that gains a `Model3D` in the
-  registry becomes a Drone Sim operator automatically; ninja/fireninja/
-  darkarin/frak/imperium are still on primitives.
+  registry becomes a Drone Sim operator automatically (toy and ninja
+  shipped); fireninja/darkarin/frak/imperium are still on primitives.
 
 ### Gameplay
 - **Animated ghost drone** — replay the best run as a translucent drone

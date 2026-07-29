@@ -35,6 +35,8 @@ export interface AvatarVisual {
 // Per-avatar 3D figures — dynamic imports keep three.js out of the main chunk.
 const ToyFigure3D = lazy(() => import('../components/widgets/characters/toy/ToyFigure3D'))
 const ToyModel3D = lazy(() => import('../components/widgets/characters/toy/ToyModel3D'))
+const NinjaFigure3D = lazy(() => import('../components/widgets/characters/ninja/NinjaFigure3D'))
+const NinjaModel3D = lazy(() => import('../components/widgets/characters/ninja/NinjaModel3D'))
 
 export const avatarVisualById: Record<AvatarId, AvatarVisual> = {
   toy: {
@@ -44,7 +46,13 @@ export const avatarVisualById: Record<AvatarId, AvatarVisual> = {
     Figure3D: ToyFigure3D,
     Model3D: ToyModel3D,
   },
-  ninja: { Head: NinjaHead, Figure: NinjaFigure, Celebration: NinjaCelebration },
+  ninja: {
+    Head: NinjaHead,
+    Figure: NinjaFigure,
+    Celebration: NinjaCelebration,
+    Figure3D: NinjaFigure3D,
+    Model3D: NinjaModel3D,
+  },
   fireninja: { Head: FireNinjaHead, Figure: FireNinjaFigure, Celebration: FireNinjaCelebration },
   darkarin: { Head: DarkArinHead, Figure: DarkArinFigure, Celebration: DarkArinCelebration },
   frak: { Head: FrakHead, Figure: FrakFigure, Celebration: FrakCelebration },

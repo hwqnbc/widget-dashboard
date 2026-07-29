@@ -117,8 +117,10 @@ faces +Z, feet at y=0, ~1.85 u, no spin) and the thin viewer
 either to the folder's `index.ts`), then register both in
 `avatarRegistry.tsx` as `lazy(() => import(...))` on the avatar's `Model3D` /
 `Figure3D` fields. The Avatar Actions 3D view and the Drone Sim operator pick
-them up automatically. Still missing 3D figures: ninja, fireninja, darkarin,
-frak, imperium.
+them up automatically. Shipped so far: toy, ninja (`NinjaModel3D` — hooded
+faceted head + mask, gold obi/medallion, crossed back katanas; celebration
+draws one and pumps it overhead). Still missing 3D figures: fireninja,
+darkarin, frak, imperium.
 
 ## Reading a seat's look
 `features/avatars/useSeatAvatars.ts`:

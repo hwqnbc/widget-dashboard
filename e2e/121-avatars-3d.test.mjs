@@ -4,13 +4,13 @@
  * ('available'/'unavailable' for the selected avatar).
  *
  * Covers: 2D default, toggling to 3D lazy-loads the three.js chunk and
- * renders a WebGL canvas for the toy (the first avatar with a Figure3D), the
+ * renders a WebGL canvas for the avatars with a Figure3D (toy, ninja), the
  * Idle/Celebrate toggle keeps working in 3D, an avatar without a 3D figure
- * shows the "not available" placeholder instead of a canvas (with the
- * celebration toggle disabled — nothing would visibly play), switching back
- * restores each view, and the chosen view survives a reload. The 3D art
- * itself is reviewed from screenshots — the suite asserts presence + the
- * data contract, like the 2D suite (120).
+ * (fireninja) shows the "not available" placeholder instead of a canvas
+ * (with the celebration toggle disabled — nothing would visibly play),
+ * switching back restores each view, and the chosen view survives a reload.
+ * The 3D art itself is reviewed from screenshots — the suite asserts
+ * presence + the data contract, like the 2D suite (120).
  */
 import { addAvatarWidget, launch, reporter } from './helpers.mjs'
 
@@ -52,13 +52,20 @@ await celebration.nth(0).click()
 await page.waitForTimeout(150)
 check('Idle stops it', (await attr('data-playing')) === 'no')
 
-// an avatar without a Figure3D shows the placeholder, not a canvas
+// ninja carries a 3D figure too — its canvas renders the same way
 await picker.nth(1).click() // ninja
 await page.waitForTimeout(150)
-check('ninja reports no 3D figure', (await attr('data-figure3d')) === 'unavailable')
+check('ninja advertises an available 3D figure', (await attr('data-figure3d')) === 'available')
+await page.waitForSelector('[data-testid="figure3d-stage"] canvas', { timeout: 20000 })
+check('ninja 3d view renders a WebGL canvas', (await stageCanvas.count()) === 1)
+
+// an avatar without a Figure3D shows the placeholder, not a canvas
+await picker.nth(2).click() // fireninja — still 3D-less
+await page.waitForTimeout(150)
+check('fireninja reports no 3D figure', (await attr('data-figure3d')) === 'unavailable')
 check('unavailable placeholder shown', (await unavailable.count()) === 1)
 check('no canvas for an unavailable figure', (await stageCanvas.count()) === 0)
-check('placeholder names the avatar', /Ninja/.test(await unavailable.innerText()))
+check('placeholder names the avatar', /Fire Ninja/.test(await unavailable.innerText()))
 check('celebration toggle disabled on the placeholder', await celebration.nth(1).isDisabled())
 
 // back to toy: the 3D figure returns and the toggle re-enables
