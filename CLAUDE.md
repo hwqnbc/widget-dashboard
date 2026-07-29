@@ -137,14 +137,16 @@ Reusable primitives for new widgets: `hooks/useNow` (ticking clock),
 `components/widgets/droneSim/webAudio` (synthesized Web Audio SFX engine —
 `tone`/`noise`/`unlockAudio`, no asset files), and the per-avatar
 character folders under `components/widgets/characters/` — `toy/` (`ToyHead`,
-`ToyFigure`, `SixSevenFigure`, `ToyCelebration`, `toyParts`, `toyPalette`),
+`ToyFigure`, `SixSevenFigure`, `ToyCelebration`, `ToyFigure3D`, `toyParts`,
+`toyPalette`),
 `ninja/` (`NinjaHead`, `SwordNinjaFigure`, `NinjaFigure`, `NinjaCelebration`,
 `ninjaPalette`), `fireninja/` (`FireNinjaHead`, `FireBladeFigure`, `FireNinjaFigure`,
 `FireNinjaCelebration`, `fireNinjaPalette`), `darkarin/` (`DarkArinHead`,
 `TwinSwordFigure`, `DarkArinFigure`, `DarkArinCelebration`, `darkArinPalette`),
 `frak/` (`FrakHead`, `FrakFigure`, `FrakCelebration`, `frakPalette`),
 `imperium/` (`ImperiumHead`, `ClawFigure`, `ImperiumFigure`, `ImperiumCelebration`,
-`imperiumPalette`), `shared/Hand`, `boy/Boy`.
+`imperiumPalette`), `shared/Hand`, `shared/FigureStage3D` (R3F turntable stage
+for the lazy 3D figures), `boy/Boy`.
 
 ## Avatars (players vs seats)
 
@@ -161,7 +163,10 @@ win celebration). `Celebration` is the looping win animation; it's also what the
 **Avatar Actions** widget plays on tap
 (`components/widgets/AvatarActionsWidget.tsx` — pick a character, tap to play its
 celebration, tap again to return to the static figure; works for any registered
-avatar, uniformly).
+avatar, uniformly). That widget also has a persisted **2D/3D view toggle**: an
+avatar may carry an optional `Figure3D` (a lazy three.js/R3F figure on the shared
+`FigureStage3D` turntable — toy has one); avatars without one show a "no 3D figure
+yet" placeholder in 3D view (see `docs/avatars.md`).
 
 ### Adding an avatar (figure)
 
@@ -171,6 +176,10 @@ avatar, uniformly).
    `Figure` and `Celebration` (+ palette), and register the bundle in
    `registry/avatarRegistry.tsx`. It becomes selectable on the Settings page and in
    the Avatar Actions widget automatically.
+4. Optionally add a 3D figure: `<Name>Figure3D.tsx` in the same folder (meshes
+   inside `shared/FigureStage3D`; do **not** re-export it from the folder's
+   `index.ts` — three.js must stay out of the main chunk) and register it as
+   `Figure3D: lazy(() => import(...))` in the registry.
 
 ## Docs
 

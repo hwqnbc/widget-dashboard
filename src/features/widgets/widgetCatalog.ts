@@ -52,7 +52,7 @@ export const WIDGET_CATALOG: WidgetMeta[] = [
   {
     type: 'avatarActions',
     title: 'Avatar Actions',
-    description: 'Pick a character, tap to play its celebration',
+    description: 'Pick a character in 2D or 3D, tap to play its celebration',
     defaultSize: { w: 3, h: 6, minW: 3, minH: 5 },
   },
   {
@@ -117,7 +117,7 @@ export function defaultWidgetData(type: WidgetType): Record<string, unknown> {
     case 'imageToggle':
       return { character: 'toy' }
     case 'avatarActions':
-      return { avatar: 'toy' }
+      return { avatar: 'toy', view: '2d' }
     case 'ticTacToe':
       return {
         board: Array(9).fill(null),

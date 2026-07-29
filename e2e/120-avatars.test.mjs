@@ -26,7 +26,9 @@ const { browser, page } = await launch()
 await addAvatarWidget(page)
 
 const root = page.locator('[data-testid="avatar-actions"]')
-const toggles = root.locator('.MuiToggleButton-root')
+// Scoped to the avatar picker — the 2D/3D view toggle (suite 121) is a
+// second ToggleButtonGroup on the same root.
+const toggles = root.locator('[data-testid="avatar-picker"] .MuiToggleButton-root')
 const stage = root.locator('button[aria-label*="celebration"]')
 const avatarAttr = () => root.getAttribute('data-avatar')
 const playingAttr = () => root.getAttribute('data-playing')

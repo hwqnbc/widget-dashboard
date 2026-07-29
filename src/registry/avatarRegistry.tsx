@@ -1,3 +1,4 @@
+import { lazy } from 'react'
 import type { ComponentType } from 'react'
 import type { AvatarId } from '../features/avatars/types'
 import { ToyHead, ToyFigure, ToyCelebration } from '../components/widgets/characters/toy'
@@ -19,10 +20,17 @@ export interface AvatarVisual {
   Head: ComponentType<{ size?: number | string }>
   Figure: ComponentType
   Celebration: ComponentType
+  /** Optional 3D figure. Registered with lazy() so the three.js chunk loads
+   * only when a 3D view is actually rendered (wrap in <Suspense>). Avatars
+   * without one show "not available" in the Avatar Actions 3D view. */
+  Figure3D?: ComponentType<{ playing?: boolean }>
 }
 
+// Per-avatar 3D figures — dynamic imports keep three.js out of the main chunk.
+const ToyFigure3D = lazy(() => import('../components/widgets/characters/toy/ToyFigure3D'))
+
 export const avatarVisualById: Record<AvatarId, AvatarVisual> = {
-  toy: { Head: ToyHead, Figure: ToyFigure, Celebration: ToyCelebration },
+  toy: { Head: ToyHead, Figure: ToyFigure, Celebration: ToyCelebration, Figure3D: ToyFigure3D },
   ninja: { Head: NinjaHead, Figure: NinjaFigure, Celebration: NinjaCelebration },
   fireninja: { Head: FireNinjaHead, Figure: FireNinjaFigure, Celebration: FireNinjaCelebration },
   darkarin: { Head: DarkArinHead, Figure: DarkArinFigure, Celebration: DarkArinCelebration },

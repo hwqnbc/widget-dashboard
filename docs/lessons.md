@@ -497,6 +497,25 @@ carried over; these are the new ones.
     renders" (the art itself is reviewed from screenshots) — the same
     app-generic harness the drone suites use, minus WebGL.
 
+57. **An optional per-avatar capability slots into the registry as an
+    optional lazy field — never a parallel registry.** The 3D figures are
+    `AvatarVisual.Figure3D?: ComponentType<{playing?}>`, registered with
+    `lazy(() => import(...))` so three.js loads only when a 3D view first
+    renders (the widget wraps it in `<Suspense>`). Three rules made it
+    clean: (a) the heavy component and its shared stage
+    (`FigureStage3D`) must NOT be re-exported from the character `index.ts`
+    barrels — a static re-export would pull three.js into the main chunk
+    and silently defeat the `lazy()` (verify by checking `*Figure3D` gets
+    its own file in the `vite build` output); (b) capability presence is
+    part of the widget's data contract (`data-figure3d`:
+    `available`/`unavailable`) with a visible placeholder for the have-nots,
+    so the roster can gain the capability one avatar at a time; (c) the
+    same interaction props drive both renders (`playing` mirrors the 2D
+    Figure/Celebration swap), so the view toggle changes *presentation*,
+    not behaviour — and the e2e tap checks run identically in both views.
+    Bonus 3D-modeling trick: a 4-segment `cylinderGeometry` rotated 45° is
+    a tapered box — the minifig's flared torso in one primitive.
+
 ## Responsive touch layout (Drone Strike → Tank Battle)
 
 53. **"Fullscreen" is not "big" — size touch controls from the container's

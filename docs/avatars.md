@@ -28,14 +28,16 @@ the split. Only *rendering* consults the map.
   `playerColors.ts` map and the inline `'Toy'/'Ninja'` label strings). Kept free of
   component imports so the `ui` slice can depend on it.
 - `registry/avatarRegistry.tsx` — **component-carrying**
-  `AvatarVisual { Head, Figure, Celebration }` + `avatarVisualById`,
-  assembled from the per-avatar folder bundles.
+  `AvatarVisual { Head, Figure, Celebration, Figure3D? }` + `avatarVisualById`,
+  assembled from the per-avatar folder bundles. `Figure3D` is optional and
+  registered via `lazy()` (see "3D figures" below).
 
 ## Per-avatar character folders
 `components/widgets/characters/` groups each character's pieces physically:
 ```
 shared/Hand.tsx                       cross-character primitive
-toy/       ToyHead, ToyFigure, SixSevenFigure, ToyCelebration, toyParts, toyPalette, index
+shared/FigureStage3D.tsx              R3F turntable stage for the 3D figures (lazy-only)
+toy/       ToyHead, ToyFigure, SixSevenFigure, ToyCelebration, ToyFigure3D, toyParts, toyPalette, index
 ninja/     NinjaHead, SwordNinjaFigure, NinjaFigure, NinjaCelebration, ninjaPalette, index
 fireninja/ FireNinjaHead, FireBladeFigure, FireNinjaFigure, FireNinjaCelebration, fireNinjaPalette, index
 darkarin/  DarkArinHead, TwinSwordFigure, DarkArinFigure, DarkArinCelebration, darkArinPalette, index
@@ -55,9 +57,47 @@ boy/       Boy.tsx                    (an ImageToggle figure, not a game avatar)
   tap move) keeps the widget's behaviour uniform across every present and future
   avatar. The widget publishes a small test contract on its root —
   `data-testid="avatar-actions"`, `data-avatar` (selected id), `data-playing`
-  (`yes`/`no`) — exercised by `e2e/120-avatars.test.mjs`. Its avatar picker
+  (`yes`/`no`), `data-view` (`2d`/`3d`), `data-figure3d`
+  (`available`/`unavailable`) — exercised by `e2e/120-avatars.test.mjs` and
+  `e2e/121-avatars-3d.test.mjs`. Its avatar picker
   (a `ToggleButtonGroup`) **wraps** (`flexWrap`), so as the roster grows the
   buttons stack onto more rows instead of overflowing off the small card.
+
+## 3D figures (`Figure3D`)
+An avatar can optionally carry a **3D figure** — a three.js/R3F render of the
+same character (`{ playing?: boolean }`: static-ish idle vs the looping
+celebration move). The pieces:
+
+- `characters/shared/FigureStage3D.tsx` — the shared stage: a transparent
+  `<Canvas>` (camera framed on a ~1.9-unit figure), lights, and a figurine
+  base disc. The per-avatar figure supplies the meshes and its own `useFrame`
+  animation (mutating refs, zero React renders — the drone widgets' pattern).
+- `characters/toy/ToyFigure3D.tsx` — the first one: the toy minifig from
+  primitives (4-sided-cylinder trick for the flared torso, hemisphere cap +
+  box brim), sharing `toyPalette`. Idle = slow turntable + arm sway; playing
+  = bounce with raised arms pumping alternately (the "6 7" in 3D).
+- **Chunking rule:** three.js must never reach the main bundle. The registry
+  mounts each 3D figure with `lazy(() => import(...))` and the Avatar Actions
+  widget wraps it in `<Suspense>`; `FigureStage3D`/`*Figure3D` are therefore
+  **not** re-exported from the character `index.ts` barrels. Vite splits the
+  figure into its own chunk sharing the existing lazy R3F/three chunk.
+
+The **Avatar Actions** widget grew a persisted per-instance **2D/3D view
+toggle** (`data-testid="avatar-view-toggle"`; the picker is
+`data-testid="avatar-picker"`). In 3D view the tap toggle drives `playing`
+exactly like the 2D celebration swap; the canvas mounts under
+`data-testid="figure3d-stage"`. An avatar without a `Figure3D` shows a
+placeholder (`data-testid="figure3d-unavailable"`, head + "<Name> has no 3D
+figure yet") instead — so avatars gain 3D one at a time without gating the
+toggle.
+
+**Adding a 3D figure to an avatar:** build
+`characters/<id>/<Name>Figure3D.tsx` (default-export `{ playing?: boolean }`,
+meshes inside `<FigureStage3D>`; do NOT add it to the folder's `index.ts`),
+then register it in `avatarRegistry.tsx` as
+`lazy(() => import('.../<Name>Figure3D'))` on that avatar's `Figure3D` field.
+The Avatar Actions 3D view picks it up automatically. Still missing 3D
+figures: ninja, fireninja, darkarin, frak, imperium.
 
 ## Reading a seat's look
 `features/avatars/useSeatAvatars.ts`:
@@ -81,9 +121,11 @@ seat inherits this seat's previous avatar) instead of allowing a duplicate — w
 two avatars today that's a swap, and it generalises as figures are added.
 
 ## Verifying
-`npm run build` + `npm run lint`, then `npm run e2e avatars` (the Avatar Actions
-contract: default selection, every catalogued avatar selectable + rendering a
-figure, tap play/stop, switch-resets-play, and selection persistence). Then
+`npm run build` + `npm run lint`, then `npm run e2e avatars` (both Avatar
+Actions suites — 120: default selection, every catalogued avatar selectable +
+rendering a figure, tap play/stop, switch-resets-play, selection persistence;
+121: the 2D/3D toggle, the toy's lazy WebGL canvas, tap play/stop in 3D, the
+unavailable placeholder, and view persistence). Then
 headless Chromium for the seat picker. Default map is a pure
 regression (each game's chips/colours/celebration look identical — check
 `aria-label="Toy figure"/"Ninja figure"` on the expected cells). Then on Settings swap
