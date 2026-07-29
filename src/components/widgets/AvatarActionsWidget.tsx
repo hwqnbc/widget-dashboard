@@ -15,7 +15,6 @@ import type { AvatarId } from '../../features/avatars/types'
 import { AVATAR_IDS } from '../../features/avatars/types'
 import { AVATAR_CATALOG, avatarMetaById } from '../../features/avatars/avatarCatalog'
 import { avatarVisualById } from '../../registry/avatarRegistry'
-import TapStage from './TapStage'
 
 const coerceAvatar = (v: unknown): AvatarId | undefined =>
   typeof v === 'string' && (AVATAR_IDS as string[]).includes(v) ? (v as AvatarId) : undefined
@@ -25,14 +24,17 @@ const coerceFigureView = (v: unknown): FigureView | undefined =>
   v === '2d' || v === '3d' ? v : undefined
 
 /**
- * A configurable character viewer: pick an avatar and tap to play its
- * celebration — the looping victory animation, uniform across every avatar (so
- * there's no per-avatar inconsistency between one-shot and looping moves). Tapping
- * again returns to the static figure. Reuses the avatar registry, so every present
- * and future avatar is available automatically. A 2D/3D view toggle swaps the SVG
- * figure for the avatar's lazy three.js `Figure3D` (tap still plays the
- * celebration); avatars without one show a "not available" placeholder. The
- * selection and view persist per-widget-instance; the play state is transient.
+ * A configurable character viewer: pick an avatar and flip the Idle/Celebrate
+ * toggle to play its celebration — the looping victory animation, uniform
+ * across every avatar (so there's no per-avatar inconsistency between one-shot
+ * and looping moves). An explicit labelled toggle (not a tap on the figure —
+ * an invisible tap surface gave no feedback about what, if anything, it did).
+ * Reuses the avatar registry, so every present and future avatar is available
+ * automatically. A 2D/3D view toggle swaps the SVG figure for the avatar's
+ * lazy three.js `Figure3D`; avatars without one show a "not available"
+ * placeholder there, with the celebration toggle disabled (nothing would
+ * visibly play). The selection and view persist per-widget-instance; the play
+ * state is transient and resets on avatar/view switches.
  */
 export default function AvatarActionsWidget({ id }: WidgetProps) {
   const dispatch = useAppDispatch()
@@ -42,6 +44,7 @@ export default function AvatarActionsWidget({ id }: WidgetProps) {
 
   const { Head, Figure, Celebration, Figure3D } = avatarVisualById[avatar]
   const name = avatarMetaById[avatar].name
+  const unavailable3d = view === '3d' && !Figure3D
 
   const select = (next: AvatarId | null) => {
     if (!next || next === avatar) return
@@ -53,7 +56,6 @@ export default function AvatarActionsWidget({ id }: WidgetProps) {
     setActive(false)
     dispatch(updateWidgetData({ id, data: { view: next } }))
   }
-  const toggle = () => setActive((a) => !a)
 
   return (
     <Box
@@ -95,6 +97,23 @@ export default function AvatarActionsWidget({ id }: WidgetProps) {
         <ToggleButtonGroup
           size="small"
           exclusive
+          value={active ? 'celebrate' : 'idle'}
+          onChange={(_, v) => {
+            if (v) setActive(v === 'celebrate')
+          }}
+          data-testid="celebration-toggle"
+          aria-label="Celebration"
+        >
+          <ToggleButton value="idle" disabled={unavailable3d} sx={{ textTransform: 'none', py: 0.3, px: 1 }}>
+            Idle
+          </ToggleButton>
+          <ToggleButton value="celebrate" disabled={unavailable3d} sx={{ textTransform: 'none', py: 0.3, px: 1 }}>
+            Celebrate
+          </ToggleButton>
+        </ToggleButtonGroup>
+        <ToggleButtonGroup
+          size="small"
+          exclusive
           value={avatar}
           onChange={(_, v) => select(v as AvatarId | null)}
           data-testid="avatar-picker"
@@ -115,7 +134,7 @@ export default function AvatarActionsWidget({ id }: WidgetProps) {
       </Stack>
 
       <Box sx={{ flex: 1, minHeight: 0 }}>
-        {view === '3d' && !Figure3D ? (
+        {unavailable3d ? (
           <Box
             data-testid="figure3d-unavailable"
             sx={{
@@ -134,7 +153,18 @@ export default function AvatarActionsWidget({ id }: WidgetProps) {
             <Typography variant="body2">{name} has no 3D figure yet</Typography>
           </Box>
         ) : (
-          <TapStage onClick={toggle} ariaLabel={`${active ? 'Stop' : 'Play'} the ${name} celebration`}>
+          <Box
+            data-testid="avatar-stage"
+            aria-label={`${name} ${active ? 'celebration' : 'figure'}`}
+            sx={{
+              height: '100%',
+              width: '100%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              '& svg': { maxHeight: '100%', width: 'auto' },
+            }}
+          >
             {view === '3d' && Figure3D ? (
               <Box data-testid="figure3d-stage" sx={{ width: '100%', height: '100%' }}>
                 <Suspense
@@ -152,7 +182,7 @@ export default function AvatarActionsWidget({ id }: WidgetProps) {
             ) : (
               <Figure />
             )}
-          </TapStage>
+          </Box>
         )}
       </Box>
     </Box>

@@ -52,7 +52,7 @@ export const WIDGET_CATALOG: WidgetMeta[] = [
   {
     type: 'avatarActions',
     title: 'Avatar Actions',
-    description: 'Pick a character in 2D or 3D, tap to play its celebration',
+    description: 'Pick a character in 2D or 3D and play its celebration',
     defaultSize: { w: 3, h: 6, minW: 3, minH: 5 },
   },
   {

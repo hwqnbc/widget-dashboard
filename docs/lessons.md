@@ -512,9 +512,24 @@ carried over; these are the new ones.
     so the roster can gain the capability one avatar at a time; (c) the
     same interaction props drive both renders (`playing` mirrors the 2D
     Figure/Celebration swap), so the view toggle changes *presentation*,
-    not behaviour — and the e2e tap checks run identically in both views.
+    not behaviour — and the e2e play/stop checks run identically in both views.
     Bonus 3D-modeling trick: a 4-segment `cylinderGeometry` rotated 45° is
     a tapered box — the minifig's flared torso in one primitive.
+
+58. **Tap-the-figure is an invisible control — give play/stop a labelled
+    toggle.** The celebration originally played by tapping the figure
+    itself (`TapStage`): no visible affordance, so the user couldn't tell
+    where to tap or whether a tap had done anything — the same
+    zero-feedback failure as lesson #36's icon toggles, just with an even
+    bigger invisible hit area. Replaced with an explicit **Idle |
+    Celebrate** `ToggleButtonGroup` beside the 2D/3D toggle: the control
+    is discoverable, and the selected button shows the current state even
+    when the two renders look momentarily alike. Companions: disable the
+    toggle when the mode can't render (the 3D "no figure yet" placeholder
+    — a control that would do nothing visible is the same bug again), and
+    when a widget's main surface stops being a button, keep the test
+    contract on data-* attributes so only the suites' *interaction* lines
+    change, not the assertions.
 
 ## Responsive touch layout (Drone Strike → Tank Battle)
 

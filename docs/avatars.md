@@ -51,11 +51,16 @@ boy/       Boy.tsx                    (an ImageToggle figure, not a game avatar)
 - **Celebration** = the looping victory animation (no-prop): `ToyCelebration` = the
   "6 7"; `NinjaCelebration` = the draw/sheathe loop (extracted from the old inline
   `LoopingNinja`). Rendered by `WinnerCelebration`, and also what the **Avatar
-  Actions** widget (`components/widgets/AvatarActionsWidget.tsx`) plays on tap —
-  pick a character, tap to loop its celebration, tap again to return to the static
-  `Figure`. Using the one looping `Celebration` (rather than a separate per-avatar
-  tap move) keeps the widget's behaviour uniform across every present and future
-  avatar. The widget publishes a small test contract on its root —
+  Actions** widget (`components/widgets/AvatarActionsWidget.tsx`) plays via its
+  labelled **Idle | Celebrate** toggle (`data-testid="celebration-toggle"`) —
+  pick a character, flip to Celebrate to loop its celebration, back to Idle for
+  the static `Figure`. (It used to be tap-on-the-figure; the invisible tap
+  surface gave no feedback about what a tap did, so it became an explicit
+  toggle — lesson #36's pattern.) Using the one looping `Celebration` (rather
+  than a separate per-avatar move) keeps the widget's behaviour uniform across
+  every present and future avatar. The play state stays transient: it resets on
+  reload and on avatar/view switches. The widget publishes a small test
+  contract on its root —
   `data-testid="avatar-actions"`, `data-avatar` (selected id), `data-playing`
   (`yes`/`no`), `data-view` (`2d`/`3d`), `data-figure3d`
   (`available`/`unavailable`) — exercised by `e2e/120-avatars.test.mjs` and
@@ -84,12 +89,13 @@ celebration move). The pieces:
 
 The **Avatar Actions** widget grew a persisted per-instance **2D/3D view
 toggle** (`data-testid="avatar-view-toggle"`; the picker is
-`data-testid="avatar-picker"`). In 3D view the tap toggle drives `playing`
-exactly like the 2D celebration swap; the canvas mounts under
-`data-testid="figure3d-stage"`. An avatar without a `Figure3D` shows a
-placeholder (`data-testid="figure3d-unavailable"`, head + "<Name> has no 3D
-figure yet") instead — so avatars gain 3D one at a time without gating the
-toggle.
+`data-testid="avatar-picker"`, the figure area `data-testid="avatar-stage"`).
+In 3D view the Idle/Celebrate toggle drives `playing` exactly like the 2D
+celebration swap; the canvas mounts under `data-testid="figure3d-stage"`. An
+avatar without a `Figure3D` shows a placeholder
+(`data-testid="figure3d-unavailable"`, head + "<Name> has no 3D figure yet")
+instead, with the celebration toggle **disabled** (nothing would visibly
+play) — so avatars gain 3D one at a time without gating the view toggle.
 
 **Adding a 3D figure to an avatar:** build
 `characters/<id>/<Name>Figure3D.tsx` (default-export `{ playing?: boolean }`,
@@ -123,9 +129,10 @@ two avatars today that's a swap, and it generalises as figures are added.
 ## Verifying
 `npm run build` + `npm run lint`, then `npm run e2e avatars` (both Avatar
 Actions suites — 120: default selection, every catalogued avatar selectable +
-rendering a figure, tap play/stop, switch-resets-play, selection persistence;
-121: the 2D/3D toggle, the toy's lazy WebGL canvas, tap play/stop in 3D, the
-unavailable placeholder, and view persistence). Then
+rendering a figure, Celebrate/Idle play/stop, switch-resets-play, selection
+persistence; 121: the 2D/3D toggle, the toy's lazy WebGL canvas, the
+celebration toggle in 3D + its disabled state on the placeholder, and view
+persistence). Then
 headless Chromium for the seat picker. Default map is a pure
 regression (each game's chips/colours/celebration look identical — check
 `aria-label="Toy figure"/"Ninja figure"` on the expected cells). Then on Settings swap

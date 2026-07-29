@@ -161,8 +161,8 @@ Never hardcode `seat === 'toy' ? <ToyHead/> : <NinjaHead/>` — go through the
 registry so a swapped avatar follows everywhere (the chip, colour, turn banner and
 win celebration). `Celebration` is the looping win animation; it's also what the
 **Avatar Actions** widget plays on tap
-(`components/widgets/AvatarActionsWidget.tsx` — pick a character, tap to play its
-celebration, tap again to return to the static figure; works for any registered
+(`components/widgets/AvatarActionsWidget.tsx` — pick a character and flip its
+Idle/Celebrate toggle to play the celebration; works for any registered
 avatar, uniformly). That widget also has a persisted **2D/3D view toggle**: an
 avatar may carry an optional `Figure3D` (a lazy three.js/R3F figure on the shared
 `FigureStage3D` turntable — toy has one); avatars without one show a "no 3D figure
