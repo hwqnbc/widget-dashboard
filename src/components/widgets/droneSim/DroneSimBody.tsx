@@ -12,6 +12,8 @@ import { useAppDispatch } from '../../../app/hooks'
 import { updateWidgetData } from '../../../features/widgets/widgetsSlice'
 import { useWidgetField } from '../../../features/widgets/useWidgetField'
 import { defaultWidgetData } from '../../../features/widgets/widgetCatalog'
+import { useSeatAvatarId } from '../../../features/avatars/useSeatAvatars'
+import { avatarVisualById } from '../../../registry/avatarRegistry'
 import { usePresentation } from '../../fullscreen/presentation'
 import type { WidgetProps } from '../../../registry/widgetRegistry'
 import { DAY_PALETTE, DUSK_PALETTE, NIGHT_PALETTE } from './palettes'
@@ -130,6 +132,11 @@ export default function DroneSimBody({ id }: WidgetProps) {
         ? NIGHT_PALETTE
         : DAY_PALETTE
   const { fullscreen } = usePresentation()
+  // The operator is Player 1 (seat 'toy'): when their chosen avatar carries a
+  // mesh-level Model3D it stands in the world as the pilot. Resolved HERE —
+  // redux doesn't cross into the <Canvas> root — and handed down as a prop.
+  const opAvatarId = useSeatAvatarId('toy')
+  const OperatorModel = avatarVisualById[opAvatarId].Model3D
   const view = useWidgetField<DroneView>(id, 'view', 'tp', coerceView)
   const score = useWidgetField(id, 'score', 0)
   const bestLapMs = useWidgetField(id, 'bestLapMs', 0)
@@ -526,6 +533,8 @@ export default function DroneSimBody({ id }: WidgetProps) {
       data-minimap={minimap ? 'on' : 'off'}
       data-turbo={turbo ? 'on' : 'off'}
       data-op-hold={opHold ? 'on' : 'off'}
+      data-op-avatar={opAvatarId}
+      data-op-figure={OperatorModel ? 'avatar' : 'basic'}
       data-follow-dist={followDist}
       data-fpv={fpvPolish ? 'on' : 'off'}
       data-sound={soundOn ? 'on' : 'off'}
@@ -551,6 +560,7 @@ export default function DroneSimBody({ id }: WidgetProps) {
           <OperatorFigure
             operator={operatorRef}
             visible={view === 'tp' || view === 'fp'}
+            model={OperatorModel}
           />
           {richWorld && <RichWorld layout={layout} />}
           {landing && <LandingPads pads={layout.landingPads} />}

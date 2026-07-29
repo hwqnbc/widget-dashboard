@@ -68,24 +68,37 @@ boy/       Boy.tsx                    (an ImageToggle figure, not a game avatar)
   (a `ToggleButtonGroup`) **wraps** (`flexWrap`), so as the roster grows the
   buttons stack onto more rows instead of overflowing off the small card.
 
-## 3D figures (`Figure3D`)
+## 3D figures (`Model3D` + `Figure3D`)
 An avatar can optionally carry a **3D figure** — a three.js/R3F render of the
 same character (`{ playing?: boolean }`: static-ish idle vs the looping
-celebration move). The pieces:
+celebration move). It is split into a venue-neutral **model** and a viewer
+**figure**, so the same character can stand in a game world:
 
-- `characters/shared/FigureStage3D.tsx` — the shared stage: a transparent
-  `<Canvas>` (camera framed on a ~1.9-unit figure), lights, and a figurine
-  base disc. The per-avatar figure supplies the meshes and its own `useFrame`
-  animation (mutating refs, zero React renders — the drone widgets' pattern).
-- `characters/toy/ToyFigure3D.tsx` — the first one: the toy minifig from
-  primitives (4-sided-cylinder trick for the flared torso, hemisphere cap +
-  box brim), sharing `toyPalette`. Idle = slow turntable + arm sway; playing
-  = bounce with raised arms pumping alternately (the "6 7" in 3D).
+- `characters/toy/ToyModel3D.tsx` (registry `Model3D`) — the **mesh-level
+  model**: the toy minifig from primitives (4-sided-cylinder trick for the
+  flared torso, hemisphere cap + box brim), sharing `toyPalette`. Faces +Z,
+  feet at y=0, ~1.85 u tall. It owns only the *character's* animation via its
+  own `useFrame` (mutating refs, zero React renders — the drone widgets'
+  pattern): idle arm sway, and the celebration bounce + alternating arm pump
+  (the "6 7" in 3D) when `playing`. **It does not spin** — spinning is
+  presentation, and baking it in would make the model unusable in a world.
+- `characters/shared/FigureStage3D.tsx` — the shared viewer stage: a
+  transparent `<Canvas>` (camera framed on a ~1.9-unit figure), lights, a
+  figurine base disc, and the **turntable** (`spin` prop, rad/s) — the stage
+  owns the spin, not the model.
+- `characters/toy/ToyFigure3D.tsx` (registry `Figure3D`) — the thin viewer:
+  `<FigureStage3D spin={playing ? 1.3 : 0.45}><ToyModel3D playing/></FigureStage3D>`.
+  This is what the Avatar Actions 3D view renders.
+- **Reuse in games:** the Drone Sim renders Player 1's (seat `'toy'`)
+  `Model3D` as the walking RC operator when the chosen avatar has one
+  (`droneSim/OperatorFigure.tsx`; primitive-figure fallback otherwise —
+  also the `<Suspense>` fallback). Root contract `data-op-avatar` /
+  `data-op-figure`, suite `16-op-avatar`. See `docs/drone-sim.md`.
 - **Chunking rule:** three.js must never reach the main bundle. The registry
-  mounts each 3D figure with `lazy(() => import(...))` and the Avatar Actions
-  widget wraps it in `<Suspense>`; `FigureStage3D`/`*Figure3D` are therefore
-  **not** re-exported from the character `index.ts` barrels. Vite splits the
-  figure into its own chunk sharing the existing lazy R3F/three chunk.
+  mounts `Model3D`/`Figure3D` with `lazy(() => import(...))` and every render
+  site wraps them in `<Suspense>`; `FigureStage3D`/`*Figure3D`/`*Model3D` are
+  therefore **not** re-exported from the character `index.ts` barrels. Vite
+  splits them into their own chunks sharing the existing lazy R3F/three chunk.
 
 The **Avatar Actions** widget grew a persisted per-instance **2D/3D view
 toggle** (`data-testid="avatar-view-toggle"`; the picker is
@@ -97,13 +110,15 @@ avatar without a `Figure3D` shows a placeholder
 instead, with the celebration toggle **disabled** (nothing would visibly
 play) — so avatars gain 3D one at a time without gating the view toggle.
 
-**Adding a 3D figure to an avatar:** build
-`characters/<id>/<Name>Figure3D.tsx` (default-export `{ playing?: boolean }`,
-meshes inside `<FigureStage3D>`; do NOT add it to the folder's `index.ts`),
-then register it in `avatarRegistry.tsx` as
-`lazy(() => import('.../<Name>Figure3D'))` on that avatar's `Figure3D` field.
-The Avatar Actions 3D view picks it up automatically. Still missing 3D
-figures: ninja, fireninja, darkarin, frak, imperium.
+**Adding a 3D figure to an avatar:** build the mesh-level
+`characters/<id>/<Name>Model3D.tsx` (default-export `{ playing?: boolean }`,
+faces +Z, feet at y=0, ~1.85 u, no spin) and the thin viewer
+`<Name>Figure3D.tsx` wrapping it in `<FigureStage3D spin={...}>` (do NOT add
+either to the folder's `index.ts`), then register both in
+`avatarRegistry.tsx` as `lazy(() => import(...))` on the avatar's `Model3D` /
+`Figure3D` fields. The Avatar Actions 3D view and the Drone Sim operator pick
+them up automatically. Still missing 3D figures: ninja, fireninja, darkarin,
+frak, imperium.
 
 ## Reading a seat's look
 `features/avatars/useSeatAvatars.ts`:

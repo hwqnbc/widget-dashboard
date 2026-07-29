@@ -20,17 +20,30 @@ export interface AvatarVisual {
   Head: ComponentType<{ size?: number | string }>
   Figure: ComponentType
   Celebration: ComponentType
-  /** Optional 3D figure. Registered with lazy() so the three.js chunk loads
-   * only when a 3D view is actually rendered (wrap in <Suspense>). Avatars
-   * without one show "not available" in the Avatar Actions 3D view. */
+  /** Optional 3D figure VIEWER (its own <Canvas> on the turntable stage).
+   * Registered with lazy() so the three.js chunk loads only when a 3D view
+   * is actually rendered (wrap in <Suspense>). Avatars without one show
+   * "not available" in the Avatar Actions 3D view. */
   Figure3D?: ComponentType<{ playing?: boolean }>
+  /** Optional mesh-level 3D MODEL for reuse INSIDE an existing R3F canvas
+   * (no stage, no spin — venue-neutral, faces +Z, feet at y=0). The Drone
+   * Sim renders Player 1's model as the RC operator when present. Same
+   * lazy() rule; wrap in <Suspense>. */
+  Model3D?: ComponentType<{ playing?: boolean }>
 }
 
 // Per-avatar 3D figures — dynamic imports keep three.js out of the main chunk.
 const ToyFigure3D = lazy(() => import('../components/widgets/characters/toy/ToyFigure3D'))
+const ToyModel3D = lazy(() => import('../components/widgets/characters/toy/ToyModel3D'))
 
 export const avatarVisualById: Record<AvatarId, AvatarVisual> = {
-  toy: { Head: ToyHead, Figure: ToyFigure, Celebration: ToyCelebration, Figure3D: ToyFigure3D },
+  toy: {
+    Head: ToyHead,
+    Figure: ToyFigure,
+    Celebration: ToyCelebration,
+    Figure3D: ToyFigure3D,
+    Model3D: ToyModel3D,
+  },
   ninja: { Head: NinjaHead, Figure: NinjaFigure, Celebration: NinjaCelebration },
   fireninja: { Head: FireNinjaHead, Figure: FireNinjaFigure, Celebration: FireNinjaCelebration },
   darkarin: { Head: DarkArinHead, Figure: DarkArinFigure, Celebration: DarkArinCelebration },

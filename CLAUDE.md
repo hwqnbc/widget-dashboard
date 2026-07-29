@@ -137,8 +137,8 @@ Reusable primitives for new widgets: `hooks/useNow` (ticking clock),
 `components/widgets/droneSim/webAudio` (synthesized Web Audio SFX engine —
 `tone`/`noise`/`unlockAudio`, no asset files), and the per-avatar
 character folders under `components/widgets/characters/` — `toy/` (`ToyHead`,
-`ToyFigure`, `SixSevenFigure`, `ToyCelebration`, `ToyFigure3D`, `toyParts`,
-`toyPalette`),
+`ToyFigure`, `SixSevenFigure`, `ToyCelebration`, `ToyFigure3D`, `ToyModel3D`,
+`toyParts`, `toyPalette`),
 `ninja/` (`NinjaHead`, `SwordNinjaFigure`, `NinjaFigure`, `NinjaCelebration`,
 `ninjaPalette`), `fireninja/` (`FireNinjaHead`, `FireBladeFigure`, `FireNinjaFigure`,
 `FireNinjaCelebration`, `fireNinjaPalette`), `darkarin/` (`DarkArinHead`,
@@ -164,9 +164,11 @@ win celebration). `Celebration` is the looping win animation; it's also what the
 (`components/widgets/AvatarActionsWidget.tsx` — pick a character and flip its
 Idle/Celebrate toggle to play the celebration; works for any registered
 avatar, uniformly). That widget also has a persisted **2D/3D view toggle**: an
-avatar may carry an optional `Figure3D` (a lazy three.js/R3F figure on the shared
-`FigureStage3D` turntable — toy has one); avatars without one show a "no 3D figure
-yet" placeholder in 3D view (see `docs/avatars.md`).
+avatar may carry an optional lazy 3D render, split into a venue-neutral
+`Model3D` (mesh-level, no spin — also reused as the Drone Sim's RC operator for
+Player 1's avatar) and a `Figure3D` viewer (the model on the shared
+`FigureStage3D` turntable — toy has both); avatars without one show a "no 3D
+figure yet" placeholder in 3D view (see `docs/avatars.md`).
 
 ### Adding an avatar (figure)
 
@@ -176,10 +178,12 @@ yet" placeholder in 3D view (see `docs/avatars.md`).
    `Figure` and `Celebration` (+ palette), and register the bundle in
    `registry/avatarRegistry.tsx`. It becomes selectable on the Settings page and in
    the Avatar Actions widget automatically.
-4. Optionally add a 3D figure: `<Name>Figure3D.tsx` in the same folder (meshes
-   inside `shared/FigureStage3D`; do **not** re-export it from the folder's
-   `index.ts` — three.js must stay out of the main chunk) and register it as
-   `Figure3D: lazy(() => import(...))` in the registry.
+4. Optionally add a 3D figure: a mesh-level `<Name>Model3D.tsx` (faces +Z, no
+   spin) plus a thin `<Name>Figure3D.tsx` viewer wrapping it in
+   `shared/FigureStage3D` (do **not** re-export either from the folder's
+   `index.ts` — three.js must stay out of the main chunk) and register them as
+   `Model3D`/`Figure3D: lazy(() => import(...))` in the registry. `Model3D`
+   also makes the avatar the Drone Sim's operator figure for Player 1.
 
 ## Docs
 

@@ -539,6 +539,24 @@ carried over; these are the new ones.
     a bounding-box e2e check (`|svg centre − stage centre| < 4px`), since
     presence-only svg assertions can't see alignment.
 
+59. **Presentation animation belongs to the venue, not the character — split
+    the mesh-level model from its viewer.** The first cut baked the
+    turntable spin into `ToyFigure3D`, which made the character unusable
+    anywhere else: a game can't have its operator pirouetting (the user
+    caught this while asking for the Drone Sim reuse). The split that
+    works: a venue-neutral `Model3D` (meshes + *character*-owned animation
+    only — idle sway, celebration; faces +Z, feet at y=0, documented scale)
+    and a thin `Figure3D` viewer = `FigureStage3D` (which owns the
+    turntable via a `spin` prop) + the model. The registry carries both as
+    lazy fields. Reuse then costs three lines at the call site: resolve the
+    seat's avatar OUTSIDE the canvas (lesson #28) and pass the component
+    down as a prop; render it inside `<Suspense>` whose fallback is the old
+    primitive figure, so the actor never blinks out while the chunk loads;
+    counter-rotate for the world's heading convention (drone-yaw −Z forward
+    vs the model's +Z face). Presence mirrors onto the root as data-*
+    (`data-op-figure`) since meshes aren't DOM-observable — and any avatar
+    that later gains a `Model3D` upgrades every venue automatically.
+
 ## Responsive touch layout (Drone Strike → Tank Battle)
 
 53. **"Fullscreen" is not "big" — size touch controls from the container's

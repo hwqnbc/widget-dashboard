@@ -353,9 +353,18 @@ The view button cycles `tp → fp → los → tp` (persisted `view`):
   distance (65 → 22 over ~78 u, damped λ = 3) so the drone stays legible
   across the map — the squint-into-the-distance feel of real line-of-sight
   flying. Leaving `los` eases the fov back to 60. The operator figure
-  (`OperatorFigure.tsx`, simple primitives holding an RC transmitter)
-  renders in `tp`/`fp` and hides in `los`/`walk` — the camera stands at its
-  eyes.
+  (`OperatorFigure.tsx`) renders in `tp`/`fp` and hides in `los`/`walk` —
+  the camera stands at its eyes. **The operator is Player 1's avatar**: when
+  the avatar chosen for seat `'toy'` on the Settings page carries a
+  mesh-level `Model3D` (see `docs/avatars.md` — toy has one), that lazy 3D
+  figure stands in the world (turned to the drone-yaw heading convention,
+  scaled to the ~1.7 u human size); avatars without one fall back to the
+  original primitive figure, which is also the `<Suspense>` fallback while
+  the model chunk loads, so the operator never blinks out. Either way it
+  holds the RC transmitter. The seat's avatar is resolved OUTSIDE the canvas
+  (redux doesn't cross the R3F root) and passed in as a component prop;
+  the widget root mirrors it as `data-op-avatar` (id) + `data-op-figure`
+  (`avatar`/`basic`), asserted by suite `16-op-avatar`.
 - **`walk` walking pilot**: the same operator, on the move. A pure
   mutate-in-place module (`operatorWalk.ts`, the `lapTimer` pattern) steps
   the op each frame: beyond the follow distance + `FOLLOW_BAND` (3) it
@@ -587,6 +596,12 @@ from the enhancement menu, with the integration point each would build on.
 
 ### Camera & visuals
 - **Rain streaks** — upgrade `RainField` points to short line segments.
+- **Operator celebration** — the operator's avatar `Model3D` already takes
+  `playing`; flip it on for a few seconds on a new best lap (the lap-complete
+  event in `DroneSimBody` is the hook) so your figure celebrates the record.
+- **More avatar operators** — every avatar that gains a `Model3D` in the
+  registry becomes a Drone Sim operator automatically; ninja/fireninja/
+  darkarin/frak/imperium are still on primitives.
 
 ### Gameplay
 - **Animated ghost drone** — replay the best run as a translucent drone
