@@ -77,7 +77,12 @@ subtle sway), and the id list lives as registry metadata
 the Avatar Actions picker can render the buttons without loading three.js.
 New moves are *added* as new ids ("add action"); existing ones are improved
 in place under a stable id ("refine"). Current libraries: toy
-`[sixseven "6 7"]` (bounce + alternating arm pump); ninja `[pump "Pump"]`
+`[sixseven "6 7"]` (bounce + alternating arm pump) and
+`[sixsevenshow "6 7 Show"]` — the same dance flanked by big red "6"/"7"
+numerals built from primitives (torus + boxes, no fonts), popping in with a
+spring and bobbing in counter-phase with the arms; the flat digits are
+**billboarded at the camera** each frame (local = parentWorldRot⁻¹ ·
+cameraRot) so they never read mirrored on the turntable; ninja `[pump "Pump"]`
 (bounce + overhead katana pump) and `[draw "Draw"]` — the 2D celebration's
 choreography in 3D: reach over the right shoulder, unsheathe the back
 katana, sweep it to an upright guard, flourish, re-sheathe, loop (~3.2 s

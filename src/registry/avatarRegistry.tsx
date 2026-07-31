@@ -60,7 +60,10 @@ export const avatarVisualById: Record<AvatarId, AvatarVisual> = {
     Celebration: ToyCelebration,
     Figure3D: ToyFigure3D,
     Model3D: ToyModel3D,
-    actions3d: [{ id: 'sixseven', name: '6 7' }],
+    actions3d: [
+      { id: 'sixseven', name: '6 7' },
+      { id: 'sixsevenshow', name: '6 7 Show' },
+    ],
   },
   ninja: {
     Head: NinjaHead,

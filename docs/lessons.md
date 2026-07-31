@@ -577,7 +577,13 @@ carried over; these are the new ones.
     the user asked for: moves are a **named-action library** (`action`
     string prop + `actions3d` registry metadata living OUTSIDE the lazy
     chunk so pickers render three-free) — new moves add ids, they never
-    overwrite the one celebration.
+    overwrite the one celebration. Companion-object addendum (the toy's
+    "6 7 Show" numerals): flat text-like props on a turntable read
+    MIRRORED from behind — billboard them each frame
+    (`local = parentWorldQuat⁻¹ · cameraQuat`, one module-scope scratch
+    Quaternion, positions still orbiting with the figure), and park them
+    at the 2D reference's height (the lower third) — at hand height they
+    collide with the dancing arms.
 
 ## Responsive touch layout (Drone Strike → Tank Battle)
 

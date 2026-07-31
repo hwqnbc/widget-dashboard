@@ -47,12 +47,16 @@ check('no unavailable placeholder for toy', (await unavailable.count()) === 0)
 check('switching view does not auto-play', (await attr('data-playing')) === 'no')
 
 // the action toggle lists the toy's move library and drives the 3D model
-check('toy 3d actions: Idle + 6 7', (await celebration.count()) === 2)
+check('toy 3d actions: Idle + 6 7 + 6 7 Show', (await celebration.count()) === 3)
 await celebration.nth(1).click() // '6 7'
 await page.waitForTimeout(150)
 check('6 7 starts the 3d action', (await attr('data-playing')) === 'yes')
 check('action id is sixseven', (await attr('data-action')) === 'sixseven')
 check('canvas stays mounted while playing', (await stageCanvas.count()) === 1)
+await celebration.nth(2).click() // '6 7 Show' — the numerals variant
+await page.waitForTimeout(150)
+check('6 7 Show takes over', (await attr('data-action')) === 'sixsevenshow')
+check('show keeps playing', (await attr('data-playing')) === 'yes')
 await celebration.nth(0).click()
 await page.waitForTimeout(150)
 check('Idle stops it', (await attr('data-playing')) === 'no')
