@@ -141,7 +141,8 @@ character folders under `components/widgets/characters/` — `toy/` (`ToyHead`,
 `toyParts`, `toyPalette`),
 `ninja/` (`NinjaHead`, `SwordNinjaFigure`, `NinjaFigure`, `NinjaCelebration`,
 `NinjaFigure3D`, `NinjaModel3D`, `ninjaPalette`), `fireninja/` (`FireNinjaHead`, `FireBladeFigure`, `FireNinjaFigure`,
-`FireNinjaCelebration`, `fireNinjaPalette`), `darkarin/` (`DarkArinHead`,
+`FireNinjaCelebration`, `FireNinjaFigure3D`, `FireNinjaModel3D`,
+`fireNinjaPalette`), `darkarin/` (`DarkArinHead`,
 `TwinSwordFigure`, `DarkArinFigure`, `DarkArinCelebration`, `darkArinPalette`),
 `frak/` (`FrakHead`, `FrakFigure`, `FrakCelebration`, `frakPalette`),
 `imperium/` (`ImperiumHead`, `ClawFigure`, `ImperiumFigure`, `ImperiumCelebration`,
@@ -167,7 +168,7 @@ avatar, uniformly). That widget also has a persisted **2D/3D view toggle**: an
 avatar may carry an optional lazy 3D render, split into a venue-neutral
 `Model3D` (mesh-level, no spin — also reused as the Drone Sim's RC operator for
 Player 1's avatar) and a `Figure3D` viewer (the model on the shared
-`FigureStage3D` turntable — toy and ninja have both). A 3D model's moves are a
+`FigureStage3D` turntable — toy, ninja and fireninja have both). A 3D model's moves are a
 named **action library** (`actions3d` registry metadata; `action` prop) that
 grows one id per added move — ninja has Pump + Draw; avatars without a 3D
 render show a "no 3D figure yet" placeholder in 3D view (see `docs/avatars.md`).

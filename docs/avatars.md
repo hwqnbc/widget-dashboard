@@ -81,7 +81,10 @@ in place under a stable id ("refine"). Current libraries: toy
 (bounce + overhead katana pump) and `[draw "Draw"]` — the 2D celebration's
 choreography in 3D: reach over the right shoulder, unsheathe the back
 katana, sweep it to an upright guard, flourish, re-sheathe, loop (~3.2 s
-phase timeline).
+phase timeline); fireninja `[blaze "Fire Blade"]` — the flaming blade
+ignites out of the always-held hilt (overshoot scale-up from the start-time
+ref) then sweeps across the body in a looping guard parry, flame flickering
+via scale noise + emissive pulse.
 
 The render is split into a venue-neutral **model** and a viewer **figure**,
 so the same character can stand in a game world:
@@ -144,8 +147,10 @@ toggle grows the button automatically. Ids are stable so future rounds can
 "refine" a move in place.
 
 Shipped so far: toy, ninja (`NinjaModel3D` — hooded faceted head + mask,
-gold obi/medallion, crossed back katanas; actions Pump + Draw). Still
-missing 3D figures: fireninja, darkarin, frak, imperium.
+gold obi/medallion, crossed back katanas; actions Pump + Draw), fireninja
+(`FireNinjaModel3D` — spiky hair, crossed sashes + silver emblem, gripped
+hilt with the emissive fire blade; action Fire Blade). Still missing 3D
+figures: darkarin, frak, imperium.
 
 ## Reading a seat's look
 `features/avatars/useSeatAvatars.ts`:
