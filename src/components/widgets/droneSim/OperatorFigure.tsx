@@ -23,7 +23,7 @@ export default function OperatorFigure({
   operator: { current: OperatorState }
   visible: boolean
   /** Player 1's avatar `Model3D` (lazy, venue-neutral), if it has one. */
-  model?: ComponentType<{ playing?: boolean }>
+  model?: ComponentType<{ action?: string }>
 }) {
   const groupRef = useRef<Group>(null)
 
@@ -44,7 +44,7 @@ export default function OperatorFigure({
            * models face +Z, so turn them round. ~1.85u model vs the basic
            * figure's ~1.7u — scale to match. */}
           <group rotation-y={Math.PI} scale={0.92}>
-            <Model playing={false} />
+            <Model />
           </group>
         </Suspense>
       ) : (

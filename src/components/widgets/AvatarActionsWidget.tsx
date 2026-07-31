@@ -24,36 +24,46 @@ const coerceFigureView = (v: unknown): FigureView | undefined =>
   v === '2d' || v === '3d' ? v : undefined
 
 /**
- * A configurable character viewer: pick an avatar and flip the Idle/Celebrate
- * toggle to play its celebration — the looping victory animation, uniform
- * across every avatar (so there's no per-avatar inconsistency between one-shot
- * and looping moves). An explicit labelled toggle (not a tap on the figure —
- * an invisible tap surface gave no feedback about what, if anything, it did).
- * Reuses the avatar registry, so every present and future avatar is available
- * automatically. A 2D/3D view toggle swaps the SVG figure for the avatar's
- * lazy three.js `Figure3D`; avatars without one show a "not available"
- * placeholder there, with the celebration toggle disabled (nothing would
- * visibly play). The selection and view persist per-widget-instance; the play
- * state is transient and resets on avatar/view switches.
+ * A configurable character viewer: pick an avatar and flip the action toggle
+ * to play one of its moves. An explicit labelled toggle (not a tap on the
+ * figure — an invisible tap surface gave no feedback about what, if
+ * anything, it did). Reuses the avatar registry, so every present and future
+ * avatar is available automatically. A 2D/3D view toggle swaps the SVG
+ * figure for the avatar's lazy three.js `Figure3D`; avatars without one show
+ * a "not available" placeholder there, with the action toggle disabled
+ * (nothing would visibly play).
+ *
+ * In 2D the toggle is Idle | Celebrate (the one looping 2D `Celebration`,
+ * uniform across avatars). In 3D it lists the model's named-move library —
+ * the registry's `actions3d` metadata — one button per action, so avatars
+ * accumulate moves over time instead of overwriting the single celebration.
+ * The selection and view persist per-widget-instance; the playing action is
+ * transient and resets on avatar/view switches.
  */
 export default function AvatarActionsWidget({ id }: WidgetProps) {
   const dispatch = useAppDispatch()
   const avatar = useWidgetField<AvatarId>(id, 'avatar', 'toy', coerceAvatar)
   const view = useWidgetField<FigureView>(id, 'view', '2d', coerceFigureView)
-  const [active, setActive] = useState(false)
+  const [action, setAction] = useState<string | null>(null)
 
-  const { Head, Figure, Celebration, Figure3D } = avatarVisualById[avatar]
+  const { Head, Figure, Celebration, Figure3D, actions3d } = avatarVisualById[avatar]
   const name = avatarMetaById[avatar].name
   const unavailable3d = view === '3d' && !Figure3D
+  // The action options for the current view: the 3D model's move library, or
+  // the single 2D celebration (also the disabled-placeholder shape).
+  const actionOptions =
+    view === '3d' && Figure3D && actions3d?.length
+      ? actions3d
+      : [{ id: 'celebrate', name: 'Celebrate' }]
 
   const select = (next: AvatarId | null) => {
     if (!next || next === avatar) return
-    setActive(false)
+    setAction(null)
     dispatch(updateWidgetData({ id, data: { avatar: next } }))
   }
   const selectView = (next: FigureView | null) => {
     if (!next || next === view) return
-    setActive(false)
+    setAction(null)
     dispatch(updateWidgetData({ id, data: { view: next } }))
   }
 
@@ -64,7 +74,8 @@ export default function AvatarActionsWidget({ id }: WidgetProps) {
       data-avatar={avatar}
       data-view={view}
       data-figure3d={Figure3D ? 'available' : 'unavailable'}
-      data-playing={active ? 'yes' : 'no'}
+      data-playing={action ? 'yes' : 'no'}
+      data-action={action ?? 'idle'}
       onMouseDown={(e) => e.stopPropagation()}
       onTouchStart={(e) => e.stopPropagation()}
       sx={{ height: '100%', display: 'flex', flexDirection: 'column', gap: 0.5, p: 0.5 }}
@@ -97,19 +108,26 @@ export default function AvatarActionsWidget({ id }: WidgetProps) {
         <ToggleButtonGroup
           size="small"
           exclusive
-          value={active ? 'celebrate' : 'idle'}
+          value={action ?? 'idle'}
           onChange={(_, v) => {
-            if (v) setActive(v === 'celebrate')
+            if (typeof v === 'string') setAction(v === 'idle' ? null : v)
           }}
           data-testid="celebration-toggle"
-          aria-label="Celebration"
+          aria-label="Action"
         >
           <ToggleButton value="idle" disabled={unavailable3d} sx={{ textTransform: 'none', py: 0.3, px: 1 }}>
             Idle
           </ToggleButton>
-          <ToggleButton value="celebrate" disabled={unavailable3d} sx={{ textTransform: 'none', py: 0.3, px: 1 }}>
-            Celebrate
-          </ToggleButton>
+          {actionOptions.map((a) => (
+            <ToggleButton
+              key={a.id}
+              value={a.id}
+              disabled={unavailable3d}
+              sx={{ textTransform: 'none', py: 0.3, px: 1 }}
+            >
+              {a.name}
+            </ToggleButton>
+          ))}
         </ToggleButtonGroup>
         <ToggleButtonGroup
           size="small"
@@ -155,7 +173,7 @@ export default function AvatarActionsWidget({ id }: WidgetProps) {
         ) : (
           <Box
             data-testid="avatar-stage"
-            aria-label={`${name} ${active ? 'celebration' : 'figure'}`}
+            aria-label={`${name} ${action ? 'celebration' : 'figure'}`}
             sx={{
               height: '100%',
               width: '100%',
@@ -178,10 +196,10 @@ export default function AvatarActionsWidget({ id }: WidgetProps) {
                     </Box>
                   }
                 >
-                  <Figure3D playing={active} />
+                  <Figure3D action={action ?? undefined} />
                 </Suspense>
               </Box>
-            ) : active ? (
+            ) : action ? (
               <Celebration />
             ) : (
               <Figure />

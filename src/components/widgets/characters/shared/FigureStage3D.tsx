@@ -16,11 +16,21 @@ import type { ReactNode } from 'react'
 import { Canvas, useFrame } from '@react-three/fiber'
 import type { Group } from 'three'
 
-/** Rotates its children about Y at `speed` rad/s (0 = static). */
+/** Rotates its children about Y at `speed` rad/s. At speed 0 it eases back
+ * to face the camera instead of freezing mid-turn — directional actions
+ * (e.g. the ninja sword draw) set spin 0 so their choreography always plays
+ * facing the viewer. */
 function Turntable({ speed, children }: { speed: number; children: ReactNode }) {
   const ref = useRef<Group>(null)
   useFrame((_, dt) => {
-    if (ref.current) ref.current.rotation.y += dt * speed
+    const g = ref.current
+    if (!g) return
+    if (speed > 0) {
+      g.rotation.y += dt * speed
+    } else {
+      const target = Math.round(g.rotation.y / (Math.PI * 2)) * Math.PI * 2
+      g.rotation.y += (target - g.rotation.y) * Math.min(1, dt * 4)
+    }
   })
   return <group ref={ref}>{children}</group>
 }

@@ -52,42 +52,60 @@ boy/       Boy.tsx                    (an ImageToggle figure, not a game avatar)
   "6 7"; `NinjaCelebration` = the draw/sheathe loop (extracted from the old inline
   `LoopingNinja`). Rendered by `WinnerCelebration`, and also what the **Avatar
   Actions** widget (`components/widgets/AvatarActionsWidget.tsx`) plays via its
-  labelled **Idle | Celebrate** toggle (`data-testid="celebration-toggle"`) —
-  pick a character, flip to Celebrate to loop its celebration, back to Idle for
-  the static `Figure`. (It used to be tap-on-the-figure; the invisible tap
+  labelled action toggle (`data-testid="celebration-toggle"`) — in 2D it is
+  **Idle | Celebrate** (the one looping 2D celebration, uniform across
+  avatars); in 3D it lists the model's named-move library (`actions3d`), one
+  button per action. (It used to be tap-on-the-figure; the invisible tap
   surface gave no feedback about what a tap did, so it became an explicit
-  toggle — lesson #36's pattern.) Using the one looping `Celebration` (rather
-  than a separate per-avatar move) keeps the widget's behaviour uniform across
-  every present and future avatar. The play state stays transient: it resets on
-  reload and on avatar/view switches. The widget publishes a small test
-  contract on its root —
+  toggle — lesson #36's pattern.) The playing action stays transient: it
+  resets on reload and on avatar/view switches. The widget publishes a small
+  test contract on its root —
   `data-testid="avatar-actions"`, `data-avatar` (selected id), `data-playing`
-  (`yes`/`no`), `data-view` (`2d`/`3d`), `data-figure3d`
+  (`yes`/`no`), `data-action` (action id or `idle`), `data-view` (`2d`/`3d`),
+  `data-figure3d`
   (`available`/`unavailable`) — exercised by `e2e/120-avatars.test.mjs` and
   `e2e/121-avatars-3d.test.mjs`. Its avatar picker
   (a `ToggleButtonGroup`) **wraps** (`flexWrap`), so as the roster grows the
   buttons stack onto more rows instead of overflowing off the small card.
 
-## 3D figures (`Model3D` + `Figure3D`)
+## 3D figures (`Model3D` + `Figure3D`) and the action library
 An avatar can optionally carry a **3D figure** — a three.js/R3F render of the
-same character (`{ playing?: boolean }`: static-ish idle vs the looping
-celebration move). It is split into a venue-neutral **model** and a viewer
-**figure**, so the same character can stand in a game world:
+same character. Its moves are a growing **library of named actions**: the
+component prop is `{ action?: string }` (undefined/unknown = idle with a
+subtle sway), and the id list lives as registry metadata
+(`AvatarVisual.actions3d: { id, name }[]`) — **outside the lazy chunk**, so
+the Avatar Actions picker can render the buttons without loading three.js.
+New moves are *added* as new ids ("add action"); existing ones are improved
+in place under a stable id ("refine"). Current libraries: toy
+`[sixseven "6 7"]` (bounce + alternating arm pump); ninja `[pump "Pump"]`
+(bounce + overhead katana pump) and `[draw "Draw"]` — the 2D celebration's
+choreography in 3D: reach over the right shoulder, unsheathe the back
+katana, sweep it to an upright guard, flourish, re-sheathe, loop (~3.2 s
+phase timeline).
+
+The render is split into a venue-neutral **model** and a viewer **figure**,
+so the same character can stand in a game world:
 
 - `characters/toy/ToyModel3D.tsx` (registry `Model3D`) — the **mesh-level
   model**: the toy minifig from primitives (4-sided-cylinder trick for the
   flared torso, hemisphere cap + box brim), sharing `toyPalette`. Faces +Z,
   feet at y=0, ~1.85 u tall. It owns only the *character's* animation via its
   own `useFrame` (mutating refs, zero React renders — the drone widgets'
-  pattern): idle arm sway, and the celebration bounce + alternating arm pump
-  (the "6 7" in 3D) when `playing`. **It does not spin** — spinning is
+  pattern), one branch per `action` id. **It does not spin** — spinning is
   presentation, and baking it in would make the model unusable in a world.
+  Choreographed loops (the ninja Draw) additionally keep a start-time ref
+  (reset when the `action` prop changes) so the phase timeline begins at
+  phase 0 rather than wherever the global clock happens to be, and write
+  katana visibility imperatively every frame.
 - `characters/shared/FigureStage3D.tsx` — the shared viewer stage: a
   transparent `<Canvas>` (camera framed on a ~1.9-unit figure), lights, a
   figurine base disc, and the **turntable** (`spin` prop, rad/s) — the stage
-  owns the spin, not the model.
+  owns the spin, not the model. `spin={0}` doesn't freeze mid-turn: it eases
+  the figure back to face the camera, for **directional** actions (the
+  ninja Draw sets 0 — a spinning figure hides the blade behind the body for
+  half of every turn).
 - `characters/toy/ToyFigure3D.tsx` (registry `Figure3D`) — the thin viewer:
-  `<FigureStage3D spin={playing ? 1.3 : 0.45}><ToyModel3D playing/></FigureStage3D>`.
+  the model on `<FigureStage3D>` with a per-action spin choice.
   This is what the Avatar Actions 3D view renders.
 - **Reuse in games:** the Drone Sim renders Player 1's (seat `'toy'`)
   `Model3D` as the walking RC operator when the chosen avatar has one
@@ -111,16 +129,23 @@ instead, with the celebration toggle **disabled** (nothing would visibly
 play) — so avatars gain 3D one at a time without gating the view toggle.
 
 **Adding a 3D figure to an avatar:** build the mesh-level
-`characters/<id>/<Name>Model3D.tsx` (default-export `{ playing?: boolean }`,
+`characters/<id>/<Name>Model3D.tsx` (default-export `{ action?: string }`,
 faces +Z, feet at y=0, ~1.85 u, no spin) and the thin viewer
 `<Name>Figure3D.tsx` wrapping it in `<FigureStage3D spin={...}>` (do NOT add
 either to the folder's `index.ts`), then register both in
 `avatarRegistry.tsx` as `lazy(() => import(...))` on the avatar's `Model3D` /
-`Figure3D` fields. The Avatar Actions 3D view and the Drone Sim operator pick
-them up automatically. Shipped so far: toy, ninja (`NinjaModel3D` — hooded
-faceted head + mask, gold obi/medallion, crossed back katanas; celebration
-draws one and pumps it overhead). Still missing 3D figures: fireninja,
-darkarin, frak, imperium.
+`Figure3D` fields, with at least one `actions3d` entry. The Avatar Actions
+3D view and the Drone Sim operator pick them up automatically.
+
+**Adding an action to a model:** one `useFrame` branch keyed on the new id
+in the model (plus a spin choice in the viewer if the move is directional),
+and one `{ id, name }` entry in the registry's `actions3d` — the widget's
+toggle grows the button automatically. Ids are stable so future rounds can
+"refine" a move in place.
+
+Shipped so far: toy, ninja (`NinjaModel3D` — hooded faceted head + mask,
+gold obi/medallion, crossed back katanas; actions Pump + Draw). Still
+missing 3D figures: fireninja, darkarin, frak, imperium.
 
 ## Reading a seat's look
 `features/avatars/useSeatAvatars.ts`:

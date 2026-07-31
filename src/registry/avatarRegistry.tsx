@@ -16,6 +16,13 @@ import { ImperiumHead, ImperiumFigure, ImperiumCelebration } from '../components
  * `AvatarId`; the metadata (name/colour) lives in the component-free
  * `avatarCatalog.ts`.
  */
+/** One named move a 3D model can play (`id` is the `action` prop value;
+ * `name` is the toggle-button label in the Avatar Actions widget). */
+export interface Action3D {
+  id: string
+  name: string
+}
+
 export interface AvatarVisual {
   Head: ComponentType<{ size?: number | string }>
   Figure: ComponentType
@@ -24,12 +31,18 @@ export interface AvatarVisual {
    * Registered with lazy() so the three.js chunk loads only when a 3D view
    * is actually rendered (wrap in <Suspense>). Avatars without one show
    * "not available" in the Avatar Actions 3D view. */
-  Figure3D?: ComponentType<{ playing?: boolean }>
+  Figure3D?: ComponentType<{ action?: string }>
   /** Optional mesh-level 3D MODEL for reuse INSIDE an existing R3F canvas
    * (no stage, no spin — venue-neutral, faces +Z, feet at y=0). The Drone
    * Sim renders Player 1's model as the RC operator when present. Same
-   * lazy() rule; wrap in <Suspense>. */
-  Model3D?: ComponentType<{ playing?: boolean }>
+   * lazy() rule; wrap in <Suspense>. `action` selects a named move from
+   * `actions3d` (undefined/unknown = idle). */
+  Model3D?: ComponentType<{ action?: string }>
+  /** The 3D model's named-move library. Metadata lives HERE — not in the
+   * lazy model chunk — so pickers render without loading three.js. Grows
+   * one entry per added action; ids are stable, moves are refined in
+   * place. */
+  actions3d?: Action3D[]
 }
 
 // Per-avatar 3D figures — dynamic imports keep three.js out of the main chunk.
@@ -45,6 +58,7 @@ export const avatarVisualById: Record<AvatarId, AvatarVisual> = {
     Celebration: ToyCelebration,
     Figure3D: ToyFigure3D,
     Model3D: ToyModel3D,
+    actions3d: [{ id: 'sixseven', name: '6 7' }],
   },
   ninja: {
     Head: NinjaHead,
@@ -52,6 +66,10 @@ export const avatarVisualById: Record<AvatarId, AvatarVisual> = {
     Celebration: NinjaCelebration,
     Figure3D: NinjaFigure3D,
     Model3D: NinjaModel3D,
+    actions3d: [
+      { id: 'pump', name: 'Pump' },
+      { id: 'draw', name: 'Draw' },
+    ],
   },
   fireninja: { Head: FireNinjaHead, Figure: FireNinjaFigure, Celebration: FireNinjaCelebration },
   darkarin: { Head: DarkArinHead, Figure: DarkArinFigure, Celebration: DarkArinCelebration },

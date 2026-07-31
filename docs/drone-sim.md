@@ -597,8 +597,9 @@ from the enhancement menu, with the integration point each would build on.
 ### Camera & visuals
 - **Rain streaks** — upgrade `RainField` points to short line segments.
 - **Operator celebration** — the operator's avatar `Model3D` already takes
-  `playing`; flip it on for a few seconds on a new best lap (the lap-complete
-  event in `DroneSimBody` is the hook) so your figure celebrates the record.
+  an `action` id (the registry's `actions3d` library); pass one for a few
+  seconds on a new best lap (the lap-complete event in `DroneSimBody` is the
+  hook) so your figure celebrates the record.
 - **More avatar operators** — every avatar that gains a `Model3D` in the
   registry becomes a Drone Sim operator automatically (toy and ninja
   shipped); fireninja/darkarin/frak/imperium are still on primitives.

@@ -5,12 +5,14 @@
  *
  * Covers: 2D default, toggling to 3D lazy-loads the three.js chunk and
  * renders a WebGL canvas for the avatars with a Figure3D (toy, ninja), the
- * Idle/Celebrate toggle keeps working in 3D, an avatar without a 3D figure
- * (fireninja) shows the "not available" placeholder instead of a canvas
- * (with the celebration toggle disabled — nothing would visibly play),
- * switching back restores each view, and the chosen view survives a reload.
- * The 3D art itself is reviewed from screenshots — the suite asserts
- * presence + the data contract, like the 2D suite (120).
+ * action toggle lists the 3D model's named-move library (registry
+ * `actions3d`: toy [6 7], ninja [Pump, Draw]) and each action drives
+ * `data-action`/`data-playing`, an avatar without a 3D figure (fireninja)
+ * shows the "not available" placeholder instead of a canvas (with the
+ * action toggle disabled — nothing would visibly play), switching back
+ * restores each view, and the chosen view survives a reload. The 3D art
+ * itself is reviewed from screenshots — the suite asserts presence + the
+ * data contract, like the 2D suite (120).
  */
 import { addAvatarWidget, launch, reporter } from './helpers.mjs'
 
@@ -43,21 +45,34 @@ check('toy 3d view renders a WebGL canvas', (await stageCanvas.count()) === 1)
 check('no unavailable placeholder for toy', (await unavailable.count()) === 0)
 check('switching view does not auto-play', (await attr('data-playing')) === 'no')
 
-// the Idle/Celebrate toggle drives the 3D celebration exactly like the 2D one
-await celebration.nth(1).click()
+// the action toggle lists the toy's move library and drives the 3D model
+check('toy 3d actions: Idle + 6 7', (await celebration.count()) === 2)
+await celebration.nth(1).click() // '6 7'
 await page.waitForTimeout(150)
-check('Celebrate starts the 3d celebration', (await attr('data-playing')) === 'yes')
+check('6 7 starts the 3d action', (await attr('data-playing')) === 'yes')
+check('action id is sixseven', (await attr('data-action')) === 'sixseven')
 check('canvas stays mounted while playing', (await stageCanvas.count()) === 1)
 await celebration.nth(0).click()
 await page.waitForTimeout(150)
 check('Idle stops it', (await attr('data-playing')) === 'no')
 
-// ninja carries a 3D figure too — its canvas renders the same way
+// ninja carries a 3D figure too — with a two-move library
 await picker.nth(1).click() // ninja
 await page.waitForTimeout(150)
 check('ninja advertises an available 3D figure', (await attr('data-figure3d')) === 'available')
 await page.waitForSelector('[data-testid="figure3d-stage"] canvas', { timeout: 20000 })
 check('ninja 3d view renders a WebGL canvas', (await stageCanvas.count()) === 1)
+check('ninja 3d actions: Idle + Pump + Draw', (await celebration.count()) === 3)
+await celebration.nth(2).click() // Draw
+await page.waitForTimeout(150)
+check('Draw plays', (await attr('data-action')) === 'draw')
+check('Draw sets playing', (await attr('data-playing')) === 'yes')
+await celebration.nth(1).click() // Pump — switching mid-play
+await page.waitForTimeout(150)
+check('Pump takes over', (await attr('data-action')) === 'pump')
+await celebration.nth(0).click()
+await page.waitForTimeout(150)
+check('Idle resets the ninja action', (await attr('data-action')) === 'idle')
 
 // an avatar without a Figure3D shows the placeholder, not a canvas
 await picker.nth(2).click() // fireninja — still 3D-less

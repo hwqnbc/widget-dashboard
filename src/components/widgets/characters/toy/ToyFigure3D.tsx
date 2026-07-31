@@ -7,10 +7,10 @@
 import FigureStage3D from '../shared/FigureStage3D'
 import ToyModel3D from './ToyModel3D'
 
-export default function ToyFigure3D({ playing = false }: { playing?: boolean }) {
+export default function ToyFigure3D({ action }: { action?: string }) {
   return (
-    <FigureStage3D spin={playing ? 1.3 : 0.45}>
-      <ToyModel3D playing={playing} />
+    <FigureStage3D spin={action ? 1.3 : 0.45}>
+      <ToyModel3D action={action} />
     </FigureStage3D>
   )
 }

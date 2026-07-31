@@ -557,6 +557,28 @@ carried over; these are the new ones.
     (`data-op-figure`) since meshes aren't DOM-observable — and any avatar
     that later gains a `Model3D` upgrades every venue automatically.
 
+60. **A choreographed 3D move is a phase timeline — four things make it
+    work.** The ninja's sword draw (reach → unsheathe → guard → sheathe,
+    looping) surfaced all of these at once: (a) **start-time ref, not the
+    global clock** — key the loop on `t - t0` where `t0` resets when the
+    `action` prop changes, or the move starts mid-phase; (b) **lerp angles
+    the short way** — the wrist tween from `π` to `-0.85` swept 300° through
+    "blade pointing down" mid-draw because `lerp(π, -0.85)` takes the long
+    arc; start from the coterminal `-π` instead (same pose, short path);
+    (c) **phase-driven visibility is imperative** — `.visible` written every
+    frame from the phase (self-correcting), not React props; (d) **verify
+    with timestamped burst captures** — single "wait then screenshot" shots
+    drift under software-GL screenshot overhead (~0.5 s each) and can miss
+    every interesting phase; a burst of frames named with their real
+    `Date.now()` offsets pins what pose existed when. Companion viewer
+    lesson: a *directional* move on a turntable hides behind the body half
+    of every turn — give the stage's `spin={0}` an ease-back-to-front
+    behaviour and let directional actions select it. And the meta-pattern
+    the user asked for: moves are a **named-action library** (`action`
+    string prop + `actions3d` registry metadata living OUTSIDE the lazy
+    chunk so pickers render three-free) — new moves add ids, they never
+    overwrite the one celebration.
+
 ## Responsive touch layout (Drone Strike → Tank Battle)
 
 53. **"Fullscreen" is not "big" — size touch controls from the container's

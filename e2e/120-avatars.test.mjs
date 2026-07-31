@@ -48,6 +48,7 @@ const svgCentered = async () => {
 // defaults
 check('default avatar is toy', (await avatarAttr()) === 'toy')
 check('not playing by default', (await playingAttr()) === 'no')
+check('default action is idle', (await root.getAttribute('data-action')) === 'idle')
 check('one toggle per catalogued avatar', (await toggles.count()) === AVATARS.length)
 check('celebration toggle has Idle and Celebrate', (await celebration.count()) === 2)
 check('a figure svg is rendered', (await figureCount()) >= 1)
@@ -67,6 +68,7 @@ for (let i = 0; i < AVATARS.length; i++) {
 await celebration.nth(1).click()
 await page.waitForTimeout(150)
 check('Celebrate starts the celebration', (await playingAttr()) === 'yes')
+check('2d action id is celebrate', (await root.getAttribute('data-action')) === 'celebrate')
 check('celebration still shows a figure svg', (await figureCount()) >= 1)
 check('celebrating figure is horizontally centred', await svgCentered())
 await celebration.nth(0).click()

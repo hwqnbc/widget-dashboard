@@ -7,7 +7,8 @@
 // take on the toy's "6 7" celebration — a bounce with both arms raised and
 // pumping alternately. Animation mutates refs in useFrame (zero React
 // renders), matching the drone widgets' input path. Faces +Z; ~1.85 units
-// tall, feet at y=0.
+// tall, feet at y=0. `action` picks a named move from the registry's
+// actions3d library ('sixseven' — the "6 7"); undefined/unknown ids idle.
 //
 // Loaded only via lazy() (the avatar registry's Model3D/Figure3D fields) —
 // never re-export from toy/index.ts, or three.js lands in the main chunk.
@@ -18,13 +19,14 @@ import { TOY as T } from './toyPalette'
 
 const PLASTIC = { roughness: 0.55, metalness: 0 }
 
-export default function ToyModel3D({ playing = false }: { playing?: boolean }) {
+export default function ToyModel3D({ action }: { action?: string }) {
   const bodyRef = useRef<Group>(null)
   const armLRef = useRef<Group>(null)
   const armRRef = useRef<Group>(null)
 
   useFrame((state) => {
     const t = state.clock.elapsedTime
+    const playing = action === 'sixseven'
     const body = bodyRef.current
     if (body) body.position.y = playing ? Math.abs(Math.sin(t * 5.4)) * 0.16 : 0
     // Arms hang with a hint of sway when idle; raised and pumping
