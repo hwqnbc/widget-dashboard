@@ -2,23 +2,28 @@
 // torso, green legs and chest badge/shell rebuilt from three.js primitives.
 // Venue-neutral — it neither spins nor assumes a stage, so it can stand
 // anywhere: the Avatar Actions viewer puts it on the FigureStage3D turntable,
-// the Drone Sim plants it in the world as the RC operator. It owns only the
-// character's animation: a hint of idle arm sway, and `playing` runs the 3D
-// take on the toy's "6 7" celebration — a bounce with both arms raised and
-// pumping alternately. Animation mutates refs in useFrame (zero React
-// renders), matching the drone widgets' input path. Faces +Z; ~1.85 units
-// tall, feet at y=0. `action` picks a named move from the registry's
-// actions3d library — 'sixseven' (the "6 7" dance) or 'sixsevenshow' (the
-// same dance flanked by big red "6"/"7" numerals built from primitives,
-// popping in with a spring and bobbing in counter-phase with the arms, the
-// 2D SixSevenFigure's popL/popR); undefined/unknown ids idle.
+// the Drone Sim plants it in the world as the RC operator. Animation mutates
+// refs in useFrame (zero React renders). Faces +Z; ~1.85 units tall, feet at
+// y=0.
+//
+// `action` picks a named move from the registry's actions3d library:
+// - 'sixseven': the "6 7" exactly as the 2D SixSevenFigure articulates it —
+//   the upper arms hold an elbows-out pose and the FOREARMS flex at the
+//   ELBOW (±38°, mirrored bases + the same flex angle = alternating hands,
+//   the "six… seven" weighing; lesson #27's pivot rule). No body bounce —
+//   the 2D figure stands still — and the smile swaps for the open hyped
+//   mouth.
+// - 'sixsevenshow': the same dance flanked by big red "6"/"7" numerals built
+//   from primitives, popping in with a spring and bobbing in counter-phase
+//   with the hands (the 2D popL/popR), billboarded at the camera.
+// Undefined/unknown ids idle with a subtle arm sway.
 //
 // Loaded only via lazy() (the avatar registry's Model3D/Figure3D fields) —
 // never re-export from toy/index.ts, or three.js lands in the main chunk.
 import { useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { Quaternion } from 'three'
-import type { Group } from 'three'
+import type { Group, Mesh } from 'three'
 import { TOY as T } from './toyPalette'
 
 /** Scratch quaternion for the numeral billboarding (no per-frame allocs). */
@@ -32,14 +37,17 @@ const lerp = (a: number, b: number, k: number) => a + (b - a) * k
 const smooth = (k: number) => (k <= 0 ? 0 : k >= 1 ? 1 : k * k * (3 - 2 * k))
 
 /** Digits flank at waist height (the 2D places them in the lower third) —
- * below the dancing arms' reach (raised hands stay above y ≈ 1.0). */
+ * below the dancing forearms' reach. */
 const DIGIT_X = 0.78
 const DIGIT_Y = 0.62
 
 export default function ToyModel3D({ action }: { action?: string }) {
-  const bodyRef = useRef<Group>(null)
   const armLRef = useRef<Group>(null)
   const armRRef = useRef<Group>(null)
+  const elbowLRef = useRef<Group>(null)
+  const elbowRRef = useRef<Group>(null)
+  const smileRef = useRef<Mesh>(null)
+  const mouthORef = useRef<Mesh>(null)
   const num6Ref = useRef<Group>(null)
   const num7Ref = useRef<Group>(null)
   const t0Ref = useRef(0)
@@ -53,18 +61,29 @@ export default function ToyModel3D({ action }: { action?: string }) {
     }
     const dancing = action === 'sixseven' || action === 'sixsevenshow'
     const show = action === 'sixsevenshow'
-    const body = bodyRef.current
-    if (body) body.position.y = dancing ? Math.abs(Math.sin(t * 5.4)) * 0.16 : 0
-    // Arms hang with a hint of sway when idle; raised and pumping
-    // alternately (the "6 7" scales motion) while celebrating.
     const s = Math.sin(t * 5.4)
-    const lift = dancing ? 1.75 : 0.12
-    const swing = dancing ? s * 0.45 : Math.sin(t * 1.7) * 0.05
-    // +z rotation moves a hanging arm toward +x, so left/right mirror.
-    if (armLRef.current) armLRef.current.rotation.z = -(lift + swing)
-    if (armRRef.current) armRRef.current.rotation.z = lift - swing
+    if (dancing) {
+      // Upper arms hold still, elbows out; only the FOREARMS flex (the 2D
+      // `flex` keyframes: ±38° ≈ 0.66 rad). Mirrored elbow bases plus the
+      // SAME flex angle on both make the hands alternate, like the 2D's
+      // mirrored geometry under one keyframe set.
+      const flex = s * 0.66
+      if (armLRef.current) armLRef.current.rotation.z = -0.4
+      if (armRRef.current) armRRef.current.rotation.z = 0.4
+      if (elbowLRef.current) elbowLRef.current.rotation.z = -0.35 + flex
+      if (elbowRRef.current) elbowRRef.current.rotation.z = 0.35 + flex
+    } else {
+      const sway = Math.sin(t * 1.7) * 0.05
+      if (armLRef.current) armLRef.current.rotation.z = -(0.12 + sway)
+      if (armRRef.current) armRRef.current.rotation.z = 0.12 - sway
+      if (elbowLRef.current) elbowLRef.current.rotation.z = -0.12
+      if (elbowRRef.current) elbowRRef.current.rotation.z = 0.12
+    }
+    // hyped open mouth while dancing, smile otherwise (the 2D mouth swap)
+    if (smileRef.current) smileRef.current.visible = !dancing
+    if (mouthORef.current) mouthORef.current.visible = dancing
     // The flanking numerals: spring pop-in from t0, then a counter-phase
-    // bob off the same oscillator as the arms ("six… seven" weighing).
+    // bob off the same oscillator as the forearms ("six… seven" weighing).
     const num6 = num6Ref.current
     const num7 = num7Ref.current
     if (num6 && num7) {
@@ -89,7 +108,7 @@ export default function ToyModel3D({ action }: { action?: string }) {
   })
 
   return (
-    <group ref={bodyRef}>
+    <group>
       {/* legs */}
       <mesh position={[-0.14, 0.25, 0]}>
         <boxGeometry args={[0.24, 0.5, 0.26]} />
@@ -118,36 +137,56 @@ export default function ToyModel3D({ action }: { action?: string }) {
         <sphereGeometry args={[0.11, 16, 12]} />
         <meshStandardMaterial color={T.shell} {...PLASTIC} />
       </mesh>
-      {/* arms: groups pivoted at the shoulder so useFrame swings them */}
+      {/* arms: shoulder group (pose) + ELBOW-hinged forearm group — the 2D
+       * SixSevenFigure's articulation. Cap spheres keep both joints closed
+       * at any pose (lessons #27/#27b). */}
       <group ref={armLRef} position={[-0.3, 1.14, 0]}>
-        {/* shoulder cap: pivot-centred, keeps the joint closed at any pose */}
         <mesh>
           <sphereGeometry args={[0.1, 12, 10]} />
           <meshStandardMaterial color={T.teal} {...PLASTIC} />
         </mesh>
-        <mesh position={[0, -0.21, 0]}>
-          <cylinderGeometry args={[0.075, 0.075, 0.42, 12]} />
+        <mesh position={[0, -0.11, 0]}>
+          <cylinderGeometry args={[0.075, 0.075, 0.22, 12]} />
           <meshStandardMaterial color={T.teal} {...PLASTIC} />
         </mesh>
-        <mesh position={[0, -0.46, 0]}>
-          <sphereGeometry args={[0.085, 12, 10]} />
-          <meshStandardMaterial color={T.skin} {...PLASTIC} />
-        </mesh>
+        <group ref={elbowLRef} position={[0, -0.22, 0]}>
+          <mesh>
+            <sphereGeometry args={[0.08, 12, 10]} />
+            <meshStandardMaterial color={T.teal} {...PLASTIC} />
+          </mesh>
+          <mesh position={[0, -0.12, 0]}>
+            <cylinderGeometry args={[0.075, 0.075, 0.24, 12]} />
+            <meshStandardMaterial color={T.teal} {...PLASTIC} />
+          </mesh>
+          <mesh position={[0, -0.26, 0]}>
+            <sphereGeometry args={[0.085, 12, 10]} />
+            <meshStandardMaterial color={T.skin} {...PLASTIC} />
+          </mesh>
+        </group>
       </group>
       <group ref={armRRef} position={[0.3, 1.14, 0]}>
-        {/* shoulder cap: pivot-centred, keeps the joint closed at any pose */}
         <mesh>
           <sphereGeometry args={[0.1, 12, 10]} />
           <meshStandardMaterial color={T.teal} {...PLASTIC} />
         </mesh>
-        <mesh position={[0, -0.21, 0]}>
-          <cylinderGeometry args={[0.075, 0.075, 0.42, 12]} />
+        <mesh position={[0, -0.11, 0]}>
+          <cylinderGeometry args={[0.075, 0.075, 0.22, 12]} />
           <meshStandardMaterial color={T.teal} {...PLASTIC} />
         </mesh>
-        <mesh position={[0, -0.46, 0]}>
-          <sphereGeometry args={[0.085, 12, 10]} />
-          <meshStandardMaterial color={T.skin} {...PLASTIC} />
-        </mesh>
+        <group ref={elbowRRef} position={[0, -0.22, 0]}>
+          <mesh>
+            <sphereGeometry args={[0.08, 12, 10]} />
+            <meshStandardMaterial color={T.teal} {...PLASTIC} />
+          </mesh>
+          <mesh position={[0, -0.12, 0]}>
+            <cylinderGeometry args={[0.075, 0.075, 0.24, 12]} />
+            <meshStandardMaterial color={T.teal} {...PLASTIC} />
+          </mesh>
+          <mesh position={[0, -0.26, 0]}>
+            <sphereGeometry args={[0.085, 12, 10]} />
+            <meshStandardMaterial color={T.skin} {...PLASTIC} />
+          </mesh>
+        </group>
       </group>
       {/* neck + head (short cylinder head — minifig proportions) */}
       <mesh position={[0, 1.27, 0]}>
@@ -158,7 +197,7 @@ export default function ToyModel3D({ action }: { action?: string }) {
         <cylinderGeometry args={[0.26, 0.26, 0.32, 24]} />
         <meshStandardMaterial color={T.skin} {...PLASTIC} />
       </mesh>
-      {/* face: eyes + smile on the head's front */}
+      {/* face: eyes + smile (idle) / open hyped mouth (dancing) */}
       <mesh position={[-0.09, 1.5, 0.25]}>
         <sphereGeometry args={[0.028, 10, 8]} />
         <meshStandardMaterial color={T.line} roughness={0.3} />
@@ -167,9 +206,13 @@ export default function ToyModel3D({ action }: { action?: string }) {
         <sphereGeometry args={[0.028, 10, 8]} />
         <meshStandardMaterial color={T.line} roughness={0.3} />
       </mesh>
-      <mesh position={[0, 1.42, 0.255]} rotation-z={Math.PI * 1.05}>
+      <mesh ref={smileRef} position={[0, 1.42, 0.255]} rotation-z={Math.PI * 1.05}>
         <torusGeometry args={[0.075, 0.014, 8, 16, Math.PI * 0.9]} />
         <meshStandardMaterial color={T.line} roughness={0.3} />
+      </mesh>
+      <mesh ref={mouthORef} position={[0, 1.41, 0.25]} scale={[1, 1.2, 0.5]} visible={false}>
+        <sphereGeometry args={[0.035, 12, 10]} />
+        <meshStandardMaterial color="#7a3b34" roughness={0.4} />
       </mesh>
       {/* cap: dome + front brim */}
       <mesh position={[0, 1.56, 0]}>

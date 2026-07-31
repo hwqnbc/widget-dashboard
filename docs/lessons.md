@@ -193,7 +193,13 @@ before drawing a new character.
     the pivot height), and add a sleeve-coloured sphere (r ≈ 0.1) as the
     arm group's first child, centred exactly on the pivot — like the 2D
     elbow-cap circle (#27) it overlaps torso and arm regardless of
-    rotation, so no choreography can reopen the gap.
+    rotation, so no choreography can reopen the gap. And the SAME
+    wrong-pivot mistake from #27 recurred in 3D: the toy's 6-7 v1 swung
+    whole arms at the shoulder, where the 2D (and the meme) hinge the
+    FOREARM at the elbow with a static upper arm (user caught it both
+    times). The 2D pivot rules apply verbatim to 3D rigs — when the
+    reference flexes a forearm, build the hierarchy for it (shoulder group
+    for pose → elbow group for the move, each joint capped).
 
 28. **Face-forward figures chop *forward*, not sideways.** A chop that sweeps the
     blade out to the side (a rotating windmill) looks comical on a figure that faces

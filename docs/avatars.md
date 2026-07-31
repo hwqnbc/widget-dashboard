@@ -77,7 +77,10 @@ subtle sway), and the id list lives as registry metadata
 the Avatar Actions picker can render the buttons without loading three.js.
 New moves are *added* as new ids ("add action"); existing ones are improved
 in place under a stable id ("refine"). Current libraries: toy
-`[sixseven "6 7"]` (bounce + alternating arm pump) and
+`[sixseven "6 7"]` — the 2D SixSevenFigure's articulation faithfully: upper
+arms hold an elbows-out pose and the FOREARMS flex at the elbow (±38°,
+mirrored bases + one flex angle = alternating hands), no body bounce, smile
+swapped for the open hyped mouth — and
 `[sixsevenshow "6 7 Show"]` — the same dance flanked by big red "6"/"7"
 numerals built from primitives (torus + boxes, no fonts), popping in with a
 spring and bobbing in counter-phase with the arms; the flat digits are
