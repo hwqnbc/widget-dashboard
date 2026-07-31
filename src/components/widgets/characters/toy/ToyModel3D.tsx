@@ -119,7 +119,12 @@ export default function ToyModel3D({ action }: { action?: string }) {
         <meshStandardMaterial color={T.shell} {...PLASTIC} />
       </mesh>
       {/* arms: groups pivoted at the shoulder so useFrame swings them */}
-      <group ref={armLRef} position={[-0.38, 1.14, 0]}>
+      <group ref={armLRef} position={[-0.3, 1.14, 0]}>
+        {/* shoulder cap: pivot-centred, keeps the joint closed at any pose */}
+        <mesh>
+          <sphereGeometry args={[0.1, 12, 10]} />
+          <meshStandardMaterial color={T.teal} {...PLASTIC} />
+        </mesh>
         <mesh position={[0, -0.21, 0]}>
           <cylinderGeometry args={[0.075, 0.075, 0.42, 12]} />
           <meshStandardMaterial color={T.teal} {...PLASTIC} />
@@ -129,7 +134,12 @@ export default function ToyModel3D({ action }: { action?: string }) {
           <meshStandardMaterial color={T.skin} {...PLASTIC} />
         </mesh>
       </group>
-      <group ref={armRRef} position={[0.38, 1.14, 0]}>
+      <group ref={armRRef} position={[0.3, 1.14, 0]}>
+        {/* shoulder cap: pivot-centred, keeps the joint closed at any pose */}
+        <mesh>
+          <sphereGeometry args={[0.1, 12, 10]} />
+          <meshStandardMaterial color={T.teal} {...PLASTIC} />
+        </mesh>
         <mesh position={[0, -0.21, 0]}>
           <cylinderGeometry args={[0.075, 0.075, 0.42, 12]} />
           <meshStandardMaterial color={T.teal} {...PLASTIC} />

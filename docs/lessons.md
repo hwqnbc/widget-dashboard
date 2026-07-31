@@ -181,6 +181,20 @@ before drawing a new character.
     separate renders — the rest pose can be posed independently of the animation's
     endpoints.
 
+27b. **3D shoulders float unless the pivot lands on the body's actual
+    surface — and a pivot-centred cap sphere closes the joint at every
+    pose.** All three 3D models shipped with arm pivots at x ±0.38 while
+    the tapered 4-seg torso is only ~0.22 half-wide at shoulder height —
+    the arm cylinder's inner edge never touched the body and the figures
+    read as arms floating beside a torso (user-reported, the 3D analogue
+    of #24's floating heads). Two-part fix, applied uniformly: move the
+    pivots inward to the torso's top-face width (±0.30 — a taper is
+    narrower up top than the hip number suggests, so compute the width AT
+    the pivot height), and add a sleeve-coloured sphere (r ≈ 0.1) as the
+    arm group's first child, centred exactly on the pivot — like the 2D
+    elbow-cap circle (#27) it overlaps torso and arm regardless of
+    rotation, so no choreography can reopen the gap.
+
 28. **Face-forward figures chop *forward*, not sideways.** A chop that sweeps the
     blade out to the side (a rotating windmill) looks comical on a figure that faces
     the viewer. Strike **down in front** instead: tween each sword-hand between a

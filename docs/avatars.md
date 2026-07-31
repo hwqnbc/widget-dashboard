@@ -99,7 +99,11 @@ so the same character can stand in a game world:
   flared torso, hemisphere cap + box brim), sharing `toyPalette`. Faces +Z,
   feet at y=0, ~1.85 u tall. It owns only the *character's* animation via its
   own `useFrame` (mutating refs, zero React renders — the drone widgets'
-  pattern), one branch per `action` id. **It does not spin** — spinning is
+  pattern), one branch per `action` id. Shared skeleton note: the shoulder
+  pivots sit at x ±0.30 / y 1.14 — ON the tapered torso's top face (its
+  half-width is only ~0.22 up there) — and each arm group's first child is
+  a pivot-centred **shoulder cap sphere** (r 0.1, sleeve colour) so the
+  joint stays closed at every arm angle. **It does not spin** — spinning is
   presentation, and baking it in would make the model unusable in a world.
   Choreographed loops (the ninja Draw) additionally keep a start-time ref
   (reset when the `action` prop changes) so the phase timeline begins at

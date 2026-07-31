@@ -207,7 +207,7 @@ export default function NinjaModel3D({ action }: { action?: string }) {
         <meshStandardMaterial color={N.gold} {...STEEL} flatShading />
       </mesh>
       {/* right shoulder armor slab */}
-      <mesh position={[0.37, 1.23, 0]} rotation-z={-0.25}>
+      <mesh position={[0.3, 1.23, 0]} rotation-z={-0.25}>
         <boxGeometry args={[0.28, 0.07, 0.3]} />
         <meshStandardMaterial color={N.robe} {...CLOTH} />
       </mesh>
@@ -221,7 +221,12 @@ export default function NinjaModel3D({ action }: { action?: string }) {
         </group>
       </group>
       {/* arms: groups pivoted at the shoulder so useFrame swings them */}
-      <group ref={armLRef} position={[-0.38, 1.14, 0]}>
+      <group ref={armLRef} position={[-0.3, 1.14, 0]}>
+        {/* shoulder cap: pivot-centred, keeps the joint closed at any pose */}
+        <mesh>
+          <sphereGeometry args={[0.1, 12, 10]} />
+          <meshStandardMaterial color={N.robe} {...CLOTH} />
+        </mesh>
         <mesh position={[0, -0.21, 0]}>
           <cylinderGeometry args={[0.075, 0.075, 0.42, 12]} />
           <meshStandardMaterial color={N.robe} {...CLOTH} />
@@ -231,7 +236,12 @@ export default function NinjaModel3D({ action }: { action?: string }) {
           <meshStandardMaterial color={N.robeShade} {...CLOTH} />
         </mesh>
       </group>
-      <group ref={armRRef} position={[0.38, 1.14, 0]}>
+      <group ref={armRRef} position={[0.3, 1.14, 0]}>
+        {/* shoulder cap: pivot-centred, keeps the joint closed at any pose */}
+        <mesh>
+          <sphereGeometry args={[0.1, 12, 10]} />
+          <meshStandardMaterial color={N.robe} {...CLOTH} />
+        </mesh>
         <mesh position={[0, -0.21, 0]}>
           <cylinderGeometry args={[0.075, 0.075, 0.42, 12]} />
           <meshStandardMaterial color={N.robe} {...CLOTH} />

@@ -152,7 +152,12 @@ export default function FireNinjaModel3D({ action }: { action?: string }) {
         <meshStandardMaterial color={F.steel} {...STEEL} flatShading />
       </mesh>
       {/* arms: groups pivoted at the shoulder so useFrame swings them */}
-      <group ref={armLRef} position={[-0.38, 1.14, 0]}>
+      <group ref={armLRef} position={[-0.3, 1.14, 0]}>
+        {/* shoulder cap: pivot-centred, keeps the joint closed at any pose */}
+        <mesh>
+          <sphereGeometry args={[0.1, 12, 10]} />
+          <meshStandardMaterial color={F.gi} {...CLOTH} />
+        </mesh>
         <mesh position={[0, -0.21, 0]}>
           <cylinderGeometry args={[0.075, 0.075, 0.42, 12]} />
           <meshStandardMaterial color={F.gi} {...CLOTH} />
@@ -162,7 +167,12 @@ export default function FireNinjaModel3D({ action }: { action?: string }) {
           <meshStandardMaterial color={F.skin} {...CLOTH} />
         </mesh>
       </group>
-      <group ref={armRRef} position={[0.38, 1.14, 0]}>
+      <group ref={armRRef} position={[0.3, 1.14, 0]}>
+        {/* shoulder cap: pivot-centred, keeps the joint closed at any pose */}
+        <mesh>
+          <sphereGeometry args={[0.1, 12, 10]} />
+          <meshStandardMaterial color={F.gi} {...CLOTH} />
+        </mesh>
         <mesh position={[0, -0.21, 0]}>
           <cylinderGeometry args={[0.075, 0.075, 0.42, 12]} />
           <meshStandardMaterial color={F.gi} {...CLOTH} />
