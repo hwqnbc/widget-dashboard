@@ -117,7 +117,7 @@ export function defaultWidgetData(type: WidgetType): Record<string, unknown> {
     case 'imageToggle':
       return { character: 'toy' }
     case 'avatarActions':
-      return { avatar: 'toy', view: '2d' }
+      return { avatar: 'toy', view: '2d', spin3d: true }
     case 'ticTacToe':
       return {
         board: Array(9).fill(null),

@@ -30,8 +30,10 @@ export interface AvatarVisual {
   /** Optional 3D figure VIEWER (its own <Canvas> on the turntable stage).
    * Registered with lazy() so the three.js chunk loads only when a 3D view
    * is actually rendered (wrap in <Suspense>). Avatars without one show
-   * "not available" in the Avatar Actions 3D view. */
-  Figure3D?: ComponentType<{ action?: string }>
+   * "not available" in the Avatar Actions 3D view. `spinning` is the
+   * user's turntable toggle (uniform across avatars — default true; false
+   * eases the figure back to face the camera). */
+  Figure3D?: ComponentType<{ action?: string; spinning?: boolean }>
   /** Optional mesh-level 3D MODEL for reuse INSIDE an existing R3F canvas
    * (no stage, no spin — venue-neutral, faces +Z, feet at y=0). The Drone
    * Sim renders Player 1's model as the RC operator when present. Same

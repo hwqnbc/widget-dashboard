@@ -37,13 +37,17 @@ const coerceFigureView = (v: unknown): FigureView | undefined =>
  * uniform across avatars). In 3D it lists the model's named-move library —
  * the registry's `actions3d` metadata — one button per action, so avatars
  * accumulate moves over time instead of overwriting the single celebration.
- * The selection and view persist per-widget-instance; the playing action is
- * transient and resets on avatar/view switches.
+ * Tapping the 3D figure toggles the turntable (uniform across avatars: one
+ * spin rate or stopped-facing-you) — a tap is fine HERE because the feedback
+ * is immediate visible motion change, unlike the old invisible tap-to-play.
+ * The selection, view and spin preference persist per-widget-instance; the
+ * playing action is transient and resets on avatar/view switches.
  */
 export default function AvatarActionsWidget({ id }: WidgetProps) {
   const dispatch = useAppDispatch()
   const avatar = useWidgetField<AvatarId>(id, 'avatar', 'toy', coerceAvatar)
   const view = useWidgetField<FigureView>(id, 'view', '2d', coerceFigureView)
+  const spin3d = useWidgetField<boolean>(id, 'spin3d', true)
   const [action, setAction] = useState<string | null>(null)
 
   const { Head, Figure, Celebration, Figure3D, actions3d } = avatarVisualById[avatar]
@@ -66,6 +70,7 @@ export default function AvatarActionsWidget({ id }: WidgetProps) {
     setAction(null)
     dispatch(updateWidgetData({ id, data: { view: next } }))
   }
+  const toggleSpin = () => dispatch(updateWidgetData({ id, data: { spin3d: !spin3d } }))
 
   return (
     <Box
@@ -76,6 +81,7 @@ export default function AvatarActionsWidget({ id }: WidgetProps) {
       data-figure3d={Figure3D ? 'available' : 'unavailable'}
       data-playing={action ? 'yes' : 'no'}
       data-action={action ?? 'idle'}
+      data-spin={spin3d ? 'on' : 'off'}
       onMouseDown={(e) => e.stopPropagation()}
       onTouchStart={(e) => e.stopPropagation()}
       sx={{ height: '100%', display: 'flex', flexDirection: 'column', gap: 0.5, p: 0.5 }}
@@ -188,7 +194,13 @@ export default function AvatarActionsWidget({ id }: WidgetProps) {
             }}
           >
             {view === '3d' && Figure3D ? (
-              <Box data-testid="figure3d-stage" sx={{ width: '100%', height: '100%' }}>
+              <Box
+                data-testid="figure3d-stage"
+                role="button"
+                aria-label={spin3d ? 'Stop the turntable' : 'Start the turntable'}
+                onClick={toggleSpin}
+                sx={{ width: '100%', height: '100%', cursor: 'pointer' }}
+              >
                 <Suspense
                   fallback={
                     <Box sx={{ height: '100%', display: 'grid', placeItems: 'center' }}>
@@ -196,7 +208,7 @@ export default function AvatarActionsWidget({ id }: WidgetProps) {
                     </Box>
                   }
                 >
-                  <Figure3D action={action ?? undefined} />
+                  <Figure3D action={action ?? undefined} spinning={spin3d} />
                 </Suspense>
               </Box>
             ) : action ? (

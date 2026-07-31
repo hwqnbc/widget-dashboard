@@ -10,10 +10,11 @@
  * [Fire Blade]) and each action drives `data-action`/`data-playing`, an
  * avatar without a 3D figure (darkarin) shows the "not available"
  * placeholder instead of a canvas (with the action toggle disabled —
- * nothing would visibly play), switching back restores each view, and the
- * chosen view survives a reload. The 3D art itself is reviewed from
- * screenshots — the suite asserts presence + the data contract, like the
- * 2D suite (120).
+ * nothing would visibly play), tapping the 3D figure toggles the turntable
+ * (`data-spin`, one uniform rule for every avatar, persisted per widget),
+ * switching back restores each view, and the chosen view + spin preference
+ * survive a reload. The 3D art itself is reviewed from screenshots — the
+ * suite asserts presence + the data contract, like the 2D suite (120).
  */
 import { addAvatarWidget, launch, reporter } from './helpers.mjs'
 
@@ -46,6 +47,16 @@ check('toy 3d view renders a WebGL canvas', (await stageCanvas.count()) === 1)
 check('no unavailable placeholder for toy', (await unavailable.count()) === 0)
 check('switching view does not auto-play', (await attr('data-playing')) === 'no')
 
+// tapping the figure toggles the turntable (feedback = the motion itself)
+const stage3d = root.locator('[data-testid="figure3d-stage"]')
+check('turntable spins by default', (await attr('data-spin')) === 'on')
+await stage3d.click()
+await page.waitForTimeout(150)
+check('tapping the figure stops the turntable', (await attr('data-spin')) === 'off')
+await stage3d.click()
+await page.waitForTimeout(150)
+check('tapping again restarts it', (await attr('data-spin')) === 'on')
+
 // the action toggle lists the toy's move library and drives the 3D model
 check('toy 3d actions: Idle + 6 7 + 6 7 Show', (await celebration.count()) === 3)
 await celebration.nth(1).click() // '6 7'
@@ -67,6 +78,9 @@ await page.waitForTimeout(150)
 check('ninja advertises an available 3D figure', (await attr('data-figure3d')) === 'available')
 await page.waitForSelector('[data-testid="figure3d-stage"] canvas', { timeout: 20000 })
 check('ninja 3d view renders a WebGL canvas', (await stageCanvas.count()) === 1)
+await stage3d.click() // the same tap toggle on every avatar
+await page.waitForTimeout(150)
+check('spin toggle works on ninja too', (await attr('data-spin')) === 'off')
 check('ninja 3d actions: Idle + Pump + Draw', (await celebration.count()) === 3)
 await celebration.nth(2).click() // Draw
 await page.waitForTimeout(150)
@@ -107,6 +121,7 @@ await picker.nth(0).click()
 await page.waitForSelector('[data-testid="figure3d-stage"] canvas', { timeout: 20000 })
 check('canvas returns for toy', (await stageCanvas.count()) === 1)
 check('celebration toggle re-enabled for toy', !(await celebration.nth(1).isDisabled()))
+check('spin preference follows the widget across avatars', (await attr('data-spin')) === 'off')
 
 // back to 2D: the svg figure renders again
 await viewToggle.nth(0).click()
@@ -115,13 +130,15 @@ check('back to 2d', (await attr('data-view')) === '2d')
 check('2d figure svg renders', (await stage.locator('svg').count()) >= 1)
 check('leaving 3d unmounts the canvas', (await stageCanvas.count()) === 0)
 
-// persistence: the chosen view survives a reload (selection is covered by 120)
+// persistence: the chosen view + spin preference survive a reload
+// (selection is covered by 120; data-spin is still 'off' from above)
 await viewToggle.nth(1).click()
 await page.waitForSelector('[data-testid="figure3d-stage"] canvas', { timeout: 20000 })
 await page.waitForTimeout(300) // let redux-persist flush
 await page.reload({ waitUntil: 'networkidle' })
 await page.waitForSelector('[data-testid="avatar-actions"]')
 check('3d view persists across reload', (await attr('data-view')) === '3d')
+check('spin preference persists across reload', (await attr('data-spin')) === 'off')
 await page.waitForSelector('[data-testid="figure3d-stage"] canvas', { timeout: 20000 })
 check('3d canvas renders after reload', (await stageCanvas.count()) === 1)
 

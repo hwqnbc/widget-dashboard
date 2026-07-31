@@ -529,7 +529,11 @@ carried over; these are the new ones.
     — a control that would do nothing visible is the same bug again), and
     when a widget's main surface stops being a button, keep the test
     contract on data-* attributes so only the suites' *interaction* lines
-    change, not the assertions. Follow-up bite: swapping the `<button>`
+    change, not the assertions. Counter-case that shows the real rule:
+    tapping the 3D figure to toggle the TURNTABLE is fine — the feedback
+    is immediate visible motion change (direct manipulation), where
+    tap-to-play swapped between two near-identical renders. The rule is
+    "no interaction whose effect is invisible", not "no taps". Follow-up bite: swapping the `<button>`
     wrapper for a plain div silently dropped a UA default the layout was
     leaning on — `text-align: center` — and the figure's inline svg (made
     narrower than its full-width wrapper by the stage's `width:auto` rule)

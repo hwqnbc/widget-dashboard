@@ -109,12 +109,16 @@ so the same character can stand in a game world:
   transparent `<Canvas>` (camera framed on a ~1.9-unit figure), lights, a
   figurine base disc, and the **turntable** (`spin` prop, rad/s) — the stage
   owns the spin, not the model. `spin={0}` doesn't freeze mid-turn: it eases
-  the figure back to face the camera, for **directional** actions (the
-  ninja Draw sets 0 — a spinning figure hides the blade behind the body for
-  half of every turn).
+  the figure back to face the camera.
 - `characters/toy/ToyFigure3D.tsx` (registry `Figure3D`) — the thin viewer:
-  the model on `<FigureStage3D>` with a per-action spin choice.
-  This is what the Avatar Actions 3D view renders.
+  the model on `<FigureStage3D>`. This is what the Avatar Actions 3D view
+  renders. **The turntable is the user's toggle, uniform across every
+  avatar**: viewers take `spinning?: boolean` (default true) and map it to
+  the one 0.45 rad/s rate or 0 — tapping the 3D figure in Avatar Actions
+  flips it (persisted `spin3d`, root `data-spin`). A tap works here where
+  tap-to-play didn't (lesson #58): the feedback is immediate visible motion
+  change, and stopping also turns a directional move (Draw, Fire Blade)
+  face-on.
 - **Reuse in games:** the Drone Sim renders Player 1's (seat `'toy'`)
   `Model3D` as the walking RC operator when the chosen avatar has one
   (`droneSim/OperatorFigure.tsx`; primitive-figure fallback otherwise —
