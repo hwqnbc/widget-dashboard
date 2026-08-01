@@ -12,5 +12,27 @@ export default defineConfig(({ command, mode }) => ({
   define: {
     'process.env.NODE_ENV': JSON.stringify(mode),
   },
+  // Pre-bundle the deep @arcgis/core entries the Map page imports. They sit
+  // behind a lazy route chunk, so without this the first /map visit makes the
+  // dev server discover them late and force a full page reload ("new
+  // dependencies optimized") — which flakes the e2e suites mid-run.
+  optimizeDeps: {
+    include: [
+      '@arcgis/core/Map',
+      '@arcgis/core/Basemap',
+      '@arcgis/core/Graphic',
+      '@arcgis/core/views/MapView',
+      '@arcgis/core/views/SceneView',
+      '@arcgis/core/layers/GraphicsLayer',
+      '@arcgis/core/geometry/Point',
+      '@arcgis/core/geometry/Polyline',
+      '@arcgis/core/symbols/SimpleMarkerSymbol',
+      '@arcgis/core/symbols/SimpleLineSymbol',
+      '@arcgis/core/widgets/DistanceMeasurement2D',
+      '@arcgis/core/widgets/AreaMeasurement2D',
+      '@arcgis/core/widgets/DirectLineMeasurement3D',
+      '@arcgis/core/widgets/AreaMeasurement3D',
+    ],
+  },
   plugins: [react()],
 }))

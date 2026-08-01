@@ -11,6 +11,7 @@ import {
 } from 'redux-persist'
 import widgetsReducer from '../features/widgets/widgetsSlice'
 import uiReducer from '../features/ui/uiSlice'
+import mapReducer from '../features/map/mapSlice'
 
 /**
  * Self-contained localStorage engine for redux-persist.
@@ -39,13 +40,14 @@ const storage = {
 const rootReducer = combineReducers({
   widgets: widgetsReducer,
   ui: uiReducer,
+  map: mapReducer,
 })
 
 const persistConfig = {
   key: 'testsite',
   version: 1,
   storage,
-  whitelist: ['widgets', 'ui'],
+  whitelist: ['widgets', 'ui', 'map'],
 }
 
 const persistedReducer = persistReducer(persistConfig, rootReducer)

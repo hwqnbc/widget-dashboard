@@ -1,0 +1,428 @@
+/**
+ * Map page body — owns the ArcGIS map/view lifecycle, the theme-following
+ * basemap, and the tool strip (2D/3D, locate, pins, measure, route).
+ *
+ * HEAVY MODULE: @arcgis/core enters the bundle ONLY through this lazy route
+ * chunk. Never re-export anything from here in a barrel (docs/lessons.md #57).
+ *
+ * Test contract (asserted by e2e/130-map.test.mjs): the root publishes
+ * `data-map-status` (loading|ready|error, from view.when — networkidle is
+ * meaningless with tile servers), `data-basemap` (render-computed from the
+ * theme so it works offline), `data-view-mode`, `data-tool`,
+ * `data-pin-count` and `data-route-*`.
+ */
+import { useEffect, useRef, useState } from 'react'
+import {
+  Alert,
+  Box,
+  Divider,
+  IconButton,
+  Stack,
+  ToggleButton,
+  ToggleButtonGroup,
+  Tooltip,
+  useTheme,
+} from '@mui/material'
+import PushPinIcon from '@mui/icons-material/PushPin'
+import StraightenIcon from '@mui/icons-material/Straighten'
+import SquareFootIcon from '@mui/icons-material/SquareFoot'
+import RouteIcon from '@mui/icons-material/Route'
+import DeleteSweepIcon from '@mui/icons-material/DeleteSweep'
+import esriConfig from '@arcgis/core/config'
+import EsriMap from '@arcgis/core/Map'
+import Basemap from '@arcgis/core/Basemap'
+import MapView from '@arcgis/core/views/MapView'
+import SceneView from '@arcgis/core/views/SceneView'
+import GraphicsLayer from '@arcgis/core/layers/GraphicsLayer'
+import Graphic from '@arcgis/core/Graphic'
+import Point from '@arcgis/core/geometry/Point'
+import SimpleMarkerSymbol from '@arcgis/core/symbols/SimpleMarkerSymbol'
+import type Viewpoint from '@arcgis/core/Viewpoint'
+import lightCss from '@arcgis/core/assets/esri/themes/light/main.css?inline'
+import darkCss from '@arcgis/core/assets/esri/themes/dark/main.css?inline'
+import { nanoid } from '@reduxjs/toolkit'
+import { useAppDispatch, useAppSelector } from '../../app/hooks'
+import {
+  addPin,
+  clearPins,
+  removePin,
+  setViewMode,
+  type MapPin,
+  type MapViewMode,
+} from '../../features/map/mapSlice'
+import ConfirmDialog from '../../components/widgets/ConfirmDialog'
+import LocateControl from './LocateControl'
+import MeasureBinding from './MeasureControls'
+import RouteControl from './RouteControl'
+import { useOsrmRoute } from './useOsrmRoute'
+import type { LonLat, RouteProfile } from './osrm'
+
+/**
+ * Esri's legacy basemaps — free, no API key. They sunset in 2028/2029;
+ * swap here for `osm` (raster OSM) or CARTO tiles via WebTileLayer then.
+ */
+export const BASEMAP_BY_MODE = {
+  light: 'gray-vector',
+  dark: 'dark-gray-vector',
+} as const
+
+// Production keeps the 4.x default: runtime assets (workers, fonts, widget
+// locale bundles) come from the ArcGIS CDN, which sidesteps the GitHub Pages
+// base path. In dev, serve them from node_modules instead so the page works
+// on a CDN-blocked network (missing locale bundles make the view widgets
+// throw) — basemap tiles still need the network either way.
+if (import.meta.env.DEV) {
+  esriConfig.assetsPath = '/node_modules/@arcgis/core/assets'
+}
+
+export type AnyView = MapView | SceneView
+type MapStatus = 'loading' | 'ready' | 'error'
+type Tool = 'none' | 'pins' | 'measure-line' | 'measure-area' | 'route'
+
+/** ArcGIS teardown can throw when the view is in a broken state (e.g. its
+ * widget assets never loaded offline); never let that reach React. */
+function safeDestroy(target: { destroy(): void } | null | undefined) {
+  try {
+    target?.destroy()
+  } catch {
+    // already unusable — nothing to release
+  }
+}
+
+// Stable fallback: a fresh `?? []` each render would churn the pins-sync
+// effect's dependency (docs/lessons.md — stable fallbacks).
+const NO_PINS: MapPin[] = []
+
+const PIN_SYMBOL = new SimpleMarkerSymbol({
+  style: 'circle',
+  color: '#5c6bc0', // theme primary
+  size: 12,
+  outline: { color: 'white', width: 1.5 },
+})
+
+/** The ArcGIS theme CSS ships as two separate stylesheets; hold whichever
+ * matches the app theme in a single swapped <style> element. */
+function applyArcgisTheme(mode: 'light' | 'dark') {
+  let el = document.getElementById('arcgis-theme') as HTMLStyleElement | null
+  if (!el) {
+    el = document.createElement('style')
+    el.id = 'arcgis-theme'
+    document.head.appendChild(el)
+  }
+  el.textContent = mode === 'dark' ? darkCss : lightCss
+}
+
+export default function MapPageBody() {
+  const dispatch = useAppDispatch()
+  const mode = useTheme().palette.mode
+  const basemapId = BASEMAP_BY_MODE[mode]
+  const viewMode = useAppSelector((state) => state.map.viewMode) ?? '2d'
+  const pins = useAppSelector((state) => state.map.pins) ?? NO_PINS
+
+  const containerRef = useRef<HTMLDivElement>(null)
+  const mapRef = useRef<EsriMap | null>(null)
+  const pinsLayerRef = useRef<GraphicsLayer | null>(null)
+  const routeLayerRef = useRef<GraphicsLayer | null>(null)
+  const locateLayerRef = useRef<GraphicsLayer | null>(null)
+  const viewpointRef = useRef<Viewpoint | null>(null)
+  const basemapIdRef = useRef(basemapId)
+
+  // The live view stays OUT of React state/props: ArcGIS Accessor objects
+  // are getter minefields, and React 19's dev-mode render logging deep-walks
+  // changed props — reading e.g. `zoom` on a destroyed SceneView throws
+  // inside React's commit and takes the whole tree down. Children get the
+  // ref (stable identity, never diffed) plus a revision counter to re-run
+  // their effects when the view is swapped.
+  const viewRef = useRef<AnyView | null>(null)
+  const [viewRevision, setViewRevision] = useState(0)
+  const [status, setStatus] = useState<MapStatus>('loading')
+  const [tool, setTool] = useState<Tool>('none')
+  const [confirmClear, setConfirmClear] = useState(false)
+  const [routePoints, setRoutePoints] = useState<LonLat[]>([])
+  const [routeProfile, setRouteProfile] = useState<RouteProfile>('drive')
+
+  // Click dispatch reads the live tool through a ref so the view's click
+  // handler (registered once per view) never needs re-registering.
+  const toolRef = useRef(tool)
+  toolRef.current = tool
+
+  // One shared Map (basemap + graphics layers) for both view modes — pins
+  // and routes survive the 2D/3D swap because they live on the map, not the
+  // view. Ground only matters to the SceneView; world-elevation is the free
+  // legacy Esri elevation service (no API key).
+  function ensureMap(): EsriMap {
+    if (!mapRef.current) {
+      pinsLayerRef.current = new GraphicsLayer({ elevationInfo: { mode: 'on-the-ground' } })
+      routeLayerRef.current = new GraphicsLayer({ elevationInfo: { mode: 'on-the-ground' } })
+      locateLayerRef.current = new GraphicsLayer({ elevationInfo: { mode: 'on-the-ground' } })
+      mapRef.current = new EsriMap({
+        basemap: Basemap.fromId(basemapIdRef.current),
+        ground: 'world-elevation',
+        layers: [routeLayerRef.current, pinsLayerRef.current, locateLayerRef.current],
+      })
+    }
+    return mapRef.current
+  }
+
+  // Full teardown on unmount only. destroy() is idempotent, so the view
+  // effect's own cleanup destroying the view first is fine.
+  useEffect(() => {
+    return () => {
+      safeDestroy(mapRef.current) // also destroys the layers
+      mapRef.current = null
+      pinsLayerRef.current = null
+      routeLayerRef.current = null
+      locateLayerRef.current = null
+      document.getElementById('arcgis-theme')?.remove()
+    }
+  }, [])
+
+  // Create/destroy the view — once per mount per view mode. StrictMode (dev)
+  // runs mount → cleanup → mount; destroy() fully releases the first view and
+  // the second creation reuses the same container div (the supported ArcGIS
+  // pattern). On a 2D/3D toggle the viewpoint carries over via viewpointRef.
+  useEffect(() => {
+    const container = containerRef.current
+    if (!container) return
+    let disposed = false
+    setStatus('loading')
+
+    // Everything ArcGIS throws (it can, when its assets/tiles are
+    // unreachable) must stay out of React's commit phase — a stray exception
+    // here unmounts the whole app.
+    let nextView: AnyView | null = null
+    let clickHandle: { remove(): void } | null = null
+    try {
+      const map = ensureMap()
+      const carried = viewpointRef.current
+      const common = {
+        container,
+        map,
+        ...(carried ? { viewpoint: carried } : { center: [0, 20] as [number, number], zoom: 2 }),
+      }
+      nextView = viewMode === '3d' ? new SceneView(common) : new MapView(common)
+
+      nextView.when(
+        () => {
+          if (!disposed) setStatus('ready')
+        },
+        () => {
+          // Typically the basemap fetch failing (offline / blocked CDN).
+          if (!disposed) setStatus('error')
+        },
+      )
+
+      const created = nextView
+      clickHandle = (created as MapView).on('click', (event) => {
+        void handleViewClick(created, event)
+      })
+      viewRef.current = created
+      setViewRevision((r) => r + 1)
+    } catch {
+      setStatus('error')
+    }
+
+    return () => {
+      disposed = true
+      try {
+        clickHandle?.remove()
+        // Only carry the camera over from a view that actually initialised —
+        // a half-built viewpoint makes the next view's constructor throw.
+        if (nextView?.ready) {
+          viewpointRef.current = nextView.viewpoint?.clone() ?? viewpointRef.current
+        }
+      } catch {
+        // keep the previous viewpoint
+      }
+      viewRef.current = null
+      safeDestroy(nextView)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewMode])
+
+  async function handleViewClick(
+    v: AnyView,
+    event: { mapPoint: Point | null | undefined; x: number; y: number },
+  ) {
+    const activeTool = toolRef.current
+    if (activeTool === 'pins') {
+      // Clicking an existing pin removes it; empty ground adds one.
+      const hit = await v.hitTest({ x: event.x, y: event.y })
+      const pinHit = hit.results.find(
+        (r) =>
+          r.type === 'graphic' &&
+          r.layer === pinsLayerRef.current &&
+          typeof r.graphic.attributes?.pinId === 'string',
+      )
+      if (pinHit && pinHit.type === 'graphic') {
+        dispatch(removePin(pinHit.graphic.attributes.pinId as string))
+      } else if (event.mapPoint?.longitude != null && event.mapPoint.latitude != null) {
+        dispatch(
+          addPin({
+            id: nanoid(),
+            lon: event.mapPoint.longitude,
+            lat: event.mapPoint.latitude,
+          }),
+        )
+      }
+    } else if (activeTool === 'route') {
+      if (event.mapPoint?.longitude != null && event.mapPoint.latitude != null) {
+        const p: LonLat = [event.mapPoint.longitude, event.mapPoint.latitude]
+        setRoutePoints((prev) => (prev.length >= 2 ? [p] : [...prev, p]))
+      }
+    }
+  }
+
+  // Follow the app theme: swap the injected ArcGIS CSS and the basemap in
+  // place — no view re-create.
+  useEffect(() => {
+    applyArcgisTheme(mode)
+    if (basemapIdRef.current !== basemapId && mapRef.current) {
+      basemapIdRef.current = basemapId
+      mapRef.current.basemap = Basemap.fromId(basemapId)
+    }
+  }, [mode, basemapId])
+
+  // Mirror the persisted pins onto the graphics layer.
+  useEffect(() => {
+    const layer = pinsLayerRef.current
+    if (!layer) return
+    layer.removeAll()
+    layer.addMany(
+      pins.map(
+        (pin) =>
+          new Graphic({
+            geometry: new Point({ longitude: pin.lon, latitude: pin.lat }),
+            symbol: PIN_SYMBOL,
+            attributes: { pinId: pin.id },
+          }),
+      ),
+    )
+  }, [pins])
+
+  const route = useOsrmRoute(routeLayerRef, routePoints, routeProfile)
+
+  const clearRoute = () => setRoutePoints([])
+  const handleTool = (next: Tool | null) => {
+    const t = next ?? 'none'
+    setTool(t)
+    if (t !== 'route') clearRoute()
+  }
+
+  return (
+    <Box
+      data-testid="map-page"
+      data-map-status={status}
+      data-basemap={basemapId}
+      data-view-mode={viewMode}
+      data-tool={tool}
+      data-pin-count={pins.length}
+      data-route-status={route.status}
+      data-route-km={route.km ?? ''}
+      data-route-profile={routeProfile}
+      sx={{
+        // No 100%-height chain from #root: size against the viewport minus
+        // the sticky AppBar (56px at xs, 64px up) and the Container's py.
+        height: { xs: 'calc(100vh - 56px - 48px)', sm: 'calc(100vh - 64px - 48px)' },
+        minHeight: 400,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 1,
+      }}
+    >
+      <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap', alignItems: 'center' }}>
+        <ToggleButtonGroup
+          size="small"
+          exclusive
+          value={viewMode}
+          onChange={(_, v: MapViewMode | null) => {
+            if (v) dispatch(setViewMode(v))
+          }}
+          aria-label="View mode"
+        >
+          <ToggleButton value="2d" data-testid="map-mode-2d">
+            2D
+          </ToggleButton>
+          <ToggleButton value="3d" data-testid="map-mode-3d">
+            3D
+          </ToggleButton>
+        </ToggleButtonGroup>
+        <Divider orientation="vertical" flexItem />
+        <ToggleButtonGroup
+          size="small"
+          exclusive
+          value={tool}
+          onChange={(_, v: Tool | null) => handleTool(v)}
+          aria-label="Map tool"
+        >
+          <ToggleButton value="pins" data-testid="map-tool-pins" aria-label="Drop pins">
+            <Tooltip title="Drop pins (tap a pin to remove it)">
+              <PushPinIcon fontSize="small" />
+            </Tooltip>
+          </ToggleButton>
+          <ToggleButton value="measure-line" data-testid="map-tool-measure-line" aria-label="Measure distance">
+            <Tooltip title="Measure distance">
+              <StraightenIcon fontSize="small" />
+            </Tooltip>
+          </ToggleButton>
+          <ToggleButton value="measure-area" data-testid="map-tool-measure-area" aria-label="Measure area">
+            <Tooltip title="Measure area">
+              <SquareFootIcon fontSize="small" />
+            </Tooltip>
+          </ToggleButton>
+          <ToggleButton value="route" data-testid="map-tool-route" aria-label="Route distance">
+            <Tooltip title="Route distance (walk / bike / drive)">
+              <RouteIcon fontSize="small" />
+            </Tooltip>
+          </ToggleButton>
+        </ToggleButtonGroup>
+        <LocateControl viewRef={viewRef} viewRevision={viewRevision} layerRef={locateLayerRef} />
+        {tool === 'pins' && pins.length > 0 && (
+          <Tooltip title="Remove all pins">
+            <IconButton
+              size="small"
+              data-testid="map-pins-clear"
+              onClick={() => setConfirmClear(true)}
+            >
+              <DeleteSweepIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        )}
+        {tool === 'route' && (
+          <RouteControl
+            profile={routeProfile}
+            onProfileChange={setRouteProfile}
+            pointCount={routePoints.length}
+            state={route}
+            onClear={clearRoute}
+          />
+        )}
+      </Stack>
+      <Box sx={{ position: 'relative', flexGrow: 1, borderRadius: 1, overflow: 'hidden' }}>
+        <Box ref={containerRef} data-testid="map-container" sx={{ width: '100%', height: '100%' }} />
+        {status === 'error' && (
+          <Alert
+            severity="warning"
+            sx={{ position: 'absolute', top: 8, left: 8, right: 8, zIndex: 1 }}
+          >
+            Basemap unreachable — check the network connection. Tools that need
+            tiles won&apos;t work until it recovers.
+          </Alert>
+        )}
+      </Box>
+      <MeasureBinding viewRef={viewRef} viewRevision={viewRevision} tool={tool} />
+      <ConfirmDialog
+        open={confirmClear}
+        title="Remove all pins?"
+        message={`This removes all ${pins.length} dropped pins from the map.`}
+        confirmLabel="Remove all"
+        cancelLabel="Keep pins"
+        onConfirm={() => {
+          dispatch(clearPins())
+          setConfirmClear(false)
+        }}
+        onCancel={() => setConfirmClear(false)}
+      />
+    </Box>
+  )
+}

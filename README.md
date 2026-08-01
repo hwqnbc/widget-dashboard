@@ -12,7 +12,8 @@ and **resizable** on a responsive grid. Layout and widget state persist to
 - **MUI** (Material UI) for components + theming
 - **Redux Toolkit** + **react-redux** for state
 - **redux-persist** → localStorage for persistence
-- **react-router-dom** for routing (Dashboard + Settings)
+- **react-router-dom** for routing (Dashboard + Map + Settings)
+- **@arcgis/core** for the Map page (lazy chunk, free no-key basemaps)
 - **react-grid-layout** for the drag/resize grid
 - **ESLint 9** (flat config)
 

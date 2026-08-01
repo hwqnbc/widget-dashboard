@@ -794,3 +794,37 @@ carried over; these are the new ones.
     tracks intent (and the suite still passes) on a browser with no Web Audio.
     (Sibling to #55 — that one shapes the engine's API for the stub; this one
     shapes the widget's data-* so the *dispatch* is assertable at all.)
+
+## Maps (ArcGIS)
+
+67. **Never let an ArcGIS `Accessor` (a view, a layer) into React state or
+    props.** React 19's dev-mode render instrumentation
+    (`logComponentRender` → `addObjectDiffToProperties`) deep-walks every
+    *changed* prop object — including its getters. An ArcGIS `SceneView`
+    held in `useState` and passed as a prop meant that after a 3D→2D toggle
+    destroyed it, React's next commit read the dead view's `zoom` getter,
+    which threw **inside `commitPassiveMountOnFiber`** and corrupted the
+    scheduler ("Should not already be working") — every later click dead,
+    app gone, and only in dev. Fix: keep the view in a `useRef` and hand
+    children the **ref + a `viewRevision` number** (refs are identity-stable
+    so the dev diff never walks them; the primitive revision re-runs their
+    effects on view swap). Corollary: wrap every ArcGIS construct/teardown in
+    try/catch (`safeDestroy`) — with its asset/tile CDN unreachable, ArcGIS
+    constructors and `destroy()` genuinely throw, and an exception escaping
+    an effect cleanup unmounts the entire tree.
+
+68. **A renderer that needs third-party servers gets a three-layer e2e
+    contract: readiness as data, theme as render-computed state, external
+    APIs mocked.** The Map page can't assert on tiles (the ArcGIS CDN may be
+    blocked — it *is* blocked in this sandbox). What keeps the suite green
+    everywhere: (a) readiness is `view.when()` mirrored to
+    `data-map-status` — never `networkidle`, which tile servers keep alive
+    forever; (b) the theme contract (`data-basemap`) is computed from the
+    MUI mode in render, not read back from the map, so theme-follow asserts
+    with zero network; (c) the reachability probe runs **in the page**
+    (`page.evaluate(fetch)`) because node-side fetch doesn't share the
+    browser's proxy path, and picks the online/offline branch; (d) the
+    external API (OSRM routing) is always `page.route()`-mocked so its
+    checks are deterministic; (e) dev serves the ArcGIS runtime assets from
+    `node_modules` (`esriConfig.assetsPath`, DEV-gated) so widget locale
+    bundles don't 404 into crashes offline while prod keeps the CDN default.

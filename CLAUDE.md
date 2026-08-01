@@ -91,6 +91,9 @@ the next round from — never leave a new game without one.
   (`Responsive`, `WidthProvider`). The v2 main entry dropped the `WidthProvider`
   HOC. The `Layout` type is the layout **array** (readonly), `LayoutItem` is a
   single item.
+- @arcgis/core **~4.34, pinned** (Map page only, behind its lazy route chunk —
+  npm `latest` is the 5.x major, don't cross it casually). ArcGIS objects must
+  never enter React state/props (lessons.md #67); see `docs/map.md`.
 
 ## Architecture
 
@@ -108,7 +111,9 @@ src/
   components/fullscreen/  FullscreenProvider (transient fullscreen id) +
                       FullscreenView overlay; presentation context (usePresentation)
   hooks/useViewport   live viewport size + orientation (portrait/landscape)
-  pages/              DashboardPage, SettingsPage
+  features/map/       mapSlice (Map page: 2D/3D choice + dropped pins)
+  pages/              DashboardPage, SettingsPage, MapPage (+ pages/map/ —
+                      the @arcgis/core lazy chunk; see docs/map.md)
 ```
 
 Provider order (`main.tsx`): `Provider` → `PersistGate` → `AppThemeProvider`
@@ -223,6 +228,11 @@ right stick orbits the camera with the turret chasing it, auto-turn hull
 assist (default on), automatic gun elevation via a ballistic solver,
 Waves/Roam mode toggle, patrol/engage/attack enemy tank AI with terrain
 line of sight).
+See `docs/map.md` for the Map page (the first page-level heavy feature —
+@arcgis/core lazy route chunk, free no-key `gray-vector`/`dark-gray-vector`
+basemaps following the theme toggle, 2D map / 3D globe switch, locate/pins/
+measure/OSRM-route tools, the ArcGIS-out-of-React rule, and the
+offline-tolerant e2e contract).
 See `docs/avatars.md` for the avatar system (seat-vs-avatar model, the per-avatar
 character folders, the catalog/registry split, the Settings picker, and how to add
 a new figure). See `docs/fullscreen.md` for full-screen mode (the WidgetCard

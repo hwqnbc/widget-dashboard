@@ -11,6 +11,7 @@
     "e2e": "node e2e/run.mjs"
   },
   "dependencies": {
+    "@arcgis/core": "~4.34.8",
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.0",
     "@mui/icons-material": "^9.2.0",
