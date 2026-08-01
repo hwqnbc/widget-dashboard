@@ -81,11 +81,13 @@ export default function SettingsPage() {
                 <Typography variant="body2" sx={{ fontWeight: 600, minWidth: 72 }}>
                   {SEAT_LABEL[seat]}
                 </Typography>
+                {/* wrap: six head+name buttons never fit a phone row (#51) */}
                 <ToggleButtonGroup
                   size="small"
                   exclusive
                   value={seatAvatars[seat]}
                   onChange={(_, v) => choose(seat, v as AvatarId | null)}
+                  sx={{ flexWrap: 'wrap' }}
                 >
                   {AVATAR_CATALOG.map((a) => {
                     const Head = avatarVisualById[a.id].Head

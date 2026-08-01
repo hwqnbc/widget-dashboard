@@ -238,7 +238,10 @@ card-face `MOTIF_BY_ID` deliberately stays independent — those heads are card
 ## Settings picker
 `pages/SettingsPage.tsx` adds an **Avatars** card: one `ToggleButtonGroup` per seat
 ("Player 1" = seat `toy`, "Player 2" = seat `ninja`), each option showing the avatar's
-head preview + name, dispatching `setSeatAvatar`. To keep the two players visually
+head preview + name, dispatching `setSeatAvatar`. The groups **wrap**
+(`flexWrap`, lesson #51) — six head+name buttons never fit a phone row — and
+the app bar collapses its brand text + nav labels to icons at `xs`; suite
+`122-settings-mobile` pins both on a portrait-phone viewport. To keep the two players visually
 distinct, choosing an avatar already held by the other seat **swaps** them (the other
 seat inherits this seat's previous avatar) instead of allowing a duplicate — with only
 two avatars today that's a swap, and it generalises as figures are added.

@@ -30,10 +30,11 @@ export default function AppLayout() {
       <AppBar position="sticky" elevation={1}>
         <Toolbar>
           <WidgetsIcon sx={{ mr: 1 }} />
-          <Typography variant="h6" component="div" sx={{ fontWeight: 700 }}>
+          {/* brand text + nav labels collapse at xs — the full row overflows a phone */}
+          <Typography variant="h6" component="div" sx={{ fontWeight: 700, display: { xs: 'none', sm: 'block' } }}>
             TestSite
           </Typography>
-          <Box sx={{ display: 'flex', gap: 1, ml: 4, flexGrow: 1 }}>
+          <Box sx={{ display: 'flex', gap: 1, ml: { xs: 0.5, sm: 4 }, flexGrow: 1 }}>
             {NAV_ITEMS.map((item) => (
               <Button
                 key={item.to}
@@ -42,9 +43,16 @@ export default function AppLayout() {
                 end={item.to === '/'}
                 startIcon={item.icon}
                 color="inherit"
-                sx={{ '&.active': { bgcolor: 'rgba(255,255,255,0.16)' } }}
+                aria-label={item.label}
+                sx={{
+                  minWidth: 0,
+                  '&.active': { bgcolor: 'rgba(255,255,255,0.16)' },
+                  '& .MuiButton-startIcon': { mr: { xs: 0, sm: 1 }, ml: { xs: 0, sm: -0.5 } },
+                }}
               >
-                {item.label}
+                <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>
+                  {item.label}
+                </Box>
               </Button>
             ))}
           </Box>

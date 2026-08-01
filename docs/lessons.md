@@ -528,6 +528,14 @@ carried over; these are the new ones.
     on the group stacks the buttons onto more rows instead; the fix generalises
     as figures are added. Lesson: any button row whose item count grows with
     the roster must wrap (or scroll) — assume it won't fit the smallest card.
+    RECURRED (roster at six): the Settings page's two seat pickers had the
+    identical non-wrapping groups and overflowed a phone — when a roster
+    row is fixed in one place, sweep every other roster-sized button row.
+    And assert at PAGE level too (`document.documentElement.scrollWidth <=
+    window.innerWidth`): the element-level box checks passed while the
+    app-bar's brand text + nav labels still overflowed the same viewport —
+    the page assertion is what caught the second offender (fixed by
+    collapsing chrome to icons at `xs`; suite 122).
 
 52. **A pure-SVG widget still gets an e2e suite — assert on a root data-*
     contract, not pixels.** Avatar Actions has no canvas and no telemetry
