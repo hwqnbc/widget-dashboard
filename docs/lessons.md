@@ -657,6 +657,24 @@ carried over; these are the new ones.
     angles the whole plane just enough to read from the front without
     breaking the forward chop (#28).
 
+64. **Orient the EDGE into the swing — a flat blade's wide face goes
+    PERPENDICULAR to the swing plane.** The primitive swords were built
+    as boxes wide in local x and thin in z; held as forearm extensions,
+    that puts the broad flat facing the direction of every sagittal chop
+    — slapping the air with the flat of the blade, which is not how a
+    saber/knife cuts (user-reported on frak's sabers, and the same
+    mistake sat unnoticed in the ninja katana and darkarin ice swords).
+    The fix is one roll about the blade's own long axis on the held
+    group: `rotation-y = π/2` alongside the existing `rotation-z = π`
+    (Euler XYZ — the useFrame wrist writes touch only `.x`/`.z`, so the
+    JSX `.y` persists). Check it from two angles: side-on the blade now
+    shows its broad face, face-on it thins to an edge line. Bonus from
+    the frak sabers: once a curved blade bows FORWARD (in each arm's
+    sagittal plane), the left/right pair is mirror-symmetric by
+    construction — the earlier `rotation-y = π` mirror flip becomes
+    unnecessary. Weapon-shape checklist alongside #27b/#63's grip rules:
+    grip (extension vs pistol), edge orientation, curve direction.
+
 ## Responsive touch layout (Drone Strike → Tank Battle)
 
 53. **"Fullscreen" is not "big" — size touch controls from the container's

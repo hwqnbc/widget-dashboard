@@ -246,8 +246,9 @@ export default function DarkArinModel3D({ action }: { action?: string }) {
             <sphereGeometry args={[0.085, 12, 10]} />
             <meshStandardMaterial color={D.giShade} {...CLOTH} />
           </mesh>
-          {/* the sword in hand; rides the FOREARM as its obtuse extension */}
-          <group ref={heldLRef} position={[0, -0.26, 0]} rotation-z={Math.PI}>
+          {/* the sword in hand; rides the FOREARM as its obtuse extension,
+           * rolled 90° so the cutting edge leads the sweep (#64) */}
+          <group ref={heldLRef} position={[0, -0.26, 0]} rotation-z={Math.PI} rotation-y={Math.PI / 2}>
             <IceSword />
           </group>
         </group>
@@ -274,7 +275,7 @@ export default function DarkArinModel3D({ action }: { action?: string }) {
             <sphereGeometry args={[0.085, 12, 10]} />
             <meshStandardMaterial color={D.giShade} {...CLOTH} />
           </mesh>
-          <group ref={heldRRef} position={[0, -0.26, 0]} rotation-z={Math.PI}>
+          <group ref={heldRRef} position={[0, -0.26, 0]} rotation-z={Math.PI} rotation-y={Math.PI / 2}>
             <IceSword />
           </group>
         </group>

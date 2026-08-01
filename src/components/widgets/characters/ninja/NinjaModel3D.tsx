@@ -287,8 +287,10 @@ export default function NinjaModel3D({ action }: { action?: string }) {
             <sphereGeometry args={[0.085, 12, 10]} />
             <meshStandardMaterial color={N.robeShade} {...CLOTH} />
           </mesh>
-          {/* the katana in hand; rides the FOREARM as its obtuse extension */}
-          <group ref={heldRef} position={[0, -0.26, 0]} rotation-z={Math.PI} visible={false}>
+          {/* the katana in hand; rides the FOREARM as its obtuse extension,
+           * rolled 90° (rotation-y — never touched by useFrame) so the
+           * cutting edge leads the guard flourish (#64) */}
+          <group ref={heldRef} position={[0, -0.26, 0]} rotation-z={Math.PI} rotation-y={Math.PI / 2} visible={false}>
             <Katana />
           </group>
         </group>

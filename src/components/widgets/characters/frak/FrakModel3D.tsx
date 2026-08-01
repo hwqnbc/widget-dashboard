@@ -53,7 +53,9 @@ const RAISE_IN = 0.35 // blend from the idle guard into the loop at action start
  * ~0.7 long — a broad flat blade whose upper third sweeps back toward +x
  * (the curve), a bright goldHi stripe on the +x cutting edge, and a
  * knuckle bow arcing from the crossguard to the pommel on the edge side.
- * The left hand's copy is turned rotation-y=π so the two curves mirror. */
+ * The held groups roll it rotation-y=π/2 so the EDGE leads the sagittal
+ * chop and the flat faces sideways — a slice, not a flat slap (#64);
+ * with the curve bowing forward the two hands mirror by construction. */
 function GoldSaber() {
   return (
     <group>
@@ -261,9 +263,9 @@ export default function FrakModel3D({ action }: { action?: string }) {
             <sphereGeometry args={[0.085, 12, 10]} />
             <meshStandardMaterial color={FR.glove} {...CLOTH} />
           </mesh>
-          {/* the saber in hand; rides the FOREARM as its obtuse extension.
-           * rotation-y=π mirrors the curve so the pair reads symmetric. */}
-          <group ref={heldLRef} position={[0, -0.26, 0]} rotation-z={Math.PI} rotation-y={Math.PI}>
+          {/* the saber in hand; rides the FOREARM as its obtuse extension,
+           * rolled 90° so the cutting edge leads the chop */}
+          <group ref={heldLRef} position={[0, -0.26, 0]} rotation-z={Math.PI} rotation-y={Math.PI / 2}>
             <GoldSaber />
           </group>
         </group>
@@ -290,7 +292,7 @@ export default function FrakModel3D({ action }: { action?: string }) {
             <sphereGeometry args={[0.085, 12, 10]} />
             <meshStandardMaterial color={FR.glove} {...CLOTH} />
           </mesh>
-          <group ref={heldRRef} position={[0, -0.26, 0]} rotation-z={Math.PI}>
+          <group ref={heldRRef} position={[0, -0.26, 0]} rotation-z={Math.PI} rotation-y={Math.PI / 2}>
             <GoldSaber />
           </group>
         </group>

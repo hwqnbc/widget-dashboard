@@ -138,7 +138,10 @@ so the same character can stand in a game world:
   every pose. Held weapons attach INSIDE the elbow group at the hand and
   ride as the forearm's obtuse extension (`wrist.rotation.z = π` + a fixed
   slight up-tilt) — never counter-rotated to a world-space angle, which
-  folds them acute against the arm. **It does not spin** — spinning is
+  folds them acute against the arm — and flat blades are additionally
+  rolled `rotation-y = π/2` so the cutting EDGE leads the sagittal swing
+  and the broad face points sideways (a slice, not a flat slap; lesson
+  #64). **It does not spin** — spinning is
   presentation, and baking it in would make the model unusable in a world.
   Choreographed loops (the ninja Draw) additionally keep a start-time ref
   (reset when the `action` prop changes) so the phase timeline begins at
