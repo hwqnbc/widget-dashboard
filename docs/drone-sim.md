@@ -597,10 +597,22 @@ from the enhancement menu, with the integration point each would build on.
 
 ### Camera & visuals
 - **Rain streaks** — upgrade `RainField` points to short line segments.
-- **Operator celebration** — the operator's avatar `Model3D` already takes
-  an `action` id (the registry's `actions3d` library); pass one for a few
-  seconds on a new best lap (the lap-complete event in `DroneSimBody` is the
-  hook) so your figure celebrates the record.
+- **Operator celebration on a best lap** — when a lap beats the record,
+  the RC operator plays their avatar's signature 3D action for a few
+  seconds (toy → Dance, ninja → Draw, imperium → Claw Slash, …), then
+  returns to idle. Now cheap to build: ALL six avatars ship a `Model3D`
+  whose `action` prop selects from the registry `actions3d` library, so
+  the celebration is *choosing an id*, not building animation. Wiring:
+  (a) `droneSim/OperatorFigure.tsx` renders `<Model />` with no `action`
+  yet — thread an `action?: string` prop through it and through
+  `DroneSimBody`'s `<OperatorFigure model={...}>` call; (b) trigger on
+  the best-lap branch of the lap-complete logic in `DroneSimBody`, hold
+  the id ~4 s via a cleaned-up timeout (lesson #13), then clear back to
+  `undefined` (idle); (c) default id = the avatar's first library entry
+  (`avatarVisualById[opAvatarId].actions3d?.[0]?.id`) — no per-avatar
+  table; (d) publish `data-op-action` (`idle`/playing id) beside
+  `data-op-avatar` so an e2e can fly a record lap closed-loop (the gate
+  pilot pattern) and assert the celebration fires and self-clears.
 - ~~**More avatar operators**~~ — shipped: every avatar that gains a
   `Model3D` in the registry becomes a Drone Sim operator automatically,
   and ALL six avatars now carry one; the primitive `BasicOperator`
