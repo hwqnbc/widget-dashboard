@@ -40,7 +40,7 @@ shared/FigureStage3D.tsx              R3F turntable stage for the 3D figures (la
 toy/       ToyHead, ToyFigure, SixSevenFigure, ToyCelebration, ToyFigure3D, toyParts, toyPalette, index
 ninja/     NinjaHead, SwordNinjaFigure, NinjaFigure, NinjaCelebration, ninjaPalette, index
 fireninja/ FireNinjaHead, FireBladeFigure, FireNinjaFigure, FireNinjaCelebration, fireNinjaPalette, index
-darkarin/  DarkArinHead, TwinSwordFigure, DarkArinFigure, DarkArinCelebration, darkArinPalette, index
+darkarin/  DarkArinHead, TwinSwordFigure, DarkArinFigure, DarkArinCelebration, DarkArinFigure3D, DarkArinModel3D, darkArinPalette, index
 frak/      FrakHead, FrakFigure, FrakCelebration, frakPalette, index
 imperium/  ImperiumHead, ClawFigure, ImperiumFigure, ImperiumCelebration, imperiumPalette, index
 boy/       Boy.tsx                    (an ImageToggle figure, not a game avatar)
@@ -98,7 +98,14 @@ flourish, re-sheathe, loop (~3.2 s phase timeline); fireninja
 hilt (overshoot scale-up from the start-time ref) as the forward forearm's
 obtuse extension pointing ~45° up, then the shoulder sweeps FORWARD
 (rotation.x, sagittal plane) so the blade slashes up-and-down in front,
-flame flickering via scale noise + emissive pulse.
+flame flickering via scale noise + emissive pulse; darkarin
+`[cross "Twin Cross"]` — the 2D celebration's defensive X in 3D: from the
+ready V (both ice blades up-and-out) BOTH arms sweep down-forward-inward
+and the blades land crossed in front of the chest, hold, then open back
+out (2.6 s loop matching the 2D's 0.7 s tween + hold). Both arms mirror
+one scalar set; the inward/outward aim lives in the shoulder's **y yaw** —
+it re-planes the elbow's bend so the forearms (and the blades riding them
+as obtuse extensions) cross the midline instead of staying parallel.
 
 The render is split into a venue-neutral **model** and a viewer **figure**,
 so the same character can stand in a game world:
@@ -176,8 +183,11 @@ toggle grows the button automatically. Ids are stable so future rounds can
 Shipped so far: toy, ninja (`NinjaModel3D` — hooded faceted head + mask,
 gold obi/medallion, crossed back katanas; actions Pump + Draw), fireninja
 (`FireNinjaModel3D` — spiky hair, crossed sashes + silver emblem, gripped
-hilt with the emissive fire blade; action Fire Blade). Still missing 3D
-figures: darkarin, frak, imperium.
+hilt with the emissive fire blade; action Fire Blade), darkarin
+(`DarkArinModel3D` — faceted chin-pointed mask, gold crown band +
+spike/studs/temple fins, gunmetal pauldrons + gorget, magenta dragon
+emblem, black obi + shin wraps, two permanently-held translucent ice
+blades; action Twin Cross). Still missing 3D figures: frak, imperium.
 
 ## Reading a seat's look
 `features/avatars/useSeatAvatars.ts`:

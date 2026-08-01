@@ -615,6 +615,21 @@ carried over; these are the new ones.
     at the 2D reference's height (the lower third) — at hand height they
     collide with the dancing arms.
 
+61. **An elbow hinge only bends in one plane — aim that plane with the
+    SHOULDER'S y yaw, and a two-armed move becomes one mirrored scalar
+    set.** DarkArin's Twin Cross needs both forearms (and the blades riding
+    them as obtuse extensions, #27b) to cross the body's midline — but an
+    elbow's `rotation.x` swings the forearm strictly forward in the arm's
+    own sagittal plane, so two bent arms stay parallel forever. The lever
+    is the shoulder group's `rotation.y`: it re-planes the elbow's hinge,
+    so yawed OUTWARD the same bend sends the blades up-and-out (the ready
+    V) and yawed INWARD it sends them across the midline into the X — the
+    entire cross/uncross is then one lerp over a single right-arm scalar
+    set `{shZ, shY, shX, elbow}` with the left arm applying `-shZ`/`-shY`.
+    Corollary for pose height: the crossing point tracks the ELBOW bend
+    (deeper = the X climbs to the face, shallower = it sits at the chest),
+    so tune elevation there, not by moving the shoulders.
+
 ## Responsive touch layout (Drone Strike → Tank Battle)
 
 53. **"Fullscreen" is not "big" — size touch controls from the container's

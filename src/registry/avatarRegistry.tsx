@@ -54,6 +54,8 @@ const NinjaFigure3D = lazy(() => import('../components/widgets/characters/ninja/
 const NinjaModel3D = lazy(() => import('../components/widgets/characters/ninja/NinjaModel3D'))
 const FireNinjaFigure3D = lazy(() => import('../components/widgets/characters/fireninja/FireNinjaFigure3D'))
 const FireNinjaModel3D = lazy(() => import('../components/widgets/characters/fireninja/FireNinjaModel3D'))
+const DarkArinFigure3D = lazy(() => import('../components/widgets/characters/darkarin/DarkArinFigure3D'))
+const DarkArinModel3D = lazy(() => import('../components/widgets/characters/darkarin/DarkArinModel3D'))
 
 export const avatarVisualById: Record<AvatarId, AvatarVisual> = {
   toy: {
@@ -86,7 +88,14 @@ export const avatarVisualById: Record<AvatarId, AvatarVisual> = {
     Model3D: FireNinjaModel3D,
     actions3d: [{ id: 'blaze', name: 'Fire Blade' }],
   },
-  darkarin: { Head: DarkArinHead, Figure: DarkArinFigure, Celebration: DarkArinCelebration },
+  darkarin: {
+    Head: DarkArinHead,
+    Figure: DarkArinFigure,
+    Celebration: DarkArinCelebration,
+    Figure3D: DarkArinFigure3D,
+    Model3D: DarkArinModel3D,
+    actions3d: [{ id: 'cross', name: 'Twin Cross' }],
+  },
   frak: { Head: FrakHead, Figure: FrakFigure, Celebration: FrakCelebration },
   imperium: { Head: ImperiumHead, Figure: ImperiumFigure, Celebration: ImperiumCelebration },
 }
