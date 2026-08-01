@@ -24,6 +24,13 @@ import {
   nearestOnPath,
   pathDistanceThresholdMeters,
 } from './.bundle/routeGeometry.js'
+import {
+  armDrag,
+  createDragState,
+  dragPointerDown,
+  dragPointerUp,
+  dragStep,
+} from './.bundle/dragModel.js'
 
 const { check, finish } = reporter('map')
 const { browser, page } = await launch()
@@ -87,6 +94,49 @@ await page.route('**/routing.openstreetmap.de/**', (route) => {
     Math.abs(t2 / t1 - 2) < 1e-9 && t1 > 0,
     `t1=${t1.toFixed(0)}m`,
   )
+
+  // Drag state machine — the pointer-up vs drag-end ordering rules.
+  // Regression for the shipped bug: pointer-up outracing drag end ate the
+  // commit, so a moved waypoint never re-routed.
+  {
+    const s = createDragState()
+    armDrag(s, 1)
+    dragStep(s, 'start', [10, 20])
+    dragStep(s, 'update', [11, 21])
+    dragPointerUp(s) // arrives BEFORE the drag end event
+    const commit = dragStep(s, 'end', null) // and toMap failed at release
+    check(
+      'drag commits when pointer-up outraces drag end',
+      commit != null && commit.index === 1 && commit.pos[0] === 11 && commit.pos[1] === 21,
+      JSON.stringify(commit),
+    )
+  }
+  {
+    const s = createDragState()
+    armDrag(s, 0)
+    dragStep(s, 'start', [1, 2])
+    const commit = dragStep(s, 'end', [3, 4])
+    check(
+      'drag end commits at the release position',
+      commit != null && commit.index === 0 && commit.pos[0] === 3,
+      JSON.stringify(commit),
+    )
+    check('drag state fully disarmed after commit', s.index === null && !s.active)
+  }
+  {
+    const s = createDragState()
+    armDrag(s, 2) // plain click: armed, but no drag steps ever fire
+    dragPointerUp(s)
+    check('click without drag disarms on pointer-up', s.index === null)
+    check('no phantom commit after a click', dragStep(s, 'end', [5, 6]) === null)
+  }
+  {
+    const s = createDragState()
+    armDrag(s, 3)
+    dragStep(s, 'update', [7, 8])
+    dragPointerDown(s) // next gesture begins before any end arrived
+    check('pointer-down clears a lost gesture', s.index === null && !s.active && s.pos === null)
+  }
 }
 
 // ---- dashboard first: the arcgis chunk must NOT load with the app shell ----

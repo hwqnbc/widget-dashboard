@@ -118,7 +118,10 @@ on it works without a backend server or API key.
   `pointer-down` hitTest pre-arms the drag (hitTest is async, but the drag
   event's `stopPropagation` — which stops the map panning — must be called
   synchronously), `drag` moves the marker graphics live via `view.toMap`,
-  and release commits one re-route. An **Undo** button unwinds
+  and the drag **end step commits** one re-route — the event-ordering rules
+  (pointer-up can outrace drag end; toMap can be null at release) live in
+  the pure `dragModel.ts` state machine, unit-tested offline by the e2e
+  bundle (lessons.md #71). An **Undo** button unwinds
   add/remove/insert/move/clear through a history stack (capped at 20).
   **Saved routes**: the bookmark-add button names and saves the current
   waypoints + profile to the persisted `map` slice (`SavedRoute[]`); the

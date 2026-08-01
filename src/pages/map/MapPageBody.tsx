@@ -65,6 +65,7 @@ import MeasureBinding from './MeasureControls'
 import RouteControl from './RouteControl'
 import { useOsrmRoute } from './useOsrmRoute'
 import { insertIndexFor, nearestOnPath, pathDistanceThresholdMeters } from './routeGeometry'
+import { armDrag, createDragState, dragPointerDown, dragPointerUp, dragStep } from './dragModel'
 import type { LonLat, RouteProfile } from './osrm'
 
 /**
@@ -234,10 +235,12 @@ export default function MapPageBody() {
   const clearRoute = () => updateRoute((points) => (points.length ? [] : points))
 
   // Drag-to-move waypoints. hitTest is async but drag's stopPropagation
-  // must be synchronous, so pointer-down pre-arms the index and the drag
-  // handler only consults the ref. Live movement mutates the two marker
-  // graphics; the commit (one OSRM re-fetch, undoable) happens on release.
-  const dragIndexRef = useRef<number | null>(null)
+  // must be synchronous, so pointer-down pre-arms the state and the drag
+  // handler only consults it. Live movement mutates the two marker
+  // graphics; the commit (one OSRM re-fetch, undoable) happens on the drag
+  // END step — event ordering rules live in dragModel.ts (pure, unit-tested
+  // by the e2e bundle; see lessons.md #71).
+  const dragRef = useRef(createDragState())
   const moveWaypointGraphics = (index: number, p: LonLat) => {
     const layer = routeLayerRef.current
     if (!layer) return
@@ -386,6 +389,7 @@ export default function MapPageBody() {
       // disarms, drag moves the marker live and commits on release.
       handles.push(
         (created as MapView).on('pointer-down', (event) => {
+          dragPointerDown(dragRef.current) // never leak a lost gesture's arm
           if (toolRef.current !== 'route') return
           void created
             .hitTest({ x: event.x, y: event.y })
@@ -396,34 +400,37 @@ export default function MapPageBody() {
                   r.layer === routeLayerRef.current &&
                   typeof r.graphic.attributes?.waypointIndex === 'number',
               )
-              dragIndexRef.current =
+              armDrag(
+                dragRef.current,
                 wp && wp.type === 'graphic'
                   ? (wp.graphic.attributes.waypointIndex as number)
-                  : null
+                  : null,
+              )
             })
-            .catch(() => {
-              dragIndexRef.current = null
-            })
+            .catch(() => armDrag(dragRef.current, null))
         }),
       )
       handles.push(
         (created as MapView).on('pointer-up', () => {
-          dragIndexRef.current = null
+          // Disarms clicks only — an active drag's commit belongs to the
+          // drag END step, and pointer-up can arrive BEFORE it.
+          dragPointerUp(dragRef.current)
         }),
       )
       handles.push(
         (created as MapView).on('drag', (event) => {
-          const index = dragIndexRef.current
-          if (index == null || toolRef.current !== 'route') return
+          if (dragRef.current.index == null || toolRef.current !== 'route') return
           event.stopPropagation() // the waypoint moves, not the map
           const mp = created.toMap({ x: event.x, y: event.y })
-          if (mp?.longitude == null || mp.latitude == null) return
-          const p: LonLat = [mp.longitude, mp.latitude]
-          if (event.action === 'end') {
-            dragIndexRef.current = null
-            updateRoute((points) => points.map((pt, i) => (i === index ? p : pt)))
-          } else {
-            moveWaypointGraphics(index, p)
+          const p: LonLat | null =
+            mp?.longitude != null && mp.latitude != null ? [mp.longitude, mp.latitude] : null
+          const commit = dragStep(dragRef.current, event.action, p)
+          if (commit) {
+            updateRoute((points) =>
+              points.map((pt, i) => (i === commit.index ? commit.pos : pt)),
+            )
+          } else if (p && dragRef.current.index != null) {
+            moveWaypointGraphics(dragRef.current.index, p)
           }
         }),
       )

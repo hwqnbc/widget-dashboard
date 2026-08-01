@@ -859,3 +859,22 @@ carried over; these are the new ones.
     graphic. The race (drag starting before the hitTest resolves) loses only
     the first few pixels of movement — invisible in practice. Works
     identically for MapView and SceneView and for touch.
+
+71. **Commit gesture results in the gesture's OWN end event — a parallel
+    listener's "cleanup" can outrace it.** Follow-up to #70's drag pattern:
+    the first ship cleared the armed waypoint index in `pointer-up`
+    (needed so a plain click doesn't leave a drag armed), but ArcGIS can
+    deliver `pointer-up` BEFORE the synthesized drag `end` — when it did,
+    the end handler found nothing armed and the moved waypoint silently
+    never re-routed (user-reported: marker moves, route doesn't redraw; it
+    also never reproduced in the offline sandbox, where drags can't run).
+    Two rules fixed it, and they generalize to any gesture built from
+    multiple event streams: (a) the commit lives in the gesture's own
+    terminal event, and every other listener may only clean up gestures
+    that are provably NOT in flight (pointer-up disarms only never-active
+    "click" arms); (b) remember the last good intermediate position — the
+    terminal event's own coordinate can be invalid (3D `toMap` returns null
+    over the sky) and must fall back to it. The ordering rules were moved
+    into a pure state machine (`src/pages/map/dragModel.ts`) precisely so
+    the e2e bundle can unit-test the race orderings offline — the
+    live-drag path needs a network the sandbox doesn't have.
