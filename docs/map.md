@@ -81,13 +81,26 @@ on it works without a backend server or API key.
   matching tool + view dimension (`DistanceMeasurement2D`/`AreaMeasurement2D`
   vs `DirectLineMeasurement3D`/`AreaMeasurement3D`) into the view UI,
   destroyed on tool change.
-- **Route distance** (`osrm.ts`, `useOsrmRoute.ts`, `RouteControl.tsx`):
-  two map clicks pick A→B, profile toggle walks/bikes/drives, and the
-  **FOSSGIS public OSRM server** (`routing.openstreetmap.de/routed-{car,bike,foot}`,
-  free, no key, CORS-open) returns the route, drawn as a polyline with a
-  km/min chip. Fair-use policy: attribution + ≤1 req/s — we fetch once per
-  picked pair with abort-on-change. Esri's own routing service needs an API
-  key, hence OSRM.
+- **Route distance with waypoints** (`osrm.ts`, `routeGeometry.ts`,
+  `useOsrmRoute.ts`, `RouteControl.tsx`): map clicks build a waypoint list
+  (numbered markers — start green, end red, intermediates orange; capped at
+  25 for public-server politeness), profile toggle walks/bikes/drives, and
+  the **FOSSGIS public OSRM server**
+  (`routing.openstreetmap.de/routed-{car,bike,foot}`, free, no key,
+  CORS-open — takes N `;`-separated coordinates per request) returns the
+  route, drawn as a polyline with a km/min/pts chip. Editing semantics, in
+  click-dispatch order: tap a **marker** to remove that waypoint (hitTest on
+  `waypointIndex`, same pattern as pins), tap **on the line** to insert into
+  that leg, tap **anywhere else** to append a new destination. Insert
+  position is pure math (`routeGeometry.ts` — no ArcGIS imports, bundled by
+  `e2e/run.mjs` for offline unit checks): project the click and OSRM's
+  road-snapped waypoints onto the route polyline's monotonic measure and
+  splice between the bracketing pair; "on the line" is a 12-px tolerance
+  derived from `view.scale` (present on both MapView and SceneView, unlike
+  `resolution`). An **Undo** button unwinds add/remove/insert/clear through
+  a history stack (capped at 20). One fetch per edit with abort-on-change —
+  well inside the fair-use policy (attribution + ≤1 req/s). Esri's own
+  routing service needs an API key, hence OSRM.
 
 ## Test contract & offline-tolerant e2e
 
@@ -101,10 +114,14 @@ with no network), `data-view-mode`, `data-tool`, `data-pin-count` and
 Suite `e2e/130-map.test.mjs` probes ArcGIS-CDN reachability **in the page**
 (what the browser sees is what matters) and branches: structural checks,
 chunk isolation (no arcgis resources until the Map page is visited),
-theme-follow, 2D/3D toggle + persistence and tool activation assert
-unconditionally; view-ready, attribution/zoom UI, click-driven pins/route/
-measure checks run only when the CDN is reachable. OSRM is **always mocked**
-via `page.route()` so the route contract never depends on the live service.
+theme-follow, 2D/3D toggle + persistence, tool activation and the
+`routeGeometry` **pure unit checks** (bundled like the game widgets' pure
+modules) assert unconditionally; view-ready, attribution/zoom UI,
+click-driven pins and the waypoint-editing flow (insert on line, remove on
+marker, undo of remove/insert/clear) run only when the CDN is reachable.
+OSRM is **always mocked** via `page.route()` — as an **echo mock** returning
+a line through the requested coordinates, so the drawn route lies exactly
+where the suite clicked and insert-on-line is deterministic.
 On this project's sandboxed dev environment the ArcGIS hosts
 (`js.arcgis.com`, `basemaps.arcgis.com`) are proxy-blocked, so the suite runs
 its offline branch there; the online branch runs on a normal network. Full
@@ -126,6 +143,12 @@ visual verification happens on the GitHub Pages deploy.
   Autocomplete → `view.goTo`; avoids the key-gated Esri geocoder.
 - **Named/labelled pins** — pin titles, popups, a pin list panel; extends the
   `map` slice.
+- **Drag-to-move waypoints** — pointer-drag a route marker instead of
+  remove+re-add; builds on the `waypointIndex` hitTest + `routeGeometry`.
+- **Persisted / named routes** — save a waypoint list to the `map` slice like
+  pins; a route library panel.
+- **Per-leg breakdown** — OSRM already returns `legs`; show distance/time
+  between consecutive waypoints in a popover.
 - **Bookmarks** — save the current viewpoint to the map slice, jump list.
 - **Coordinate readout** — pointer-move → lon/lat chip with copy.
 - **Swipe compare** — ArcGIS `Swipe` widget between two free basemaps.

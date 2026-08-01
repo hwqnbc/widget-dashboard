@@ -2,11 +2,12 @@
  * Route distance via the FOSSGIS-run public OSRM server
  * (https://routing.openstreetmap.de) — free, no API key, CORS-open.
  * Usage policy: attribution, sensible volume (≤1 request/second). We only
- * fire one request per user-picked A→B pair, well inside that.
+ * fire one request per user waypoint edit, well inside that.
  */
+import type { LonLat } from './routeGeometry'
 
+export type { LonLat }
 export type RouteProfile = 'walk' | 'bike' | 'drive'
-export type LonLat = [number, number]
 
 /** Endpoint path per profile — `/route/v1/driving/` after it is literal OSRM
  * API boilerplate; the profile is chosen by the server instance. */
@@ -21,6 +22,8 @@ export interface OsrmRoute {
   durationS: number
   /** WGS84 lon/lat path of the route line. */
   path: LonLat[]
+  /** Each input waypoint snapped onto the road network, same order. */
+  snapped: LonLat[]
 }
 
 interface OsrmResponse {
@@ -30,17 +33,21 @@ interface OsrmResponse {
     duration: number
     geometry: { coordinates: LonLat[] }
   }[]
+  waypoints?: { location: LonLat }[]
 }
 
+/** Route through every waypoint in order (OSRM takes N `;`-separated
+ * coordinates in one request). Needs at least two points. */
 export async function fetchOsrmRoute(
   profile: RouteProfile,
-  a: LonLat,
-  b: LonLat,
+  points: LonLat[],
   signal?: AbortSignal,
 ): Promise<OsrmRoute> {
+  if (points.length < 2) throw new Error('need at least two waypoints')
+  const coords = points.map(([lon, lat]) => `${lon},${lat}`).join(';')
   const url =
     `https://routing.openstreetmap.de/${OSRM_PROFILE_PATH[profile]}` +
-    `/route/v1/driving/${a[0]},${a[1]};${b[0]},${b[1]}` +
+    `/route/v1/driving/${coords}` +
     `?overview=full&geometries=geojson&alternatives=false&steps=false`
   const res = await fetch(url, { signal })
   if (!res.ok) throw new Error(`OSRM ${res.status}`)
@@ -51,5 +58,6 @@ export async function fetchOsrmRoute(
     distanceM: route.distance,
     durationS: route.duration,
     path: route.geometry.coordinates,
+    snapped: (json.waypoints ?? []).map((w) => w.location),
   }
 }

@@ -55,6 +55,7 @@ import LocateControl from './LocateControl'
 import MeasureBinding from './MeasureControls'
 import RouteControl from './RouteControl'
 import { useOsrmRoute } from './useOsrmRoute'
+import { insertIndexFor, nearestOnPath, pathDistanceThresholdMeters } from './routeGeometry'
 import type { LonLat, RouteProfile } from './osrm'
 
 /**
@@ -78,6 +79,16 @@ if (import.meta.env.DEV) {
 export type AnyView = MapView | SceneView
 type MapStatus = 'loading' | 'ready' | 'error'
 type Tool = 'none' | 'pins' | 'measure-line' | 'measure-area' | 'route'
+
+/** Waypoint list + undo history (every edit pushes the previous list). */
+interface RouteEdit {
+  points: LonLat[]
+  history: LonLat[][]
+}
+
+/** Public-OSRM politeness cap; also keeps the URL well under limits. */
+const MAX_WAYPOINTS = 25
+const ROUTE_HISTORY_LIMIT = 20
 
 /** ArcGIS teardown can throw when the view is in a broken state (e.g. its
  * widget assets never loaded offline); never let that reach React. */
@@ -138,13 +149,32 @@ export default function MapPageBody() {
   const [status, setStatus] = useState<MapStatus>('loading')
   const [tool, setTool] = useState<Tool>('none')
   const [confirmClear, setConfirmClear] = useState(false)
-  const [routePoints, setRoutePoints] = useState<LonLat[]>([])
+  const [routeEdit, setRouteEdit] = useState<RouteEdit>({ points: [], history: [] })
   const [routeProfile, setRouteProfile] = useState<RouteProfile>('drive')
 
   // Click dispatch reads the live tool through a ref so the view's click
   // handler (registered once per view) never needs re-registering.
   const toolRef = useRef(tool)
   toolRef.current = tool
+
+  // Every waypoint edit funnels through here so undo always has the
+  // previous list. Pure functional updates — the click handler is async and
+  // long-lived, so it must never bake in a stale snapshot.
+  const updateRoute = (updater: (points: LonLat[]) => LonLat[]) => {
+    setRouteEdit((prev) => {
+      const points = updater(prev.points)
+      if (points === prev.points) return prev
+      return { points, history: [...prev.history.slice(-(ROUTE_HISTORY_LIMIT - 1)), prev.points] }
+    })
+  }
+  const undoRoute = () => {
+    setRouteEdit((prev) =>
+      prev.history.length === 0
+        ? prev
+        : { points: prev.history[prev.history.length - 1], history: prev.history.slice(0, -1) },
+    )
+  }
+  const clearRoute = () => updateRoute((points) => (points.length ? [] : points))
 
   // One shared Map (basemap + graphics layers) for both view modes — pins
   // and routes survive the 2D/3D swap because they live on the map, not the
@@ -266,10 +296,41 @@ export default function MapPageBody() {
         )
       }
     } else if (activeTool === 'route') {
-      if (event.mapPoint?.longitude != null && event.mapPoint.latitude != null) {
-        const p: LonLat = [event.mapPoint.longitude, event.mapPoint.latitude]
-        setRoutePoints((prev) => (prev.length >= 2 ? [p] : [...prev, p]))
+      if (event.mapPoint?.longitude == null || event.mapPoint.latitude == null) return
+      const p: LonLat = [event.mapPoint.longitude, event.mapPoint.latitude]
+
+      // 1. Clicking a waypoint marker (or its number label) removes it.
+      const hit = await v.hitTest({ x: event.x, y: event.y })
+      const wpHit = hit.results.find(
+        (r) =>
+          r.type === 'graphic' &&
+          r.layer === routeLayerRef.current &&
+          typeof r.graphic.attributes?.waypointIndex === 'number',
+      )
+      if (wpHit && wpHit.type === 'graphic') {
+        const index = wpHit.graphic.attributes.waypointIndex as number
+        updateRoute((points) => points.filter((_, i) => i !== index))
+        return
       }
+
+      // 2. Clicking on/near the route line inserts a waypoint into the leg
+      //    it landed on (pure math over the fetched geometry).
+      const data = routeDataRef.current
+      if (data?.path && data.snapped && data.snapped.length >= 2) {
+        const near = nearestOnPath(data.path, p)
+        if (near && near.distMeters <= pathDistanceThresholdMeters(v.scale)) {
+          const at = insertIndexFor(data.path, data.snapped, p)
+          updateRoute((points) =>
+            points.length >= MAX_WAYPOINTS
+              ? points
+              : [...points.slice(0, at), p, ...points.slice(at)],
+          )
+          return
+        }
+      }
+
+      // 3. Anywhere else: append as the new destination.
+      updateRoute((points) => (points.length >= MAX_WAYPOINTS ? points : [...points, p]))
     }
   }
 
@@ -300,9 +361,11 @@ export default function MapPageBody() {
     )
   }, [pins])
 
-  const route = useOsrmRoute(routeLayerRef, routePoints, routeProfile)
+  const route = useOsrmRoute(routeLayerRef, routeEdit.points, routeProfile)
+  // The fetched route geometry, readable from the long-lived click handler.
+  const routeDataRef = useRef(route)
+  routeDataRef.current = route
 
-  const clearRoute = () => setRoutePoints([])
   const handleTool = (next: Tool | null) => {
     const t = next ?? 'none'
     setTool(t)
@@ -319,6 +382,7 @@ export default function MapPageBody() {
       data-pin-count={pins.length}
       data-route-status={route.status}
       data-route-km={route.km ?? ''}
+      data-route-points={routeEdit.points.length}
       data-route-profile={routeProfile}
       sx={{
         // No 100%-height chain from #root: size against the viewport minus
@@ -392,8 +456,10 @@ export default function MapPageBody() {
           <RouteControl
             profile={routeProfile}
             onProfileChange={setRouteProfile}
-            pointCount={routePoints.length}
+            pointCount={routeEdit.points.length}
             state={route}
+            canUndo={routeEdit.history.length > 0}
+            onUndo={undoRoute}
             onClear={clearRoute}
           />
         )}

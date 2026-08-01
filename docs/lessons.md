@@ -828,3 +828,19 @@ carried over; these are the new ones.
     checks are deterministic; (e) dev serves the ArcGIS runtime assets from
     `node_modules` (`esriConfig.assetsPath`, DEV-gated) so widget locale
     bundles don't 404 into crashes offline while prod keeps the CDN default.
+
+69. **Mock a geometry-returning third-party API as an ECHO, not a fixture.**
+    The first OSRM mock returned a fixed canned route — fine for "the chip
+    shows a distance", useless the moment the feature interacted with the
+    *drawn* geometry: insert-a-waypoint-by-clicking-the-line needs the route
+    polyline to lie where the test actually clicked, and a fixture's line is
+    in Munich while the clicks are wherever the view happens to be. The fix
+    is an echo mock: parse the coordinates out of the intercepted request
+    URL and answer with a geometry that runs straight through them (plus
+    per-point `waypoints[].location`), so every drawn artifact lands at the
+    test's own click positions and screen-space interactions become
+    deterministic. Pair it with recording the parsed coordinates per request
+    — asserting "the third request had 3 pairs, the new one in the middle"
+    tests the *request contract*, not just the UI echo. (Extends #68's
+    always-mock rule; the mock's fidelity has to match what the feature
+    reads back from the response.)

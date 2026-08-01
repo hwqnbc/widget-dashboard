@@ -73,6 +73,20 @@ const tankBundle = spawnSync(
 )
 if (tankBundle.status !== 0) process.exit(tankBundle.status ?? 1)
 
+// Map page's pure modules — fourth flat pass, same reasoning.
+const mapBundle = spawnSync(
+  'npx',
+  [
+    'esbuild',
+    'src/pages/map/routeGeometry.ts',
+    '--bundle',
+    '--format=esm',
+    `--outdir=${join(here, '.bundle')}`,
+  ],
+  { cwd: root, stdio: 'inherit' },
+)
+if (mapBundle.status !== 0) process.exit(mapBundle.status ?? 1)
+
 // 2. Start the dev server and wait for it.
 const server = spawn('npx', ['vite', '--port', PORT, '--strictPort'], {
   cwd: root,

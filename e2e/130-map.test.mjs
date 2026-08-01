@@ -6,13 +6,22 @@
  *  - always: nav link, lazy-chunk isolation (no @arcgis code until the Map
  *    page is visited), theme-follow (data-basemap + injected ArcGIS CSS flip
  *    with the app toggle — render-computed, works offline), 2D/3D toggle +
- *    persistence, tool toggles, route control with a MOCKED OSRM response
- *    contract check, deep-link render.
+ *    persistence, tool toggles, pure routeGeometry unit checks (bundled
+ *    module: insert index, nearest-distance, tap threshold), undo-disabled
+ *    state, deep-link render.
  *  - online only: data-map-status reaches "ready" (from view.when, never
  *    networkidle), attribution + zoom UI present, click-driven pins with
- *    reload persistence, click-driven A→B route distance from the mock.
+ *    reload persistence, and the waypoint-editing flow against an ECHO OSRM
+ *    mock (returns a line through the requested coords): A→B distance,
+ *    insert by clicking the line, remove by clicking a marker, undo of
+ *    remove/insert/clear.
  */
 import { BASE_URL, launch, reporter } from './helpers.mjs'
+import {
+  insertIndexFor,
+  nearestOnPath,
+  pathDistanceThresholdMeters,
+} from './.bundle/routeGeometry.js'
 
 const { check, finish } = reporter('map')
 const { browser, page } = await launch()
@@ -31,31 +40,52 @@ async function waitForAttr(attr, pred, timeout = 30000) {
 }
 
 // Mock OSRM before any navigation: the route contract must assert the same
-// way whether routing.openstreetmap.de is reachable or not.
-const MOCK_ROUTE = {
-  code: 'Ok',
-  routes: [
-    {
-      distance: 12345.6,
-      duration: 1800,
-      geometry: {
-        coordinates: [
-          [11.5, 48.1],
-          [11.6, 48.2],
-        ],
-      },
-    },
-  ],
-}
-let osrmRequests = 0
+// way whether routing.openstreetmap.de is reachable or not. It's an ECHO
+// mock — the returned geometry runs straight through whatever coordinates
+// were requested — so the drawn line lies where the suite clicked and
+// insert-on-line is testable.
+const osrmCoords = [] // per request: [[lon,lat], ...]
 await page.route('**/routing.openstreetmap.de/**', (route) => {
-  osrmRequests += 1
+  const url = decodeURIComponent(route.request().url())
+  const coords = (url.match(/route\/v1\/driving\/([^?]+)/)?.[1] ?? '')
+    .split(';')
+    .map((pair) => pair.split(',').map(Number))
+  osrmCoords.push(coords)
   return route.fulfill({
     status: 200,
     contentType: 'application/json',
-    body: JSON.stringify(MOCK_ROUTE),
+    body: JSON.stringify({
+      code: 'Ok',
+      routes: [{ distance: 12345.6, duration: 1800, geometry: { coordinates: coords } }],
+      waypoints: coords.map((c) => ({ location: c })),
+    }),
   })
 })
+
+// ---- pure route-geometry unit checks (bundled module, no network) ----
+{
+  const path = [
+    [0, 0],
+    [0, 1],
+    [0, 2],
+  ]
+  const snapped = path
+  check('insertIndexFor picks the first leg', insertIndexFor(path, snapped, [0.001, 0.4]) === 1)
+  check('insertIndexFor picks the second leg', insertIndexFor(path, snapped, [-0.001, 1.6]) === 2)
+  const near = nearestOnPath(path, [0.001, 0.5])
+  check(
+    'nearestOnPath distance ~111 m for 0.001° offset',
+    near && Math.abs(near.distMeters - 111.3) < 2,
+    `d=${near?.distMeters?.toFixed(1)}`,
+  )
+  const t1 = pathDistanceThresholdMeters(1_000_000)
+  const t2 = pathDistanceThresholdMeters(2_000_000)
+  check(
+    'threshold scales linearly with view scale',
+    Math.abs(t2 / t1 - 2) < 1e-9 && t1 > 0,
+    `t1=${t1.toFixed(0)}m`,
+  )
+}
 
 // ---- dashboard first: the arcgis chunk must NOT load with the app shell ----
 await page.goto(BASE_URL, { waitUntil: 'networkidle' })
@@ -154,10 +184,15 @@ await page.locator('[data-testid="map-tool-route"]').click()
 await page.waitForTimeout(200)
 check('route tool activates', (await root().getAttribute('data-tool')) === 'route')
 check('route starts idle', (await root().getAttribute('data-route-status')) === 'idle')
+check('route starts with no waypoints', (await root().getAttribute('data-route-points')) === '0')
 check(
   'route profile picker renders',
   (await page.locator('[data-testid="map-route-walk"]').count()) === 1 &&
     (await page.locator('[data-testid="map-route-drive"]').count()) === 1,
+)
+check(
+  'undo renders disabled with no history',
+  await page.locator('[data-testid="map-route-undo"]').isDisabled(),
 )
 check('locate control renders', (await page.locator('[data-testid="map-locate"]').count()) === 1)
 
@@ -165,17 +200,52 @@ if (online) {
   // ---- route: two map clicks → mocked OSRM → distance chip ----
   if (await waitForAttr('data-map-status', (v) => v === 'ready', 45000) === 'ready') {
     const box = await page.locator('[data-testid="map-container"]').boundingBox()
-    await page.mouse.click(box.x + box.width * 0.4, box.y + box.height * 0.5)
+    const at = (fx, fy) => [box.x + box.width * fx, box.y + box.height * fy]
+
+    // Build A → B. Same screen height = same latitude, so the echoed route
+    // line runs exactly through the midpoint we insert at later.
+    await page.mouse.click(...at(0.35, 0.5))
     await page.waitForTimeout(400)
-    check('first click arms end point', (await root().getAttribute('data-route-status')) === 'picking')
-    await page.mouse.click(box.x + box.width * 0.6, box.y + box.height * 0.5)
+    check('first click arms next point', (await root().getAttribute('data-route-status')) === 'picking')
+    await page.mouse.click(...at(0.65, 0.5))
     const routeStatus = await waitForAttr('data-route-status', (v) => v === 'ok' || v === 'error', 15000)
     check('route resolves from (mocked) OSRM', routeStatus === 'ok', `status=${routeStatus}`)
     check('route distance published', (await root().getAttribute('data-route-km')) === '12.3')
-    check('OSRM was called through the mock', osrmRequests >= 1, `requests=${osrmRequests}`)
+    check('OSRM was called through the mock', osrmCoords.length >= 1, `requests=${osrmCoords.length}`)
+
+    // Insert: click ON the drawn line, halfway along — waypoint 2 of 3.
+    await page.mouse.click(...at(0.5, 0.5))
+    await waitForAttr('data-route-status', (v) => v === 'ok', 15000)
+    check('click on the line inserts a waypoint', (await root().getAttribute('data-route-points')) === '3')
+    const last = osrmCoords[osrmCoords.length - 1]
+    check(
+      'inserted waypoint routed in the middle',
+      last.length === 3 && last[0][0] < last[1][0] && last[1][0] < last[2][0],
+      JSON.stringify(last),
+    )
+
+    // Remove: click the destination marker (waypoint 3).
+    await page.mouse.click(...at(0.65, 0.5))
+    await waitForAttr('data-route-points', (v) => v === '2', 15000)
+    check('clicking a waypoint marker removes it', (await root().getAttribute('data-route-points')) === '2')
+
+    // Undo unwinds remove, then insert.
+    await page.locator('[data-testid="map-route-undo"]').click()
+    await page.waitForTimeout(300)
+    check('undo restores the removed waypoint', (await root().getAttribute('data-route-points')) === '3')
+    await page.locator('[data-testid="map-route-undo"]').click()
+    await page.waitForTimeout(300)
+    check('undo unwinds the insert', (await root().getAttribute('data-route-points')) === '2')
+
+    // Clear is undoable too.
     await page.locator('[data-testid="map-route-clear"]').click()
     await page.waitForTimeout(200)
     check('route clears', (await root().getAttribute('data-route-status')) === 'idle')
+    await page.locator('[data-testid="map-route-undo"]').click()
+    await page.waitForTimeout(300)
+    check('undo restores a cleared route', (await root().getAttribute('data-route-points')) === '2')
+    await page.locator('[data-testid="map-route-clear"]').click()
+    await page.waitForTimeout(200)
 
     // ---- pins: click to add, click pin to remove, persist across reload ----
     await page.locator('[data-testid="map-tool-pins"]').click()
