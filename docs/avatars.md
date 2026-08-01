@@ -42,7 +42,7 @@ ninja/     NinjaHead, SwordNinjaFigure, NinjaFigure, NinjaCelebration, ninjaPale
 fireninja/ FireNinjaHead, FireBladeFigure, FireNinjaFigure, FireNinjaCelebration, fireNinjaPalette, index
 darkarin/  DarkArinHead, TwinSwordFigure, DarkArinFigure, DarkArinCelebration, DarkArinFigure3D, DarkArinModel3D, darkArinPalette, index
 frak/      FrakHead, FrakFigure, FrakCelebration, FrakFigure3D, FrakModel3D, frakPalette, index
-imperium/  ImperiumHead, ClawFigure, ImperiumFigure, ImperiumCelebration, imperiumPalette, index
+imperium/  ImperiumHead, ClawFigure, ImperiumFigure, ImperiumCelebration, ImperiumFigure3D, ImperiumModel3D, imperiumPalette, index
 boy/       Boy.tsx                    (an ImageToggle figure, not a game avatar)
 ```
 - **Head** = the standalone `<svg>` chip/mark (`size` prop; default `'100%'`).
@@ -112,7 +112,14 @@ unlike the darkarin cross's mirrored single set), one raising its gold
 blade overhead-forward while the other chops down-and-inward across the
 front, swapping every 620 ms half-beat (1.24 s loop); a short raise-in
 blend at action start lifts both arms out of the idle guard so the loop
-never pops.
+never pops; imperium `[slash "Claw Slash"]` — the 2D celebration
+verbatim: ONLY the right elbow animates, sweeping the oversized
+translucent-orange energy blade from hip height up past the face and
+back on a symmetric 0.7 s cosine (the 2D's −18°→+48° ease-in-out
+keyframes); the claw is a PISTOL grip — blade perpendicular to the
+forearm (local +z of the elbow group), so the elbow's hinge IS the
+swing — with a slight outward shoulder yaw so the sagittal arc stays
+readable face-on.
 
 The render is split into a venue-neutral **model** and a viewer **figure**,
 so the same character can stand in a game world:
@@ -198,8 +205,17 @@ blades; action Twin Cross), frak (`FrakModel3D` — faceted lime hood with
 peak spike + darker back drape, orange face opening over the green
 lower-face wrap, gunmetal torso with the lime hex chest plate + belt bar,
 orange arms with black gloves, printed grey legs, two permanently-held
-pearl-gold short swords; action Blade Flurry). Still missing a 3D
-figure: imperium.
+pearl-gold short swords; action Blade Flurry), and imperium
+(`ImperiumModel3D` — black faceted helmet with horn spikes, gold face
+plate under the black V-crest with four orange eye slits + glowing mouth
+vent, gold rib print + hex core emblem, left fist akimbo on the hip, the
+pistol-grip energy claw in the right; action Claw Slash). **Every avatar
+now ships a 3D figure** — the Avatar Actions "no 3D figure yet"
+placeholder and the Drone Sim's `data-op-figure="basic"` value are no
+longer reachable from any current avatar; both code paths stay as
+scaffolding for future avatars (suite 121 keeps only the toy block's
+negative placeholder check, and `BasicOperator` remains as the operator's
+Suspense fallback).
 
 ## Reading a seat's look
 `features/avatars/useSeatAvatars.ts`:

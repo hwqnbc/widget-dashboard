@@ -4,18 +4,20 @@
  * ('available'/'unavailable' for the selected avatar).
  *
  * Covers: 2D default, toggling to 3D lazy-loads the three.js chunk and
- * renders a WebGL canvas for the avatars with a Figure3D (toy, ninja,
- * fireninja, darkarin, frak), the action toggle lists the 3D model's
- * named-move library (registry `actions3d`: toy [Dance, 6 7 Show], ninja
- * [Pump, Draw], fireninja [Fire Blade], darkarin [Twin Cross], frak
- * [Blade Flurry]) and each action drives `data-action`/`data-playing`, an
- * avatar without a 3D figure (imperium) shows the "not available"
- * placeholder instead of a canvas (with the action toggle disabled —
- * nothing would visibly play), tapping the 3D figure toggles the turntable
- * (`data-spin`, one uniform rule for every avatar, persisted per widget),
- * switching back restores each view, and the chosen view + spin preference
- * survive a reload. The 3D art itself is reviewed from screenshots — the
- * suite asserts presence + the data contract, like the 2D suite (120).
+ * renders a WebGL canvas for every avatar (ALL six carry a Figure3D now),
+ * the action toggle lists the 3D model's named-move library (registry
+ * `actions3d`: toy [Dance, 6 7 Show], ninja [Pump, Draw], fireninja
+ * [Fire Blade], darkarin [Twin Cross], frak [Blade Flurry], imperium
+ * [Claw Slash]) and each action drives `data-action`/`data-playing`,
+ * tapping the 3D figure toggles the turntable (`data-spin`, one uniform
+ * rule for every avatar, persisted per widget), switching back restores
+ * each view, and the chosen view + spin preference survive a reload.
+ * The "no 3D figure" placeholder path (`figure3d-unavailable`, action
+ * toggle disabled) is retained in the widget as scaffolding for future
+ * avatars but no current avatar exercises it — only the toy block's
+ * negative check still probes it. The 3D art itself is reviewed from
+ * screenshots — the suite asserts presence + the data contract, like the
+ * 2D suite (120).
  */
 import { addAvatarWidget, launch, reporter } from './helpers.mjs'
 
@@ -138,14 +140,20 @@ await celebration.nth(0).click()
 await page.waitForTimeout(150)
 check('Idle resets the frak action', (await attr('data-action')) === 'idle')
 
-// an avatar without a Figure3D shows the placeholder, not a canvas
-await picker.nth(5).click() // imperium — still 3D-less
+// imperium's 3D figure: one-move library, the Claw Slash round-trips
+await picker.nth(5).click() // imperium — the last avatar to gain 3D
 await page.waitForTimeout(150)
-check('imperium reports no 3D figure', (await attr('data-figure3d')) === 'unavailable')
-check('unavailable placeholder shown', (await unavailable.count()) === 1)
-check('no canvas for an unavailable figure', (await stageCanvas.count()) === 0)
-check('placeholder names the avatar', /Imperium/.test(await unavailable.innerText()))
-check('celebration toggle disabled on the placeholder', await celebration.nth(1).isDisabled())
+check('imperium advertises an available 3D figure', (await attr('data-figure3d')) === 'available')
+await page.waitForSelector('[data-testid="figure3d-stage"] canvas', { timeout: 20000 })
+check('imperium 3d view renders a WebGL canvas', (await stageCanvas.count()) === 1)
+check('imperium 3d actions: Idle + Claw Slash', (await celebration.count()) === 2)
+await celebration.nth(1).click() // Claw Slash
+await page.waitForTimeout(150)
+check('Claw Slash plays', (await attr('data-action')) === 'slash')
+check('Claw Slash sets playing', (await attr('data-playing')) === 'yes')
+await celebration.nth(0).click()
+await page.waitForTimeout(150)
+check('Idle resets the imperium action', (await attr('data-action')) === 'idle')
 
 // back to toy: the 3D figure returns and the toggle re-enables
 await picker.nth(0).click()

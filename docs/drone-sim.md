@@ -601,9 +601,10 @@ from the enhancement menu, with the integration point each would build on.
   an `action` id (the registry's `actions3d` library); pass one for a few
   seconds on a new best lap (the lap-complete event in `DroneSimBody` is the
   hook) so your figure celebrates the record.
-- **More avatar operators** — every avatar that gains a `Model3D` in the
-  registry becomes a Drone Sim operator automatically (toy, ninja,
-  fireninja, darkarin and frak shipped); imperium is still on primitives.
+- ~~**More avatar operators**~~ — shipped: every avatar that gains a
+  `Model3D` in the registry becomes a Drone Sim operator automatically,
+  and ALL six avatars now carry one; the primitive `BasicOperator`
+  remains only as the Suspense fallback while a model chunk loads.
 
 ### Gameplay
 - **Animated ghost drone** — replay the best run as a translucent drone

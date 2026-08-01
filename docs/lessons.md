@@ -643,6 +643,20 @@ carried over; these are the new ones.
     second timeline, only a swap of which arm reads which scalar at the
     half-beat boundary.
 
+63. **Held props have two grips — extension and pistol — and sagittal
+    moves need a touch of outward yaw to read face-on.** Every sword so
+    far EXTENDS the forearm (`rotation-z = π` at the hand, #27b's grip
+    corollary), but imperium's energy claw is a pistol grip: the blade
+    mounts PERPENDICULAR to the forearm (local +z of the elbow group, no
+    flip), and then the elbow's x-hinge is not a wrist detail — it IS the
+    swing, arcing the tip exactly like the 2D's elbow-pivoted rotation.
+    Second half (hit twice this round-pair): a forward/sagittal move or
+    guard is invisible face-on — the prop foreshortens to a sliver
+    pointing at the camera (frak's idle guard, imperium's blade). The fix
+    is a modest fixed outward shoulder yaw (~0.4 rad, #61's lever), which
+    angles the whole plane just enough to read from the front without
+    breaking the forward chop (#28).
+
 ## Responsive touch layout (Drone Strike → Tank Battle)
 
 53. **"Fullscreen" is not "big" — size touch controls from the container's

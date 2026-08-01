@@ -58,6 +58,8 @@ const DarkArinFigure3D = lazy(() => import('../components/widgets/characters/dar
 const DarkArinModel3D = lazy(() => import('../components/widgets/characters/darkarin/DarkArinModel3D'))
 const FrakFigure3D = lazy(() => import('../components/widgets/characters/frak/FrakFigure3D'))
 const FrakModel3D = lazy(() => import('../components/widgets/characters/frak/FrakModel3D'))
+const ImperiumFigure3D = lazy(() => import('../components/widgets/characters/imperium/ImperiumFigure3D'))
+const ImperiumModel3D = lazy(() => import('../components/widgets/characters/imperium/ImperiumModel3D'))
 
 export const avatarVisualById: Record<AvatarId, AvatarVisual> = {
   toy: {
@@ -106,5 +108,12 @@ export const avatarVisualById: Record<AvatarId, AvatarVisual> = {
     Model3D: FrakModel3D,
     actions3d: [{ id: 'flurry', name: 'Blade Flurry' }],
   },
-  imperium: { Head: ImperiumHead, Figure: ImperiumFigure, Celebration: ImperiumCelebration },
+  imperium: {
+    Head: ImperiumHead,
+    Figure: ImperiumFigure,
+    Celebration: ImperiumCelebration,
+    Figure3D: ImperiumFigure3D,
+    Model3D: ImperiumModel3D,
+    actions3d: [{ id: 'slash', name: 'Claw Slash' }],
+  },
 }
