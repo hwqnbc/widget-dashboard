@@ -199,7 +199,13 @@ before drawing a new character.
     FOREARM at the elbow with a static upper arm (user caught it both
     times). The 2D pivot rules apply verbatim to 3D rigs — when the
     reference flexes a forearm, build the hierarchy for it (shoulder group
-    for pose → elbow group for the move, each joint capped).
+    for pose → elbow group for the move, each joint capped). Grip
+    corollary (ninja/fireninja, also user-caught): a held weapon should
+    EXTEND the forearm (obtuse, wrist ≈ extension + a slight fixed
+    up-tilt) — counter-rotating the wrist per-frame to force a world-space
+    blade angle (e.g. "keep it vertical") folds the sword acute against
+    the raised arm and reads broken-wristed. Aim the FOREARM at the target
+    direction via the elbow and let the weapon follow.
 
 28. **Face-forward figures chop *forward*, not sideways.** A chop that sweeps the
     blade out to the side (a rotating windmill) looks comical on a figure that faces

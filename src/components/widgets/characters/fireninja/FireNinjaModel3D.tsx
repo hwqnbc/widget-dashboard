@@ -8,11 +8,12 @@
 // `action` picks a named move from the registry's actions3d library
 // (undefined/unknown ids idle with a subtle arm sway, bare handle):
 // - 'blaze': the 2D celebration — a flaming blade IGNITES out of the hilt
-//   (overshoot scale-up from a start-time ref) then the arm sweeps the
-//   burning sword across the body in a looping guard parry, with the flame
-//   flickering (scale noise + emissive pulse). Blade visibility/scale are
-//   written imperatively each frame; the wrist counter-rotates the arm so
-//   the blade stays upright through the sweep (lesson #60).
+//   (overshoot scale-up from a start-time ref); the ELBOW bends the forearm
+//   forward and the sword rides as the forearm's obtuse extension (fixed
+//   slight up-tilt at the wrist — never counter-rotated to world-vertical,
+//   which folded it acute against the arm), then the SHOULDER sweeps so the
+//   forward blade slashes across the front, flame flickering (scale noise +
+//   emissive pulse). Blade visibility/scale written imperatively each frame.
 // All animation mutates refs in useFrame — zero React renders.
 //
 // Loaded only via lazy() (the avatar registry's Model3D/Figure3D fields) —
@@ -28,10 +29,13 @@ const STEEL = { roughness: 0.35, metalness: 0.4 }
 const lerp = (a: number, b: number, k: number) => a + (b - a) * k
 const smooth = (k: number) => (k <= 0 ? 0 : k >= 1 ? 1 : k * k * (3 - 2 * k))
 
-/** Guard-sweep pose targets (radians on the right shoulder). */
+/** Guard-sweep pose targets. */
 const REST = 0.12
-const GUARD = 0.9
-const SWEEP = 0.45 // sweep amplitude about the guard
+const GUARD_SHOULDER = 0.35 // shoulder z at the guard
+const GUARD_ELBOW = -1.25 // elbow x — forearm forward
+const WRIST_TILT = -0.45 // fixed up-tilt: blade obtuse (~155°) to the forearm
+const ELBOW_REST = -0.3
+const SWEEP = 0.45 // shoulder sweep amplitude about the guard
 const IGNITE_S = 0.5
 
 /** Crown hair spikes: [x, y, z, tiltZ, tiltX, height]. */
@@ -47,6 +51,8 @@ const SPIKES: [number, number, number, number, number, number][] = [
 export default function FireNinjaModel3D({ action }: { action?: string }) {
   const armLRef = useRef<Group>(null)
   const armRRef = useRef<Group>(null)
+  const elbowLRef = useRef<Group>(null)
+  const elbowRRef = useRef<Group>(null)
   const wristRef = useRef<Group>(null)
   const bladeRef = useRef<Group>(null)
   const coreMatRef = useRef<MeshStandardMaterial>(null)
@@ -61,13 +67,16 @@ export default function FireNinjaModel3D({ action }: { action?: string }) {
     }
     const armL = armLRef.current
     const armR = armRRef.current
+    const elbowL = elbowLRef.current
+    const elbowR = elbowRRef.current
     const wrist = wristRef.current
     const blade = bladeRef.current
-    if (!armL || !armR || !wrist || !blade) return
+    if (!armL || !armR || !elbowL || !elbowR || !wrist || !blade) return
 
     let armRz = REST
     let armLz = -REST
-    let wristZ = Math.PI // hilt along the hanging arm, blade axis down
+    let elbowRX = ELBOW_REST
+    let wristX = WRIST_TILT * 0.6 // relaxed obtuse grip at rest
     let bladeScale = 0
     let flicker = 1
 
@@ -75,17 +84,20 @@ export default function FireNinjaModel3D({ action }: { action?: string }) {
       const tau = t - t0Ref.current
       armLz = -0.4
       if (tau < IGNITE_S) {
-        // raise into the guard while the blade shoots out of the hilt
+        // the ELBOW bends the forearm forward while the blade shoots out of
+        // the hilt as the forearm's obtuse extension
         const k = smooth(tau / IGNITE_S)
-        armRz = lerp(REST, GUARD, k)
-        wristZ = lerp(Math.PI, -GUARD + 0.2, k) // short arc — blade ends upright
+        armRz = lerp(REST, GUARD_SHOULDER, k)
+        elbowRX = lerp(ELBOW_REST, GUARD_ELBOW, k)
+        wristX = lerp(WRIST_TILT * 0.6, WRIST_TILT, k)
         // overshoot ignite: 0 → 1.12 → 1
         bladeScale = tau / IGNITE_S < 0.55 ? lerp(0.02, 1.12, smooth(tau / (IGNITE_S * 0.55))) : lerp(1.12, 1, smooth((tau / IGNITE_S - 0.55) / 0.45))
       } else {
-        // looping cross-body guard sweep, blade held upright
+        // the SHOULDER sweeps; the forward-pointing blade slashes across
         const s = Math.sin(((tau - IGNITE_S) / 1.5) * Math.PI * 2)
-        armRz = GUARD + s * SWEEP
-        wristZ = -armRz + 0.2
+        armRz = GUARD_SHOULDER + s * SWEEP
+        elbowRX = GUARD_ELBOW
+        wristX = WRIST_TILT
         bladeScale = 1
         // living flame: two incommensurate wobbles + emissive pulse
         flicker = 1 + Math.sin(t * 13) * 0.05 + Math.sin(t * 7.3) * 0.04
@@ -98,7 +110,10 @@ export default function FireNinjaModel3D({ action }: { action?: string }) {
 
     armL.rotation.z = armLz
     armR.rotation.z = armRz
-    wrist.rotation.z = wristZ
+    elbowL.rotation.x = ELBOW_REST
+    elbowR.rotation.x = elbowRX
+    wrist.rotation.z = Math.PI // blade = the forearm's extension…
+    wrist.rotation.x = wristX // …tilted up a touch: obtuse, never folded back
     blade.visible = bladeScale > 0.03
     blade.scale.set(1 + (flicker - 1) * 0.6, bladeScale * flicker, 1 + (flicker - 1) * 0.6)
     if (coreMatRef.current) coreMatRef.current.emissiveIntensity = 1.1 + (flicker - 1) * 6
@@ -151,39 +166,58 @@ export default function FireNinjaModel3D({ action }: { action?: string }) {
         <cylinderGeometry args={[0.08, 0.08, 0.025, 6]} />
         <meshStandardMaterial color={F.steel} {...STEEL} flatShading />
       </mesh>
-      {/* arms: groups pivoted at the shoulder so useFrame swings them */}
+      {/* arms: shoulder group (pose) + ELBOW-hinged forearm (the move) —
+       * the toy's two-joint rig; cap spheres keep both joints closed */}
       <group ref={armLRef} position={[-0.3, 1.14, 0]}>
-        {/* shoulder cap: pivot-centred, keeps the joint closed at any pose */}
         <mesh>
           <sphereGeometry args={[0.1, 12, 10]} />
           <meshStandardMaterial color={F.gi} {...CLOTH} />
         </mesh>
-        <mesh position={[0, -0.21, 0]}>
-          <cylinderGeometry args={[0.075, 0.075, 0.42, 12]} />
+        <mesh position={[0, -0.11, 0]}>
+          <cylinderGeometry args={[0.075, 0.075, 0.22, 12]} />
           <meshStandardMaterial color={F.gi} {...CLOTH} />
         </mesh>
-        <mesh position={[0, -0.46, 0]}>
-          <sphereGeometry args={[0.085, 12, 10]} />
-          <meshStandardMaterial color={F.skin} {...CLOTH} />
-        </mesh>
+        <group ref={elbowLRef} position={[0, -0.22, 0]}>
+          <mesh>
+            <sphereGeometry args={[0.08, 12, 10]} />
+            <meshStandardMaterial color={F.gi} {...CLOTH} />
+          </mesh>
+          <mesh position={[0, -0.12, 0]}>
+            <cylinderGeometry args={[0.075, 0.075, 0.24, 12]} />
+            <meshStandardMaterial color={F.gi} {...CLOTH} />
+          </mesh>
+          <mesh position={[0, -0.26, 0]}>
+            <sphereGeometry args={[0.085, 12, 10]} />
+            <meshStandardMaterial color={F.skin} {...CLOTH} />
+          </mesh>
+        </group>
       </group>
       <group ref={armRRef} position={[0.3, 1.14, 0]}>
-        {/* shoulder cap: pivot-centred, keeps the joint closed at any pose */}
         <mesh>
           <sphereGeometry args={[0.1, 12, 10]} />
           <meshStandardMaterial color={F.gi} {...CLOTH} />
         </mesh>
-        <mesh position={[0, -0.21, 0]}>
-          <cylinderGeometry args={[0.075, 0.075, 0.42, 12]} />
+        <mesh position={[0, -0.11, 0]}>
+          <cylinderGeometry args={[0.075, 0.075, 0.22, 12]} />
           <meshStandardMaterial color={F.gi} {...CLOTH} />
         </mesh>
-        <mesh position={[0, -0.46, 0]}>
-          <sphereGeometry args={[0.085, 12, 10]} />
-          <meshStandardMaterial color={F.skin} {...CLOTH} />
-        </mesh>
-        {/* the sword, always gripped: gold tsuba + wrapped grip + pommel,
-         * with the fire blade child that ignites for 'blaze' */}
-        <group ref={wristRef} position={[0, -0.46, 0]} rotation-z={Math.PI}>
+        <group ref={elbowRRef} position={[0, -0.22, 0]}>
+          <mesh>
+            <sphereGeometry args={[0.08, 12, 10]} />
+            <meshStandardMaterial color={F.gi} {...CLOTH} />
+          </mesh>
+          <mesh position={[0, -0.12, 0]}>
+            <cylinderGeometry args={[0.075, 0.075, 0.24, 12]} />
+            <meshStandardMaterial color={F.gi} {...CLOTH} />
+          </mesh>
+          <mesh position={[0, -0.26, 0]}>
+            <sphereGeometry args={[0.085, 12, 10]} />
+            <meshStandardMaterial color={F.skin} {...CLOTH} />
+          </mesh>
+          {/* the sword, always gripped: gold tsuba + wrapped grip + pommel,
+           * with the fire blade child that ignites for 'blaze' — rides the
+           * FOREARM as its obtuse extension */}
+          <group ref={wristRef} position={[0, -0.26, 0]} rotation-z={Math.PI}>
           <mesh position={[0, 0, 0]}>
             <boxGeometry args={[0.16, 0.03, 0.05]} />
             <meshStandardMaterial color={F.guard} {...STEEL} />
@@ -220,6 +254,7 @@ export default function FireNinjaModel3D({ action }: { action?: string }) {
                 flatShading
               />
             </mesh>
+            </group>
           </group>
         </group>
       </group>

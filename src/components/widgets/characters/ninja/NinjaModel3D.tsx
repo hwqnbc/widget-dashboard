@@ -9,11 +9,13 @@
 // (undefined/unknown ids idle with a subtle arm sway):
 // - 'pump': bounce with the right arm pumping a drawn katana overhead.
 // - 'draw': the 2D celebration's choreography — reach over the right
-//   shoulder, unsheathe the back katana, sweep it to an upright guard,
-//   flourish, re-sheathe; looping. A phase timeline over a start-time ref
-//   (so the loop always begins at the reach), with the katana visibility
-//   written imperatively each frame and a wrist angle that counter-rotates
-//   the arm so the blade ends vertical in the guard.
+//   shoulder, unsheathe the back katana and land in a FORWARD guard: the
+//   ELBOW bends the forearm ahead of the body and the blade rides as the
+//   forearm's obtuse extension (fixed slight up-tilt at the wrist — never
+//   counter-rotated to world-vertical, which folded it acute against the
+//   arm), flourish, re-sheathe; looping. A phase timeline over a start-time
+//   ref (so the loop always begins at the reach), with the katana
+//   visibility written imperatively each frame.
 // All animation mutates refs in useFrame — zero React renders.
 //
 // Loaded only via lazy() (the avatar registry's Model3D/Figure3D fields) —
@@ -29,11 +31,14 @@ const STEEL = { roughness: 0.35, metalness: 0.4 }
 const lerp = (a: number, b: number, k: number) => a + (b - a) * k
 const smooth = (k: number) => (k <= 0 ? 0 : k >= 1 ? 1 : k * k * (3 - 2 * k))
 
-/** Draw-loop pose targets (radians on the right shoulder). */
+/** Draw-loop pose targets. */
 const REST = 0.12
-const REACH = 2.5 // hand up over the right shoulder
-const GUARD = 1.0 // raised guard, blade vertical
-const BACK_TILT = -0.55 // rotation.x reaching behind the shoulder
+const REACH = 2.5 // shoulder z — hand up over the right shoulder
+const GUARD_SHOULDER = 0.35 // shoulder z at the forward guard
+const GUARD_ELBOW = -1.2 // elbow x — forearm forward
+const WRIST_TILT = -0.45 // fixed up-tilt: blade obtuse (~155°) to the forearm
+const ELBOW_REST = -0.25
+const BACK_TILT = -0.55 // shoulder rotation.x reaching behind
 const DRAW_T = 3.2 // loop period (s)
 
 /** A katana in local coords: hilt at the origin, blade up (+y), ~0.85 long. */
@@ -60,6 +65,8 @@ export default function NinjaModel3D({ action }: { action?: string }) {
   const bodyRef = useRef<Group>(null)
   const armLRef = useRef<Group>(null)
   const armRRef = useRef<Group>(null)
+  const elbowLRef = useRef<Group>(null)
+  const elbowRRef = useRef<Group>(null)
   const heldRef = useRef<Group>(null)
   /** Back katana with its hilt over the RIGHT shoulder — the one 'draw' pulls. */
   const backRRef = useRef<Group>(null)
@@ -77,25 +84,30 @@ export default function NinjaModel3D({ action }: { action?: string }) {
     const body = bodyRef.current
     const armL = armLRef.current
     const armR = armRRef.current
+    const elbowL = elbowLRef.current
+    const elbowR = elbowRRef.current
     const held = heldRef.current
     const backR = backRRef.current
     const backL = backLRef.current
-    if (!body || !armL || !armR || !held || !backR || !backL) return
+    if (!body || !armL || !armR || !elbowL || !elbowR || !held || !backR || !backL) return
 
     // Per-action pose; every mutable written every frame (self-correcting).
     let armRz = REST
     let armRx = 0
     let armLz = -REST
+    let elbowRX = ELBOW_REST
+    let wristX = 0
     let bodyY = 0
     let heldVisible = false
-    let heldWrist = Math.PI // blade as the arm's extension
     let backRVisible = true
     let backLVisible = true
 
     if (action === 'pump') {
+      // overhead pump: blade as the straight arm's extension — elbow open
       bodyY = Math.abs(Math.sin(t * 5.4)) * 0.16
       armRz = 1.9 - Math.sin(t * 5.4) * 0.35
       armLz = -(0.5 + Math.sin(t * 5.4) * 0.2)
+      elbowRX = -0.1
       heldVisible = true
       backLVisible = false
     } else if (action === 'draw') {
@@ -106,41 +118,45 @@ export default function NinjaModel3D({ action }: { action?: string }) {
         const k = smooth(tau / 0.8)
         armRz = lerp(REST, REACH, k)
         armRx = lerp(0, BACK_TILT, k)
+        elbowRX = lerp(ELBOW_REST, -0.15, k)
         bodyY = -0.05 * k
       } else if (tau < 1.6) {
-        // unsheathe: sweep to the guard, blade arcing out overhead
+        // unsheathe: the shoulder comes down while the ELBOW bends the
+        // forearm ahead — the blade lands pointing FORWARD (chudan guard),
+        // an obtuse extension of the forearm
         const k = smooth((tau - 0.8) / 0.8)
-        armRz = lerp(REACH, GUARD, k)
+        armRz = lerp(REACH, GUARD_SHOULDER, k)
         armRx = lerp(BACK_TILT, 0, k)
+        elbowRX = lerp(-0.15, GUARD_ELBOW, k)
+        wristX = lerp(0, WRIST_TILT, k)
         bodyY = -0.05 * (1 - k)
         heldVisible = true
         backRVisible = false
-        // wrist: from arm-extension at the grab to blade-vertical at guard.
-        // Start at -π (≡ π) so the lerp takes the SHORT arc — from +π the
-        // blade sweeps 300° the wrong way and points down mid-draw.
-        heldWrist = lerp(-Math.PI, -GUARD + 0.15, k)
       } else if (tau < 2.3) {
-        // guard flourish: small pump, blade stays upright
-        const pump = Math.sin(((tau - 1.6) / 0.7) * Math.PI * 2) * 0.1
-        armRz = GUARD + pump
+        // guard flourish: the elbow pumps the forward blade slightly
+        const pump = Math.sin(((tau - 1.6) / 0.7) * Math.PI * 2) * 0.12
+        armRz = GUARD_SHOULDER
+        elbowRX = GUARD_ELBOW + pump
+        wristX = WRIST_TILT
         heldVisible = true
         backRVisible = false
-        heldWrist = -armRz + 0.15
       } else if (tau < 2.9) {
-        // re-sheathe: reverse the sweep back over the shoulder
+        // re-sheathe: reverse back over the shoulder
         const k = smooth((tau - 2.3) / 0.6)
-        armRz = lerp(GUARD, REACH, k)
+        armRz = lerp(GUARD_SHOULDER, REACH, k)
         armRx = lerp(0, BACK_TILT, k)
+        elbowRX = lerp(GUARD_ELBOW, -0.15, k)
+        wristX = lerp(WRIST_TILT, 0, k)
         bodyY = -0.05 * k
         const sheathed = k > 0.92
         heldVisible = !sheathed
         backRVisible = sheathed
-        heldWrist = lerp(-GUARD + 0.15, -Math.PI, k) // short arc back
       } else {
         // return to rest
         const k = smooth((tau - 2.9) / 0.3)
         armRz = lerp(REACH, REST, k)
         armRx = lerp(BACK_TILT, 0, k)
+        elbowRX = lerp(-0.15, ELBOW_REST, k)
         bodyY = -0.05 * (1 - k)
       }
     } else {
@@ -153,8 +169,11 @@ export default function NinjaModel3D({ action }: { action?: string }) {
     armL.rotation.z = armLz
     armR.rotation.z = armRz
     armR.rotation.x = armRx
+    elbowL.rotation.x = ELBOW_REST
+    elbowR.rotation.x = elbowRX
     held.visible = heldVisible
-    held.rotation.z = heldWrist
+    held.rotation.z = Math.PI // blade = the forearm's extension…
+    held.rotation.x = wristX // …tilted up a touch: obtuse, never folded back
     backR.visible = backRVisible
     backL.visible = backLVisible
   })
@@ -220,39 +239,58 @@ export default function NinjaModel3D({ action }: { action?: string }) {
           <Katana />
         </group>
       </group>
-      {/* arms: groups pivoted at the shoulder so useFrame swings them */}
+      {/* arms: shoulder group (pose) + ELBOW-hinged forearm (the move) —
+       * the toy's two-joint rig; cap spheres keep both joints closed */}
       <group ref={armLRef} position={[-0.3, 1.14, 0]}>
-        {/* shoulder cap: pivot-centred, keeps the joint closed at any pose */}
         <mesh>
           <sphereGeometry args={[0.1, 12, 10]} />
           <meshStandardMaterial color={N.robe} {...CLOTH} />
         </mesh>
-        <mesh position={[0, -0.21, 0]}>
-          <cylinderGeometry args={[0.075, 0.075, 0.42, 12]} />
+        <mesh position={[0, -0.11, 0]}>
+          <cylinderGeometry args={[0.075, 0.075, 0.22, 12]} />
           <meshStandardMaterial color={N.robe} {...CLOTH} />
         </mesh>
-        <mesh position={[0, -0.46, 0]}>
-          <sphereGeometry args={[0.085, 12, 10]} />
-          <meshStandardMaterial color={N.robeShade} {...CLOTH} />
-        </mesh>
+        <group ref={elbowLRef} position={[0, -0.22, 0]}>
+          <mesh>
+            <sphereGeometry args={[0.08, 12, 10]} />
+            <meshStandardMaterial color={N.robe} {...CLOTH} />
+          </mesh>
+          <mesh position={[0, -0.12, 0]}>
+            <cylinderGeometry args={[0.075, 0.075, 0.24, 12]} />
+            <meshStandardMaterial color={N.robe} {...CLOTH} />
+          </mesh>
+          <mesh position={[0, -0.26, 0]}>
+            <sphereGeometry args={[0.085, 12, 10]} />
+            <meshStandardMaterial color={N.robeShade} {...CLOTH} />
+          </mesh>
+        </group>
       </group>
       <group ref={armRRef} position={[0.3, 1.14, 0]}>
-        {/* shoulder cap: pivot-centred, keeps the joint closed at any pose */}
         <mesh>
           <sphereGeometry args={[0.1, 12, 10]} />
           <meshStandardMaterial color={N.robe} {...CLOTH} />
         </mesh>
-        <mesh position={[0, -0.21, 0]}>
-          <cylinderGeometry args={[0.075, 0.075, 0.42, 12]} />
+        <mesh position={[0, -0.11, 0]}>
+          <cylinderGeometry args={[0.075, 0.075, 0.22, 12]} />
           <meshStandardMaterial color={N.robe} {...CLOTH} />
         </mesh>
-        <mesh position={[0, -0.46, 0]}>
-          <sphereGeometry args={[0.085, 12, 10]} />
-          <meshStandardMaterial color={N.robeShade} {...CLOTH} />
-        </mesh>
-        {/* the katana in hand; visibility + wrist driven per-frame */}
-        <group ref={heldRef} position={[0, -0.46, 0]} rotation-z={Math.PI} visible={false}>
-          <Katana />
+        <group ref={elbowRRef} position={[0, -0.22, 0]}>
+          <mesh>
+            <sphereGeometry args={[0.08, 12, 10]} />
+            <meshStandardMaterial color={N.robe} {...CLOTH} />
+          </mesh>
+          <mesh position={[0, -0.12, 0]}>
+            <cylinderGeometry args={[0.075, 0.075, 0.24, 12]} />
+            <meshStandardMaterial color={N.robe} {...CLOTH} />
+          </mesh>
+          <mesh position={[0, -0.26, 0]}>
+            <sphereGeometry args={[0.085, 12, 10]} />
+            <meshStandardMaterial color={N.robeShade} {...CLOTH} />
+          </mesh>
+          {/* the katana in hand; rides the FOREARM as its obtuse extension */}
+          <group ref={heldRef} position={[0, -0.26, 0]} rotation-z={Math.PI} visible={false}>
+            <Katana />
+          </group>
         </group>
       </group>
       {/* neck + faceted hood head (8-seg flat-shaded — helmet-like, short) */}

@@ -91,11 +91,13 @@ digits are
 cameraRot) so they never read mirrored on the turntable; ninja `[pump "Pump"]`
 (bounce + overhead katana pump) and `[draw "Draw"]` — the 2D celebration's
 choreography in 3D: reach over the right shoulder, unsheathe the back
-katana, sweep it to an upright guard, flourish, re-sheathe, loop (~3.2 s
-phase timeline); fireninja `[blaze "Fire Blade"]` — the flaming blade
-ignites out of the always-held hilt (overshoot scale-up from the start-time
-ref) then sweeps across the body in a looping guard parry, flame flickering
-via scale noise + emissive pulse.
+katana and land in a FORWARD guard (the elbow bends the forearm ahead, the
+blade riding as its obtuse extension, pointing at the "opponent"),
+flourish, re-sheathe, loop (~3.2 s phase timeline); fireninja
+`[blaze "Fire Blade"]` — the flaming blade ignites out of the always-held
+hilt (overshoot scale-up from the start-time ref) as the forward forearm's
+obtuse extension, then the shoulder sweeps so the blade slashes across the
+front, flame flickering via scale noise + emissive pulse.
 
 The render is split into a venue-neutral **model** and a viewer **figure**,
 so the same character can stand in a game world:
@@ -105,11 +107,16 @@ so the same character can stand in a game world:
   flared torso, hemisphere cap + box brim), sharing `toyPalette`. Faces +Z,
   feet at y=0, ~1.85 u tall. It owns only the *character's* animation via its
   own `useFrame` (mutating refs, zero React renders — the drone widgets'
-  pattern), one branch per `action` id. Shared skeleton note: the shoulder
-  pivots sit at x ±0.30 / y 1.14 — ON the tapered torso's top face (its
-  half-width is only ~0.22 up there) — and each arm group's first child is
-  a pivot-centred **shoulder cap sphere** (r 0.1, sleeve colour) so the
-  joint stays closed at every arm angle. **It does not spin** — spinning is
+  pattern), one branch per `action` id. Shared skeleton note: ALL three
+  models use the two-joint arm rig — shoulder group at x ±0.30 / y 1.14
+  (ON the tapered torso's top face, whose half-width is only ~0.22 up
+  there; upper arm h 0.22) → elbow group at (0, −0.22) (forearm h 0.24,
+  hand at −0.26) — with a pivot-centred **cap sphere** on each joint
+  (shoulder r 0.1, elbow r 0.08, sleeve colour) so joints stay closed at
+  every pose. Held weapons attach INSIDE the elbow group at the hand and
+  ride as the forearm's obtuse extension (`wrist.rotation.z = π` + a fixed
+  slight up-tilt) — never counter-rotated to a world-space angle, which
+  folds them acute against the arm. **It does not spin** — spinning is
   presentation, and baking it in would make the model unusable in a world.
   Choreographed loops (the ninja Draw) additionally keep a start-time ref
   (reset when the `action` prop changes) so the phase timeline begins at
