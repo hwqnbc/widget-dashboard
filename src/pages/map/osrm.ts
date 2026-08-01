@@ -5,9 +5,9 @@
  * fire one request per user waypoint edit, well inside that.
  */
 import type { LonLat } from './routeGeometry'
+import type { RouteProfile } from '../../features/map/mapSlice'
 
-export type { LonLat }
-export type RouteProfile = 'walk' | 'bike' | 'drive'
+export type { LonLat, RouteProfile }
 
 /** Endpoint path per profile — `/route/v1/driving/` after it is literal OSRM
  * API boilerplate; the profile is chosen by the server instance. */

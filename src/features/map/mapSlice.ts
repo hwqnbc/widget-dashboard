@@ -1,6 +1,10 @@
-import { createSlice, type PayloadAction } from '@reduxjs/toolkit'
+import { createSlice, nanoid, type PayloadAction } from '@reduxjs/toolkit'
 
 export type MapViewMode = '2d' | '3d'
+
+/** OSRM routing profile (the slice owns the type so pages/map can depend on
+ * features/map, never the other way around). */
+export type RouteProfile = 'walk' | 'bike' | 'drive'
 
 /** A user-dropped map pin (WGS84 lon/lat). */
 export interface MapPin {
@@ -23,18 +27,29 @@ export interface SavedViewpoint {
   tilt?: number
 }
 
+/** A named, persisted route: the waypoint list plus its travel profile.
+ * Distance/duration are re-fetched from OSRM on load, not stored. */
+export interface SavedRoute {
+  id: string
+  name: string
+  profile: RouteProfile
+  points: [number, number][]
+}
+
 export interface MapState {
   /** 2D flat map (MapView) or 3D globe (SceneView). */
   viewMode: MapViewMode
   pins: MapPin[]
   /** Where to reopen the map; null falls back to the Singapore default. */
   viewpoint: SavedViewpoint | null
+  savedRoutes: SavedRoute[]
 }
 
 const initialState: MapState = {
   viewMode: '2d',
   pins: [],
   viewpoint: null,
+  savedRoutes: [],
 }
 
 /** Map-page state (persisted): the 2D/3D choice and the dropped pins. */
@@ -58,8 +73,21 @@ const mapSlice = createSlice({
     setViewpoint(state, action: PayloadAction<SavedViewpoint>) {
       state.viewpoint = action.payload
     },
+    saveRoute: {
+      prepare(route: Omit<SavedRoute, 'id'>) {
+        return { payload: { ...route, id: nanoid() } }
+      },
+      reducer(state, action: PayloadAction<SavedRoute>) {
+        if (!state.savedRoutes) state.savedRoutes = []
+        state.savedRoutes.push(action.payload)
+      },
+    },
+    deleteRoute(state, action: PayloadAction<string>) {
+      state.savedRoutes = (state.savedRoutes ?? []).filter((r) => r.id !== action.payload)
+    },
   },
 })
 
-export const { setViewMode, addPin, removePin, clearPins, setViewpoint } = mapSlice.actions
+export const { setViewMode, addPin, removePin, clearPins, setViewpoint, saveRoute, deleteRoute } =
+  mapSlice.actions
 export default mapSlice.reducer

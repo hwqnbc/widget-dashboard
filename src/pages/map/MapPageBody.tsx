@@ -36,6 +36,7 @@ import SceneView from '@arcgis/core/views/SceneView'
 import GraphicsLayer from '@arcgis/core/layers/GraphicsLayer'
 import Graphic from '@arcgis/core/Graphic'
 import Point from '@arcgis/core/geometry/Point'
+import Polyline from '@arcgis/core/geometry/Polyline'
 import SimpleMarkerSymbol from '@arcgis/core/symbols/SimpleMarkerSymbol'
 import type Viewpoint from '@arcgis/core/Viewpoint'
 import lightCss from '@arcgis/core/assets/esri/themes/light/main.css?inline'
@@ -45,11 +46,14 @@ import { useAppDispatch, useAppSelector } from '../../app/hooks'
 import {
   addPin,
   clearPins,
+  deleteRoute,
   removePin,
+  saveRoute,
   setViewMode,
   setViewpoint,
   type MapPin,
   type MapViewMode,
+  type SavedRoute,
   type SavedViewpoint,
 } from '../../features/map/mapSlice'
 import ConfirmDialog from '../../components/widgets/ConfirmDialog'
@@ -136,9 +140,10 @@ function safeDestroy(target: { destroy(): void } | null | undefined) {
   }
 }
 
-// Stable fallback: a fresh `?? []` each render would churn the pins-sync
-// effect's dependency (docs/lessons.md — stable fallbacks).
+// Stable fallbacks: a fresh `?? []` each render would churn effect
+// dependencies (docs/lessons.md — stable fallbacks).
 const NO_PINS: MapPin[] = []
+const NO_ROUTES: SavedRoute[] = []
 
 const PIN_SYMBOL = new SimpleMarkerSymbol({
   style: 'circle',
@@ -171,6 +176,7 @@ export default function MapPageBody() {
   const savedViewpoint = useAppSelector((state) => state.map.viewpoint) ?? null
   const savedViewpointRef = useRef(savedViewpoint)
   savedViewpointRef.current = savedViewpoint
+  const savedRoutes = useAppSelector((state) => state.map.savedRoutes) ?? NO_ROUTES
 
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<EsriMap | null>(null)
@@ -217,6 +223,48 @@ export default function MapPageBody() {
     )
   }
   const clearRoute = () => updateRoute((points) => (points.length ? [] : points))
+
+  // Drag-to-move waypoints. hitTest is async but drag's stopPropagation
+  // must be synchronous, so pointer-down pre-arms the index and the drag
+  // handler only consults the ref. Live movement mutates the two marker
+  // graphics; the commit (one OSRM re-fetch, undoable) happens on release.
+  const dragIndexRef = useRef<number | null>(null)
+  const moveWaypointGraphics = (index: number, p: LonLat) => {
+    const layer = routeLayerRef.current
+    if (!layer) return
+    for (const g of layer.graphics.toArray()) {
+      if (g.attributes?.waypointIndex === index) {
+        g.geometry = new Point({ longitude: p[0], latitude: p[1] })
+      }
+    }
+  }
+
+  const saveCurrentRoute = (name: string) => {
+    if (routeEdit.points.length < 2) return
+    dispatch(
+      saveRoute({
+        name: name.trim() || `Route ${savedRoutes.length + 1}`,
+        profile: routeProfile,
+        points: routeEdit.points,
+      }),
+    )
+  }
+
+  const loadSavedRoute = (route: SavedRoute) => {
+    setRouteProfile(route.profile)
+    updateRoute(() => route.points.map(([lon, lat]): LonLat => [lon, lat]))
+    const view = viewRef.current
+    if (!view || route.points.length === 0) return
+    try {
+      const target =
+        route.points.length === 1
+          ? new Point({ longitude: route.points[0][0], latitude: route.points[0][1] })
+          : new Polyline({ paths: [route.points.map(([lon, lat]) => [lon, lat])] })
+      void (view as MapView).goTo(target).catch(() => {})
+    } catch {
+      // view not ready — the route still loads, just without the fly-to
+    }
+  }
 
   // Render-computed viewport contract (persisted value or the Singapore
   // default) — like data-basemap, it asserts in e2e even with no network.
@@ -267,8 +315,7 @@ export default function MapPageBody() {
     // unreachable) must stay out of React's commit phase — a stray exception
     // here unmounts the whole app.
     let nextView: AnyView | null = null
-    let clickHandle: { remove(): void } | null = null
-    let stationaryHandle: { remove(): void } | null = null
+    const handles: { remove(): void }[] = []
     try {
       const map = ensureMap()
       // Where to open: the in-session carry-over (2D/3D toggle) is exact,
@@ -310,16 +357,66 @@ export default function MapPageBody() {
       )
 
       const created = nextView
-      clickHandle = (created as MapView).on('click', (event) => {
-        void handleViewClick(created, event)
-      })
+      handles.push(
+        (created as MapView).on('click', (event) => {
+          void handleViewClick(created, event)
+        }),
+      )
       // Persist the viewpoint whenever the camera comes to rest — this is
       // what survives a browser close, not just a page unmount.
-      stationaryHandle = (created as MapView).watch('stationary', (stationary: boolean) => {
-        if (!stationary) return
-        const vp = captureViewpoint(created)
-        if (vp) dispatch(setViewpoint(vp))
-      })
+      handles.push(
+        (created as MapView).watch('stationary', (stationary: boolean) => {
+          if (!stationary) return
+          const vp = captureViewpoint(created)
+          if (vp) dispatch(setViewpoint(vp))
+        }),
+      )
+      // Drag-to-move waypoints: pointer-down arms the candidate (hitTest is
+      // async; drag's stopPropagation below must be synchronous), pointer-up
+      // disarms, drag moves the marker live and commits on release.
+      handles.push(
+        (created as MapView).on('pointer-down', (event) => {
+          if (toolRef.current !== 'route') return
+          void created
+            .hitTest({ x: event.x, y: event.y })
+            .then((hit) => {
+              const wp = hit.results.find(
+                (r) =>
+                  r.type === 'graphic' &&
+                  r.layer === routeLayerRef.current &&
+                  typeof r.graphic.attributes?.waypointIndex === 'number',
+              )
+              dragIndexRef.current =
+                wp && wp.type === 'graphic'
+                  ? (wp.graphic.attributes.waypointIndex as number)
+                  : null
+            })
+            .catch(() => {
+              dragIndexRef.current = null
+            })
+        }),
+      )
+      handles.push(
+        (created as MapView).on('pointer-up', () => {
+          dragIndexRef.current = null
+        }),
+      )
+      handles.push(
+        (created as MapView).on('drag', (event) => {
+          const index = dragIndexRef.current
+          if (index == null || toolRef.current !== 'route') return
+          event.stopPropagation() // the waypoint moves, not the map
+          const mp = created.toMap({ x: event.x, y: event.y })
+          if (mp?.longitude == null || mp.latitude == null) return
+          const p: LonLat = [mp.longitude, mp.latitude]
+          if (event.action === 'end') {
+            dragIndexRef.current = null
+            updateRoute((points) => points.map((pt, i) => (i === index ? p : pt)))
+          } else {
+            moveWaypointGraphics(index, p)
+          }
+        }),
+      )
       viewRef.current = created
       setViewRevision((r) => r + 1)
     } catch {
@@ -329,8 +426,7 @@ export default function MapPageBody() {
     return () => {
       disposed = true
       try {
-        clickHandle?.remove()
-        stationaryHandle?.remove()
+        for (const h of handles) h.remove()
         // Only carry the camera over from a view that actually initialised —
         // a half-built viewpoint makes the next view's constructor throw.
         if (nextView?.ready) {
@@ -465,6 +561,7 @@ export default function MapPageBody() {
       data-center-lon={focus.lon.toFixed(4)}
       data-center-lat={focus.lat.toFixed(4)}
       data-scale={Math.round(focus.scale)}
+      data-saved-routes={savedRoutes.length}
       sx={{
         // No 100%-height chain from #root: size against the viewport minus
         // the sticky AppBar (56px at xs, 64px up) and the Container's py.
@@ -542,6 +639,10 @@ export default function MapPageBody() {
             canUndo={routeEdit.history.length > 0}
             onUndo={undoRoute}
             onClear={clearRoute}
+            savedRoutes={savedRoutes}
+            onSave={saveCurrentRoute}
+            onLoad={loadSavedRoute}
+            onDelete={(id) => dispatch(deleteRoute(id))}
           />
         )}
       </Stack>

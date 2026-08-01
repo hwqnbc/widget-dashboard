@@ -106,10 +106,18 @@ on it works without a backend server or API key.
   road-snapped waypoints onto the route polyline's monotonic measure and
   splice between the bracketing pair; "on the line" is a 12-px tolerance
   derived from `view.scale` (present on both MapView and SceneView, unlike
-  `resolution`). An **Undo** button unwinds add/remove/insert/clear through
-  a history stack (capped at 20). One fetch per edit with abort-on-change —
-  well inside the fair-use policy (attribution + ≤1 req/s). Esri's own
-  routing service needs an API key, hence OSRM.
+  `resolution`). Markers can also be **dragged to move** a waypoint: a
+  `pointer-down` hitTest pre-arms the drag (hitTest is async, but the drag
+  event's `stopPropagation` — which stops the map panning — must be called
+  synchronously), `drag` moves the marker graphics live via `view.toMap`,
+  and release commits one re-route. An **Undo** button unwinds
+  add/remove/insert/move/clear through a history stack (capped at 20).
+  **Saved routes**: the bookmark-add button names and saves the current
+  waypoints + profile to the persisted `map` slice (`SavedRoute[]`); the
+  bookmarks menu lists them with load (restores points + profile — undoable —
+  and flies to the route's extent) and per-item delete. One fetch per edit
+  with abort-on-change — well inside the fair-use policy (attribution +
+  ≤1 req/s). Esri's own routing service needs an API key, hence OSRM.
 
 ## Test contract & offline-tolerant e2e
 
@@ -155,10 +163,10 @@ visual verification happens on the GitHub Pages deploy.
   Autocomplete → `view.goTo`; avoids the key-gated Esri geocoder.
 - **Named/labelled pins** — pin titles, popups, a pin list panel; extends the
   `map` slice.
-- **Drag-to-move waypoints** — pointer-drag a route marker instead of
-  remove+re-add; builds on the `waypointIndex` hitTest + `routeGeometry`.
-- **Persisted / named routes** — save a waypoint list to the `map` slice like
-  pins; a route library panel.
+- ~~Drag-to-move waypoints~~ — shipped (pointer-down-armed drag, see the
+  route bullet above).
+- ~~Persisted / named routes~~ — shipped (save dialog + bookmarks menu, see
+  the route bullet above).
 - **Per-leg breakdown** — OSRM already returns `legs`; show distance/time
   between consecutive waypoints in a popover.
 - **Bookmarks** — save the current viewpoint to the map slice, jump list.

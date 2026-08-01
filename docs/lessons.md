@@ -844,3 +844,18 @@ carried over; these are the new ones.
     tests the *request contract*, not just the UI echo. (Extends #68's
     always-mock rule; the mock's fidelity has to match what the feature
     reads back from the response.)
+
+70. **ArcGIS drag needs a synchronous stopPropagation, but knowing WHAT was
+    grabbed needs an async hitTest — pre-arm on pointer-down.** To drag a
+    graphic instead of panning the map, the view's `drag` event must have
+    `stopPropagation()` called *during dispatch*; by the time
+    `view.hitTest()` resolves, the event is gone and the map already pans.
+    The pattern: `pointer-down` fires the hitTest and stores the grabbed
+    graphic's identity (here `attributes.waypointIndex`) in a ref; the
+    `drag` handler only consults the ref — set → stopPropagation, move the
+    graphic live with `view.toMap({x, y})`, commit on `action === 'end'`;
+    unset → let the map pan. Clear the ref on `pointer-up` too, or a plain
+    click (no drag) leaves the candidate armed and the *next* pan drags the
+    graphic. The race (drag starting before the hitTest resolves) loses only
+    the first few pixels of movement — invisible in practice. Works
+    identically for MapView and SceneView and for touch.

@@ -14,7 +14,9 @@
  *    reload persistence, and the waypoint-editing flow against an ECHO OSRM
  *    mock (returns a line through the requested coords): A→B distance,
  *    insert by clicking the line, remove by clicking a marker, undo of
- *    remove/insert/clear.
+ *    remove/insert/clear, drag-to-move a marker (re-routes with the moved
+ *    coordinate), and saved routes (save dialog, load from the menu,
+ *    persistence across reload, delete).
  */
 import { BASE_URL, launch, reporter } from './helpers.mjs'
 import {
@@ -204,6 +206,15 @@ check(
   'undo renders disabled with no history',
   await page.locator('[data-testid="map-route-undo"]').isDisabled(),
 )
+check(
+  'save disabled with no route',
+  await page.locator('[data-testid="map-route-save"]').isDisabled(),
+)
+check(
+  'saved-routes menu disabled when empty',
+  await page.locator('[data-testid="map-routes-open"]').isDisabled(),
+)
+check('no saved routes initially', (await root().getAttribute('data-saved-routes')) === '0')
 check('locate control renders', (await page.locator('[data-testid="map-locate"]').count()) === 1)
 
 if (online) {
@@ -254,7 +265,66 @@ if (online) {
     await page.locator('[data-testid="map-route-undo"]').click()
     await page.waitForTimeout(300)
     check('undo restores a cleared route', (await root().getAttribute('data-route-points')) === '2')
+    await waitForAttr('data-route-status', (v) => v === 'ok', 15000)
+
+    // ---- drag-to-move: grab the destination marker, pull it up-screen ----
+    const preDrag = osrmCoords[osrmCoords.length - 1]
+    const [fx, fy] = at(0.65, 0.5)
+    await page.mouse.move(fx, fy)
+    await page.mouse.down()
+    await page.waitForTimeout(200) // pointer-down hitTest arms the drag
+    for (let i = 1; i <= 5; i++) {
+      await page.mouse.move(fx, fy - i * 15)
+      await page.waitForTimeout(50)
+    }
+    await page.mouse.up()
+    await waitForAttr('data-route-status', (v) => v === 'ok', 15000)
+    check('drag keeps the waypoint count', (await root().getAttribute('data-route-points')) === '2')
+    const postDrag = osrmCoords[osrmCoords.length - 1]
+    check(
+      'dragging a marker re-routes with the moved coordinate',
+      osrmCoords.length > 0 &&
+        postDrag.length === 2 &&
+        postDrag[1][1] > preDrag[1][1] + 1e-6 &&
+        Math.abs(postDrag[0][0] - preDrag[0][0]) < 1e-9,
+      `B lat ${preDrag[1][1].toFixed(4)} -> ${postDrag[1][1].toFixed(4)}`,
+    )
+    check('drag is undoable', !(await page.locator('[data-testid="map-route-undo"]').isDisabled()))
+
+    // ---- saved routes: save, clear, load, persist across reload, delete ----
+    await page.locator('[data-testid="map-route-save"]').click()
+    await page.waitForTimeout(300)
+    check(
+      'save dialog prefills a name',
+      (await page.locator('[data-testid="map-route-save-name"]').inputValue()) === 'Route 1',
+    )
+    await page.locator('[data-testid="map-route-save-confirm"]').click()
+    await page.waitForTimeout(300)
+    check('route saved', (await root().getAttribute('data-saved-routes')) === '1')
     await page.locator('[data-testid="map-route-clear"]').click()
+    await page.waitForTimeout(200)
+    await page.locator('[data-testid="map-routes-open"]').click()
+    await page.waitForTimeout(300)
+    check('saved route listed', (await page.locator('[data-testid="map-route-item"]').count()) === 1)
+    await page.locator('[data-testid="map-route-item"]').click()
+    await waitForAttr('data-route-status', (v) => v === 'ok', 15000)
+    check('loading a saved route restores its waypoints', (await root().getAttribute('data-route-points')) === '2')
+
+    await page.reload({ waitUntil: 'networkidle' })
+    await page.waitForSelector('[data-testid="map-page"]', { timeout: 30000 })
+    await waitForAttr('data-map-status', (v) => v === 'ready', 45000)
+    await page.locator('[data-testid="map-tool-route"]').click()
+    await page.waitForTimeout(200)
+    check(
+      'saved routes persist across reload',
+      (await root().getAttribute('data-saved-routes')) === '1',
+    )
+    await page.locator('[data-testid="map-routes-open"]').click()
+    await page.waitForTimeout(300)
+    await page.locator('[data-testid="map-route-delete"]').click()
+    await page.waitForTimeout(300)
+    check('deleting a saved route empties the list', (await root().getAttribute('data-saved-routes')) === '0')
+    await page.keyboard.press('Escape')
     await page.waitForTimeout(200)
 
     // ---- pins: click to add, click pin to remove, persist across reload ----
