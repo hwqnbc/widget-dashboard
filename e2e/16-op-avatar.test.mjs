@@ -1,8 +1,8 @@
 /**
  * Operator-avatar suite: the Drone Sim's RC operator renders Player 1's
  * (seat 'toy') selected avatar as its 3D model when the avatar carries a
- * `Model3D` (toy, ninja, fireninja, darkarin), and falls back to the basic
- * primitive figure otherwise (frak).
+ * `Model3D` (toy, ninja, fireninja, darkarin, frak), and falls back to the
+ * basic primitive figure otherwise (imperium).
  *
  * Contract on the widget root (React-owned): `data-op-avatar` (Player 1's
  * avatar id from the persisted seat map) and `data-op-figure`
@@ -49,10 +49,15 @@ op = await opAttrs()
 check('operator follows the swapped avatar', op.avatar === 'darkarin')
 check('darkarin operator uses the avatar 3D model', op.figure === 'avatar')
 
-// swap Player 1 → frak (no Model3D yet → basic figure)
+// swap Player 1 → frak — its twin gold blades operate the drone too
 await swapPlayer1('frak')
 op = await opAttrs()
-check('frak has no Model3D → basic primitive figure', op.figure === 'basic')
+check('frak operator uses the avatar 3D model', op.figure === 'avatar')
+
+// swap Player 1 → Imperium (no Model3D yet → basic figure)
+await swapPlayer1('Imperium Claw General')
+op = await opAttrs()
+check('imperium has no Model3D → basic primitive figure', op.figure === 'basic')
 const t1 = await readers(page).telemetry()
 check('sim still runs with the basic operator', Number.isFinite(t1.alt))
 

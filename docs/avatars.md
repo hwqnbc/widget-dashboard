@@ -41,7 +41,7 @@ toy/       ToyHead, ToyFigure, SixSevenFigure, ToyCelebration, ToyFigure3D, toyP
 ninja/     NinjaHead, SwordNinjaFigure, NinjaFigure, NinjaCelebration, ninjaPalette, index
 fireninja/ FireNinjaHead, FireBladeFigure, FireNinjaFigure, FireNinjaCelebration, fireNinjaPalette, index
 darkarin/  DarkArinHead, TwinSwordFigure, DarkArinFigure, DarkArinCelebration, DarkArinFigure3D, DarkArinModel3D, darkArinPalette, index
-frak/      FrakHead, FrakFigure, FrakCelebration, frakPalette, index
+frak/      FrakHead, FrakFigure, FrakCelebration, FrakFigure3D, FrakModel3D, frakPalette, index
 imperium/  ImperiumHead, ClawFigure, ImperiumFigure, ImperiumCelebration, imperiumPalette, index
 boy/       Boy.tsx                    (an ImageToggle figure, not a game avatar)
 ```
@@ -105,7 +105,14 @@ and the blades land crossed in front of the chest, hold, then open back
 out (2.6 s loop matching the 2D's 0.7 s tween + hold). Both arms mirror
 one scalar set; the inward/outward aim lives in the shoulder's **y yaw** —
 it re-planes the elbow's bend so the forearms (and the blades riding them
-as obtuse extensions) cross the midline instead of staying parallel.
+as obtuse extensions) cross the midline instead of staying parallel; frak
+`[flurry "Blade Flurry"]` — the 2D celebration's alternating chop: the
+arms run in ANTIPHASE (each gets its own strike progress, k and 1−k —
+unlike the darkarin cross's mirrored single set), one raising its gold
+blade overhead-forward while the other chops down-and-inward across the
+front, swapping every 620 ms half-beat (1.24 s loop); a short raise-in
+blend at action start lifts both arms out of the idle guard so the loop
+never pops.
 
 The render is split into a venue-neutral **model** and a viewer **figure**,
 so the same character can stand in a game world:
@@ -187,7 +194,12 @@ hilt with the emissive fire blade; action Fire Blade), darkarin
 (`DarkArinModel3D` — faceted chin-pointed mask, gold crown band +
 spike/studs/temple fins, gunmetal pauldrons + gorget, magenta dragon
 emblem, black obi + shin wraps, two permanently-held translucent ice
-blades; action Twin Cross). Still missing 3D figures: frak, imperium.
+blades; action Twin Cross), frak (`FrakModel3D` — faceted lime hood with
+peak spike + darker back drape, orange face opening over the green
+lower-face wrap, gunmetal torso with the lime hex chest plate + belt bar,
+orange arms with black gloves, printed grey legs, two permanently-held
+pearl-gold short swords; action Blade Flurry). Still missing a 3D
+figure: imperium.
 
 ## Reading a seat's look
 `features/avatars/useSeatAvatars.ts`:

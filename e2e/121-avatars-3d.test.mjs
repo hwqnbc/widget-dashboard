@@ -5,12 +5,12 @@
  *
  * Covers: 2D default, toggling to 3D lazy-loads the three.js chunk and
  * renders a WebGL canvas for the avatars with a Figure3D (toy, ninja,
- * fireninja, darkarin), the action toggle lists the 3D model's named-move
- * library (registry `actions3d`: toy [Dance, 6 7 Show], ninja [Pump, Draw],
- * fireninja [Fire Blade], darkarin [Twin Cross]) and each action drives
- * `data-action`/`data-playing`, an avatar without a 3D figure (frak) shows
- * the "not available" placeholder instead of a canvas (with the action
- * toggle disabled —
+ * fireninja, darkarin, frak), the action toggle lists the 3D model's
+ * named-move library (registry `actions3d`: toy [Dance, 6 7 Show], ninja
+ * [Pump, Draw], fireninja [Fire Blade], darkarin [Twin Cross], frak
+ * [Blade Flurry]) and each action drives `data-action`/`data-playing`, an
+ * avatar without a 3D figure (imperium) shows the "not available"
+ * placeholder instead of a canvas (with the action toggle disabled —
  * nothing would visibly play), tapping the 3D figure toggles the turntable
  * (`data-spin`, one uniform rule for every avatar, persisted per widget),
  * switching back restores each view, and the chosen view + spin preference
@@ -123,13 +123,28 @@ await celebration.nth(0).click()
 await page.waitForTimeout(150)
 check('Idle resets the darkarin action', (await attr('data-action')) === 'idle')
 
-// an avatar without a Figure3D shows the placeholder, not a canvas
-await picker.nth(4).click() // frak — still 3D-less
+// frak's 3D figure: one-move library, the Blade Flurry round-trips
+await picker.nth(4).click() // frak
 await page.waitForTimeout(150)
-check('frak reports no 3D figure', (await attr('data-figure3d')) === 'unavailable')
+check('frak advertises an available 3D figure', (await attr('data-figure3d')) === 'available')
+await page.waitForSelector('[data-testid="figure3d-stage"] canvas', { timeout: 20000 })
+check('frak 3d view renders a WebGL canvas', (await stageCanvas.count()) === 1)
+check('frak 3d actions: Idle + Blade Flurry', (await celebration.count()) === 2)
+await celebration.nth(1).click() // Blade Flurry
+await page.waitForTimeout(150)
+check('Blade Flurry plays', (await attr('data-action')) === 'flurry')
+check('Blade Flurry sets playing', (await attr('data-playing')) === 'yes')
+await celebration.nth(0).click()
+await page.waitForTimeout(150)
+check('Idle resets the frak action', (await attr('data-action')) === 'idle')
+
+// an avatar without a Figure3D shows the placeholder, not a canvas
+await picker.nth(5).click() // imperium — still 3D-less
+await page.waitForTimeout(150)
+check('imperium reports no 3D figure', (await attr('data-figure3d')) === 'unavailable')
 check('unavailable placeholder shown', (await unavailable.count()) === 1)
 check('no canvas for an unavailable figure', (await stageCanvas.count()) === 0)
-check('placeholder names the avatar', /frak/.test(await unavailable.innerText()))
+check('placeholder names the avatar', /Imperium/.test(await unavailable.innerText()))
 check('celebration toggle disabled on the placeholder', await celebration.nth(1).isDisabled())
 
 // back to toy: the 3D figure returns and the toggle re-enables

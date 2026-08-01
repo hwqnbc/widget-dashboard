@@ -630,6 +630,19 @@ carried over; these are the new ones.
     (deeper = the X climbs to the face, shallower = it sits at the chest),
     so tune elevation there, not by moving the shoulders.
 
+62. **A loop whose base pose differs from idle needs an entry blend — and
+    antiphase arms are just k and 1−k.** Frak's Blade Flurry alternates
+    the arms between raised-overhead and struck-down, but its idle guard
+    is neither pose — starting the modulo loop directly snaps the arms to
+    "raised" on the first frame. The fix is one extra scalar: `raise =
+    smooth(min((t − t0) / 0.35, 1))`, blending every channel from the idle
+    pose into the loop's computed pose, so the move eases in and the
+    modulo timeline stays untouched (no special-cased first cycle). And
+    for the alternation itself: compute one tween scalar `m` per
+    half-beat and give the arms `k = m` and `1 − k` — antiphase costs no
+    second timeline, only a swap of which arm reads which scalar at the
+    half-beat boundary.
+
 ## Responsive touch layout (Drone Strike → Tank Battle)
 
 53. **"Fullscreen" is not "big" — size touch controls from the container's

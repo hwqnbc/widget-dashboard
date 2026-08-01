@@ -602,8 +602,8 @@ from the enhancement menu, with the integration point each would build on.
   seconds on a new best lap (the lap-complete event in `DroneSimBody` is the
   hook) so your figure celebrates the record.
 - **More avatar operators** — every avatar that gains a `Model3D` in the
-  registry becomes a Drone Sim operator automatically (toy, ninja and
-  fireninja shipped); darkarin/frak/imperium are still on primitives.
+  registry becomes a Drone Sim operator automatically (toy, ninja,
+  fireninja, darkarin and frak shipped); imperium is still on primitives.
 
 ### Gameplay
 - **Animated ghost drone** — replay the best run as a translucent drone
