@@ -57,6 +57,15 @@ on it works without a backend server or API key.
   construct/destroy path is also wrapped (`safeDestroy`, try/catch around
   creation): with its CDN unreachable ArcGIS constructors and teardown really
   do throw.
+- **The viewport persists.** A `stationary` watcher snapshots the camera as
+  plain numbers (`SavedViewpoint` in `mapSlice`: lon/lat/scale + 3D
+  camera extras) into redux whenever the map comes to rest — writing
+  as-you-go is what survives a **browser close**, where no unmount cleanup
+  ever runs (the unmount path also saves, covering in-app navigation).
+  On open, precedence is: in-session 2D/3D carry-over viewpoint → persisted
+  `SavedViewpoint` → the **Singapore default** (`DEFAULT_VIEW`, city-wide
+  scale). A 2D-saved viewpoint restores in 3D via center+scale; a 3D-saved
+  one restores its full camera (position/heading/tilt).
 - Runtime assets (workers, fonts, widget locale bundles) come from the ArcGIS
   CDN in production (the 4.x default — also sidesteps the `/widget-dashboard/`
   GitHub Pages base path). **In dev they're served from
@@ -108,8 +117,11 @@ The page root (`data-testid="map-page"`) publishes: `data-map-status`
 (`loading|ready|error` — driven by `view.when()`, **never** networkidle,
 which is meaningless against tile servers), `data-basemap`
 (**render-computed from the theme**, so the theme-follow assertion holds even
-with no network), `data-view-mode`, `data-tool`, `data-pin-count` and
-`data-route-status/-km/-profile`.
+with no network), `data-view-mode`, `data-tool`, `data-pin-count`,
+`data-route-status/-km/-points/-profile`, and the persisted-viewport mirror
+`data-center-lon/-lat` + `data-scale` (render-computed from the redux
+viewpoint or the Singapore default — the offline branch asserts the default,
+the online branch pans and asserts reload persistence).
 
 Suite `e2e/130-map.test.mjs` probes ArcGIS-CDN reachability **in the page**
 (what the browser sees is what matters) and branches: structural checks,

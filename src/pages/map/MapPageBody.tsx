@@ -47,8 +47,10 @@ import {
   clearPins,
   removePin,
   setViewMode,
+  setViewpoint,
   type MapPin,
   type MapViewMode,
+  type SavedViewpoint,
 } from '../../features/map/mapSlice'
 import ConfirmDialog from '../../components/widgets/ConfirmDialog'
 import LocateControl from './LocateControl'
@@ -90,6 +92,40 @@ interface RouteEdit {
 const MAX_WAYPOINTS = 25
 const ROUTE_HISTORY_LIMIT = 20
 
+/** Where the map opens when nothing is persisted yet: Singapore, city-wide
+ * (scale ≈ Web-Mercator zoom 11). */
+const DEFAULT_VIEW: SavedViewpoint = { lon: 103.8198, lat: 1.3521, scale: 288895 }
+
+/** Snapshot the camera as plain serializable numbers for redux-persist.
+ * Null while the view isn't ready (or mid-teardown — ArcGIS getters throw). */
+function captureViewpoint(view: AnyView): SavedViewpoint | null {
+  try {
+    if (!view.ready) return null
+    const scale = view.scale
+    if (view.type === '3d') {
+      const cam = view.camera
+      const p = cam?.position
+      if (p?.longitude == null || p.latitude == null) return null
+      const vp: SavedViewpoint = {
+        lon: p.longitude,
+        lat: p.latitude,
+        scale,
+        z: p.z,
+        heading: cam.heading,
+        tilt: cam.tilt,
+      }
+      return Number.isFinite(vp.lon) && Number.isFinite(vp.lat) && Number.isFinite(scale) ? vp : null
+    }
+    const c = view.center
+    if (c?.longitude == null || c.latitude == null) return null
+    return Number.isFinite(c.longitude) && Number.isFinite(c.latitude) && Number.isFinite(scale)
+      ? { lon: c.longitude, lat: c.latitude, scale }
+      : null
+  } catch {
+    return null
+  }
+}
+
 /** ArcGIS teardown can throw when the view is in a broken state (e.g. its
  * widget assets never loaded offline); never let that reach React. */
 function safeDestroy(target: { destroy(): void } | null | undefined) {
@@ -129,6 +165,12 @@ export default function MapPageBody() {
   const basemapId = BASEMAP_BY_MODE[mode]
   const viewMode = useAppSelector((state) => state.map.viewMode) ?? '2d'
   const pins = useAppSelector((state) => state.map.pins) ?? NO_PINS
+  // The persisted "reopen here" viewpoint (kept fresh by the stationary
+  // watcher below). The ref lets the view-creation effect read it without
+  // re-running on every pan.
+  const savedViewpoint = useAppSelector((state) => state.map.viewpoint) ?? null
+  const savedViewpointRef = useRef(savedViewpoint)
+  savedViewpointRef.current = savedViewpoint
 
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<EsriMap | null>(null)
@@ -176,6 +218,10 @@ export default function MapPageBody() {
   }
   const clearRoute = () => updateRoute((points) => (points.length ? [] : points))
 
+  // Render-computed viewport contract (persisted value or the Singapore
+  // default) — like data-basemap, it asserts in e2e even with no network.
+  const focus = savedViewpoint ?? DEFAULT_VIEW
+
   // One shared Map (basemap + graphics layers) for both view modes — pins
   // and routes survive the 2D/3D swap because they live on the map, not the
   // view. Ground only matters to the SceneView; world-elevation is the free
@@ -222,15 +268,36 @@ export default function MapPageBody() {
     // here unmounts the whole app.
     let nextView: AnyView | null = null
     let clickHandle: { remove(): void } | null = null
+    let stationaryHandle: { remove(): void } | null = null
     try {
       const map = ensureMap()
+      // Where to open: the in-session carry-over (2D/3D toggle) is exact,
+      // else the persisted last viewpoint, else the Singapore default.
       const carried = viewpointRef.current
-      const common = {
-        container,
-        map,
-        ...(carried ? { viewpoint: carried } : { center: [0, 20] as [number, number], zoom: 2 }),
+      const saved = savedViewpointRef.current ?? DEFAULT_VIEW
+      if (viewMode === '3d') {
+        const props: __esri.SceneViewProperties = { container, map }
+        if (carried) props.viewpoint = carried
+        else if (saved.z != null) {
+          props.camera = {
+            position: { longitude: saved.lon, latitude: saved.lat, z: saved.z },
+            heading: saved.heading ?? 0,
+            tilt: saved.tilt ?? 0,
+          }
+        } else {
+          props.center = [saved.lon, saved.lat]
+          props.scale = saved.scale
+        }
+        nextView = new SceneView(props)
+      } else {
+        const props: __esri.MapViewProperties = { container, map }
+        if (carried) props.viewpoint = carried
+        else {
+          props.center = [saved.lon, saved.lat]
+          props.scale = saved.scale
+        }
+        nextView = new MapView(props)
       }
-      nextView = viewMode === '3d' ? new SceneView(common) : new MapView(common)
 
       nextView.when(
         () => {
@@ -246,6 +313,13 @@ export default function MapPageBody() {
       clickHandle = (created as MapView).on('click', (event) => {
         void handleViewClick(created, event)
       })
+      // Persist the viewpoint whenever the camera comes to rest — this is
+      // what survives a browser close, not just a page unmount.
+      stationaryHandle = (created as MapView).watch('stationary', (stationary: boolean) => {
+        if (!stationary) return
+        const vp = captureViewpoint(created)
+        if (vp) dispatch(setViewpoint(vp))
+      })
       viewRef.current = created
       setViewRevision((r) => r + 1)
     } catch {
@@ -256,10 +330,14 @@ export default function MapPageBody() {
       disposed = true
       try {
         clickHandle?.remove()
+        stationaryHandle?.remove()
         // Only carry the camera over from a view that actually initialised —
         // a half-built viewpoint makes the next view's constructor throw.
         if (nextView?.ready) {
           viewpointRef.current = nextView.viewpoint?.clone() ?? viewpointRef.current
+          // Final position (covers leaving the page mid-gesture).
+          const vp = captureViewpoint(nextView)
+          if (vp) dispatch(setViewpoint(vp))
         }
       } catch {
         // keep the previous viewpoint
@@ -384,6 +462,9 @@ export default function MapPageBody() {
       data-route-km={route.km ?? ''}
       data-route-points={routeEdit.points.length}
       data-route-profile={routeProfile}
+      data-center-lon={focus.lon.toFixed(4)}
+      data-center-lat={focus.lat.toFixed(4)}
+      data-scale={Math.round(focus.scale)}
       sx={{
         // No 100%-height chain from #root: size against the viewport minus
         // the sticky AppBar (56px at xs, 64px up) and the Container's py.

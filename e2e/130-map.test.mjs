@@ -142,6 +142,16 @@ if (online) {
   )
 }
 
+// ---- default viewport: Singapore when nothing is persisted yet ----
+// (render-computed from the redux map slice, so it asserts offline too)
+check(
+  'fresh map opens focused on Singapore',
+  (await root().getAttribute('data-center-lat')) === '1.3521' &&
+    (await root().getAttribute('data-center-lon')) === '103.8198',
+  `${await root().getAttribute('data-center-lon')},${await root().getAttribute('data-center-lat')}`,
+)
+check('default scale is city-wide', (await root().getAttribute('data-scale')) === '288895')
+
 // ---- theme follow: render-computed, asserts identically offline ----
 check('light theme starts on gray-vector', (await root().getAttribute('data-basemap')) === 'gray-vector')
 const cssLenLight = await page.evaluate(
@@ -281,6 +291,30 @@ if (online) {
     check(
       'measurement widget unmounts',
       (await page.locator('.esri-distance-measurement-2d').count()) === 0,
+    )
+
+    // ---- viewport persistence: pan, wait for the stationary capture,
+    //      reload and reopen at the same spot (no unmount on reload — the
+    //      stationary watcher is what survives a browser close) ----
+    const lonBefore = await root().getAttribute('data-center-lon')
+    await page.mouse.move(box.x + box.width * 0.5, box.y + box.height * 0.5)
+    await page.mouse.down()
+    for (let i = 1; i <= 6; i++) {
+      await page.mouse.move(
+        box.x + box.width * 0.5 - i * 30,
+        box.y + box.height * 0.5 + i * 12,
+      )
+      await page.waitForTimeout(40)
+    }
+    await page.mouse.up()
+    const lonAfterPan = await waitForAttr('data-center-lon', (v) => v !== lonBefore, 15000)
+    check('panning updates the persisted viewpoint', lonAfterPan !== lonBefore, `lon=${lonAfterPan}`)
+    await page.reload({ waitUntil: 'networkidle' })
+    await page.waitForSelector('[data-testid="map-page"]', { timeout: 30000 })
+    check(
+      'viewport survives a reload',
+      (await root().getAttribute('data-center-lon')) === lonAfterPan,
+      `expected ${lonAfterPan}, got ${await root().getAttribute('data-center-lon')}`,
     )
   } else {
     check('online but view never ready', false, 'ready wait timed out')
