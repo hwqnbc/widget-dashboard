@@ -92,12 +92,13 @@ cameraRot) so they never read mirrored on the turntable; ninja `[pump "Pump"]`
 (bounce + overhead katana pump) and `[draw "Draw"]` — the 2D celebration's
 choreography in 3D: reach over the right shoulder, unsheathe the back
 katana and land in a FORWARD guard (the elbow bends the forearm ahead, the
-blade riding as its obtuse extension, pointing at the "opponent"),
+blade riding as its obtuse extension, pointing forward-up at ~45°),
 flourish, re-sheathe, loop (~3.2 s phase timeline); fireninja
 `[blaze "Fire Blade"]` — the flaming blade ignites out of the always-held
 hilt (overshoot scale-up from the start-time ref) as the forward forearm's
-obtuse extension, then the shoulder sweeps so the blade slashes across the
-front, flame flickering via scale noise + emissive pulse.
+obtuse extension pointing ~45° up, then the shoulder sweeps FORWARD
+(rotation.x, sagittal plane) so the blade slashes up-and-down in front,
+flame flickering via scale noise + emissive pulse.
 
 The render is split into a venue-neutral **model** and a viewer **figure**,
 so the same character can stand in a game world:

@@ -31,11 +31,11 @@ const smooth = (k: number) => (k <= 0 ? 0 : k >= 1 ? 1 : k * k * (3 - 2 * k))
 
 /** Guard-sweep pose targets. */
 const REST = 0.12
-const GUARD_SHOULDER = 0.35 // shoulder z at the guard
-const GUARD_ELBOW = -1.25 // elbow x — forearm forward
-const WRIST_TILT = -0.45 // fixed up-tilt: blade obtuse (~155°) to the forearm
+const GUARD_SHOULDER = 0.2 // shoulder z at the guard (arm near the side)
+const GUARD_ELBOW = -1.7 // elbow x — forearm forward, just past horizontal
+const WRIST_TILT = -0.65 // fixed up-tilt: with the elbow, blade ~45° up
 const ELBOW_REST = -0.3
-const SWEEP = 0.45 // shoulder sweep amplitude about the guard
+const SWEEP = 0.35 // FORWARD shoulder sweep (rotation.x) about the guard
 const IGNITE_S = 0.5
 
 /** Crown hair spikes: [x, y, z, tiltZ, tiltX, height]. */
@@ -74,6 +74,7 @@ export default function FireNinjaModel3D({ action }: { action?: string }) {
     if (!armL || !armR || !elbowL || !elbowR || !wrist || !blade) return
 
     let armRz = REST
+    let armRx = 0
     let armLz = -REST
     let elbowRX = ELBOW_REST
     let wristX = WRIST_TILT * 0.6 // relaxed obtuse grip at rest
@@ -93,9 +94,12 @@ export default function FireNinjaModel3D({ action }: { action?: string }) {
         // overshoot ignite: 0 → 1.12 → 1
         bladeScale = tau / IGNITE_S < 0.55 ? lerp(0.02, 1.12, smooth(tau / (IGNITE_S * 0.55))) : lerp(1.12, 1, smooth((tau / IGNITE_S - 0.55) / 0.45))
       } else {
-        // the SHOULDER sweeps; the forward-pointing blade slashes across
+        // the SHOULDER sweeps FORWARD (rotation.x, sagittal plane — like the
+        // ninja's forward guard): the whole arm swings ahead/back so the
+        // 45°-up blade slashes up-and-down in front of the body
         const s = Math.sin(((tau - IGNITE_S) / 1.5) * Math.PI * 2)
-        armRz = GUARD_SHOULDER + s * SWEEP
+        armRz = GUARD_SHOULDER
+        armRx = s * SWEEP
         elbowRX = GUARD_ELBOW
         wristX = WRIST_TILT
         bladeScale = 1
@@ -110,6 +114,7 @@ export default function FireNinjaModel3D({ action }: { action?: string }) {
 
     armL.rotation.z = armLz
     armR.rotation.z = armRz
+    armR.rotation.x = armRx
     elbowL.rotation.x = ELBOW_REST
     elbowR.rotation.x = elbowRX
     wrist.rotation.z = Math.PI // blade = the forearm's extension…

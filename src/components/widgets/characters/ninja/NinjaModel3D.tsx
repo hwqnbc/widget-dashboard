@@ -35,8 +35,8 @@ const smooth = (k: number) => (k <= 0 ? 0 : k >= 1 ? 1 : k * k * (3 - 2 * k))
 const REST = 0.12
 const REACH = 2.5 // shoulder z — hand up over the right shoulder
 const GUARD_SHOULDER = 0.35 // shoulder z at the forward guard
-const GUARD_ELBOW = -1.2 // elbow x — forearm forward
-const WRIST_TILT = -0.45 // fixed up-tilt: blade obtuse (~155°) to the forearm
+const GUARD_ELBOW = -1.7 // elbow x — forearm forward, just past horizontal
+const WRIST_TILT = -0.65 // fixed up-tilt: with the elbow, blade ~45° up
 const ELBOW_REST = -0.25
 const BACK_TILT = -0.55 // shoulder rotation.x reaching behind
 const DRAW_T = 3.2 // loop period (s)
