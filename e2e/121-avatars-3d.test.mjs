@@ -6,7 +6,7 @@
  * Covers: 2D default, toggling to 3D lazy-loads the three.js chunk and
  * renders a WebGL canvas for the avatars with a Figure3D (toy, ninja,
  * fireninja), the action toggle lists the 3D model's named-move library
- * (registry `actions3d`: toy [6 7], ninja [Pump, Draw], fireninja
+ * (registry `actions3d`: toy [Dance, 6 7 Show], ninja [Pump, Draw], fireninja
  * [Fire Blade]) and each action drives `data-action`/`data-playing`, an
  * avatar without a 3D figure (darkarin) shows the "not available"
  * placeholder instead of a canvas (with the action toggle disabled —
@@ -58,11 +58,11 @@ await page.waitForTimeout(150)
 check('tapping again restarts it', (await attr('data-spin')) === 'on')
 
 // the action toggle lists the toy's move library and drives the 3D model
-check('toy 3d actions: Idle + 6 7 + 6 7 Show', (await celebration.count()) === 3)
-await celebration.nth(1).click() // '6 7'
+check('toy 3d actions: Idle + Dance + 6 7 Show', (await celebration.count()) === 3)
+await celebration.nth(1).click() // 'Dance'
 await page.waitForTimeout(150)
-check('6 7 starts the 3d action', (await attr('data-playing')) === 'yes')
-check('action id is sixseven', (await attr('data-action')) === 'sixseven')
+check('Dance starts the 3d action', (await attr('data-playing')) === 'yes')
+check('action id is dance', (await attr('data-action')) === 'dance')
 check('canvas stays mounted while playing', (await stageCanvas.count()) === 1)
 await celebration.nth(2).click() // '6 7 Show' — the numerals variant
 await page.waitForTimeout(150)

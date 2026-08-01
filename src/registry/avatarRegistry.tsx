@@ -63,7 +63,7 @@ export const avatarVisualById: Record<AvatarId, AvatarVisual> = {
     Figure3D: ToyFigure3D,
     Model3D: ToyModel3D,
     actions3d: [
-      { id: 'sixseven', name: '6 7' },
+      { id: 'dance', name: 'Dance' },
       { id: 'sixsevenshow', name: '6 7 Show' },
     ],
   },

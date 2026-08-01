@@ -77,13 +77,16 @@ subtle sway), and the id list lives as registry metadata
 the Avatar Actions picker can render the buttons without loading three.js.
 New moves are *added* as new ids ("add action"); existing ones are improved
 in place under a stable id ("refine"). Current libraries: toy
-`[sixseven "6 7"]` — the 2D SixSevenFigure's articulation faithfully: upper
-arms hold an elbows-out pose and the FOREARMS flex at the elbow (±38°,
-mirrored bases + one flex angle = alternating hands), no body bounce, smile
-swapped for the open hyped mouth — and
-`[sixsevenshow "6 7 Show"]` — the same dance flanked by big red "6"/"7"
-numerals built from primitives (torus + boxes, no fonts), popping in with a
-spring and bobbing in counter-phase with the arms; the flat digits are
+`[dance "Dance"]` — a generic energetic dance (not 6-7 related): jumping
+with the arms raised overhead, waving with both joints (shoulder swing +
+smaller offset-phase elbow wave) — and
+`[sixsevenshow "6 7 Show"]` — the 6-7 meme: the figure stands still, elbows
+at the sides, forearms hinged FORWARD at the elbow (rotation.x — hands out
+in front of the body, not to the side) bobbing up/down alternately, flanked
+by big red "6"/"7" numerals built from primitives (torus + boxes, no
+fonts), popping in with a spring and bobbing in counter-phase with the
+hands; both dances swap the smile for the open hyped mouth; the flat
+digits are
 **billboarded at the camera** each frame (local = parentWorldRot⁻¹ ·
 cameraRot) so they never read mirrored on the turntable; ninja `[pump "Pump"]`
 (bounce + overhead katana pump) and `[draw "Draw"]` — the 2D celebration's

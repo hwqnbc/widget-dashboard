@@ -7,16 +7,17 @@
 // y=0.
 //
 // `action` picks a named move from the registry's actions3d library:
-// - 'sixseven': the "6 7" exactly as the 2D SixSevenFigure articulates it —
-//   the upper arms hold an elbows-out pose and the FOREARMS flex at the
-//   ELBOW (±38°, mirrored bases + the same flex angle = alternating hands,
-//   the "six… seven" weighing; lesson #27's pivot rule). No body bounce —
-//   the 2D figure stands still — and the smile swaps for the open hyped
-//   mouth.
-// - 'sixsevenshow': the same dance flanked by big red "6"/"7" numerals built
-//   from primitives, popping in with a spring and bobbing in counter-phase
-//   with the hands (the 2D popL/popR), billboarded at the camera.
-// Undefined/unknown ids idle with a subtle arm sway.
+// - 'dance': a generic energetic dance (not 6-7 related) — jumping with the
+//   arms raised overhead, waving with BOTH joints: the shoulder swing plus a
+//   smaller offset-phase elbow wave.
+// - 'sixsevenshow': the 6-7 meme — the figure stands still, elbows at the
+//   sides, FOREARMS hinged FORWARD at the elbow (rotation.x, hands out in
+//   front of the body) bobbing up/down alternately, the "six… seven"
+//   weighing — flanked by big red "6"/"7" numerals built from primitives,
+//   popping in with a spring, bobbing in counter-phase with the hands and
+//   billboarded at the camera.
+// Both dances swap the smile for the open hyped mouth. Undefined/unknown
+// ids idle with a subtle arm sway.
 //
 // Loaded only via lazy() (the avatar registry's Model3D/Figure3D fields) —
 // never re-export from toy/index.ts, or three.js lands in the main chunk.
@@ -42,6 +43,7 @@ const DIGIT_X = 0.78
 const DIGIT_Y = 0.62
 
 export default function ToyModel3D({ action }: { action?: string }) {
+  const bodyRef = useRef<Group>(null)
   const armLRef = useRef<Group>(null)
   const armRRef = useRef<Group>(null)
   const elbowLRef = useRef<Group>(null)
@@ -59,26 +61,49 @@ export default function ToyModel3D({ action }: { action?: string }) {
       prevActionRef.current = action
       t0Ref.current = t // the numerals' pop-in springs from the action start
     }
-    const dancing = action === 'sixseven' || action === 'sixsevenshow'
+    const dancing = action === 'dance' || action === 'sixsevenshow'
     const show = action === 'sixsevenshow'
     const s = Math.sin(t * 5.4)
-    if (dancing) {
-      // Upper arms hold still, elbows out; only the FOREARMS flex (the 2D
-      // `flex` keyframes: ±38° ≈ 0.66 rad). Mirrored elbow bases plus the
-      // SAME flex angle on both make the hands alternate, like the 2D's
-      // mirrored geometry under one keyframe set.
-      const flex = s * 0.66
-      if (armLRef.current) armLRef.current.rotation.z = -0.4
-      if (armRRef.current) armRRef.current.rotation.z = 0.4
-      if (elbowLRef.current) elbowLRef.current.rotation.z = -0.35 + flex
-      if (elbowRRef.current) elbowRRef.current.rotation.z = 0.35 + flex
-    } else {
-      const sway = Math.sin(t * 1.7) * 0.05
-      if (armLRef.current) armLRef.current.rotation.z = -(0.12 + sway)
-      if (armRRef.current) armRRef.current.rotation.z = 0.12 - sway
-      if (elbowLRef.current) elbowLRef.current.rotation.z = -0.12
-      if (elbowRRef.current) elbowRRef.current.rotation.z = 0.12
+    // Every joint channel written every frame (self-correcting on switches).
+    let armZ = 0.12 + Math.sin(t * 1.7) * 0.05 // idle sway (mirrored below)
+    let armZOpp = 0.12 - Math.sin(t * 1.7) * 0.05
+    let elbowZ = 0.12
+    let elbowZOpp = 0.12
+    let elbowX = 0
+    let elbowXOpp = 0
+    let bodyY = 0
+    if (action === 'dance') {
+      // Energetic jump + overhead two-joint wave: shoulders swing the raised
+      // arms alternately, forearms add a smaller offset-phase elbow wave.
+      bodyY = Math.abs(s) * 0.16
+      armZ = 1.75 + s * 0.45
+      armZOpp = 1.75 - s * 0.45
+      const wave = Math.sin(t * 5.4 + 1.1) * 0.3
+      elbowZ = 0.2 + wave
+      elbowZOpp = 0.2 - wave
+    } else if (show) {
+      // The 6-7 meme: stand still, elbows at the sides, FOREARMS hinged
+      // FORWARD at the elbow (rotation.x — hands out in front, not to the
+      // side), bobbing up/down alternately: the "six… seven" weighing.
+      armZ = 0.15
+      armZOpp = 0.15
+      elbowZ = 0
+      elbowZOpp = 0
+      const flex = s * 0.5
+      elbowX = -Math.PI / 2 + flex
+      elbowXOpp = -Math.PI / 2 - flex
     }
+    if (armLRef.current) armLRef.current.rotation.z = -armZ
+    if (armRRef.current) armRRef.current.rotation.z = armZOpp
+    if (elbowLRef.current) {
+      elbowLRef.current.rotation.z = -elbowZ
+      elbowLRef.current.rotation.x = elbowX
+    }
+    if (elbowRRef.current) {
+      elbowRRef.current.rotation.z = elbowZOpp
+      elbowRRef.current.rotation.x = elbowXOpp
+    }
+    if (bodyRef.current) bodyRef.current.position.y = bodyY
     // hyped open mouth while dancing, smile otherwise (the 2D mouth swap)
     if (smileRef.current) smileRef.current.visible = !dancing
     if (mouthORef.current) mouthORef.current.visible = dancing
@@ -108,7 +133,7 @@ export default function ToyModel3D({ action }: { action?: string }) {
   })
 
   return (
-    <group>
+    <group ref={bodyRef}>
       {/* legs */}
       <mesh position={[-0.14, 0.25, 0]}>
         <boxGeometry args={[0.24, 0.5, 0.26]} />
