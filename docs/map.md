@@ -57,6 +57,14 @@ on it works without a backend server or API key.
   construct/destroy path is also wrapped (`safeDestroy`, try/catch around
   creation): with its CDN unreachable ArcGIS constructors and teardown really
   do throw.
+- **3D buildings** — a toggle (visible in 3D mode, persisted, default on)
+  adds Esri's public Living Atlas **"OpenStreetMap 3D Buildings"** scene
+  layer (portal item `ca0470dbbddb4db28bad74ed39949e25`) — free, **no API
+  key**, global extruded OSM footprints, updated monthly. The `SceneLayer`
+  is created lazily on first 3D use (try/catch — offline it degrades
+  silently), lives on the shared map (the 2D MapView just doesn't render
+  scene layers) and is driven by `visible` afterwards. Contract:
+  `data-buildings` on the root.
 - **The viewport persists.** A `stationary` watcher snapshots the camera as
   plain numbers (`SavedViewpoint` in `mapSlice`: lon/lat/scale + 3D
   camera extras) into redux whenever the map comes to rest — writing
@@ -177,6 +185,12 @@ visual verification happens on the GitHub Pages deploy.
 - **Fullscreen** — reuse `FullscreenProvider` for a chrome-less map view.
 - **Screenshot export** — `view.takeScreenshot()` → download.
 - **Elevation profile (3D)** — sketch a line, sample `ground` elevation.
+- **OSM 3D Trees** — the sibling Living Atlas scene layers (thematic /
+  realistic), same no-key family as the buildings layer; a second toggle or
+  bundled with it.
+- **Terrain enhancements** — terrain elevation is already live in 3D (the
+  free `world-elevation` ground); build on it with a **terrain exaggeration**
+  setting and/or a **hillshade** basemap option for visible relief in 2D.
 - **@arcgis/core 5.x migration** — new major; re-verify free basemaps + CDN
   asset defaults before crossing.
 - **Legacy-basemap sunset migration** (before Mar 2028) — swap

@@ -23,6 +23,7 @@ import {
   Tooltip,
   useTheme,
 } from '@mui/material'
+import LocationCityIcon from '@mui/icons-material/LocationCity'
 import PushPinIcon from '@mui/icons-material/PushPin'
 import StraightenIcon from '@mui/icons-material/Straighten'
 import SquareFootIcon from '@mui/icons-material/SquareFoot'
@@ -34,6 +35,7 @@ import Basemap from '@arcgis/core/Basemap'
 import MapView from '@arcgis/core/views/MapView'
 import SceneView from '@arcgis/core/views/SceneView'
 import GraphicsLayer from '@arcgis/core/layers/GraphicsLayer'
+import SceneLayer from '@arcgis/core/layers/SceneLayer'
 import Graphic from '@arcgis/core/Graphic'
 import Point from '@arcgis/core/geometry/Point'
 import Polyline from '@arcgis/core/geometry/Polyline'
@@ -49,6 +51,7 @@ import {
   deleteRoute,
   removePin,
   saveRoute,
+  setBuildings,
   setViewMode,
   setViewpoint,
   type MapPin,
@@ -99,6 +102,10 @@ const ROUTE_HISTORY_LIMIT = 20
 /** Where the map opens when nothing is persisted yet: Singapore, city-wide
  * (scale ≈ Web-Mercator zoom 11). */
 const DEFAULT_VIEW: SavedViewpoint = { lon: 103.8198, lat: 1.3521, scale: 288895 }
+
+/** Esri's public Living Atlas "OpenStreetMap 3D Buildings" scene layer —
+ * free, no API key, global extruded OSM buildings. Renders in 3D only. */
+const OSM_BUILDINGS_ITEM = 'ca0470dbbddb4db28bad74ed39949e25'
 
 /** Snapshot the camera as plain serializable numbers for redux-persist.
  * Null while the view isn't ready (or mid-teardown — ArcGIS getters throw). */
@@ -177,9 +184,11 @@ export default function MapPageBody() {
   const savedViewpointRef = useRef(savedViewpoint)
   savedViewpointRef.current = savedViewpoint
   const savedRoutes = useAppSelector((state) => state.map.savedRoutes) ?? NO_ROUTES
+  const buildings = useAppSelector((state) => state.map.buildings) ?? true
 
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<EsriMap | null>(null)
+  const buildingsLayerRef = useRef<SceneLayer | null>(null)
   const pinsLayerRef = useRef<GraphicsLayer | null>(null)
   const routeLayerRef = useRef<GraphicsLayer | null>(null)
   const locateLayerRef = useRef<GraphicsLayer | null>(null)
@@ -294,6 +303,7 @@ export default function MapPageBody() {
     return () => {
       safeDestroy(mapRef.current) // also destroys the layers
       mapRef.current = null
+      buildingsLayerRef.current = null
       pinsLayerRef.current = null
       routeLayerRef.current = null
       locateLayerRef.current = null
@@ -518,6 +528,22 @@ export default function MapPageBody() {
     }
   }, [mode, basemapId])
 
+  // OSM 3D Buildings: created lazily the first time the 3D view wants them
+  // (public Living Atlas item, no key), then just driven via visibility. The
+  // layer lives on the shared map; the 2D MapView simply doesn't render it.
+  useEffect(() => {
+    if (viewMode === '3d' && buildings && !buildingsLayerRef.current && mapRef.current) {
+      try {
+        const layer = new SceneLayer({ portalItem: { id: OSM_BUILDINGS_ITEM } })
+        buildingsLayerRef.current = layer
+        mapRef.current.add(layer)
+      } catch {
+        // offline/blocked CDN — 3D still works, just without buildings
+      }
+    }
+    if (buildingsLayerRef.current) buildingsLayerRef.current.visible = buildings
+  }, [buildings, viewMode])
+
   // Mirror the persisted pins onto the graphics layer.
   useEffect(() => {
     const layer = pinsLayerRef.current
@@ -562,6 +588,7 @@ export default function MapPageBody() {
       data-center-lat={focus.lat.toFixed(4)}
       data-scale={Math.round(focus.scale)}
       data-saved-routes={savedRoutes.length}
+      data-buildings={buildings ? 'on' : 'off'}
       sx={{
         // No 100%-height chain from #root: size against the viewport minus
         // the sticky AppBar (56px at xs, 64px up) and the Container's py.
@@ -589,6 +616,20 @@ export default function MapPageBody() {
             3D
           </ToggleButton>
         </ToggleButtonGroup>
+        {viewMode === '3d' && (
+          <Tooltip title="3D buildings (OpenStreetMap)">
+            <ToggleButton
+              size="small"
+              value="buildings"
+              selected={buildings}
+              onChange={() => dispatch(setBuildings(!buildings))}
+              data-testid="map-buildings"
+              aria-label="3D buildings"
+            >
+              <LocationCityIcon fontSize="small" />
+            </ToggleButton>
+          </Tooltip>
+        )}
         <Divider orientation="vertical" flexItem />
         <ToggleButtonGroup
           size="small"

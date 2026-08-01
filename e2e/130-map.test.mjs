@@ -171,8 +171,12 @@ await page.getByRole('button', { name: 'Switch to light mode' }).click()
 await page.waitForTimeout(300)
 check('toggle back restores gray-vector', (await root().getAttribute('data-basemap')) === 'gray-vector')
 
-// ---- 2D/3D toggle + persistence ----
+// ---- 2D/3D toggle + persistence, 3D buildings toggle ----
 check('starts in 2D', (await root().getAttribute('data-view-mode')) === '2d')
+check(
+  'buildings toggle hidden in 2D',
+  (await page.locator('[data-testid="map-buildings"]').count()) === 0,
+)
 await page.locator('[data-testid="map-mode-3d"]').click()
 await page.waitForTimeout(500)
 check('3D mode selected', (await root().getAttribute('data-view-mode')) === '3d')
@@ -180,12 +184,27 @@ if (online) {
   const status3d = await waitForAttr('data-map-status', (v) => v === 'ready', 60000)
   check('scene view becomes ready', status3d === 'ready', `status=${status3d}`)
 }
+check(
+  'buildings toggle appears in 3D, on by default',
+  (await page.locator('[data-testid="map-buildings"]').count()) === 1 &&
+    (await root().getAttribute('data-buildings')) === 'on',
+)
+await page.locator('[data-testid="map-buildings"]').click()
+await page.waitForTimeout(300)
+check('buildings toggle off', (await root().getAttribute('data-buildings')) === 'off')
 await page.reload({ waitUntil: 'networkidle' })
 await page.waitForSelector('[data-testid="map-page"]', { timeout: 30000 })
 check(
   '3D choice persists across reload',
   (await root().getAttribute('data-view-mode')) === '3d',
 )
+check(
+  'buildings choice persists across reload',
+  (await root().getAttribute('data-buildings')) === 'off',
+)
+await page.locator('[data-testid="map-buildings"]').click()
+await page.waitForTimeout(300)
+check('buildings back on', (await root().getAttribute('data-buildings')) === 'on')
 await page.locator('[data-testid="map-mode-2d"]').click()
 await page.waitForTimeout(500)
 check('back to 2D', (await root().getAttribute('data-view-mode')) === '2d')

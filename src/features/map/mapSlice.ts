@@ -43,6 +43,8 @@ export interface MapState {
   /** Where to reopen the map; null falls back to the Singapore default. */
   viewpoint: SavedViewpoint | null
   savedRoutes: SavedRoute[]
+  /** Show the OSM 3D Buildings scene layer (visible effect in 3D only). */
+  buildings: boolean
 }
 
 const initialState: MapState = {
@@ -50,6 +52,7 @@ const initialState: MapState = {
   pins: [],
   viewpoint: null,
   savedRoutes: [],
+  buildings: true,
 }
 
 /** Map-page state (persisted): the 2D/3D choice and the dropped pins. */
@@ -85,9 +88,20 @@ const mapSlice = createSlice({
     deleteRoute(state, action: PayloadAction<string>) {
       state.savedRoutes = (state.savedRoutes ?? []).filter((r) => r.id !== action.payload)
     },
+    setBuildings(state, action: PayloadAction<boolean>) {
+      state.buildings = action.payload
+    },
   },
 })
 
-export const { setViewMode, addPin, removePin, clearPins, setViewpoint, saveRoute, deleteRoute } =
-  mapSlice.actions
+export const {
+  setViewMode,
+  addPin,
+  removePin,
+  clearPins,
+  setViewpoint,
+  saveRoute,
+  deleteRoute,
+  setBuildings,
+} = mapSlice.actions
 export default mapSlice.reducer
