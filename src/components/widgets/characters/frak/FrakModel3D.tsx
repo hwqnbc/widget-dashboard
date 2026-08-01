@@ -1,8 +1,9 @@
 // Frak's mesh-level 3D model: the 2D FrakFigure's faceted lime hood (peak
 // spike + darker back drape), orange face opening with the green lower-face
 // wrap, gunmetal torso with the lime hex chest plate + belt bar, orange arms
-// with black gloves, printed grey legs, and the two pearl-gold short swords —
-// ALWAYS in hand (the 2D art has no sheath), rebuilt from three.js primitives.
+// with black gloves, printed grey legs, and the two pearl-gold SABERS —
+// broad curved blades with knuckle-bow hilts, ALWAYS in hand (the 2D art has
+// no sheath), rebuilt from three.js primitives.
 // Venue-neutral (no spin, no stage — the FigureStage3D turntable or a game
 // world drives its heading): faces +Z, feet at y=0, ~1.85 units tall, same
 // skeleton as ToyModel3D so shared scaling holds.
@@ -48,30 +49,53 @@ const HALF = FLURRY_T / 2
 const TWEEN = 0.5 // the 2D's 0.5 s move; the rest of the half-beat holds
 const RAISE_IN = 0.35 // blend from the idle guard into the loop at action start
 
-/** A pearl-gold short sword in local coords: hilt at the origin, blade up
- * (+y), ~0.65 long — stubbier than the darkarin/ninja blades (2D 72:17). */
-function GoldSword() {
+/** A pearl-gold SABER in local coords: hilt at the origin, blade up (+y),
+ * ~0.7 long — a broad flat blade whose upper third sweeps back toward +x
+ * (the curve), a bright goldHi stripe on the +x cutting edge, and a
+ * knuckle bow arcing from the crossguard to the pommel on the edge side.
+ * The left hand's copy is turned rotation-y=π so the two curves mirror. */
+function GoldSaber() {
   return (
     <group>
-      <mesh position={[0, 0.31, 0]}>
-        <boxGeometry args={[0.05, 0.55, 0.02]} />
+      {/* broad lower blade + swept-back upper segment + tip wedge */}
+      <mesh position={[0, 0.27, 0]}>
+        <boxGeometry args={[0.09, 0.46, 0.022]} />
         <meshStandardMaterial color={FR.gold} {...STEEL} />
       </mesh>
-      <mesh position={[0, 0.3, 0]}>
-        <boxGeometry args={[0.02, 0.5, 0.024]} />
-        <meshStandardMaterial color={FR.goldHi} {...STEEL} />
+      <mesh position={[0.03, 0.55, 0]} rotation-z={-0.2}>
+        <boxGeometry args={[0.078, 0.2, 0.022]} />
+        <meshStandardMaterial color={FR.gold} {...STEEL} />
       </mesh>
-      <mesh position={[0, 0.62, 0]}>
-        <coneGeometry args={[0.025, 0.07, 4]} />
+      <mesh position={[0.075, 0.68, 0]} rotation-z={-0.5} scale={[1, 1, 0.3]}>
+        <coneGeometry args={[0.038, 0.12, 4]} />
         <meshStandardMaterial color={FR.gold} {...STEEL} flatShading />
       </mesh>
+      {/* bright stripe along the +x cutting edge */}
+      <mesh position={[0.038, 0.27, 0]}>
+        <boxGeometry args={[0.018, 0.44, 0.026]} />
+        <meshStandardMaterial color={FR.goldHi} {...STEEL} />
+      </mesh>
+      <mesh position={[0.068, 0.55, 0]} rotation-z={-0.2}>
+        <boxGeometry args={[0.016, 0.18, 0.026]} />
+        <meshStandardMaterial color={FR.goldHi} {...STEEL} />
+      </mesh>
+      {/* crossguard + knuckle bow (half-torus on the edge side) */}
       <mesh position={[0, 0.02, 0]}>
-        <boxGeometry args={[0.12, 0.03, 0.05]} />
+        <boxGeometry args={[0.16, 0.03, 0.05]} />
         <meshStandardMaterial color={FR.gold} {...STEEL} />
       </mesh>
+      <mesh position={[0, -0.09, 0]} rotation-z={-Math.PI / 2}>
+        <torusGeometry args={[0.11, 0.013, 8, 12, Math.PI]} />
+        <meshStandardMaterial color={FR.gold} {...STEEL} />
+      </mesh>
+      {/* wrapped grip + pommel */}
       <mesh position={[0, -0.1, 0]}>
         <cylinderGeometry args={[0.026, 0.026, 0.16, 8]} />
         <meshStandardMaterial color={FR.glove} {...CLOTH} />
+      </mesh>
+      <mesh position={[0, -0.2, 0]}>
+        <boxGeometry args={[0.045, 0.03, 0.045]} />
+        <meshStandardMaterial color={FR.gold} {...STEEL} />
       </mesh>
     </group>
   )
@@ -237,9 +261,10 @@ export default function FrakModel3D({ action }: { action?: string }) {
             <sphereGeometry args={[0.085, 12, 10]} />
             <meshStandardMaterial color={FR.glove} {...CLOTH} />
           </mesh>
-          {/* the sword in hand; rides the FOREARM as its obtuse extension */}
-          <group ref={heldLRef} position={[0, -0.26, 0]} rotation-z={Math.PI}>
-            <GoldSword />
+          {/* the saber in hand; rides the FOREARM as its obtuse extension.
+           * rotation-y=π mirrors the curve so the pair reads symmetric. */}
+          <group ref={heldLRef} position={[0, -0.26, 0]} rotation-z={Math.PI} rotation-y={Math.PI}>
+            <GoldSaber />
           </group>
         </group>
       </group>
@@ -266,7 +291,7 @@ export default function FrakModel3D({ action }: { action?: string }) {
             <meshStandardMaterial color={FR.glove} {...CLOTH} />
           </mesh>
           <group ref={heldRRef} position={[0, -0.26, 0]} rotation-z={Math.PI}>
-            <GoldSword />
+            <GoldSaber />
           </group>
         </group>
       </group>

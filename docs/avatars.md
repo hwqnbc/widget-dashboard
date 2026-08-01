@@ -205,7 +205,9 @@ blades; action Twin Cross), frak (`FrakModel3D` — faceted lime hood with
 peak spike + darker back drape, orange face opening over the green
 lower-face wrap, gunmetal torso with the lime hex chest plate + belt bar,
 orange arms with black gloves, printed grey legs, two permanently-held
-pearl-gold short swords; action Blade Flurry), and imperium
+pearl-gold sabers — broad curved blades with knuckle-bow hilts, the pair
+mirrored via `rotation-y=π` on the left hand's copy; action Blade
+Flurry), and imperium
 (`ImperiumModel3D` — black faceted helmet with horn spikes, gold face
 plate under the black V-crest with four orange eye slits + glowing mouth
 vent, gold rib print + hex core emblem, left fist akimbo on the hip, the
