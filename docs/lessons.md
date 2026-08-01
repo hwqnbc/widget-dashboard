@@ -134,6 +134,21 @@ reported and asked to fix, captured so they don't recur.
 22. Branch hygiene: when the working branch is fully merged, reset it from
     `origin/main` before new work; fast-forward merges keep history linear.
 
+65. **Optional-capability rollouts need a rolling fallback target — and a
+    plan for when the last one disappears.** While the per-avatar 3D
+    figures rolled out one avatar per round, the fallback paths' e2e
+    coverage (the "no 3D figure" placeholder in suite 121, the basic
+    operator in suite 16) kept a live target by RETARGETING each round to
+    a roster member that still lacked the capability (darkarin → frak →
+    imperium). When the LAST member gained it, the positive assertions
+    became unreachable from the UI — the right move is to retire them,
+    keep the code branch as scaffolding for future members, demote
+    coverage to a negative probe (e.g. "no unavailable placeholder for
+    toy"), and say so in the suite's docblock, so the next reader knows
+    the path is deliberately untested-positive rather than forgotten.
+    The retarget step is not optional: skipping it drops the fallback
+    branch's only coverage several rounds before the rollout finishes.
+
 ## Physics / pointer interaction (Archery)
 
 23. **Projectile + drag aiming.** Keep world = SVG viewBox units and size the
@@ -674,6 +689,20 @@ carried over; these are the new ones.
     construction — the earlier `rotation-y = π` mirror flip becomes
     unnecessary. Weapon-shape checklist alongside #27b/#63's grip rules:
     grip (extension vs pistol), edge orientation, curve direction.
+
+66. **The 2D celebration is the 3D action's spec — copy its clock before
+    inventing motion.** Every 3D action that landed cleanly took its loop
+    period, easing shape and phase structure verbatim from the 2D source
+    component: DarkArin's cross = the 2D's 2.6 s interval with 0.7 s
+    tween + hold, frak's flurry = the 2D's 620 ms antiphase half-beats
+    with the 0.5 s move, imperium's slash = the 2D keyframes' symmetric
+    0.7 s −18°→+48° ease-in-out (a plain cosine). What needed
+    screenshot-tuning rounds was only ever the 3D-specific part — pose
+    angles, yaw planes, joint distribution. So when translating a 2D
+    move: read the 2D component's keyframes/intervals FIRST, transcribe
+    the timing constants into the useFrame timeline unchanged, and spend
+    the iteration budget exclusively on what 3D adds. (Timing disputes
+    never came back from review; pose disputes did, every time.)
 
 ## Responsive touch layout (Drone Strike → Tank Battle)
 
