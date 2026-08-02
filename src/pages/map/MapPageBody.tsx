@@ -64,6 +64,7 @@ import {
   type SavedViewpoint,
 } from '../../features/map/mapSlice'
 import ConfirmDialog from '../../components/widgets/ConfirmDialog'
+import CoordinateReadout from './CoordinateReadout'
 import LocateControl from './LocateControl'
 import MeasureBinding from './MeasureControls'
 import RouteControl from './RouteControl'
@@ -814,6 +815,7 @@ export default function MapPageBody() {
       </Stack>
       <Box sx={{ position: 'relative', flexGrow: 1, borderRadius: 1, overflow: 'hidden' }}>
         <Box ref={containerRef} data-testid="map-container" sx={{ width: '100%', height: '100%' }} />
+        <CoordinateReadout viewRef={viewRef} viewRevision={viewRevision} />
         {status === 'error' && (
           <Alert
             severity="warning"

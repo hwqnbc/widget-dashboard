@@ -106,6 +106,15 @@ on it works without a backend server or API key.
   behind the shared `ConfirmDialog`. Pins are `{id, lon, lat}` in the new
   persisted `map` slice (registered in `app/store.ts`, rides the existing
   `testsite` localStorage key) and are mirrored to a GraphicsLayer.
+- **Coordinate readout** (`CoordinateReadout.tsx`): a monospace chip over
+  the map's bottom-right showing `lat, lon` (5 dp ≈ 1 m) under the pointer
+  (rAF-throttled `pointer-move` → `view.toMap`), falling back to the view
+  center on `stationary` for touch devices; click copies with a brief
+  "Copied" swap. All updates write straight to the DOM node — zero React
+  re-renders per mousemove, and React must never re-create the node (it
+  holds the value). Notably `toMap` needs only the view transform, not
+  tiles, so the whole contract (`data-lat`/`data-lon` on the chip) asserts
+  in the e2e suite's offline branch, clipboard included.
 - **Measure** (`MeasureControls.tsx`): mounts the ArcGIS measurement widget
   matching tool + view dimension (`DistanceMeasurement2D`/`AreaMeasurement2D`
   vs `DirectLineMeasurement3D`/`AreaMeasurement3D`) into the view UI,
@@ -197,7 +206,8 @@ visual verification happens on the GitHub Pages deploy.
 - ~~Per-leg breakdown~~ — shipped (clickable result chip → legs popover, see
   the route bullet above).
 - **Bookmarks** — save the current viewpoint to the map slice, jump list.
-- **Coordinate readout** — pointer-move → lon/lat chip with copy.
+- ~~Coordinate readout~~ — shipped (pointer-tracking chip with copy, see the
+  tools section).
 - **Swipe compare** — ArcGIS `Swipe` widget between two free basemaps.
 - **Heatmap renderer** — over the earthquake feed or a bundled CSV
   (`CSVLayer`).

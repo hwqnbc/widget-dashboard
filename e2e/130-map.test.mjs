@@ -33,7 +33,7 @@ import {
 } from './.bundle/dragModel.js'
 
 const { check, finish } = reporter('map')
-const { browser, page } = await launch()
+const { browser, context, page } = await launch()
 
 const root = () => page.locator('[data-testid="map-page"]')
 
@@ -320,6 +320,44 @@ check(
 )
 check('no saved routes initially', (await root().getAttribute('data-saved-routes')) === '0')
 check('locate control renders', (await page.locator('[data-testid="map-locate"]').count()) === 1)
+
+// ---- coordinate readout: pointer tracking + click-to-copy. Offline-safe:
+// view.toMap only needs the view transform (center/scale), not tiles. ----
+{
+  const coords = page.locator('[data-testid="map-coords"]')
+  check('coordinate readout renders', (await coords.count()) === 1)
+  const mapBox = await page.locator('[data-testid="map-container"]').boundingBox()
+  const deadline = Date.now() + 10000
+  let lat = null
+  let lon = null
+  while (Date.now() < deadline) {
+    await page.mouse.move(mapBox.x + mapBox.width * 0.5, mapBox.y + mapBox.height * 0.5)
+    await page.mouse.move(mapBox.x + mapBox.width * 0.52, mapBox.y + mapBox.height * 0.52)
+    lat = await coords.getAttribute('data-lat')
+    lon = await coords.getAttribute('data-lon')
+    if (lat && lon) break
+    await page.waitForTimeout(300)
+  }
+  check(
+    'readout tracks the pointer near Singapore',
+    lat != null &&
+      lon != null &&
+      Math.abs(parseFloat(lat) - 1.35) < 2 &&
+      Math.abs(parseFloat(lon) - 103.82) < 3,
+    `${lat},${lon}`,
+  )
+  await context.grantPermissions(['clipboard-read', 'clipboard-write'])
+  await coords.click()
+  await page.waitForTimeout(200)
+  check('copy feedback shows', ((await coords.textContent()) ?? '') === 'Copied')
+  const clip = await page.evaluate(() => navigator.clipboard.readText())
+  check('clipboard holds lat, lon', clip === `${lat}, ${lon}`, clip)
+  await page.waitForTimeout(1100)
+  check(
+    'readout restores after the copy flash',
+    ((await coords.textContent()) ?? '').includes(','),
+  )
+}
 
 // ---- fullscreen: in-place CSS (no remount), fully offline-assertable ----
 check('starts windowed', (await root().getAttribute('data-fullscreen')) === 'off')
