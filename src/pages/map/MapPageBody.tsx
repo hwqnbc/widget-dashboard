@@ -23,6 +23,7 @@ import {
   Tooltip,
   useTheme,
 } from '@mui/material'
+import ForestIcon from '@mui/icons-material/Forest'
 import FullscreenIcon from '@mui/icons-material/Fullscreen'
 import FullscreenExitIcon from '@mui/icons-material/FullscreenExit'
 import LocationCityIcon from '@mui/icons-material/LocationCity'
@@ -54,6 +55,7 @@ import {
   removePin,
   saveRoute,
   setBuildings,
+  setTrees,
   setViewMode,
   setViewpoint,
   type MapPin,
@@ -109,6 +111,11 @@ const DEFAULT_VIEW: SavedViewpoint = { lon: 103.8198, lat: 1.3521, scale: 288895
 /** Esri's public Living Atlas "OpenStreetMap 3D Buildings" scene layer —
  * free, no API key, global extruded OSM buildings. Renders in 3D only. */
 const OSM_BUILDINGS_ITEM = 'ca0470dbbddb4db28bad74ed39949e25'
+
+/** Sibling layer: "OpenStreetMap 3D Trees (Thematic)" — stylized shapes
+ * that match the untextured buildings and stream light. The Realistic
+ * variant is item 33383da8a75f4d24b4b6a0d0532abe6e if ever preferred. */
+const OSM_TREES_ITEM = 'f75fef56b2d944fe92ef9f7737b4f953'
 
 /** Snapshot the camera as plain serializable numbers for redux-persist.
  * Null while the view isn't ready (or mid-teardown — ArcGIS getters throw). */
@@ -188,10 +195,12 @@ export default function MapPageBody() {
   savedViewpointRef.current = savedViewpoint
   const savedRoutes = useAppSelector((state) => state.map.savedRoutes) ?? NO_ROUTES
   const buildings = useAppSelector((state) => state.map.buildings) ?? true
+  const trees = useAppSelector((state) => state.map.trees) ?? true
 
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<EsriMap | null>(null)
   const buildingsLayerRef = useRef<SceneLayer | null>(null)
+  const treesLayerRef = useRef<SceneLayer | null>(null)
   const pinsLayerRef = useRef<GraphicsLayer | null>(null)
   const routeLayerRef = useRef<GraphicsLayer | null>(null)
   const locateLayerRef = useRef<GraphicsLayer | null>(null)
@@ -357,6 +366,7 @@ export default function MapPageBody() {
       safeDestroy(mapRef.current) // also destroys the layers
       mapRef.current = null
       buildingsLayerRef.current = null
+      treesLayerRef.current = null
       pinsLayerRef.current = null
       routeLayerRef.current = null
       locateLayerRef.current = null
@@ -601,6 +611,20 @@ export default function MapPageBody() {
     if (buildingsLayerRef.current) buildingsLayerRef.current.visible = buildings
   }, [buildings, viewMode])
 
+  // Same lazily-created/visibility-driven pattern for the OSM 3D Trees.
+  useEffect(() => {
+    if (viewMode === '3d' && trees && !treesLayerRef.current && mapRef.current) {
+      try {
+        const layer = new SceneLayer({ portalItem: { id: OSM_TREES_ITEM } })
+        treesLayerRef.current = layer
+        mapRef.current.add(layer)
+      } catch {
+        // offline/blocked CDN — 3D still works, just without trees
+      }
+    }
+    if (treesLayerRef.current) treesLayerRef.current.visible = trees
+  }, [trees, viewMode])
+
   // Mirror the persisted pins onto the graphics layer.
   useEffect(() => {
     const layer = pinsLayerRef.current
@@ -647,6 +671,7 @@ export default function MapPageBody() {
       data-scale={Math.round(focus.scale)}
       data-saved-routes={savedRoutes.length}
       data-buildings={buildings ? 'on' : 'off'}
+      data-trees={trees ? 'on' : 'off'}
       data-fullscreen={fullscreen ? 'on' : 'off'}
       sx={{
         display: 'flex',
@@ -688,18 +713,32 @@ export default function MapPageBody() {
           </ToggleButton>
         </ToggleButtonGroup>
         {viewMode === '3d' && (
-          <Tooltip title="3D buildings (OpenStreetMap)">
-            <ToggleButton
-              size="small"
-              value="buildings"
-              selected={buildings}
-              onChange={() => dispatch(setBuildings(!buildings))}
-              data-testid="map-buildings"
-              aria-label="3D buildings"
-            >
-              <LocationCityIcon fontSize="small" />
-            </ToggleButton>
-          </Tooltip>
+          <>
+            <Tooltip title="3D buildings (OpenStreetMap)">
+              <ToggleButton
+                size="small"
+                value="buildings"
+                selected={buildings}
+                onChange={() => dispatch(setBuildings(!buildings))}
+                data-testid="map-buildings"
+                aria-label="3D buildings"
+              >
+                <LocationCityIcon fontSize="small" />
+              </ToggleButton>
+            </Tooltip>
+            <Tooltip title="3D trees (OpenStreetMap)">
+              <ToggleButton
+                size="small"
+                value="trees"
+                selected={trees}
+                onChange={() => dispatch(setTrees(!trees))}
+                data-testid="map-trees"
+                aria-label="3D trees"
+              >
+                <ForestIcon fontSize="small" />
+              </ToggleButton>
+            </Tooltip>
+          </>
         )}
         <Divider orientation="vertical" flexItem />
         <ToggleButtonGroup

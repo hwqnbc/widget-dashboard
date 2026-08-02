@@ -239,6 +239,10 @@ check(
   'buildings toggle hidden in 2D',
   (await page.locator('[data-testid="map-buildings"]').count()) === 0,
 )
+check(
+  'trees toggle hidden in 2D',
+  (await page.locator('[data-testid="map-trees"]').count()) === 0,
+)
 await page.locator('[data-testid="map-mode-3d"]').click()
 await page.waitForTimeout(500)
 check('3D mode selected', (await root().getAttribute('data-view-mode')) === '3d')
@@ -251,9 +255,20 @@ check(
   (await page.locator('[data-testid="map-buildings"]').count()) === 1 &&
     (await root().getAttribute('data-buildings')) === 'on',
 )
+check(
+  'trees toggle appears in 3D, on by default',
+  (await page.locator('[data-testid="map-trees"]').count()) === 1 &&
+    (await root().getAttribute('data-trees')) === 'on',
+)
 await page.locator('[data-testid="map-buildings"]').click()
 await page.waitForTimeout(300)
 check('buildings toggle off', (await root().getAttribute('data-buildings')) === 'off')
+await page.locator('[data-testid="map-trees"]').click()
+await page.waitForTimeout(300)
+check(
+  'trees toggle off (independent of buildings)',
+  (await root().getAttribute('data-trees')) === 'off',
+)
 await page.reload({ waitUntil: 'networkidle' })
 await page.waitForSelector('[data-testid="map-page"]', { timeout: 30000 })
 check(
@@ -264,9 +279,16 @@ check(
   'buildings choice persists across reload',
   (await root().getAttribute('data-buildings')) === 'off',
 )
+check(
+  'trees choice persists across reload',
+  (await root().getAttribute('data-trees')) === 'off',
+)
 await page.locator('[data-testid="map-buildings"]').click()
 await page.waitForTimeout(300)
 check('buildings back on', (await root().getAttribute('data-buildings')) === 'on')
+await page.locator('[data-testid="map-trees"]').click()
+await page.waitForTimeout(300)
+check('trees back on', (await root().getAttribute('data-trees')) === 'on')
 await page.locator('[data-testid="map-mode-2d"]').click()
 await page.waitForTimeout(500)
 check('back to 2D', (await root().getAttribute('data-view-mode')) === '2d')

@@ -57,14 +57,18 @@ on it works without a backend server or API key.
   construct/destroy path is also wrapped (`safeDestroy`, try/catch around
   creation): with its CDN unreachable ArcGIS constructors and teardown really
   do throw.
-- **3D buildings** — a toggle (visible in 3D mode, persisted, default on)
-  adds Esri's public Living Atlas **"OpenStreetMap 3D Buildings"** scene
-  layer (portal item `ca0470dbbddb4db28bad74ed39949e25`) — free, **no API
-  key**, global extruded OSM footprints, updated monthly. The `SceneLayer`
-  is created lazily on first 3D use (try/catch — offline it degrades
-  silently), lives on the shared map (the 2D MapView just doesn't render
-  scene layers) and is driven by `visible` afterwards. Contract:
-  `data-buildings` on the root.
+- **3D buildings & trees** — two independent toggles (visible in 3D mode,
+  persisted, default on) add Esri's public Living Atlas scene layers:
+  **"OpenStreetMap 3D Buildings"** (portal item
+  `ca0470dbbddb4db28bad74ed39949e25`) and **"OpenStreetMap 3D Trees
+  (Thematic)"** (`f75fef56b2d944fe92ef9f7737b4f953`; the Realistic variant
+  `33383da8a75f4d24b4b6a0d0532abe6e` is a one-line swap — Thematic's
+  stylized shapes match the untextured buildings and stream lighter) —
+  free, **no API key**, global OSM-derived, updated monthly. Each
+  `SceneLayer` is created lazily on first 3D use (try/catch — offline it
+  degrades silently), lives on the shared map (the 2D MapView just doesn't
+  render scene layers) and is driven by `visible` afterwards. Contract:
+  `data-buildings` / `data-trees` on the root.
 - **Fullscreen** — a strip button (`data-testid="map-fullscreen"`, Escape or
   the button exits) fixes the page root over the viewport (`position: fixed;
   inset: 0` at modal z-index) plus best-effort native `requestFullscreen`.
@@ -201,9 +205,8 @@ visual verification happens on the GitHub Pages deploy.
   the widgets' `FullscreenProvider` was deliberately not reused).
 - **Screenshot export** — `view.takeScreenshot()` → download.
 - **Elevation profile (3D)** — sketch a line, sample `ground` elevation.
-- **OSM 3D Trees** — the sibling Living Atlas scene layers (thematic /
-  realistic), same no-key family as the buildings layer; a second toggle or
-  bundled with it.
+- ~~OSM 3D Trees~~ — shipped (thematic variant, independent toggle — see
+  the 3D buildings & trees bullet above).
 - **Terrain enhancements** — terrain elevation is already live in 3D (the
   free `world-elevation` ground); build on it with a **terrain exaggeration**
   setting and/or a **hillshade** basemap option for visible relief in 2D.

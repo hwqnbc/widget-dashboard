@@ -45,6 +45,8 @@ export interface MapState {
   savedRoutes: SavedRoute[]
   /** Show the OSM 3D Buildings scene layer (visible effect in 3D only). */
   buildings: boolean
+  /** Show the OSM 3D Trees scene layer (visible effect in 3D only). */
+  trees: boolean
 }
 
 const initialState: MapState = {
@@ -53,6 +55,7 @@ const initialState: MapState = {
   viewpoint: null,
   savedRoutes: [],
   buildings: true,
+  trees: true,
 }
 
 /** Map-page state (persisted): the 2D/3D choice and the dropped pins. */
@@ -91,6 +94,9 @@ const mapSlice = createSlice({
     setBuildings(state, action: PayloadAction<boolean>) {
       state.buildings = action.payload
     },
+    setTrees(state, action: PayloadAction<boolean>) {
+      state.trees = action.payload
+    },
   },
 })
 
@@ -103,5 +109,6 @@ export const {
   saveRoute,
   deleteRoute,
   setBuildings,
+  setTrees,
 } = mapSlice.actions
 export default mapSlice.reducer
