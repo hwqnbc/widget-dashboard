@@ -878,3 +878,19 @@ carried over; these are the new ones.
     into a pure state machine (`src/pages/map/dragModel.ts`) precisely so
     the e2e bundle can unit-test the race orderings offline — the
     live-drag path needs a network the sandbox doesn't have.
+
+72. **A live WebGL view goes fullscreen by restyling in place — never by
+    portal or remount.** The widget fullscreen system (portaled MUI
+    `Dialog` re-rendering the same widget) is the right shape for
+    redux-backed game widgets: remounting them costs only transient
+    animation state. For a component owning a persistent native resource —
+    the Map page's ArcGIS view, with its WebGL context, loaded tiles and
+    camera — a portal remount means full teardown and an expensive, visibly
+    flashing rebuild. The map's fullscreen instead flips the SAME root node
+    to `position: fixed; inset: 0` at modal z-index (+ best-effort native
+    `requestFullscreen`): zero DOM moves, the view just resizes with its
+    container. Corollary of #67's ArcGIS-out-of-React rule, at the layout
+    level: around persistent-context components, layout changes must be
+    pure CSS on the existing nodes. Sync the CSS state with a
+    `fullscreenchange` listener so the browser's own exit (Esc in native
+    fullscreen) doesn't leave the overlay stuck on.

@@ -65,6 +65,14 @@ on it works without a backend server or API key.
   silently), lives on the shared map (the 2D MapView just doesn't render
   scene layers) and is driven by `visible` afterwards. Contract:
   `data-buildings` on the root.
+- **Fullscreen** — a strip button (`data-testid="map-fullscreen"`, Escape or
+  the button exits) fixes the page root over the viewport (`position: fixed;
+  inset: 0` at modal z-index) plus best-effort native `requestFullscreen`.
+  Deliberately **not** the widgets' `FullscreenProvider`: its portaled
+  Dialog remounts its child, which would destroy and rebuild the live
+  ArcGIS view — the map instead restyles **in place** and the view just
+  resizes with its container (lessons.md #72). Transient state, never
+  persisted; `data-fullscreen` on the root.
 - **The viewport persists.** A `stationary` watcher snapshots the camera as
   plain numbers (`SavedViewpoint` in `mapSlice`: lon/lat/scale + 3D
   camera extras) into redux whenever the map comes to rest — writing
@@ -189,7 +197,8 @@ visual verification happens on the GitHub Pages deploy.
 - **Swipe compare** — ArcGIS `Swipe` widget between two free basemaps.
 - **Heatmap renderer** — over the earthquake feed or a bundled CSV
   (`CSVLayer`).
-- **Fullscreen** — reuse `FullscreenProvider` for a chrome-less map view.
+- ~~Fullscreen~~ — shipped (in-place CSS fullscreen, see the bullet above —
+  the widgets' `FullscreenProvider` was deliberately not reused).
 - **Screenshot export** — `view.takeScreenshot()` → download.
 - **Elevation profile (3D)** — sketch a line, sample `ground` elevation.
 - **OSM 3D Trees** — the sibling Living Atlas scene layers (thematic /

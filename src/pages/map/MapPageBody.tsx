@@ -23,6 +23,8 @@ import {
   Tooltip,
   useTheme,
 } from '@mui/material'
+import FullscreenIcon from '@mui/icons-material/Fullscreen'
+import FullscreenExitIcon from '@mui/icons-material/FullscreenExit'
 import LocationCityIcon from '@mui/icons-material/LocationCity'
 import PushPinIcon from '@mui/icons-material/PushPin'
 import StraightenIcon from '@mui/icons-material/Straighten'
@@ -207,6 +209,12 @@ export default function MapPageBody() {
   const [status, setStatus] = useState<MapStatus>('loading')
   const [tool, setTool] = useState<Tool>('none')
   const [confirmClear, setConfirmClear] = useState(false)
+  // Transient, like the widget fullscreen system — never persisted. The map
+  // goes fullscreen IN PLACE (the root restyles to fixed/inset-0): portaling
+  // into an overlay would remount — and so destroy — the live ArcGIS view
+  // (lessons.md #72), which is why the widgets' FullscreenProvider isn't
+  // reused here.
+  const [fullscreen, setFullscreen] = useState(false)
   const [routeEdit, setRouteEdit] = useState<RouteEdit>({ points: [], history: [] })
   const [routeProfile, setRouteProfile] = useState<RouteProfile>('drive')
 
@@ -250,6 +258,48 @@ export default function MapPageBody() {
       }
     }
   }
+
+  const enterFullscreen = () => {
+    setFullscreen(true)
+    // Best-effort native fullscreen (must run inside the click gesture);
+    // iOS Safari / headless reject → caught, the CSS overlay still applies.
+    try {
+      void document.documentElement.requestFullscreen?.().catch(() => {})
+    } catch {
+      /* unsupported */
+    }
+  }
+  const exitFullscreen = () => {
+    setFullscreen(false)
+    try {
+      if (document.fullscreenElement) void document.exitFullscreen().catch(() => {})
+    } catch {
+      /* noop */
+    }
+  }
+
+  // While fullscreen: Escape exits, and leaving native fullscreen via the
+  // browser's own UI keeps the CSS state in sync. Unmount also releases.
+  useEffect(() => {
+    if (!fullscreen) return
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') exitFullscreen()
+    }
+    const onFullscreenChange = () => {
+      if (!document.fullscreenElement) setFullscreen(false)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    document.addEventListener('fullscreenchange', onFullscreenChange)
+    return () => {
+      window.removeEventListener('keydown', onKeyDown)
+      document.removeEventListener('fullscreenchange', onFullscreenChange)
+      try {
+        if (document.fullscreenElement) void document.exitFullscreen().catch(() => {})
+      } catch {
+        /* noop */
+      }
+    }
+  }, [fullscreen])
 
   const saveCurrentRoute = (name: string) => {
     if (routeEdit.points.length < 2) return
@@ -597,14 +647,27 @@ export default function MapPageBody() {
       data-scale={Math.round(focus.scale)}
       data-saved-routes={savedRoutes.length}
       data-buildings={buildings ? 'on' : 'off'}
+      data-fullscreen={fullscreen ? 'on' : 'off'}
       sx={{
-        // No 100%-height chain from #root: size against the viewport minus
-        // the sticky AppBar (56px at xs, 64px up) and the Container's py.
-        height: { xs: 'calc(100vh - 56px - 48px)', sm: 'calc(100vh - 64px - 48px)' },
-        minHeight: 400,
         display: 'flex',
         flexDirection: 'column',
         gap: 1,
+        ...(fullscreen
+          ? {
+              // In-place fullscreen: same DOM, fixed over the app shell —
+              // the live ArcGIS view just resizes with its container.
+              position: 'fixed',
+              inset: 0,
+              zIndex: (theme) => theme.zIndex.modal,
+              bgcolor: 'background.default',
+              p: 1,
+            }
+          : {
+              // No 100%-height chain from #root: size against the viewport
+              // minus the sticky AppBar (56px at xs, 64px up) + Container py.
+              height: { xs: 'calc(100vh - 56px - 48px)', sm: 'calc(100vh - 64px - 48px)' },
+              minHeight: 400,
+            }),
       }}
     >
       <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: 'wrap', alignItems: 'center' }}>
@@ -694,6 +757,21 @@ export default function MapPageBody() {
             onDelete={(id) => dispatch(deleteRoute(id))}
           />
         )}
+        <Tooltip title={fullscreen ? 'Exit full screen' : 'Full screen'}>
+          <IconButton
+            size="small"
+            data-testid="map-fullscreen"
+            aria-label={fullscreen ? 'Exit full screen' : 'Full screen'}
+            onClick={fullscreen ? exitFullscreen : enterFullscreen}
+            sx={{ ml: 'auto' }}
+          >
+            {fullscreen ? (
+              <FullscreenExitIcon fontSize="small" />
+            ) : (
+              <FullscreenIcon fontSize="small" />
+            )}
+          </IconButton>
+        </Tooltip>
       </Stack>
       <Box sx={{ position: 'relative', flexGrow: 1, borderRadius: 1, overflow: 'hidden' }}>
         <Box ref={containerRef} data-testid="map-container" sx={{ width: '100%', height: '100%' }} />

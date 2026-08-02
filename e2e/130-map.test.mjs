@@ -299,6 +299,47 @@ check(
 check('no saved routes initially', (await root().getAttribute('data-saved-routes')) === '0')
 check('locate control renders', (await page.locator('[data-testid="map-locate"]').count()) === 1)
 
+// ---- fullscreen: in-place CSS (no remount), fully offline-assertable ----
+check('starts windowed', (await root().getAttribute('data-fullscreen')) === 'off')
+const windowedBox = await root().boundingBox()
+await page.locator('[data-testid="map-fullscreen"]').click()
+await page.waitForTimeout(400)
+check('fullscreen toggles on', (await root().getAttribute('data-fullscreen')) === 'on')
+const fsMetrics = await root().evaluate((el) => {
+  const r = el.getBoundingClientRect()
+  return {
+    position: getComputedStyle(el).position,
+    left: r.left,
+    top: r.top,
+    right: r.width + r.left,
+    bottom: r.height + r.top,
+    vw: window.innerWidth,
+    vh: window.innerHeight,
+  }
+})
+check(
+  'fullscreen root is fixed over the whole viewport',
+  fsMetrics.position === 'fixed' &&
+    fsMetrics.left <= 2 &&
+    fsMetrics.top <= 2 &&
+    fsMetrics.right >= fsMetrics.vw - 2 &&
+    fsMetrics.bottom >= fsMetrics.vh - 2,
+  JSON.stringify(fsMetrics),
+)
+const fsBox = await root().boundingBox()
+check(
+  'map area grew (view resizes in place, no remount)',
+  windowedBox != null && fsBox != null && fsBox.height > windowedBox.height + 30,
+  `h ${windowedBox?.height} -> ${fsBox?.height}`,
+)
+await page.keyboard.press('Escape')
+await page.waitForTimeout(400)
+check('Escape exits fullscreen', (await root().getAttribute('data-fullscreen')) === 'off')
+check(
+  'root back in normal flow',
+  (await root().evaluate((el) => getComputedStyle(el).position)) !== 'fixed',
+)
+
 if (online) {
   // ---- route: two map clicks → mocked OSRM → distance chip ----
   if (await waitForAttr('data-map-status', (v) => v === 'ready', 45000) === 'ready') {
