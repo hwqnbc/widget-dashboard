@@ -123,6 +123,10 @@ on it works without a backend server or API key.
   the pure `dragModel.ts` state machine, unit-tested offline by the e2e
   bundle (lessons.md #71). An **Undo** button unwinds
   add/remove/insert/move/clear through a history stack (capped at 20).
+  The result chip is clickable once routed: a popover lists the **per-leg
+  breakdown** ("1 → 2 · km · min" rows matching the numbered markers, plus
+  the total) — OSRM's `legs` array comes free in the response we already
+  fetch, no extra request.
   **Saved routes**: the bookmark-add button names and saves the current
   waypoints + profile to the persisted `map` slice (`SavedRoute[]`); the
   bookmarks menu lists them with load (restores points + profile — undoable —
@@ -178,8 +182,8 @@ visual verification happens on the GitHub Pages deploy.
   route bullet above).
 - ~~Persisted / named routes~~ — shipped (save dialog + bookmarks menu, see
   the route bullet above).
-- **Per-leg breakdown** — OSRM already returns `legs`; show distance/time
-  between consecutive waypoints in a popover.
+- ~~Per-leg breakdown~~ — shipped (clickable result chip → legs popover, see
+  the route bullet above).
 - **Bookmarks** — save the current viewpoint to the map slice, jump list.
 - **Coordinate readout** — pointer-move → lon/lat chip with copy.
 - **Swipe compare** — ArcGIS `Swipe` widget between two free basemaps.

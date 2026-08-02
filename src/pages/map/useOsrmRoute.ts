@@ -16,6 +16,8 @@ export interface RouteState {
   path: LonLat[] | null
   /** Input waypoints snapped onto the road network, same order. */
   snapped: LonLat[] | null
+  /** Per consecutive waypoint pair, route order (the chip's popover). */
+  legs: { km: number; minutes: number }[] | null
 }
 
 const WAYPOINT_COLORS = { start: '#2e7d32', mid: '#ef6c00', end: '#c62828' }
@@ -71,6 +73,7 @@ export function useOsrmRoute(
     minutes: null,
     path: null,
     snapped: null,
+    legs: null,
   })
 
   useEffect(() => {
@@ -85,6 +88,7 @@ export function useOsrmRoute(
         minutes: null,
         path: null,
         snapped: null,
+        legs: null,
       })
       return
     }
@@ -107,12 +111,23 @@ export function useOsrmRoute(
           minutes: Math.round(route.durationS / 60),
           path: route.path,
           snapped: route.snapped.length === points.length ? route.snapped : points,
+          legs: route.legs.map((l) => ({
+            km: Math.round((l.distanceM / 1000) * 10) / 10,
+            minutes: Math.round(l.durationS / 60),
+          })),
         })
       })
       .catch((err: unknown) => {
         if (abort.signal.aborted) return
         console.warn('OSRM route failed:', err)
-        setState({ status: 'error', km: null, minutes: null, path: null, snapped: null })
+        setState({
+          status: 'error',
+          km: null,
+          minutes: null,
+          path: null,
+          snapped: null,
+          legs: null,
+        })
       })
     return () => abort.abort()
   }, [layerRef, points, profile])

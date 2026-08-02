@@ -60,12 +60,24 @@ await page.route('**/routing.openstreetmap.de/**', (route) => {
     .split(';')
     .map((pair) => pair.split(',').map(Number))
   osrmCoords.push(coords)
+  const legCount = Math.max(1, coords.length - 1)
   return route.fulfill({
     status: 200,
     contentType: 'application/json',
     body: JSON.stringify({
       code: 'Ok',
-      routes: [{ distance: 12345.6, duration: 1800, geometry: { coordinates: coords } }],
+      routes: [
+        {
+          distance: 12345.6,
+          duration: 1800,
+          geometry: { coordinates: coords },
+          // one leg per waypoint pair, splitting the totals evenly
+          legs: Array.from({ length: legCount }, () => ({
+            distance: 12345.6 / legCount,
+            duration: 1800 / legCount,
+          })),
+        },
+      ],
       waypoints: coords.map((c) => ({ location: c })),
     }),
   })
@@ -266,6 +278,7 @@ await page.waitForTimeout(200)
 check('route tool activates', (await root().getAttribute('data-tool')) === 'route')
 check('route starts idle', (await root().getAttribute('data-route-status')) === 'idle')
 check('route starts with no waypoints', (await root().getAttribute('data-route-points')) === '0')
+check('route starts with no legs', (await root().getAttribute('data-route-legs')) === '0')
 check(
   'route profile picker renders',
   (await page.locator('[data-testid="map-route-walk"]').count()) === 1 &&
@@ -307,6 +320,21 @@ if (online) {
     await page.mouse.click(...at(0.5, 0.5))
     await waitForAttr('data-route-status', (v) => v === 'ok', 15000)
     check('click on the line inserts a waypoint', (await root().getAttribute('data-route-points')) === '3')
+
+    // Per-leg breakdown: 3 waypoints → 2 legs listed in the chip's popover.
+    check('three waypoints publish two legs', (await root().getAttribute('data-route-legs')) === '2')
+    await page.locator('[data-testid="map-route-result"]').click()
+    await page.waitForTimeout(300)
+    const legRows = await page.locator('[data-testid="map-route-leg"]').count()
+    check('chip popover lists one row per leg', legRows === 2, `rows=${legRows}`)
+    const firstLeg = await page.locator('[data-testid="map-route-leg"]').first().textContent()
+    check(
+      'leg rows carry the numbered-marker labels and split distance',
+      (firstLeg ?? '').includes('1 → 2') && (firstLeg ?? '').includes('6.2 km'),
+      firstLeg ?? 'null',
+    )
+    await page.keyboard.press('Escape')
+    await page.waitForTimeout(300)
     const last = osrmCoords[osrmCoords.length - 1]
     check(
       'inserted waypoint routed in the middle',

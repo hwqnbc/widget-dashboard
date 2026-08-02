@@ -17,6 +17,11 @@ const OSRM_PROFILE_PATH: Record<RouteProfile, string> = {
   walk: 'routed-foot',
 }
 
+export interface OsrmLeg {
+  distanceM: number
+  durationS: number
+}
+
 export interface OsrmRoute {
   distanceM: number
   durationS: number
@@ -24,6 +29,8 @@ export interface OsrmRoute {
   path: LonLat[]
   /** Each input waypoint snapped onto the road network, same order. */
   snapped: LonLat[]
+  /** One entry per consecutive waypoint pair, in route order. */
+  legs: OsrmLeg[]
 }
 
 interface OsrmResponse {
@@ -32,6 +39,7 @@ interface OsrmResponse {
     distance: number
     duration: number
     geometry: { coordinates: LonLat[] }
+    legs?: { distance: number; duration: number }[]
   }[]
   waypoints?: { location: LonLat }[]
 }
@@ -59,5 +67,6 @@ export async function fetchOsrmRoute(
     durationS: route.duration,
     path: route.geometry.coordinates,
     snapped: (json.waypoints ?? []).map((w) => w.location),
+    legs: (route.legs ?? []).map((l) => ({ distanceM: l.distance, durationS: l.duration })),
   }
 }

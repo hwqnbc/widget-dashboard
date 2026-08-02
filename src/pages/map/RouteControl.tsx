@@ -6,10 +6,14 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  Divider,
   IconButton,
+  List,
+  ListItem,
   ListItemText,
   Menu,
   MenuItem,
+  Popover,
   TextField,
   ToggleButton,
   ToggleButtonGroup,
@@ -77,6 +81,8 @@ export default function RouteControl({
   const [saveOpen, setSaveOpen] = useState(false)
   const [saveName, setSaveName] = useState('')
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null)
+  const [legsAnchor, setLegsAnchor] = useState<HTMLElement | null>(null)
+  const legs = state.status === 'ok' ? (state.legs ?? []) : []
 
   const openSave = () => {
     setSaveName(`Route ${savedRoutes.length + 1}`)
@@ -114,7 +120,42 @@ export default function RouteControl({
           </Tooltip>
         </ToggleButton>
       </ToggleButtonGroup>
-      <Chip size="small" data-testid="map-route-result" color={state.status === 'ok' ? 'success' : state.status === 'error' ? 'warning' : 'default'} label={resultLabel(state, pointCount)} />
+      <Tooltip title={legs.length > 0 ? 'Per-leg breakdown' : ''}>
+        <Chip
+          size="small"
+          data-testid="map-route-result"
+          color={state.status === 'ok' ? 'success' : state.status === 'error' ? 'warning' : 'default'}
+          label={resultLabel(state, pointCount)}
+          clickable={legs.length > 0}
+          onClick={legs.length > 0 ? (e) => setLegsAnchor(e.currentTarget) : undefined}
+        />
+      </Tooltip>
+      <Popover
+        open={legsAnchor != null}
+        anchorEl={legsAnchor}
+        onClose={() => setLegsAnchor(null)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+      >
+        <List dense sx={{ minWidth: 200, py: 0.5 }}>
+          {legs.map((leg, i) => (
+            <ListItem key={i} data-testid="map-route-leg" sx={{ py: 0 }}>
+              <ListItemText
+                primary={`${i + 1} → ${i + 2}`}
+                secondary={`${leg.km} km · ${leg.minutes} min`}
+                slotProps={{ primary: { variant: 'body2' } }}
+              />
+            </ListItem>
+          ))}
+          <Divider component="li" sx={{ my: 0.5 }} />
+          <ListItem sx={{ py: 0 }}>
+            <ListItemText
+              primary="Total"
+              secondary={`${state.km} km · ${state.minutes} min`}
+              slotProps={{ primary: { variant: 'body2', sx: { fontWeight: 600 } } }}
+            />
+          </ListItem>
+        </List>
+      </Popover>
       <Tooltip title="Undo waypoint edit">
         <span>
           <IconButton size="small" data-testid="map-route-undo" aria-label="Undo waypoint edit" disabled={!canUndo} onClick={onUndo}>

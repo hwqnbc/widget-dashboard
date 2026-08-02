@@ -590,6 +590,7 @@ export default function MapPageBody() {
       data-route-status={route.status}
       data-route-km={route.km ?? ''}
       data-route-points={routeEdit.points.length}
+      data-route-legs={route.legs?.length ?? 0}
       data-route-profile={routeProfile}
       data-center-lon={focus.lon.toFixed(4)}
       data-center-lat={focus.lat.toFixed(4)}
