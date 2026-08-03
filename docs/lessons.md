@@ -909,3 +909,29 @@ carried over; these are the new ones.
     with rendering (drawing, style writes read back by layout), and if rAF
     must gate something, pair it with a timeout fallback. Found because the
     e2e suite runs on exactly such an idle page — the flake WAS the bug.
+
+## Gold Gunner avatar
+
+74. **A CSS animation with a start-delay shows the element's OWN state
+    during the delay — hide it explicitly if the first keyframe is
+    "invisible".** Gold Gunner's "both guns blaze" staggers the two muzzle
+    flashes (gold delayed 0.25s so it fires after the black rifle). Each
+    flash's keyframes go opacity 0 → 1 → 0, but with no `fill-mode` the
+    delayed element renders its base style (default `opacity:1`) for the
+    whole 250 ms delay — so the gold flash sat lit before it ever "fired,"
+    both guns flashing at once. Fix: set `opacity: 0` on the element as its
+    resting state; the running animation overrides it, the delay period
+    shows the intended dark. (Equivalent: `animation-fill-mode: backwards`
+    to borrow the first keyframe during the delay — but an explicit base
+    style is clearer.) Caught by pausing `getAnimations()` and sampling the
+    true extremes (#9) at a delayed frame, not the t=0 one.
+
+75. **Namespace gradient ids per avatar (`gg-…`), and prefer flat fills in
+    the head chip.** The source art reused generic ids (`gold-grad`,
+    `black-metal`); multiple avatars on one page (the settings seat pickers,
+    the Avatar Actions roster) share a document, and duplicate gradient ids
+    resolve to the first definition — a later avatar can inherit an
+    unrelated gradient. Prefix every def with the avatar's short key so
+    figures stay self-contained. The 20×20 head chip renders many times over
+    (picker + settings), so it keeps solid fills from the palette rather than
+    its own gradient defs — cheaper and immune to the id-collision trap.

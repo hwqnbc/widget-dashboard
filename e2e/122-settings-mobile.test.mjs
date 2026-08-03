@@ -1,6 +1,6 @@
 /**
  * Settings-page mobile-layout suite: on a phone-portrait viewport the two
- * per-seat avatar ToggleButtonGroups (six head+name buttons each, up to
+ * per-seat avatar ToggleButtonGroups (seven head+name buttons each, up to
  * "Imperium Claw General" wide) must WRAP instead of overflowing the
  * screen — the #51 roster-row defect recurred here when the roster hit
  * six — and the app-bar chrome (brand text + nav labels) must collapse to
@@ -27,7 +27,7 @@ check('both seat picker groups render', (await groups.count()) === 2)
 // Every avatar button fully inside the viewport width, both seats.
 const buttons = page.locator('.MuiToggleButtonGroup-root .MuiToggleButton-root')
 const n = await buttons.count()
-check('twelve avatar buttons (6 per seat)', n === 12)
+check('fourteen avatar buttons (7 per seat)', n === 14)
 let allInside = true
 let widest = 0
 for (let i = 0; i < n; i++) {

@@ -153,7 +153,10 @@ character folders under `components/widgets/characters/` — `toy/` (`ToyHead`,
 `frak/` (`FrakHead`, `FrakFigure`, `FrakCelebration`, `FrakFigure3D`,
 `FrakModel3D`, `frakPalette`),
 `imperium/` (`ImperiumHead`, `ClawFigure`, `ImperiumFigure`, `ImperiumCelebration`,
-`ImperiumFigure3D`, `ImperiumModel3D`, `imperiumPalette`), `shared/Hand`, `shared/FigureStage3D` (R3F turntable stage
+`ImperiumFigure3D`, `ImperiumModel3D`, `imperiumPalette`),
+`goldgunner/` (`GoldGunnerHead`, `GunnerFigure`, `GoldGunnerFigure`,
+`GoldGunnerCelebration`, `goldGunnerPalette` — 2D only so far, no 3D figure yet),
+`shared/Hand`, `shared/FigureStage3D` (R3F turntable stage
 for the lazy 3D figures), `boy/Boy`.
 
 ## Avatars (players vs seats)

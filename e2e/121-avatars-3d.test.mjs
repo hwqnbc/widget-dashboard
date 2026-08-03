@@ -13,11 +13,11 @@
  * rule for every avatar, persisted per widget), switching back restores
  * each view, and the chosen view + spin preference survive a reload.
  * The "no 3D figure" placeholder path (`figure3d-unavailable`, action
- * toggle disabled) is retained in the widget as scaffolding for future
- * avatars but no current avatar exercises it — only the toy block's
- * negative check still probes it. The 3D art itself is reviewed from
- * screenshots — the suite asserts presence + the data contract, like the
- * 2D suite (120).
+ * toggle disabled) is exercised by Gold Gunner — the newest avatar, 2D
+ * only so far — which advertises `data-figure3d=unavailable` and shows the
+ * placeholder in the 3D view (the live target for this path per lesson #65).
+ * The 3D art itself is reviewed from screenshots — the suite asserts
+ * presence + the data contract, like the 2D suite (120).
  */
 import { addAvatarWidget, launch, reporter } from './helpers.mjs'
 
@@ -154,6 +154,17 @@ check('Claw Slash sets playing', (await attr('data-playing')) === 'yes')
 await celebration.nth(0).click()
 await page.waitForTimeout(150)
 check('Idle resets the imperium action', (await attr('data-action')) === 'idle')
+
+// Gold Gunner (2D only): advertises no 3D figure, so the 3D view shows the
+// "not available" placeholder and disables the action toggle — the live
+// coverage target for the unavailable path.
+await picker.nth(6).click() // goldgunner
+await page.waitForTimeout(150)
+check('goldgunner advertises no 3D figure', (await attr('data-figure3d')) === 'unavailable')
+await page.waitForSelector('[data-testid="figure3d-unavailable"]', { timeout: 5000 })
+check('goldgunner shows the unavailable placeholder', (await unavailable.count()) === 1)
+check('no WebGL canvas for goldgunner', (await stageCanvas.count()) === 0)
+check('action toggle disabled with no 3D figure', await celebration.nth(0).isDisabled())
 
 // back to toy: the 3D figure returns and the toggle re-enables
 await picker.nth(0).click()

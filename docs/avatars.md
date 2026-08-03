@@ -43,6 +43,7 @@ fireninja/ FireNinjaHead, FireBladeFigure, FireNinjaFigure, FireNinjaCelebration
 darkarin/  DarkArinHead, TwinSwordFigure, DarkArinFigure, DarkArinCelebration, DarkArinFigure3D, DarkArinModel3D, darkArinPalette, index
 frak/      FrakHead, FrakFigure, FrakCelebration, FrakFigure3D, FrakModel3D, frakPalette, index
 imperium/  ImperiumHead, ClawFigure, ImperiumFigure, ImperiumCelebration, ImperiumFigure3D, ImperiumModel3D, imperiumPalette, index
+goldgunner/ GoldGunnerHead, GunnerFigure, GoldGunnerFigure, GoldGunnerCelebration, goldGunnerPalette, index  (2D only — no 3D figure yet)
 boy/       Boy.tsx                    (an ImageToggle figure, not a game avatar)
 ```
 - **Head** = the standalone `<svg>` chip/mark (`size` prop; default `'100%'`).
@@ -181,6 +182,8 @@ avatar without a `Figure3D` shows a placeholder
 (`data-testid="figure3d-unavailable"`, head + "<Name> has no 3D figure yet")
 instead, with the celebration toggle **disabled** (nothing would visibly
 play) — so avatars gain 3D one at a time without gating the view toggle.
+**Gold Gunner** is the current 2D-only avatar (no 3D yet), so it's the live
+example of this placeholder path and the coverage target in suite 121.
 
 **Adding a 3D figure to an avatar:** build the mesh-level
 `characters/<id>/<Name>Model3D.tsx` (default-export `{ action?: string }`,

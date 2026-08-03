@@ -7,6 +7,7 @@ import { FireNinjaHead, FireNinjaFigure, FireNinjaCelebration } from '../compone
 import { DarkArinHead, DarkArinFigure, DarkArinCelebration } from '../components/widgets/characters/darkarin'
 import { FrakHead, FrakFigure, FrakCelebration } from '../components/widgets/characters/frak'
 import { ImperiumHead, ImperiumFigure, ImperiumCelebration } from '../components/widgets/characters/imperium'
+import { GoldGunnerHead, GoldGunnerFigure, GoldGunnerCelebration } from '../components/widgets/characters/goldgunner'
 
 /**
  * The visual pieces of an avatar, grouped: the head (used as the game chip/mark),
@@ -115,5 +116,13 @@ export const avatarVisualById: Record<AvatarId, AvatarVisual> = {
     Figure3D: ImperiumFigure3D,
     Model3D: ImperiumModel3D,
     actions3d: [{ id: 'slash', name: 'Claw Slash' }],
+  },
+  goldgunner: {
+    // 2D only for now — no 3D figure yet, so the Avatar Actions 3D view shows
+    // the "not available" placeholder (a supported state). A three.js
+    // Figure3D/Model3D is on the enhancement backlog.
+    Head: GoldGunnerHead,
+    Figure: GoldGunnerFigure,
+    Celebration: GoldGunnerCelebration,
   },
 }

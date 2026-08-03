@@ -5,6 +5,7 @@ import { F } from '../../components/widgets/characters/fireninja/fireNinjaPalett
 import { D } from '../../components/widgets/characters/darkarin/darkArinPalette'
 import { FR } from '../../components/widgets/characters/frak/frakPalette'
 import { IM } from '../../components/widgets/characters/imperium/imperiumPalette'
+import { GG } from '../../components/widgets/characters/goldgunner/goldGunnerPalette'
 
 /**
  * Component-free avatar metadata (name + brand colour). Kept free of component
@@ -27,6 +28,7 @@ export const AVATAR_CATALOG: AvatarMeta[] = [
   { id: 'darkarin', name: 'DarkArin', color: D.gi },
   { id: 'frak', name: 'frak', color: FR.hood },
   { id: 'imperium', name: 'Imperium Claw General', color: IM.gold },
+  { id: 'goldgunner', name: 'Gold Gunner', color: GG.gold },
 ]
 
 export const avatarMetaById = Object.fromEntries(
