@@ -51,18 +51,22 @@ import { useAppDispatch, useAppSelector } from '../../app/hooks'
 import {
   addPin,
   clearPins,
+  deleteBookmark,
   deleteRoute,
   removePin,
+  saveBookmark,
   saveRoute,
   setBuildings,
   setTrees,
   setViewMode,
   setViewpoint,
+  type MapBookmark,
   type MapPin,
   type MapViewMode,
   type SavedRoute,
   type SavedViewpoint,
 } from '../../features/map/mapSlice'
+import BookmarksControl from './BookmarksControl'
 import ConfirmDialog from '../../components/widgets/ConfirmDialog'
 import CoordinateReadout from './CoordinateReadout'
 import LocateControl from './LocateControl'
@@ -162,6 +166,7 @@ function safeDestroy(target: { destroy(): void } | null | undefined) {
 // dependencies (docs/lessons.md — stable fallbacks).
 const NO_PINS: MapPin[] = []
 const NO_ROUTES: SavedRoute[] = []
+const NO_BOOKMARKS: MapBookmark[] = []
 
 const PIN_SYMBOL = new SimpleMarkerSymbol({
   style: 'circle',
@@ -195,6 +200,7 @@ export default function MapPageBody() {
   const savedViewpointRef = useRef(savedViewpoint)
   savedViewpointRef.current = savedViewpoint
   const savedRoutes = useAppSelector((state) => state.map.savedRoutes) ?? NO_ROUTES
+  const bookmarks = useAppSelector((state) => state.map.bookmarks) ?? NO_BOOKMARKS
   const buildings = useAppSelector((state) => state.map.buildings) ?? true
   const trees = useAppSelector((state) => state.map.trees) ?? true
 
@@ -310,6 +316,35 @@ export default function MapPageBody() {
       }
     }
   }, [fullscreen])
+
+  const saveBookmarkNow = (name: string) => {
+    const view = viewRef.current
+    if (!view) return
+    const viewpoint = captureViewpoint(view)
+    if (!viewpoint) return
+    dispatch(
+      saveBookmark({ name: name.trim() || `Bookmark ${bookmarks.length + 1}`, viewpoint }),
+    )
+  }
+
+  const loadBookmark = (bookmark: MapBookmark) => {
+    const view = viewRef.current
+    if (!view) return
+    const vp = bookmark.viewpoint
+    try {
+      const target =
+        vp.z != null && view.type === '3d'
+          ? {
+              position: { longitude: vp.lon, latitude: vp.lat, z: vp.z },
+              heading: vp.heading ?? 0,
+              tilt: vp.tilt ?? 0,
+            }
+          : { center: [vp.lon, vp.lat] as [number, number], scale: vp.scale }
+      void (view as MapView).goTo(target).catch(() => {})
+    } catch {
+      // view not ready — nothing to fly
+    }
+  }
 
   const saveCurrentRoute = (name: string) => {
     if (routeEdit.points.length < 2) return
@@ -671,6 +706,7 @@ export default function MapPageBody() {
       data-center-lat={focus.lat.toFixed(4)}
       data-scale={Math.round(focus.scale)}
       data-saved-routes={savedRoutes.length}
+      data-bookmarks={bookmarks.length}
       data-buildings={buildings ? 'on' : 'off'}
       data-trees={trees ? 'on' : 'off'}
       data-fullscreen={fullscreen ? 'on' : 'off'}
@@ -771,6 +807,13 @@ export default function MapPageBody() {
           </ToggleButton>
         </ToggleButtonGroup>
         <LocateControl viewRef={viewRef} viewRevision={viewRevision} layerRef={locateLayerRef} />
+        <BookmarksControl
+          bookmarks={bookmarks}
+          canSave={status === 'ready'}
+          onSave={saveBookmarkNow}
+          onLoad={loadBookmark}
+          onDelete={(id) => dispatch(deleteBookmark(id))}
+        />
         {tool === 'pins' && pins.length > 0 && (
           <Tooltip title="Remove all pins">
             <IconButton

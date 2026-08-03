@@ -894,3 +894,18 @@ carried over; these are the new ones.
     pure CSS on the existing nodes. Sync the CSS state with a
     `fullscreenchange` listener so the browser's own exit (Esc in native
     fullscreen) doesn't leave the overlay stuck on.
+
+73. **Never throttle input handling with requestAnimationFrame on a page
+    that can go idle — rAF only fires when the browser schedules a frame.**
+    The coordinate readout gated pointer-move processing behind an rAF
+    flag; on the offline sandbox (static map, nothing animating) headless
+    Chromium scheduled no frames, the callback never ran, the pending flag
+    stayed set, and every later pointer-move was dropped — the readout
+    froze on its placeholder, intermittently (any concurrent animation,
+    like a loading spinner, unwedged it — hence flaky, not red). Real
+    browsers do the same to background/occluded tabs. Throttle event
+    handlers by TIMESTAMP (`performance.now() - last < 50ms → skip`,
+    process synchronously otherwise); reserve rAF for work that composes
+    with rendering (drawing, style writes read back by layout), and if rAF
+    must gate something, pair it with a timeout fallback. Found because the
+    e2e suite runs on exactly such an idle page — the flake WAS the bug.

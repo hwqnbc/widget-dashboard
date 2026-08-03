@@ -106,9 +106,18 @@ on it works without a backend server or API key.
   behind the shared `ConfirmDialog`. Pins are `{id, lon, lat}` in the new
   persisted `map` slice (registered in `app/store.ts`, rides the existing
   `testsite` localStorage key) and are mirrored to a GraphicsLayer.
+- **Bookmarks** (`BookmarksControl.tsx`): star buttons in the strip save the
+  current camera as a named `MapBookmark` (`{ name, viewpoint }` — the same
+  `SavedViewpoint` shape as the viewport memory, so a 3D bookmark keeps its
+  full camera) into the persisted slice; the jump menu lists them
+  (`2D/3D · lat, lon` secondary), flies back via `view.goTo` (camera target
+  in 3D, center+scale otherwise) and deletes per item. Save is gated on the
+  view being ready. Contract: `data-bookmarks` on the root.
 - **Coordinate readout** (`CoordinateReadout.tsx`): a monospace chip over
   the map's bottom-right showing `lat, lon` (5 dp ≈ 1 m) under the pointer
-  (rAF-throttled `pointer-move` → `view.toMap`), falling back to the view
+  (time-throttled `pointer-move` → `view.toMap` — NOT rAF-throttled: an
+  idle page may schedule no frames, wedging an rAF gate shut, lessons.md
+  #73), falling back to the view
   center on `stationary` for touch devices; click copies with a brief
   "Copied" swap. All updates write straight to the DOM node — zero React
   re-renders per mousemove, and React must never re-create the node (it
@@ -205,7 +214,7 @@ visual verification happens on the GitHub Pages deploy.
   the route bullet above).
 - ~~Per-leg breakdown~~ — shipped (clickable result chip → legs popover, see
   the route bullet above).
-- **Bookmarks** — save the current viewpoint to the map slice, jump list.
+- ~~Bookmarks~~ — shipped (star save + jump menu, see the tools section).
 - ~~Coordinate readout~~ — shipped (pointer-tracking chip with copy, see the
   tools section).
 - **Swipe compare** — ArcGIS `Swipe` widget between two free basemaps.

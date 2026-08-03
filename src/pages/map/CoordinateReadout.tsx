@@ -43,23 +43,24 @@ export default function CoordinateReadout({
       }
     }
 
-    let rafPending = false
+    // Time-based throttle, NOT requestAnimationFrame: on an idle page the
+    // browser may schedule no frames at all (headless offline, background
+    // tabs), which would wedge an rAF gate shut and freeze the readout.
+    let lastWrite = 0
     const handles: { remove(): void }[] = []
     try {
       handles.push(
         (view as MapView).on('pointer-move', (event) => {
-          if (rafPending) return
-          rafPending = true
-          requestAnimationFrame(() => {
-            rafPending = false
-            try {
-              if (view.destroyed) return
-              const mp = view.toMap({ x: event.x, y: event.y })
-              write(mp?.latitude, mp?.longitude)
-            } catch {
-              /* view mid-teardown */
-            }
-          })
+          const now = performance.now()
+          if (now - lastWrite < 50) return
+          lastWrite = now
+          try {
+            if (view.destroyed) return
+            const mp = view.toMap({ x: event.x, y: event.y })
+            write(mp?.latitude, mp?.longitude)
+          } catch {
+            /* view mid-teardown */
+          }
         }),
       )
       // Touch devices never hover: track the view center once the camera

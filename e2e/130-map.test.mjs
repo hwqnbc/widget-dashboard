@@ -320,6 +320,17 @@ check(
 )
 check('no saved routes initially', (await root().getAttribute('data-saved-routes')) === '0')
 check('locate control renders', (await page.locator('[data-testid="map-locate"]').count()) === 1)
+check('no bookmarks initially', (await root().getAttribute('data-bookmarks')) === '0')
+check(
+  'bookmarks menu disabled when empty',
+  await page.locator('[data-testid="map-bookmarks-open"]').isDisabled(),
+)
+if (!online) {
+  check(
+    'offline: bookmark save disabled (view never ready)',
+    await page.locator('[data-testid="map-bookmark-save"]').isDisabled(),
+  )
+}
 
 // ---- coordinate readout: pointer tracking + click-to-copy. Offline-safe:
 // view.toMap only needs the view transform (center/scale), not tiles. ----
@@ -584,6 +595,65 @@ if (online) {
       (await root().getAttribute('data-center-lon')) === lonAfterPan,
       `expected ${lonAfterPan}, got ${await root().getAttribute('data-center-lon')}`,
     )
+
+    // ---- bookmarks: save this view, pan away, jump back, persist, delete ----
+    await waitForAttr('data-map-status', (v) => v === 'ready', 45000)
+    const savedLon = parseFloat(await root().getAttribute('data-center-lon'))
+    await page.locator('[data-testid="map-bookmark-save"]').click()
+    await page.waitForTimeout(300)
+    check(
+      'bookmark dialog prefills a name',
+      (await page.locator('[data-testid="map-bookmark-save-name"]').inputValue()) === 'Bookmark 1',
+    )
+    await page.locator('[data-testid="map-bookmark-save-confirm"]').click()
+    await page.waitForTimeout(300)
+    check('bookmark saved', (await root().getAttribute('data-bookmarks')) === '1')
+
+    // pan away again so the jump is observable
+    await page.mouse.move(box.x + box.width * 0.5, box.y + box.height * 0.5)
+    await page.mouse.down()
+    for (let i = 1; i <= 6; i++) {
+      await page.mouse.move(box.x + box.width * 0.5 + i * 35, box.y + box.height * 0.5 - i * 10)
+      await page.waitForTimeout(40)
+    }
+    await page.mouse.up()
+    await waitForAttr(
+      'data-center-lon',
+      (v) => Math.abs(parseFloat(v) - savedLon) > 0.005,
+      15000,
+    )
+
+    await page.locator('[data-testid="map-bookmarks-open"]').click()
+    await page.waitForTimeout(300)
+    check(
+      'bookmark listed',
+      (await page.locator('[data-testid="map-bookmark-item"]').count()) === 1,
+    )
+    await page.locator('[data-testid="map-bookmark-item"]').click()
+    const backLon = await waitForAttr(
+      'data-center-lon',
+      (v) => Math.abs(parseFloat(v) - savedLon) < 0.02,
+      20000,
+    )
+    check(
+      'loading a bookmark flies back to the saved view',
+      Math.abs(parseFloat(backLon) - savedLon) < 0.02,
+      `saved ${savedLon}, got ${backLon}`,
+    )
+
+    await page.reload({ waitUntil: 'networkidle' })
+    await page.waitForSelector('[data-testid="map-page"]', { timeout: 30000 })
+    check(
+      'bookmarks persist across reload',
+      (await root().getAttribute('data-bookmarks')) === '1',
+    )
+    await page.locator('[data-testid="map-bookmarks-open"]').click()
+    await page.waitForTimeout(300)
+    await page.locator('[data-testid="map-bookmark-delete"]').click()
+    await page.waitForTimeout(300)
+    check('deleting a bookmark empties the list', (await root().getAttribute('data-bookmarks')) === '0')
+    await page.keyboard.press('Escape')
+    await page.waitForTimeout(200)
   } else {
     check('online but view never ready', false, 'ready wait timed out')
   }

@@ -36,6 +36,13 @@ export interface SavedRoute {
   points: [number, number][]
 }
 
+/** A named, persisted camera view — same shape the viewport memory uses. */
+export interface MapBookmark {
+  id: string
+  name: string
+  viewpoint: SavedViewpoint
+}
+
 export interface MapState {
   /** 2D flat map (MapView) or 3D globe (SceneView). */
   viewMode: MapViewMode
@@ -47,6 +54,7 @@ export interface MapState {
   buildings: boolean
   /** Show the OSM 3D Trees scene layer (visible effect in 3D only). */
   trees: boolean
+  bookmarks: MapBookmark[]
 }
 
 const initialState: MapState = {
@@ -56,6 +64,7 @@ const initialState: MapState = {
   savedRoutes: [],
   buildings: true,
   trees: true,
+  bookmarks: [],
 }
 
 /** Map-page state (persisted): the 2D/3D choice and the dropped pins. */
@@ -97,6 +106,18 @@ const mapSlice = createSlice({
     setTrees(state, action: PayloadAction<boolean>) {
       state.trees = action.payload
     },
+    saveBookmark: {
+      prepare(bookmark: Omit<MapBookmark, 'id'>) {
+        return { payload: { ...bookmark, id: nanoid() } }
+      },
+      reducer(state, action: PayloadAction<MapBookmark>) {
+        if (!state.bookmarks) state.bookmarks = []
+        state.bookmarks.push(action.payload)
+      },
+    },
+    deleteBookmark(state, action: PayloadAction<string>) {
+      state.bookmarks = (state.bookmarks ?? []).filter((b) => b.id !== action.payload)
+    },
   },
 })
 
@@ -110,5 +131,7 @@ export const {
   deleteRoute,
   setBuildings,
   setTrees,
+  saveBookmark,
+  deleteBookmark,
 } = mapSlice.actions
 export default mapSlice.reducer
