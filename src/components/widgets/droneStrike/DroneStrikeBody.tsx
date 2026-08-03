@@ -70,6 +70,7 @@ import type { CrashState } from './StrikeRig'
 import StrikeRig from './StrikeRig'
 import Targets from './Targets'
 import GroundTargets from './GroundTargets'
+import CarTargets from './CarTargets'
 import EnemyDrones from './EnemyDrones'
 import Tracers from './Tracers'
 import Reticle from './Reticle'
@@ -728,6 +729,7 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
           {weather === 'storm' && <RainField flight={flight} wind={windRef.current} />}
           <Targets targets={targets} />
           <GroundTargets targets={targets} />
+          <CarTargets targets={targets} />
           <EnemyDrones targets={targets} />
           <Tracers combat={combat} tracerLen={BOLT.tracerLen} />
           <StrikeRig

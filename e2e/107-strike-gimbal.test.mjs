@@ -62,8 +62,14 @@ check(
 )
 check('classic reticle stays centred', (await reticleLeft()) === '')
 
-// Switch to Reticle (gimbal) for the drag/track/reticle tests below.
+// Switch to Reticle (gimbal) for the drag/track/reticle tests below. Turn
+// aim assist OFF first so soft-track never moves the gimbal during these
+// manual-drag assertions (wave 1 now fields a lockable moving car; the
+// soft-track dynamics are covered on the pure module below). The hover
+// section re-confirms assist off.
 await openStrikeSettings(page)
+await page.locator('[data-testid="strike-assist-off"]').click()
+await page.waitForTimeout(120)
 await page.locator('[data-testid="strike-aimmode-gimbal"]').click()
 await page.waitForTimeout(150)
 await closeStrikeSettings(page)

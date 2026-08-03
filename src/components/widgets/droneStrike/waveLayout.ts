@@ -52,8 +52,9 @@ export const ENEMY_WAVE_START = 3
 export const ENEMY_FIRE_WAVE = 5
 /** Ground supply trucks appear from this wave (static points targets). */
 export const GROUND_WAVE_START = 2
-/** Moving cars (road-bound) appear from this wave. */
-export const CAR_WAVE_START = 3
+/** Moving cars (road-bound) appear from this wave — from the very first
+ * wave, gently (see the wave-scaled speed in buildWave). */
+export const CAR_WAVE_START = 1
 /** AA turrets (static ground enemies that fire back) appear from this wave. */
 export const TURRET_WAVE = 4
 /** Hard cap on simultaneous targets (perf budget: one InstancedMesh).
@@ -235,7 +236,9 @@ export function buildWave(
     if (targets.length >= MAX_TARGETS) break
     const road = layout.roads[i % layout.roads.length]
     const dir = rand() < 0.5 ? 1 : -1
-    const speed = (6 + rand() * 5) * dir
+    // Wave-scaled speed: gentle movers early (wave 1 ≈ 2.5–5 u/s) ramping to
+    // ≈4–8 by wave 5 — fair to lead as a new mechanic, harder as waves climb.
+    const speed = (4 + rand() * 4) * Math.min(1, 0.5 + 0.12 * waveIndex) * dir
     const start = rand() * WORLD_HALF * 2
     // Ride one side of the lane, matching RichWorld's decorative traffic.
     const lane = road.at + (dir > 0 ? 0.8 : -0.8)

@@ -125,9 +125,9 @@ mulberry32 stream per wave, independent of the world stream):
 
 | Wave | Content |
 | --- | --- |
-| 1 | 6 static balloons |
-| 2 | 7 targets, half drifting (`ringDrone`, sinusoidal, velocity published for leading); + ground supply trucks (2) |
-| 3–4 | + enemy drones (1 then 2), orbit patrol + evade; + more trucks; moving road cars from wave 3; AA turrets from wave 4 |
+| 1 | 6 static balloons + one slow moving road car (the truck model) |
+| 2 | 7 targets, half drifting (`ringDrone`, sinusoidal, velocity published for leading); + ground supply trucks (2); + car |
+| 3–4 | + enemy drones (1 then 2), orbit patrol + evade; + more trucks + cars (faster); AA turrets from wave 4 |
 | 5+ | enemies + turrets return fire (Normal/Hard); player has 3 HP per wave attempt |
 | scaling | more/smaller/faster targets, up to 4 enemies, up to 4 trucks + 3 cars + 2 turrets, `MAX_TARGETS` 24 |
 
@@ -141,14 +141,19 @@ turrets** (`turret`, dark-red, 30 pts) appear from wave 4 — a *static ground
 enemy*: `stepTurret` is the return-fire half of `stepEnemy` with no
 movement, lobbing slow unled bolts up the player's line of sight (dodgeable),
 gated by the same difficulty preset as the drones (HP + the shared
-return-fire wave). **Cars** (`car`, blue, 25 pts, one hit) appear from
-wave 3 — a *moving* deck target that drives the city's road lanes: each is
-placed on one of the world's seeded `roads`, and `stepDrift`'s `car` branch
-reuses `RichWorld`'s decorative-traffic formula (`along = ((offset +
-dir·speed·t) mod span) − WORLD_HALF` at the road's fixed cross-coord), so it
-rides the visible road at constant speed and wraps at the far edge. Its
-velocity is the constant travel speed (not a per-frame delta), so shot
-leading stays correct across the wrap. Trucks and cars are
+return-fire wave). **Cars** (`car`, 25 pts, one hit) appear from **wave 1** — a *moving* deck
+target that drives the city's road lanes: each is placed on one of the
+world's seeded `roads`, and `stepDrift`'s `car` branch reuses `RichWorld`'s
+decorative-traffic formula (`along = ((offset + dir·speed·t) mod span) −
+WORLD_HALF` at the road's fixed cross-coord), so it rides the visible road
+and wraps at the far edge. Its velocity is the constant travel speed (not a
+per-frame delta), so shot leading stays correct across the wrap. Speed is
+**wave-scaled** — a gentle ~2.5–5 u/s mover in wave 1 (a fair intro to
+leading) ramping to ~4–8 by wave 5. Cars render as the **`LegoSwatTruck`**
+model (the primitive-built truck reused from the Model Viewer widget) via
+`CarTargets` — a small pool of model instances positioned/yawed per frame
+(the `EnemyDrones` pattern), each wheels-on-deck, nose (+Z) into travel, far
+more legible than the old instanced box. Trucks and cars are
 difficulty-independent (drawn before the difficulty-gated enemy block so
 their seeded positions don't shift with difficulty); count and hp of the
 turrets follow the preset. All use the normal pos+radius hit sphere, so the
@@ -281,9 +286,11 @@ Components: `StrikeRig` (the `useFrame` loop: input → flight → targets/AI �
 fire intent → sweeps → events → wave-clear → pose → telemetry),
 `StrikeCameraRig` (FPV + chase with the boom clip), `Targets` (one
 InstancedMesh of spheres for the balloon/ring-drone gallery), `GroundTargets`
-(one InstancedMesh of boxes for the deck-level trucks/turrets, per-instance
-colour + scale), `EnemyDrones` (≤4 `DroneModel`s with red beacons,
-slot-assigned per frame), `Tracers` (one InstancedMesh for all bolts,
+(one InstancedMesh of boxes for the static deck trucks/turrets, per-instance
+colour + scale), `CarTargets` (≤3 `LegoSwatTruck` models — reused from the
+Model Viewer widget — slot-assigned per frame, wheels-on-deck, yawed into
+travel), `EnemyDrones` (≤4 `DroneModel`s with red beacons, slot-assigned per
+frame), `Tracers` (one InstancedMesh for all bolts,
 oriented along velocity), `Reticle`/`FireButton`/`HitMarkers`/
 `StrikeMinimap`/`StrikeSettingsPanel`.
 
@@ -357,12 +364,14 @@ kind of list).
 ### Enemies & waves
 - ~~Ground-target waves~~ — **shipped** (deck-level supply trucks from
   wave 2 + AA turrets from wave 4 via `GroundTargets`/`stepTurret`, and
-  road-bound **moving cars** from wave 3 via the `car` kind + `stepDrift`'s
-  road-traffic branch; the payoff the gimbal look-down unlocked — see the
-  Gameplay section). Room to extend: **tents/depots** as further static
-  kinds; a **convoy** (several cars nose-to-tail on one lane, phase-offset);
-  and letting cars **turn at intersections** (hop lanes where two roads
-  cross) instead of a single straight lane.
+  road-bound **moving cars** from wave 1 via the `car` kind + `stepDrift`'s
+  road-traffic branch, rendered as the `LegoSwatTruck` model through
+  `CarTargets`; the payoff the gimbal look-down unlocked — see the Gameplay
+  section). Room to extend: **tents/depots** as further static kinds; a
+  **convoy** (several cars nose-to-tail on one lane, phase-offset); letting
+  cars **turn at intersections** (hop lanes where two roads cross); and
+  distinct **model variants** per ground kind now that the Model Viewer
+  catalog is a home for primitive vehicles.
 - **Enemy variety** — a *chaser* that pursues the player (waypoint =
   player position, capped speed, `resolveCollisions` for safety), a
   *kamikaze* that dives once locked, a *shielded* drone only hurt from

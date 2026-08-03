@@ -70,7 +70,7 @@ const c0 = await combat()
 check('wave 1 reported', c0.wave === 1, `wave=${c0.wave}`)
 
 // The wave is seeded: the app must field exactly the targets the pure
-// module predicts (wave 1 = static balloons only).
+// module predicts (wave 1 = a static balloon gallery plus one slow road car).
 const wave1 = buildWave(DEFAULT_SEED, 1, buildWorldLayout(DEFAULT_SEED))
 check(
   'seeded wave-1 target count',
@@ -78,11 +78,19 @@ check(
   `app=${c0.targetsLeft} expected=${wave1.targets.length}`,
 )
 check(
-  'wave 1 is a static gallery',
-  wave1.targets.every((t) => t.kind === 'balloon' && t.driftAmp === 0),
+  'wave 1 balloons are a static gallery',
+  wave1.targets.filter((t) => t.kind === 'balloon').every((t) => t.driftAmp === 0),
+)
+check(
+  'wave 1 fields a moving road car',
+  wave1.targets.some((t) => t.kind === 'car' && t.driftSpeed !== 0),
 )
 const beacon = await target()
-check('nearest-target beacon published', beacon !== null && beacon.kind === 'balloon')
+check(
+  'nearest-target beacon published',
+  beacon !== null && (beacon.kind === 'balloon' || beacon.kind === 'car'),
+  `kind=${beacon?.kind}`,
+)
 
 // The fire button shoots: shots increment and a bolt goes live.
 await tapFire(page, context, 60)
