@@ -61,6 +61,8 @@ const FrakFigure3D = lazy(() => import('../components/widgets/characters/frak/Fr
 const FrakModel3D = lazy(() => import('../components/widgets/characters/frak/FrakModel3D'))
 const ImperiumFigure3D = lazy(() => import('../components/widgets/characters/imperium/ImperiumFigure3D'))
 const ImperiumModel3D = lazy(() => import('../components/widgets/characters/imperium/ImperiumModel3D'))
+const GoldGunnerFigure3D = lazy(() => import('../components/widgets/characters/goldgunner/GoldGunnerFigure3D'))
+const GoldGunnerModel3D = lazy(() => import('../components/widgets/characters/goldgunner/GoldGunnerModel3D'))
 
 export const avatarVisualById: Record<AvatarId, AvatarVisual> = {
   toy: {
@@ -118,11 +120,11 @@ export const avatarVisualById: Record<AvatarId, AvatarVisual> = {
     actions3d: [{ id: 'slash', name: 'Claw Slash' }],
   },
   goldgunner: {
-    // 2D only for now — no 3D figure yet, so the Avatar Actions 3D view shows
-    // the "not available" placeholder (a supported state). A three.js
-    // Figure3D/Model3D is on the enhancement backlog.
     Head: GoldGunnerHead,
     Figure: GoldGunnerFigure,
     Celebration: GoldGunnerCelebration,
+    Figure3D: GoldGunnerFigure3D,
+    Model3D: GoldGunnerModel3D,
+    actions3d: [{ id: 'blaze', name: 'Guns Blazing' }],
   },
 }

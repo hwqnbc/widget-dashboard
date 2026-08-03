@@ -4,20 +4,22 @@
  * ('available'/'unavailable' for the selected avatar).
  *
  * Covers: 2D default, toggling to 3D lazy-loads the three.js chunk and
- * renders a WebGL canvas for every avatar (ALL six carry a Figure3D now),
+ * renders a WebGL canvas for every avatar (ALL seven carry a Figure3D now),
  * the action toggle lists the 3D model's named-move library (registry
  * `actions3d`: toy [Dance, 6 7 Show], ninja [Pump, Draw], fireninja
  * [Fire Blade], darkarin [Twin Cross], frak [Blade Flurry], imperium
- * [Claw Slash]) and each action drives `data-action`/`data-playing`,
- * tapping the 3D figure toggles the turntable (`data-spin`, one uniform
- * rule for every avatar, persisted per widget), switching back restores
- * each view, and the chosen view + spin preference survive a reload.
+ * [Claw Slash], goldgunner [Guns Blazing]) and each action drives
+ * `data-action`/`data-playing`, tapping the 3D figure toggles the turntable
+ * (`data-spin`, one uniform rule for every avatar, persisted per widget),
+ * switching back restores each view, and the chosen view + spin preference
+ * survive a reload.
  * The "no 3D figure" placeholder path (`figure3d-unavailable`, action
- * toggle disabled) is exercised by Gold Gunner — the newest avatar, 2D
- * only so far — which advertises `data-figure3d=unavailable` and shows the
- * placeholder in the 3D view (the live target for this path per lesson #65).
- * The 3D art itself is reviewed from screenshots — the suite asserts
- * presence + the data contract, like the 2D suite (120).
+ * toggle disabled) is retained in the widget as scaffolding for future
+ * avatars but no current avatar exercises it — per lesson #65 the roster is
+ * fully 3D and no retarget candidate remains, so only the toy block's
+ * negative check still probes it. The 3D art itself is reviewed from
+ * screenshots — the suite asserts presence + the data contract, like the
+ * 2D suite (120).
  */
 import { addAvatarWidget, launch, reporter } from './helpers.mjs'
 
@@ -141,7 +143,7 @@ await page.waitForTimeout(150)
 check('Idle resets the frak action', (await attr('data-action')) === 'idle')
 
 // imperium's 3D figure: one-move library, the Claw Slash round-trips
-await picker.nth(5).click() // imperium — the last avatar to gain 3D
+await picker.nth(5).click() // imperium
 await page.waitForTimeout(150)
 check('imperium advertises an available 3D figure', (await attr('data-figure3d')) === 'available')
 await page.waitForSelector('[data-testid="figure3d-stage"] canvas', { timeout: 20000 })
@@ -155,16 +157,20 @@ await celebration.nth(0).click()
 await page.waitForTimeout(150)
 check('Idle resets the imperium action', (await attr('data-action')) === 'idle')
 
-// Gold Gunner (2D only): advertises no 3D figure, so the 3D view shows the
-// "not available" placeholder and disables the action toggle — the live
-// coverage target for the unavailable path.
-await picker.nth(6).click() // goldgunner
+// goldgunner's 3D figure: one-move library, Guns Blazing round-trips
+await picker.nth(6).click() // goldgunner — the last avatar to gain 3D
 await page.waitForTimeout(150)
-check('goldgunner advertises no 3D figure', (await attr('data-figure3d')) === 'unavailable')
-await page.waitForSelector('[data-testid="figure3d-unavailable"]', { timeout: 5000 })
-check('goldgunner shows the unavailable placeholder', (await unavailable.count()) === 1)
-check('no WebGL canvas for goldgunner', (await stageCanvas.count()) === 0)
-check('action toggle disabled with no 3D figure', await celebration.nth(0).isDisabled())
+check('goldgunner advertises an available 3D figure', (await attr('data-figure3d')) === 'available')
+await page.waitForSelector('[data-testid="figure3d-stage"] canvas', { timeout: 20000 })
+check('goldgunner 3d view renders a WebGL canvas', (await stageCanvas.count()) === 1)
+check('goldgunner 3d actions: Idle + Guns Blazing', (await celebration.count()) === 2)
+await celebration.nth(1).click() // Guns Blazing
+await page.waitForTimeout(150)
+check('Guns Blazing plays', (await attr('data-action')) === 'blaze')
+check('Guns Blazing sets playing', (await attr('data-playing')) === 'yes')
+await celebration.nth(0).click()
+await page.waitForTimeout(150)
+check('Idle resets the goldgunner action', (await attr('data-action')) === 'idle')
 
 // back to toy: the 3D figure returns and the toggle re-enables
 await picker.nth(0).click()

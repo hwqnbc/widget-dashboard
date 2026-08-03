@@ -43,7 +43,7 @@ fireninja/ FireNinjaHead, FireBladeFigure, FireNinjaFigure, FireNinjaCelebration
 darkarin/  DarkArinHead, TwinSwordFigure, DarkArinFigure, DarkArinCelebration, DarkArinFigure3D, DarkArinModel3D, darkArinPalette, index
 frak/      FrakHead, FrakFigure, FrakCelebration, FrakFigure3D, FrakModel3D, frakPalette, index
 imperium/  ImperiumHead, ClawFigure, ImperiumFigure, ImperiumCelebration, ImperiumFigure3D, ImperiumModel3D, imperiumPalette, index
-goldgunner/ GoldGunnerHead, GunnerFigure, GoldGunnerFigure, GoldGunnerCelebration, goldGunnerPalette, index  (2D only — no 3D figure yet)
+goldgunner/ GoldGunnerHead, GunnerFigure, GoldGunnerFigure, GoldGunnerCelebration, GoldGunnerFigure3D, GoldGunnerModel3D, goldGunnerPalette, index
 boy/       Boy.tsx                    (an ImageToggle figure, not a game avatar)
 ```
 - **Head** = the standalone `<svg>` chip/mark (`size` prop; default `'100%'`).
@@ -182,8 +182,9 @@ avatar without a `Figure3D` shows a placeholder
 (`data-testid="figure3d-unavailable"`, head + "<Name> has no 3D figure yet")
 instead, with the celebration toggle **disabled** (nothing would visibly
 play) — so avatars gain 3D one at a time without gating the view toggle.
-**Gold Gunner** is the current 2D-only avatar (no 3D yet), so it's the live
-example of this placeholder path and the coverage target in suite 121.
+No current avatar exercises the placeholder (the roster is fully 3D since
+Gold Gunner's figure landed); it stays as scaffolding for future avatars,
+probed only by suite 121's negative check on the toy block.
 
 **Adding a 3D figure to an avatar:** build the mesh-level
 `characters/<id>/<Name>Model3D.tsx` (default-export `{ action?: string }`,
@@ -213,11 +214,20 @@ lower-face wrap, gunmetal torso with the lime hex chest plate + belt bar,
 orange arms with black gloves, printed grey legs, two permanently-held
 pearl-gold sabers — broad curved blades with knuckle-bow hilts, the pair
 mirrored via `rotation-y=π` on the left hand's copy; action Blade
-Flurry), and imperium
+Flurry), imperium
 (`ImperiumModel3D` — black faceted helmet with horn spikes, gold face
 plate under the black V-crest with four orange eye slits + glowing mouth
 vent, gold rib print + hex core emblem, left fist akimbo on the hip, the
-pistol-grip energy claw in the right; action Claw Slash). **Every avatar
+pistol-grip energy claw in the right; action Claw Slash), and goldgunner
+(`GoldGunnerModel3D` — smooth yellow minifig head under the brown
+hair cap + fringe/back drape, yellow jacket torso with the black
+open-jacket V lapels, black tactical legs, both guns pistol-gripped ⊥
+the forearm like the imperium claw: the black rifle raised in the right
+fist, the gold twin-barrel blaster low-forward in the left; action Guns
+Blazing — alternating elbow recoil on a 0.6 s loop with an emissive
+muzzle-flash burst per shot, `visible`-toggled in useFrame; the flash
+carries a forward cone because a flat star reads end-on as nothing when
+a barrel points at the camera). **Every avatar
 now ships a 3D figure** — the Avatar Actions "no 3D figure yet"
 placeholder and the Drone Sim's `data-op-figure="basic"` value are no
 longer reachable from any current avatar; both code paths stay as

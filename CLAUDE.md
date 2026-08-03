@@ -155,7 +155,8 @@ character folders under `components/widgets/characters/` — `toy/` (`ToyHead`,
 `imperium/` (`ImperiumHead`, `ClawFigure`, `ImperiumFigure`, `ImperiumCelebration`,
 `ImperiumFigure3D`, `ImperiumModel3D`, `imperiumPalette`),
 `goldgunner/` (`GoldGunnerHead`, `GunnerFigure`, `GoldGunnerFigure`,
-`GoldGunnerCelebration`, `goldGunnerPalette` — 2D only so far, no 3D figure yet),
+`GoldGunnerCelebration`, `GoldGunnerFigure3D`, `GoldGunnerModel3D`,
+`goldGunnerPalette`),
 `shared/Hand`, `shared/FigureStage3D` (R3F turntable stage
 for the lazy 3D figures), `boy/Boy`.
 
