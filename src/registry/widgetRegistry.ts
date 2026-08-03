@@ -13,6 +13,7 @@ import ArcheryWidget from '../components/widgets/ArcheryWidget'
 import DroneSimWidget from '../components/widgets/droneSim/DroneSimWidget'
 import DroneStrikeWidget from '../components/widgets/droneStrike/DroneStrikeWidget'
 import TankBattleWidget from '../components/widgets/tankBattle/TankBattleWidget'
+import ModelViewerWidget from '../components/widgets/modelViewer/ModelViewerWidget'
 
 /** Props every widget component receives. */
 export interface WidgetProps {
@@ -34,4 +35,5 @@ export const widgetComponents: Record<WidgetType, ComponentType<WidgetProps>> = 
   droneSim: DroneSimWidget,
   droneStrike: DroneStrikeWidget,
   tankBattle: TankBattleWidget,
+  modelViewer: ModelViewerWidget,
 }

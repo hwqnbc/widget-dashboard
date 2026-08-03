@@ -101,6 +101,12 @@ export const WIDGET_CATALOG: WidgetMeta[] = [
     defaultSize: { w: 6, h: 6, minW: 5, minH: 5 },
     preferredOrientation: 'landscape',
   },
+  {
+    type: 'modelViewer',
+    title: 'Model Viewer',
+    description: 'Orbit around your 3D models',
+    defaultSize: { w: 4, h: 6, minW: 3, minH: 4 },
+  },
 ]
 
 export const widgetMetaByType = Object.fromEntries(
@@ -223,6 +229,9 @@ export function defaultWidgetData(type: WidgetType): Record<string, unknown> {
         stickExpo: 0,
         helpSeen: false,
       }
+    case 'modelViewer':
+      // Bare string id — the model catalog itself lives in the lazy 3D chunk.
+      return { model: 'legoSwatTruck', animate: true, autoRotate: false }
     case 'clock':
     default:
       return {}

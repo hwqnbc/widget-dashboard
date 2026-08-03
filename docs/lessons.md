@@ -935,3 +935,28 @@ carried over; these are the new ones.
     figures stay self-contained. The 20×20 head chip renders many times over
     (picker + settings), so it keeps solid fills from the palette rather than
     its own gradient defs — cheaper and immune to the id-collision trap.
+
+## Model Viewer
+
+76. **R3F silently ignores transform props on geometry elements — put
+    `rotation`/`position` on the `<mesh>`, not the `<cylinderGeometry>`.**
+    The user-provided SWAT truck set `rotation={[Math.PI/2,0,0]}` on the
+    head/tail-light `<cylinderGeometry>` elements. `BufferGeometry` is not
+    an `Object3D`; R3F applies unknown JSX attributes as object properties,
+    so the rotation landed on the geometry as an inert property and the
+    lights rendered unrotated (cylinders lying flat in their faces) with no
+    warning anywhere. TypeScript doesn't catch it either — the geometry
+    element types accept arbitrary object props. When adapting pasted R3F
+    code, audit every transform prop for what element it sits on; a
+    transform that must rotate *rendered* geometry belongs on the mesh (or
+    a wrapping group).
+
+77. **A viewer widget doesn't need drei — three ships OrbitControls as an
+    addon.** `three/addons/controls/OrbitControls.js` resolves under Vite +
+    `moduleResolution: "bundler"` with matching `@types/three` declarations,
+    lands in the lazy 3D chunk like any other three import, and gives
+    damped orbit/zoom/pan + `autoRotate` for free. Construct it in a
+    `useEffect` against `useThree()`'s camera + `gl.domElement`, dispose in
+    the cleanup, and call `controls.update()` in `useFrame` (damping and
+    auto-rotate both require it). Adding `@react-three/drei` for one
+    control would have been a whole extra dependency tree.

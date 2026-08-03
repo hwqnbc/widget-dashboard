@@ -12,6 +12,7 @@ export type WidgetType =
   | 'droneSim'
   | 'droneStrike'
   | 'tankBattle'
+  | 'modelViewer'
 
 /** A widget placed on the board. `data` holds per-widget persisted state. */
 export interface WidgetInstance {

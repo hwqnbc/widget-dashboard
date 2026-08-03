@@ -60,6 +60,14 @@ export async function addDroneWidget(page) {
   await page.waitForTimeout(600)
 }
 
+/** Fresh dashboard with one Model Viewer widget. */
+export async function addModelViewerWidget(page) {
+  await page.goto(BASE_URL, { waitUntil: 'networkidle' })
+  await page.getByRole('button', { name: 'Add widget' }).click()
+  await page.getByRole('menuitem', { name: /Model Viewer/ }).click()
+  await page.waitForSelector('[data-testid="model-viewer"]')
+}
+
 /** Fresh dashboard with one Avatar Actions widget. */
 export async function addAvatarWidget(page) {
   await page.goto(BASE_URL, { waitUntil: 'networkidle' })
