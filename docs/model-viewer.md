@@ -5,7 +5,8 @@ components checked into the repo — with orbit controls. It is the fourth
 WebGL widget, but the first that is a *viewer* rather than a game: no HUD,
 no telemetry loop, just a model catalog, a camera you drag, and two toggles.
 The first catalog entry is the **LEGO SWAT Truck**, a primitives-only build
-(no asset files) with animated wheels.
+(no asset files) with animated wheels, a blinking red/blue siren lightbar and
+canvas-drawn "S.W.A.T." lettering on both sides.
 
 ## Stack
 
@@ -29,7 +30,9 @@ The first catalog entry is the **LEGO SWAT Truck**, a primitives-only build
   fights react-grid-layout.
 - **Model picker** — one toggle button per catalog entry.
 - **Animate** (default on) — the model's own motion; for the truck, the
-  wheels spin. What "animate" means belongs to each model.
+  wheels spin and the siren lightbar strobes (red/blue alternate every
+  0.4 s, the amber cap double-times; off = steady dim glow). What "animate"
+  means belongs to each model.
 - **Auto-rotate** (default off) — the *camera* orbits the model
   (`controls.autoRotate`); independent of Animate.
 
@@ -79,6 +82,22 @@ fixed — the head/tail lights set `rotation={[Math.PI/2,0,0]}` on
 `<cylinderGeometry>`, which R3F silently ignores (transforms are Object3D
 props); the rotation moved to the parent `<mesh>` so the lights face out
 from the truck's faces (lesson #76).
+
+Round 2 additions:
+
+- **Siren strobe** — the three lightbar materials carry refs and their own
+  colour as `emissive`; the wheel `useFrame` also flips `emissiveIntensity`
+  from `clock.elapsedTime` (the `GateRings` pulse pattern). Gated on
+  `animate`; parked trucks keep a steady 0.15 glow.
+- **S.W.A.T. decals** — "S.W.A.T." drawn once on an offscreen 512×128
+  canvas → `CanvasTexture` on an unlit transparent `planeGeometry` a hair
+  off each side of the rear body (no font assets, no drei — lesson #78).
+  The texture is a lazy module singleton shared by every truck instance,
+  because the model is multi-instanced: **the Drone Strike renders its
+  moving car targets with this same component** (`droneStrike/
+  CarTargets.tsx`), so changes here must stay pool-friendly — no
+  per-instance texture creation, no assumptions about being the only truck
+  in the scene.
 
 ## Test contract (data-*)
 

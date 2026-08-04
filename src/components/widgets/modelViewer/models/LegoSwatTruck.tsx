@@ -1,6 +1,7 @@
 import { useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
-import type { Group } from 'three'
+import { CanvasTexture } from 'three'
+import type { Group, MeshStandardMaterial } from 'three'
 import type { RefObject } from 'react'
 
 /**
@@ -15,6 +16,48 @@ import type { RefObject } from 'react'
 
 const LEGO_BLUE = '#1e40af'
 const DARK_CHASSIS = '#09090b'
+
+/** How long each side of the red/blue strobe stays lit (seconds). */
+const STROBE_PERIOD = 0.4
+
+/**
+ * "S.W.A.T." lettering drawn once on an offscreen canvas and shared as a
+ * texture by every truck instance (the Drone Strike mounts a pool of them),
+ * so it is a lazy module singleton and never disposed — no font assets, no
+ * drei, just canvas 2D.
+ */
+let swatTexture: CanvasTexture | null = null
+function getSwatTexture(): CanvasTexture {
+  if (swatTexture) return swatTexture
+  const canvas = document.createElement('canvas')
+  canvas.width = 512
+  canvas.height = 128
+  const ctx = canvas.getContext('2d')
+  if (ctx) {
+    ctx.clearRect(0, 0, canvas.width, canvas.height)
+    ctx.font = '900 88px system-ui, Arial, sans-serif'
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.lineWidth = 12
+    ctx.strokeStyle = '#0b1220'
+    ctx.strokeText('S.W.A.T.', canvas.width / 2, canvas.height / 2)
+    ctx.fillStyle = '#ffffff'
+    ctx.fillText('S.W.A.T.', canvas.width / 2, canvas.height / 2)
+  }
+  swatTexture = new CanvasTexture(canvas)
+  return swatTexture
+}
+
+/** One side's lettering: an unlit transparent plane a hair off the body
+ * face (offset instead of polygonOffset — no z-fighting to tune). */
+function SwatDecal({ side }: { side: 1 | -1 }) {
+  return (
+    <mesh position={[side * 0.705, 1.35, -0.3]} rotation={[0, (side * Math.PI) / 2, 0]}>
+      <planeGeometry args={[1.5, 0.38]} />
+      <meshBasicMaterial map={getSwatTexture()} transparent toneMapped={false} />
+    </mesh>
+  )
+}
 
 function Stud({ position, color = LEGO_BLUE }: { position: [number, number, number]; color?: string }) {
   return (
@@ -64,10 +107,29 @@ export default function LegoSwatTruck({ animate }: { animate: boolean }) {
   const frontWheelRight = useRef<Group>(null)
   const backWheelLeft = useRef<Group>(null)
   const backWheelRight = useRef<Group>(null)
+  const blueSirenMat = useRef<MeshStandardMaterial>(null)
+  const redSirenMat = useRef<MeshStandardMaterial>(null)
+  const amberSirenMat = useRef<MeshStandardMaterial>(null)
 
-  // Wheel rotation — refs mutated in the frame loop, never React state.
-  useFrame((_, delta) => {
-    if (!animate) return
+  // Wheel rotation + siren strobe — refs mutated in the frame loop, never
+  // React state.
+  useFrame(({ clock }, delta) => {
+    const blue = blueSirenMat.current
+    const red = redSirenMat.current
+    const amber = amberSirenMat.current
+    if (!animate) {
+      // Parked: steady dim glow, wheels still.
+      if (blue) blue.emissiveIntensity = 0.15
+      if (red) red.emissiveIntensity = 0.15
+      if (amber) amber.emissiveIntensity = 0.15
+      return
+    }
+    const t = clock.elapsedTime
+    // Police strobe: red and blue alternate; the amber cap double-times.
+    const bluePhase = Math.floor(t / STROBE_PERIOD) % 2 === 0
+    if (blue) blue.emissiveIntensity = bluePhase ? 2 : 0
+    if (red) red.emissiveIntensity = bluePhase ? 0 : 2
+    if (amber) amber.emissiveIntensity = Math.floor(t / (STROBE_PERIOD / 2)) % 2 === 0 ? 1.5 : 0
     const speed = delta * 2
     if (frontWheelLeft.current) frontWheelLeft.current.rotation.x += speed
     if (frontWheelRight.current) frontWheelRight.current.rotation.x += speed
@@ -120,21 +182,44 @@ export default function LegoSwatTruck({ animate }: { animate: boolean }) {
         <FaceLight position={[0.45, 0, 0]} color="#dc2626" />
       </group>
 
-      {/* 7. Roof police lightbar */}
+      {/* 7. Roof police lightbar — the strobe mutates emissiveIntensity via
+       * the material refs while Animate is on */}
       <group position={[0, 1.7, 0.3]}>
         <mesh position={[-0.4, 0, 0]}>
           <boxGeometry args={[0.25, 0.12, 0.25]} />
-          <meshStandardMaterial color="#3b82f6" roughness={0.1} />
+          <meshStandardMaterial
+            ref={blueSirenMat}
+            color="#3b82f6"
+            emissive="#3b82f6"
+            emissiveIntensity={0.15}
+            roughness={0.1}
+          />
         </mesh>
         <mesh position={[0, 0, 0]}>
           <boxGeometry args={[0.25, 0.12, 0.25]} />
-          <meshStandardMaterial color="#dc2626" roughness={0.1} />
+          <meshStandardMaterial
+            ref={redSirenMat}
+            color="#dc2626"
+            emissive="#dc2626"
+            emissiveIntensity={0.15}
+            roughness={0.1}
+          />
         </mesh>
         <mesh position={[0.4, 0, 0]}>
           <boxGeometry args={[0.25, 0.12, 0.25]} />
-          <meshStandardMaterial color="#f59e0b" roughness={0.1} />
+          <meshStandardMaterial
+            ref={amberSirenMat}
+            color="#f59e0b"
+            emissive="#f59e0b"
+            emissiveIntensity={0.15}
+            roughness={0.1}
+          />
         </mesh>
       </group>
+
+      {/* 7b. S.W.A.T. lettering on both sides of the rear body */}
+      <SwatDecal side={1} />
+      <SwatDecal side={-1} />
 
       {/* 8. LEGO studs on the roof */}
       <Stud position={[-0.4, 1.7, -0.6]} />

@@ -38,15 +38,20 @@ silently breaking this one.
 
 ## Workflow
 
-**Always start from the latest `main`.** Before doing any work on a task, sync the
-current branch onto the newest `origin/main`:
+**Always pull the latest code before doing anything — no exceptions.** At the
+start of EVERY round, before reading code, planning, or editing a single file,
+pull the newest `origin/main` and rebase the current branch onto it (pull =
+fetch **then rebase** — never a merge-style `git pull`, which would add sync
+merge commits):
 
 ```bash
 git fetch origin main
 git rebase origin/main
 ```
 
-Resolve any conflicts before continuing. If the working tree has uncommitted
+Other sessions land work on `main` between rounds (it has happened mid-feature),
+so skipping this risks building on stale code. Resolve any conflicts before
+continuing. If the working tree has uncommitted
 changes, stash first (`git stash`), rebase, then pop. Re-check before pushing if
 `main` may have moved. A merged branch is finished — restart it from `origin/main`
 rather than stacking new commits on already-merged history.

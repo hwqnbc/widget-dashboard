@@ -960,3 +960,15 @@ carried over; these are the new ones.
     the cleanup, and call `controls.update()` in `useFrame` (damping and
     auto-rotate both require it). Adding `@react-three/drei` for one
     control would have been a whole extra dependency tree.
+
+78. **Text on a 3D model needs no fonts, assets or drei — draw it on an
+    offscreen canvas and use a `CanvasTexture` on an unlit plane.** The
+    truck's S.W.A.T. lettering is canvas 2D (`strokeText` outline +
+    `fillText`) wrapped in `new CanvasTexture(...)`, mapped onto a
+    `meshBasicMaterial` (unlit = crisp, `toneMapped={false}` keeps the
+    white white) on a `planeGeometry` positioned a hair (~0.005) off the
+    body face — an offset beats tuning polygonOffset against z-fighting.
+    Make the texture a lazy module singleton when the model can be
+    multi-instanced (the strike mounts a pool of trucks): per-instance
+    `useMemo` + dispose-on-unmount would re-rasterize per copy and tear the
+    texture out from under surviving instances.
