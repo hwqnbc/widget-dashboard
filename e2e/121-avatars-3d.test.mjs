@@ -4,11 +4,12 @@
  * ('available'/'unavailable' for the selected avatar).
  *
  * Covers: 2D default, toggling to 3D lazy-loads the three.js chunk and
- * renders a WebGL canvas for every avatar (ALL eight carry a Figure3D now),
+ * renders a WebGL canvas for every avatar (ALL nine carry a Figure3D now),
  * the action toggle lists the 3D model's named-move library (registry
  * `actions3d`: toy [Dance, 6 7 Show], ninja [Pump, Draw], fireninja
  * [Fire Blade], darkarin [Twin Cross], frak [Blade Flurry], imperium
- * [Claw Slash], goldgunner [Guns Blazing], scar [Breach & Clear]) and each
+ * [Claw Slash], goldgunner [Guns Blazing], scar [Breach & Clear],
+ * bazookajoe [Rocket Launch]) and each
  * action drives
  * `data-action`/`data-playing`, tapping the 3D figure toggles the turntable
  * (`data-spin`, one uniform rule for every avatar, persisted per widget),
@@ -174,7 +175,7 @@ await page.waitForTimeout(150)
 check('Idle resets the goldgunner action', (await attr('data-action')) === 'idle')
 
 // scar's 3D figure: one-move library, Breach & Clear round-trips
-await picker.nth(7).click() // scar — the last avatar to gain 3D
+await picker.nth(7).click() // scar
 await page.waitForTimeout(150)
 check('scar advertises an available 3D figure', (await attr('data-figure3d')) === 'available')
 await page.waitForSelector('[data-testid="figure3d-stage"] canvas', { timeout: 20000 })
@@ -187,6 +188,21 @@ check('Breach & Clear sets playing', (await attr('data-playing')) === 'yes')
 await celebration.nth(0).click()
 await page.waitForTimeout(150)
 check('Idle resets the scar action', (await attr('data-action')) === 'idle')
+
+// bazookajoe's 3D figure: one-move library, Rocket Launch round-trips
+await picker.nth(8).click() // bazookajoe — the last avatar to gain 3D
+await page.waitForTimeout(150)
+check('bazookajoe advertises an available 3D figure', (await attr('data-figure3d')) === 'available')
+await page.waitForSelector('[data-testid="figure3d-stage"] canvas', { timeout: 20000 })
+check('bazookajoe 3d view renders a WebGL canvas', (await stageCanvas.count()) === 1)
+check('bazookajoe 3d actions: Idle + Rocket Launch', (await celebration.count()) === 2)
+await celebration.nth(1).click() // Rocket Launch
+await page.waitForTimeout(150)
+check('Rocket Launch plays', (await attr('data-action')) === 'launch')
+check('Rocket Launch sets playing', (await attr('data-playing')) === 'yes')
+await celebration.nth(0).click()
+await page.waitForTimeout(150)
+check('Idle resets the bazookajoe action', (await attr('data-action')) === 'idle')
 
 // back to toy: the 3D figure returns and the toggle re-enables
 await picker.nth(0).click()

@@ -7,6 +7,7 @@ import { FR } from '../../components/widgets/characters/frak/frakPalette'
 import { IM } from '../../components/widgets/characters/imperium/imperiumPalette'
 import { GG } from '../../components/widgets/characters/goldgunner/goldGunnerPalette'
 import { SC } from '../../components/widgets/characters/scar/scarPalette'
+import { BJ } from '../../components/widgets/characters/bazookajoe/bazookaJoePalette'
 
 /**
  * Component-free avatar metadata (name + brand colour). Kept free of component
@@ -31,6 +32,7 @@ export const AVATAR_CATALOG: AvatarMeta[] = [
   { id: 'imperium', name: 'Imperium Claw General', color: IM.gold },
   { id: 'goldgunner', name: 'Gold Gunner', color: GG.gold },
   { id: 'scar', name: 'Scar', color: SC.redDeep },
+  { id: 'bazookajoe', name: 'Bazooka Joe', color: BJ.red },
 ]
 
 export const avatarMetaById = Object.fromEntries(

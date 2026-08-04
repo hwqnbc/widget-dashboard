@@ -9,6 +9,7 @@ import { FrakHead, FrakFigure, FrakCelebration } from '../components/widgets/cha
 import { ImperiumHead, ImperiumFigure, ImperiumCelebration } from '../components/widgets/characters/imperium'
 import { GoldGunnerHead, GoldGunnerFigure, GoldGunnerCelebration } from '../components/widgets/characters/goldgunner'
 import { ScarHead, ScarFigure, ScarCelebration } from '../components/widgets/characters/scar'
+import { BazookaJoeHead, BazookaJoeFigure, BazookaJoeCelebration } from '../components/widgets/characters/bazookajoe'
 
 /**
  * The visual pieces of an avatar, grouped: the head (used as the game chip/mark),
@@ -66,6 +67,8 @@ const GoldGunnerFigure3D = lazy(() => import('../components/widgets/characters/g
 const GoldGunnerModel3D = lazy(() => import('../components/widgets/characters/goldgunner/GoldGunnerModel3D'))
 const ScarFigure3D = lazy(() => import('../components/widgets/characters/scar/ScarFigure3D'))
 const ScarModel3D = lazy(() => import('../components/widgets/characters/scar/ScarModel3D'))
+const BazookaJoeFigure3D = lazy(() => import('../components/widgets/characters/bazookajoe/BazookaJoeFigure3D'))
+const BazookaJoeModel3D = lazy(() => import('../components/widgets/characters/bazookajoe/BazookaJoeModel3D'))
 
 export const avatarVisualById: Record<AvatarId, AvatarVisual> = {
   toy: {
@@ -137,5 +140,13 @@ export const avatarVisualById: Record<AvatarId, AvatarVisual> = {
     Figure3D: ScarFigure3D,
     Model3D: ScarModel3D,
     actions3d: [{ id: 'breach', name: 'Breach & Clear' }],
+  },
+  bazookajoe: {
+    Head: BazookaJoeHead,
+    Figure: BazookaJoeFigure,
+    Celebration: BazookaJoeCelebration,
+    Figure3D: BazookaJoeFigure3D,
+    Model3D: BazookaJoeModel3D,
+    actions3d: [{ id: 'launch', name: 'Rocket Launch' }],
   },
 }

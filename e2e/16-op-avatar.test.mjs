@@ -1,7 +1,7 @@
 /**
  * Operator-avatar suite: the Drone Sim's RC operator renders Player 1's
  * (seat 'toy') selected avatar as its 3D model when the avatar carries a
- * `Model3D` — ALL eight avatars carry one now, so `data-op-figure` is always
+ * `Model3D` — ALL nine avatars carry one now, so `data-op-figure` is always
  * 'avatar'; the `BasicOperator` primitive remains only as the Suspense
  * fallback while the lazy model chunk streams in (not DOM-observable, so
  * the 'basic' value has no positive assertion left).
@@ -68,11 +68,17 @@ op = await opAttrs()
 check('operator follows the swap to goldgunner', op.avatar === 'goldgunner')
 check('goldgunner operator uses the avatar 3D model', op.figure === 'avatar')
 
-// swap Player 1 → Scar — the last avatar to gain an operator model
+// swap Player 1 → Scar
 await swapPlayer1('Scar')
 op = await opAttrs()
 check('operator follows the swap to scar', op.avatar === 'scar')
 check('scar operator uses the avatar 3D model', op.figure === 'avatar')
+
+// swap Player 1 → Bazooka Joe — the last avatar to gain an operator model
+await swapPlayer1('Bazooka Joe')
+op = await opAttrs()
+check('operator follows the swap to bazookajoe', op.avatar === 'bazookajoe')
+check('bazookajoe operator uses the avatar 3D model', op.figure === 'avatar')
 const t1 = await readers(page).telemetry()
 check('sim still runs after the swaps', Number.isFinite(t1.alt))
 

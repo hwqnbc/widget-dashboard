@@ -164,6 +164,9 @@ character folders under `components/widgets/characters/` — `toy/` (`ToyHead`,
 `goldGunnerPalette`),
 `scar/` (`ScarHead`, `SoldierFigure`, `ScarFigure`, `ScarCelebration`,
 `ScarFigure3D`, `ScarModel3D`, `scarPalette`),
+`bazookajoe/` (`BazookaJoeHead`, `BazookaFigure`, `BazookaJoeFigure`,
+`BazookaJoeCelebration`, `BazookaJoeFigure3D`, `BazookaJoeModel3D`,
+`bazookaJoePalette`),
 `shared/Hand`, `shared/FigureStage3D` (R3F turntable stage
 for the lazy 3D figures), `boy/Boy`.
 

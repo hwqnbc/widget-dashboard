@@ -45,6 +45,7 @@ frak/      FrakHead, FrakFigure, FrakCelebration, FrakFigure3D, FrakModel3D, fra
 imperium/  ImperiumHead, ClawFigure, ImperiumFigure, ImperiumCelebration, ImperiumFigure3D, ImperiumModel3D, imperiumPalette, index
 goldgunner/ GoldGunnerHead, GunnerFigure, GoldGunnerFigure, GoldGunnerCelebration, GoldGunnerFigure3D, GoldGunnerModel3D, goldGunnerPalette, index
 scar/      ScarHead, SoldierFigure, ScarFigure, ScarCelebration, ScarFigure3D, ScarModel3D, scarPalette, index
+bazookajoe/ BazookaJoeHead, BazookaFigure, BazookaJoeFigure, BazookaJoeCelebration, BazookaJoeFigure3D, BazookaJoeModel3D, bazookaJoePalette, index
 boy/       Boy.tsx                    (an ImageToggle figure, not a game avatar)
 ```
 - **Head** = the standalone `<svg>` chip/mark (`size` prop; default `'100%'`).
@@ -237,7 +238,14 @@ out of the left; action Breach & Clear — a ~2.4 s phase timeline: the
 left arm winds back and hurls the canister (`visible` OFF at release,
 an emissive white burst pops up-forward-left), then three right-elbow
 recoil pulses lay covering fire with muzzle-flash windows at the
-suppressor). **Every avatar
+suppressor), and bazookajoe (`BazookaJoeModel3D` — black cap with the
+forward visor over the sunglasses band + cocky smirk, tactical vest with
+pocket slabs + silver buckles, the RPG shouldered pistol-grip in the
+right fist: black rear cone + tube, white ridged mid, TRANSLUCENT red
+warhead (`transparent opacity` — the source art's flagged fix); action
+Rocket Launch — one recoil pulse with an orange backblast window at the
+rear opening, the warhead `visible` OFF at the shot and a big emissive
+fireball popping at a far up-forward offset). **Every avatar
 now ships a 3D figure** — the Avatar Actions "no 3D figure yet"
 placeholder and the Drone Sim's `data-op-figure="basic"` value are no
 longer reachable from any current avatar; both code paths stay as
