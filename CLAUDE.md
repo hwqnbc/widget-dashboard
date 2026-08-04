@@ -162,6 +162,8 @@ character folders under `components/widgets/characters/` — `toy/` (`ToyHead`,
 `goldgunner/` (`GoldGunnerHead`, `GunnerFigure`, `GoldGunnerFigure`,
 `GoldGunnerCelebration`, `GoldGunnerFigure3D`, `GoldGunnerModel3D`,
 `goldGunnerPalette`),
+`scar/` (`ScarHead`, `SoldierFigure`, `ScarFigure`, `ScarCelebration`,
+`ScarFigure3D`, `ScarModel3D`, `scarPalette`),
 `shared/Hand`, `shared/FigureStage3D` (R3F turntable stage
 for the lazy 3D figures), `boy/Boy`.
 

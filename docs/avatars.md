@@ -44,6 +44,7 @@ darkarin/  DarkArinHead, TwinSwordFigure, DarkArinFigure, DarkArinCelebration, D
 frak/      FrakHead, FrakFigure, FrakCelebration, FrakFigure3D, FrakModel3D, frakPalette, index
 imperium/  ImperiumHead, ClawFigure, ImperiumFigure, ImperiumCelebration, ImperiumFigure3D, ImperiumModel3D, imperiumPalette, index
 goldgunner/ GoldGunnerHead, GunnerFigure, GoldGunnerFigure, GoldGunnerCelebration, GoldGunnerFigure3D, GoldGunnerModel3D, goldGunnerPalette, index
+scar/      ScarHead, SoldierFigure, ScarFigure, ScarCelebration, ScarFigure3D, ScarModel3D, scarPalette, index
 boy/       Boy.tsx                    (an ImageToggle figure, not a game avatar)
 ```
 - **Head** = the standalone `<svg>` chip/mark (`size` prop; default `'100%'`).
@@ -227,7 +228,16 @@ fist, the gold twin-barrel blaster low-forward in the left; action Guns
 Blazing — alternating elbow recoil on a 0.6 s loop with an emissive
 muzzle-flash burst per shot, `visible`-toggled in useFrame; the flash
 carries a forward cone because a flat star reads end-on as nothing when
-a barrel points at the camera). **Every avatar
+a barrel points at the camera), and scar (`ScarModel3D` — tactical
+helmet with the flatter 8-seg dome, NVG mount, earmuffs + mic boom over
+the stubbled, scarred face (red scar slabs on the right cheek, slash on
+the left), MOLLE vest with three mag pouches, the suppressed SMG
+pistol-gripped in the right fist and the red-banded flashbang standing
+out of the left; action Breach & Clear — a ~2.4 s phase timeline: the
+left arm winds back and hurls the canister (`visible` OFF at release,
+an emissive white burst pops up-forward-left), then three right-elbow
+recoil pulses lay covering fire with muzzle-flash windows at the
+suppressor). **Every avatar
 now ships a 3D figure** — the Avatar Actions "no 3D figure yet"
 placeholder and the Drone Sim's `data-op-figure="basic"` value are no
 longer reachable from any current avatar; both code paths stay as

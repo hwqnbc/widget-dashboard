@@ -4,11 +4,12 @@
  * ('available'/'unavailable' for the selected avatar).
  *
  * Covers: 2D default, toggling to 3D lazy-loads the three.js chunk and
- * renders a WebGL canvas for every avatar (ALL seven carry a Figure3D now),
+ * renders a WebGL canvas for every avatar (ALL eight carry a Figure3D now),
  * the action toggle lists the 3D model's named-move library (registry
  * `actions3d`: toy [Dance, 6 7 Show], ninja [Pump, Draw], fireninja
  * [Fire Blade], darkarin [Twin Cross], frak [Blade Flurry], imperium
- * [Claw Slash], goldgunner [Guns Blazing]) and each action drives
+ * [Claw Slash], goldgunner [Guns Blazing], scar [Breach & Clear]) and each
+ * action drives
  * `data-action`/`data-playing`, tapping the 3D figure toggles the turntable
  * (`data-spin`, one uniform rule for every avatar, persisted per widget),
  * switching back restores each view, and the chosen view + spin preference
@@ -158,7 +159,7 @@ await page.waitForTimeout(150)
 check('Idle resets the imperium action', (await attr('data-action')) === 'idle')
 
 // goldgunner's 3D figure: one-move library, Guns Blazing round-trips
-await picker.nth(6).click() // goldgunner — the last avatar to gain 3D
+await picker.nth(6).click() // goldgunner
 await page.waitForTimeout(150)
 check('goldgunner advertises an available 3D figure', (await attr('data-figure3d')) === 'available')
 await page.waitForSelector('[data-testid="figure3d-stage"] canvas', { timeout: 20000 })
@@ -171,6 +172,21 @@ check('Guns Blazing sets playing', (await attr('data-playing')) === 'yes')
 await celebration.nth(0).click()
 await page.waitForTimeout(150)
 check('Idle resets the goldgunner action', (await attr('data-action')) === 'idle')
+
+// scar's 3D figure: one-move library, Breach & Clear round-trips
+await picker.nth(7).click() // scar — the last avatar to gain 3D
+await page.waitForTimeout(150)
+check('scar advertises an available 3D figure', (await attr('data-figure3d')) === 'available')
+await page.waitForSelector('[data-testid="figure3d-stage"] canvas', { timeout: 20000 })
+check('scar 3d view renders a WebGL canvas', (await stageCanvas.count()) === 1)
+check('scar 3d actions: Idle + Breach & Clear', (await celebration.count()) === 2)
+await celebration.nth(1).click() // Breach & Clear
+await page.waitForTimeout(150)
+check('Breach & Clear plays', (await attr('data-action')) === 'breach')
+check('Breach & Clear sets playing', (await attr('data-playing')) === 'yes')
+await celebration.nth(0).click()
+await page.waitForTimeout(150)
+check('Idle resets the scar action', (await attr('data-action')) === 'idle')
 
 // back to toy: the 3D figure returns and the toggle re-enables
 await picker.nth(0).click()

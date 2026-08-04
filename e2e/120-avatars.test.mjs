@@ -20,6 +20,7 @@ const AVATARS = [
   { id: 'frak', name: 'frak' },
   { id: 'imperium', name: 'Imperium Claw General' },
   { id: 'goldgunner', name: 'Gold Gunner' },
+  { id: 'scar', name: 'Scar' },
 ]
 
 const { check, finish } = reporter('avatars')
