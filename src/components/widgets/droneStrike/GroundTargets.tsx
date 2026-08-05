@@ -6,16 +6,16 @@ import type { TargetState } from './waveLayout'
 import { MAX_TARGETS } from './waveLayout'
 
 const TRUCK_COLOR = new Color('#6b8e23') // olive supply truck
-const TURRET_COLOR = new Color('#8b1a1a') // dark-red AA emplacement
 const FLASH_COLOR = new Color('#ffffff')
 const NO_ROT = new Quaternion()
 
 /**
- * Ground targets — supply trucks and AA turrets — as one InstancedMesh of
- * boxes (a single draw call), sitting on the deck. Positions/colours/scale
- * are written imperatively each frame from the shared target pool (dead
- * slots and airborne kinds scale to 0). Trucks are wide and flat; turrets
- * are taller and narrower. A fresh hit tints the box white for its hitFlash.
+ * Static ground supply trucks as one InstancedMesh of boxes (a single draw
+ * call), sitting on the deck. Positions/colour are written imperatively each
+ * frame from the shared target pool (dead slots and other kinds scale to 0).
+ * A fresh hit tints the box white for its hitFlash. (Cars render as the
+ * LegoSwatTruck model in `CarTargets`; AA turrets as the AaTurret model in
+ * `TurretTargets`.)
  */
 export default function GroundTargets({ targets }: { targets: TargetState[] }) {
   const meshRef = useRef<InstancedMesh>(null)
@@ -35,16 +35,10 @@ export default function GroundTargets({ targets }: { targets: TargetState[] }) {
     const { matrix, color, pos, scale } = temps
     for (let i = 0; i < targets.length; i++) {
       const t = targets[i]
-      // Cars render as the LegoSwatTruck model (see CarTargets); here we draw
-      // only the static ground kinds as instanced boxes.
-      if (t.alive && (t.kind === 'ground' || t.kind === 'turret')) {
-        if (t.kind === 'ground') {
-          scale.set(t.radius * 1.6, t.radius * 0.9, t.radius * 2.2)
-          color.copy(TRUCK_COLOR)
-        } else {
-          scale.set(t.radius * 1.2, t.radius * 1.9, t.radius * 1.2)
-          color.copy(TURRET_COLOR)
-        }
+      // Only supply trucks are boxes here; cars/turrets render as models.
+      if (t.alive && t.kind === 'ground') {
+        scale.set(t.radius * 1.6, t.radius * 0.9, t.radius * 2.2)
+        color.copy(TRUCK_COLOR)
         // Seat the box on the deck (hit-sphere centre is at pos.y).
         pos.set(t.pos.x, t.pos.y, t.pos.z)
         matrix.compose(pos, NO_ROT, scale)

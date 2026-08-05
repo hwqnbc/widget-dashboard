@@ -131,17 +131,20 @@ mulberry32 stream per wave, independent of the world stream):
 | 5+ | enemies + turrets return fire (Normal/Hard); player has 3 HP per wave attempt |
 | scaling | more/smaller/faster targets, up to 4 enemies, up to 4 trucks + 3 cars + 2 turrets, `MAX_TARGETS` 24 |
 
-**Ground targets** (unlocked by the gimbal's −70° look-down): two static,
-deck-level kinds mixed into the gallery, rendered as one instanced box mesh
-(`GroundTargets`). **Supply trucks** (`ground`, olive, 20 pts, one hit)
-appear from wave 2 — pure points targets that reward aiming down, so
-placement and count are **fully difficulty-independent** (drawn before the
-enemy block so their seeded positions don't shift with difficulty). **AA
-turrets** (`turret`, dark-red, 30 pts) appear from wave 4 — a *static ground
-enemy*: `stepTurret` is the return-fire half of `stepEnemy` with no
-movement, lobbing slow unled bolts up the player's line of sight (dodgeable),
-gated by the same difficulty preset as the drones (HP + the shared
-return-fire wave). **Cars** (`car`, 25 pts, one hit) appear from **wave 1** — a *moving* deck
+**Ground targets** (unlocked by the gimbal's −70° look-down): deck-level
+kinds mixed into the gallery. **Supply trucks** (`ground`, olive, 20 pts,
+one hit) appear from wave 2 — pure points targets that reward aiming down,
+so placement and count are **fully difficulty-independent** (drawn before
+the enemy block so their seeded positions don't shift with difficulty),
+rendered as instanced boxes (`GroundTargets`). **AA turrets** (`turret`,
+30 pts) appear from wave 4 — a *static ground enemy*: `stepTurret` is the
+return-fire half of `stepEnemy` with no movement, lobbing slow unled bolts
+up the player's line of sight (dodgeable), gated by the same difficulty
+preset as the drones (HP + the shared return-fire wave). Turrets render as
+the **`AaTurret`** model (the primitive-built emplacement reused from the
+Model Viewer widget) via `TurretTargets` — a small pool of model instances
+seated on the deck (the `EnemyDrones` pattern); the model self-traverses its
+head and elevates the barrel so it reads as a live, scanning gun. **Cars** (`car`, 25 pts, one hit) appear from **wave 1** — a *moving* deck
 target that drives the city's road lanes: each is placed on one of the
 world's seeded `roads`, and `stepDrift`'s `car` branch reuses `RichWorld`'s
 decorative-traffic formula (`along = ((offset + dir·speed·t) mod span) −
@@ -286,11 +289,12 @@ Components: `StrikeRig` (the `useFrame` loop: input → flight → targets/AI �
 fire intent → sweeps → events → wave-clear → pose → telemetry),
 `StrikeCameraRig` (FPV + chase with the boom clip), `Targets` (one
 InstancedMesh of spheres for the balloon/ring-drone gallery), `GroundTargets`
-(one InstancedMesh of boxes for the static deck trucks/turrets, per-instance
-colour + scale), `CarTargets` (≤3 `LegoSwatTruck` models — reused from the
-Model Viewer widget — slot-assigned per frame, wheels-on-deck, yawed into
-travel), `EnemyDrones` (≤4 `DroneModel`s with red beacons, slot-assigned per
-frame), `Tracers` (one InstancedMesh for all bolts,
+(one InstancedMesh of boxes for the static deck supply trucks), `CarTargets`
+(≤3 `LegoSwatTruck` models — reused from the Model Viewer widget —
+slot-assigned per frame, wheels-on-deck, yawed into travel), `TurretTargets`
+(≤2 `AaTurret` models, seated on the deck, self-scanning), `EnemyDrones`
+(≤4 `DroneModel`s with red beacons, slot-assigned per frame), `Tracers`
+(one InstancedMesh for all bolts,
 oriented along velocity), `Reticle`/`FireButton`/`HitMarkers`/
 `StrikeMinimap`/`StrikeSettingsPanel`.
 
@@ -363,11 +367,11 @@ kind of list).
 
 ### Enemies & waves
 - ~~Ground-target waves~~ — **shipped** (deck-level supply trucks from
-  wave 2 + AA turrets from wave 4 via `GroundTargets`/`stepTurret`, and
-  road-bound **moving cars** from wave 1 via the `car` kind + `stepDrift`'s
-  road-traffic branch, rendered as the `LegoSwatTruck` model through
-  `CarTargets`; the payoff the gimbal look-down unlocked — see the Gameplay
-  section). Room to extend: **tents/depots** as further static kinds; a
+  wave 2 (`GroundTargets` boxes), AA turrets from wave 4 (`stepTurret`,
+  rendered as the `AaTurret` model via `TurretTargets`), and road-bound
+  **moving cars** from wave 1 (`stepDrift` road-traffic branch, rendered as
+  the `LegoSwatTruck` model via `CarTargets`); the payoff the gimbal
+  look-down unlocked — see the Gameplay section). Room to extend: **tents/depots** as further static kinds; a
   **convoy** (several cars nose-to-tail on one lane, phase-offset); letting
   cars **turn at intersections** (hop lanes where two roads cross); and
   distinct **model variants** per ground kind now that the Model Viewer
