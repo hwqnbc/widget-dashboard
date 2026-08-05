@@ -143,8 +143,12 @@ up the player's line of sight (dodgeable), gated by the same difficulty
 preset as the drones (HP + the shared return-fire wave). Turrets render as
 the **`AaTurret`** model (the primitive-built emplacement reused from the
 Model Viewer widget) via `TurretTargets` — a small pool of model instances
-seated on the deck (the `EnemyDrones` pattern); the model self-traverses its
-head and elevates the barrel so it reads as a live, scanning gun. **Cars** (`car`, 25 pts, one hit) appear from **wave 1** — a *moving* deck
+seated on the deck (the `EnemyDrones` pattern). The head + barrel **track
+the player**: `TurretTargets` feeds each model an optional `aimRef` (the
+bearing + elevation from the emplacement to the drone), which `AaTurret`
+slews its head yaw and barrel elevation toward (clamped to the gun's arc),
+so the gun visibly points where `stepTurret` shoots. (Omitting `aimRef` —
+as the Model Viewer does — keeps the canned scan sweep.) **Cars** (`car`, 25 pts, one hit) appear from **wave 1** — a *moving* deck
 target that drives the city's road lanes: each is placed on one of the
 world's seeded `roads`, and `stepDrift`'s `car` branch reuses `RichWorld`'s
 decorative-traffic formula (`along = ((offset + dir·speed·t) mod span) −

@@ -2,6 +2,8 @@ import { useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import type { Group } from 'three'
 import AaTurret from '../modelViewer/models/AaTurret'
+import type { TurretAim } from '../modelViewer/models/AaTurret'
+import type { Vec3 } from '../droneSim/flightModel'
 import type { TargetState } from './waveLayout'
 
 /** Waves field at most this many AA turrets at once (see waveLayout's cap). */
@@ -12,15 +14,28 @@ const SCALE = 0.8
 
 /**
  * AA turret targets rendered as the AaTurret model (reused from the Model
- * Viewer widget) — a legible emplacement in place of the old dark-red box.
- * A fixed pool of groups is allocated once; each frame the alive `turret`
- * targets are assigned to slots and positioned on the deck (the model's base
- * sits at its own origin, so no lift), spare slots hidden. Turrets are
- * static, so no rotation — the model self-traverses its head + elevates the
- * barrel via `animate`, reading as a live, scanning emplacement.
+ * Viewer widget). A fixed pool of groups is allocated once; each frame the
+ * alive `turret` targets are assigned to slots and positioned on the deck
+ * (the model's base sits at its own origin, so no lift), spare slots hidden.
+ * Each turret's head + barrel **track the player**: we feed the model a
+ * per-slot `aimRef` (bearing + elevation from the emplacement to the drone)
+ * that it slews toward, so the gun points where `stepTurret` shoots.
  */
-export default function TurretTargets({ targets }: { targets: readonly TargetState[] }) {
+export default function TurretTargets({
+  targets,
+  playerPos,
+}: {
+  targets: readonly TargetState[]
+  playerPos: Vec3
+}) {
   const groupRefs = useRef<(Group | null)[]>([])
+  // One stable aim object per slot — AaTurret reads `.current` each frame.
+  const aimRefs = useRef(
+    Array.from(
+      { length: MAX_TURRET_RENDER },
+      () => ({ current: { yaw: 0, pitch: 0 } as TurretAim | null }),
+    ),
+  ).current
 
   useFrame(() => {
     let slot = 0
@@ -30,6 +45,16 @@ export default function TurretTargets({ targets }: { targets: readonly TargetSta
       if (g) {
         g.visible = true
         g.position.set(t.pos.x, 0, t.pos.z)
+      }
+      // Bearing + elevation from the emplacement to the drone (the outer
+      // group has no rotation, so local axes match world).
+      const dx = playerPos.x - t.pos.x
+      const dz = playerPos.z - t.pos.z
+      const dy = playerPos.y - t.pos.y
+      const aim = aimRefs[slot].current
+      if (aim) {
+        aim.yaw = Math.atan2(dx, dz)
+        aim.pitch = Math.atan2(dy, Math.hypot(dx, dz))
       }
       slot++
     }
@@ -50,7 +75,7 @@ export default function TurretTargets({ targets }: { targets: readonly TargetSta
           visible={false}
           scale={SCALE}
         >
-          <AaTurret animate />
+          <AaTurret animate={false} aimRef={aimRefs[i]} />
         </group>
       ))}
     </>

@@ -1,4 +1,5 @@
 import { useRef } from 'react'
+import type { RefObject } from 'react'
 import { useFrame } from '@react-three/fiber'
 import type { Group } from 'three'
 
@@ -19,6 +20,21 @@ import type { Group } from 'three'
 const OLIVE = { color: '#475536', roughness: 0.9, metalness: 0.1 }
 const DARK_METAL = { color: '#262626', roughness: 0.7, metalness: 0.5 }
 const LIGHT_METAL = { color: '#525252', roughness: 0.6, metalness: 0.4 }
+
+/** Optional aim target: head yaw + barrel elevation (radians), consumed each
+ * frame so an owner (e.g. Drone Strike) can make the gun track a target. */
+export interface TurretAim {
+  /** World/local head yaw — the barrel's +Z is slewed toward it. */
+  yaw: number
+  /** Elevation above the horizon (positive = up). */
+  pitch: number
+}
+/** Head/barrel slew responsiveness (exponential approach, per second). */
+const AIM_SLEW = 5
+/** Barrel elevation arc: steep up for aircraft, a touch below level. */
+const PITCH_MIN = -1.35 // ≈ 77° up (rotation.x is negated elevation)
+const PITCH_MAX = 0.15 // ≈ 9° down
+const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v))
 
 /** Stabilizer outrigger: beam, ground pad and support block. */
 function StabilizerLeg({
@@ -59,7 +75,16 @@ function AmmoRackSegment({ position }: { position: [number, number, number] }) {
   )
 }
 
-export default function AaTurret({ animate }: { animate: boolean }) {
+export default function AaTurret({
+  animate,
+  aimRef,
+}: {
+  animate: boolean
+  /** When set (and non-null), the gun slews to track this aim instead of
+   * running the canned scan — the Model Viewer omits it, Drone Strike feeds
+   * the player's bearing so the turret aims where it shoots. */
+  aimRef?: RefObject<TurretAim | null>
+}) {
   const turretGroupRef = useRef<Group>(null)
   const barrelCradleRef = useRef<Group>(null)
   // Animation phase in seconds, advanced only while animating — the pose is
@@ -67,13 +92,31 @@ export default function AaTurret({ animate }: { animate: boolean }) {
   const phaseRef = useRef(0)
 
   useFrame((_, delta) => {
+    const head = turretGroupRef.current
+    const cradle = barrelCradleRef.current
+    const aim = aimRef?.current
+    if (aim) {
+      // Track a target: slew the head yaw (shortest way around) and the
+      // barrel elevation toward the aim, clamped to the gun's arc.
+      const k = 1 - Math.exp(-AIM_SLEW * delta)
+      if (head) {
+        let d = aim.yaw - head.rotation.y
+        d = Math.atan2(Math.sin(d), Math.cos(d))
+        head.rotation.y += d * k
+      }
+      if (cradle) {
+        const target = clamp(-aim.pitch, PITCH_MIN, PITCH_MAX)
+        cradle.rotation.x += (target - cradle.rotation.x) * k
+      }
+      return
+    }
     if (animate) phaseRef.current += delta
     const t = phaseRef.current
     // Slow continuous traverse.
-    if (turretGroupRef.current) turretGroupRef.current.rotation.y = t * 0.1
+    if (head) head.rotation.y = t * 0.1
     // Barrel elevation sweeping ~-12°..48° on a sine.
-    if (barrelCradleRef.current) {
-      barrelCradleRef.current.rotation.x = -(Math.PI / 10 + Math.sin(t * 0.5) * (Math.PI / 6))
+    if (cradle) {
+      cradle.rotation.x = -(Math.PI / 10 + Math.sin(t * 0.5) * (Math.PI / 6))
     }
   })
 

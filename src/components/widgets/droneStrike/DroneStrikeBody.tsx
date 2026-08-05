@@ -731,7 +731,7 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
           <Targets targets={targets} />
           <GroundTargets targets={targets} />
           <CarTargets targets={targets} />
-          <TurretTargets targets={targets} />
+          <TurretTargets targets={targets} playerPos={flight.pos} />
           <EnemyDrones targets={targets} />
           <Tracers combat={combat} tracerLen={BOLT.tracerLen} />
           <StrikeRig

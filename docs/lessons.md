@@ -988,3 +988,24 @@ carried over; these are the new ones.
     exists, but then the instance must be a never-disposed module singleton
     — same rule as the shared CanvasTexture, #78.) The tell in pasted code:
     `new THREE.*Material` at module scope feeding JSX spreads.
+
+80. **A closed-loop rate ratio is confounded by FOV-dependent framerate under
+    software GL — verify a config factor on the pure module instead.** Drone
+    Strike suite 103 timed a yaw sweep unzoomed vs scoped and asserted the
+    ratio ≈ 0.5 (the 2× scope halves aim sensitivity). It rode the threshold
+    for a while, then adding more scene models tipped it to flaky (ratios
+    0.44–0.99, `ads` sometimes ≈ `hip`). Root cause: the sim clamps `dt` at
+    20 fps, so when the *wide-FOV* unzoomed pass renders the whole city and
+    dips below that, it runs slow-motion and yaws less per wall-second — while
+    the *narrow-FOV* scoped pass culls most of the scene, stays fast, and
+    yaws full — inflating the ratio. It's not tick jitter (signed
+    accumulation didn't fix it) and not scenery load alone (richWorld off
+    didn't fix it): the confound is FOV↔framerate, which no measurement
+    tweak removes. The scoped factor is pure config (`zoomSensFor(p) = 1/p`,
+    `zoomFovFor(p) = BASE_FOV/p`), so the fix was to bundle `aimModel` and
+    assert the factor directly (`zoomSensFor(2) === 0.5`, monotonic across
+    powers) — deterministic, instant — and keep only the *mechanics* live
+    (scope toggles, fire-while-scoped, persistence). Rule: when a live
+    measurement's noise scales with what you're rendering, you're measuring
+    the renderer, not the feature — pull the invariant down to the pure layer
+    (siblings #55/#56: make the assertable contract the deterministic thing).
