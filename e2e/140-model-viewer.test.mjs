@@ -7,9 +7,9 @@
  *
  * Covers: adding the widget lazy-loads the three.js chunk and renders a
  * WebGL canvas, the default model is the LEGO SWAT truck, the render loop
- * advances `data-frames`, the Animate and Auto-rotate toggles flip their
- * root attributes, the model picker mirrors `data-model` (single-entry
- * catalog today — switching gets asserted when model #2 lands), and the
+ * advances `data-frames`, the picker switches models (truck <-> AA turret,
+ * `data-model` + canvas + frames survive the swap), the Animate and
+ * Auto-rotate toggles flip their root attributes, and the model choice +
  * toggle settings survive a reload. The model art itself is reviewed from
  * screenshots — the suite asserts presence + the data contract (lesson #52).
  */
@@ -47,11 +47,21 @@ check(
   `${framesBefore} -> ${framesAfter}`,
 )
 
-// the picker mirrors data-model (one catalog entry today)
-check('picker lists the catalog', (await picker.count()) >= 1)
+// the picker mirrors data-model and switches models
+check('picker lists both models', (await picker.count()) === 2)
 check(
   'selected picker button matches data-model',
   (await picker.first().getAttribute('aria-pressed')) === 'true',
+)
+await picker.nth(1).click() // AA Turret
+await page.waitForTimeout(200)
+check('switching sets data-model=aaTurret', (await attr('data-model')) === 'aaTurret')
+check('canvas survives the model switch', (await root.locator('canvas').count()) === 1)
+const framesAtSwitch = parseInt(await attr('data-frames'), 10)
+await page.waitForTimeout(1000)
+check(
+  'render loop keeps advancing on the turret',
+  parseInt(await attr('data-frames'), 10) > framesAtSwitch,
 )
 
 // Animate toggle drives data-animate
@@ -67,15 +77,21 @@ await autoRotateBtn.click()
 await page.waitForTimeout(150)
 check('Auto-rotate toggles on', (await attr('data-autorotate')) === 'on')
 
-// persistence: flip Animate off too, then both settings survive a reload
+// persistence: flip Animate off too, then model choice + settings survive
+// a reload (the turret is still the selected model here)
 await animateBtn.click()
 await page.waitForTimeout(300) // let redux-persist flush
 await page.reload({ waitUntil: 'networkidle' })
 await page.waitForSelector('[data-testid="model-viewer"]')
-check('model persists across reload', (await attr('data-model')) === 'legoSwatTruck')
+check('model choice persists across reload', (await attr('data-model')) === 'aaTurret')
 check('animate=off persists across reload', (await attr('data-animate')) === 'off')
 check('auto-rotate=on persists across reload', (await attr('data-autorotate')) === 'on')
 await page.waitForSelector('[data-testid="model-viewer"] canvas', { timeout: 20000 })
 check('canvas renders after reload', (await root.locator('canvas').count()) === 1)
+
+// switch back to the truck
+await picker.first().click()
+await page.waitForTimeout(200)
+check('switching back restores the truck', (await attr('data-model')) === 'legoSwatTruck')
 
 await finish(browser)

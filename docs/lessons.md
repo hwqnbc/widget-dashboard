@@ -972,3 +972,19 @@ carried over; these are the new ones.
     multi-instanced (the strike mounts a pool of trucks): per-instance
     `useMemo` + dispose-on-unmount would re-rasterize per copy and tear the
     texture out from under surviving instances.
+
+79. **Never spread a `THREE.Material` instance into a JSX material element —
+    convert pasted "shared materials" to plain prop objects.** The AA
+    turret source created module-level `new THREE.MeshStandardMaterial({...})`
+    constants and spread them as `<meshStandardMaterial {...matteOliveGreen} />`.
+    That spread dumps the live object's internals (uuid, id, type, version,
+    every default field) onto a fresh material as props — it happens to
+    mostly work, but it's setting dozens of junk props, defeats the sharing
+    it looks like it does (each mesh still gets its own material), and a
+    copied `type`/`uuid` prop is a latent footgun. Adaptation rule: turn
+    each into a plain prop-object constant (`const OLIVE = { color, roughness,
+    metalness }`) and spread that; per-mesh overrides written after the
+    spread keep working. (True sharing via `material={sharedInstance}` also
+    exists, but then the instance must be a never-disposed module singleton
+    — same rule as the shared CanvasTexture, #78.) The tell in pasted code:
+    `new THREE.*Material` at module scope feeding JSX spreads.

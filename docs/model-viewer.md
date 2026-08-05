@@ -4,9 +4,11 @@ The Model Viewer displays user-provided 3D models — react-three-fiber
 components checked into the repo — with orbit controls. It is the fourth
 WebGL widget, but the first that is a *viewer* rather than a game: no HUD,
 no telemetry loop, just a model catalog, a camera you drag, and two toggles.
-The first catalog entry is the **LEGO SWAT Truck**, a primitives-only build
-(no asset files) with animated wheels, a blinking red/blue siren lightbar and
-canvas-drawn "S.W.A.T." lettering on both sides.
+The catalog holds two models so far, both primitives-only (no asset files):
+the **LEGO SWAT Truck** (animated wheels, a blinking red/blue siren lightbar,
+canvas-drawn "S.W.A.T." lettering on both sides) and the **AA Turret** (olive
+anti-aircraft gun on stabilizer outriggers whose head slowly traverses while
+the barrel sweeps its elevation arc).
 
 ## Stack
 
@@ -31,8 +33,10 @@ canvas-drawn "S.W.A.T." lettering on both sides.
 - **Model picker** — one toggle button per catalog entry.
 - **Animate** (default on) — the model's own motion; for the truck, the
   wheels spin and the siren lightbar strobes (red/blue alternate every
-  0.4 s, the amber cap double-times; off = steady dim glow). What "animate"
-  means belongs to each model.
+  0.4 s, the amber cap double-times; off = steady dim glow); for the AA
+  turret, the head traverses and the barrel sweeps its elevation arc
+  (off = frozen in the current pose). What "animate" means belongs to each
+  model.
 - **Auto-rotate** (default off) — the *camera* orbits the model
   (`controls.autoRotate`); independent of Animate.
 
@@ -83,7 +87,29 @@ fixed — the head/tail lights set `rotation={[Math.PI/2,0,0]}` on
 props); the rotation moved to the parent `<mesh>` so the lights face out
 from the truck's faces (lesson #76).
 
-Round 2 additions:
+### The AA Turret adaptation
+
+Model #2 (round 3) arrived the same way — a standalone app — and hit the
+same traps plus a new one:
+
+- **Geometry-rotation bug ×3 (lesson #76 again):** all three gun-barrel
+  sections put `rotation={[Math.PI/2,0,0]}` on `<cylinderGeometry>`; left
+  unfixed the gun would render as a vertical stack. Moved to the meshes.
+- **Material-instance spread (lesson #79):** the source built module-level
+  `new THREE.MeshStandardMaterial(...)` objects and spread them into JSX
+  (`{...matteOliveGreen}`), which dumps a live Material's internals as
+  props. Converted to plain prop-object constants (`OLIVE`, `DARK_METAL`,
+  `LIGHT_METAL`) spread into inline materials; per-mesh overrides after the
+  spread still work.
+- **Delta-accumulated animation:** the source drove traverse/elevation from
+  absolute `clock.elapsedTime`, which would snap the pose when Animate
+  toggles. The model keeps its own phase ref advanced by `delta` only while
+  animating; the pose is always derived from the phase, so off freezes and
+  on resumes smoothly.
+- Scaled 0.6× inside the model (natural build is ~4.4 units tall at full
+  elevation) to meet the catalog's ~2.5-unit framing convention.
+
+### Round 2 additions (truck)
 
 - **Siren strobe** — the three lightbar materials carry refs and their own
   colour as `emissive`; the wheel `useFrame` also flips `emissiveIntensity`
@@ -125,8 +151,12 @@ Everything above is shipped. Ideas for future rounds, with the integration
 point each builds on:
 
 - **More models** — the whole point of the catalog: each new pasted model
-  is one file + one `MODEL_CATALOG` entry, and suite 140's picker-switch
-  assertion activates with model #2.
+  is one file + one `MODEL_CATALOG` entry (model #2, the AA Turret, landed
+  this way and activated suite 140's picker-switch assertions).
+- **Reuse the AA Turret in the Drone Strike** — the strike's ground AA
+  turrets are still simple primitives; rendering them with this model is
+  the same move as `droneStrike/CarTargets.tsx` reusing the truck (which
+  would then make this model pool-shared too — keep it venue-neutral).
 - **Per-model lazy chunks** — if a heavy model lands (many meshes, baked
   data), swap its catalog entry to `lazy(() => import(...))` + Suspense
   inside the stage; the catalog shape already isolates the change.
