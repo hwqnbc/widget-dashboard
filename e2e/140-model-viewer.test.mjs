@@ -7,8 +7,9 @@
  *
  * Covers: adding the widget lazy-loads the three.js chunk and renders a
  * WebGL canvas, the default model is the LEGO SWAT truck, the render loop
- * advances `data-frames`, the picker switches models (truck <-> AA turret,
- * `data-model` + canvas + frames survive the swap), the Animate and
+ * advances `data-frames`, the picker switches between all catalog models
+ * (SWAT truck / AA turret / military truck — `data-model` + canvas + frames
+ * survive the swap), the Animate and
  * Auto-rotate toggles flip their root attributes, and the model choice +
  * toggle settings survive a reload. The model art itself is reviewed from
  * screenshots — the suite asserts presence + the data contract (lesson #52).
@@ -48,7 +49,7 @@ check(
 )
 
 // the picker mirrors data-model and switches models
-check('picker lists both models', (await picker.count()) === 2)
+check('picker lists all three models', (await picker.count()) === 3)
 check(
   'selected picker button matches data-model',
   (await picker.first().getAttribute('aria-pressed')) === 'true',
@@ -89,7 +90,13 @@ check('auto-rotate=on persists across reload', (await attr('data-autorotate')) =
 await page.waitForSelector('[data-testid="model-viewer"] canvas', { timeout: 20000 })
 check('canvas renders after reload', (await root.locator('canvas').count()) === 1)
 
-// switch back to the truck
+// the military truck is selectable too
+await picker.nth(2).click()
+await page.waitForTimeout(200)
+check('switching sets data-model=militaryTruck', (await attr('data-model')) === 'militaryTruck')
+check('canvas survives the militaryTruck switch', (await root.locator('canvas').count()) === 1)
+
+// switch back to the SWAT truck
 await picker.first().click()
 await page.waitForTimeout(200)
 check('switching back restores the truck', (await attr('data-model')) === 'legoSwatTruck')

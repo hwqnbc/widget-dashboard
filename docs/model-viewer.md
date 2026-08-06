@@ -4,11 +4,13 @@ The Model Viewer displays user-provided 3D models — react-three-fiber
 components checked into the repo — with orbit controls. It is the fourth
 WebGL widget, but the first that is a *viewer* rather than a game: no HUD,
 no telemetry loop, just a model catalog, a camera you drag, and two toggles.
-The catalog holds two models so far, both primitives-only (no asset files):
+The catalog holds three models so far, all primitives-only (no asset files):
 the **LEGO SWAT Truck** (animated wheels, a blinking red/blue siren lightbar,
-canvas-drawn "S.W.A.T." lettering on both sides) and the **AA Turret** (olive
+canvas-drawn "S.W.A.T." lettering on both sides), the **AA Turret** (olive
 anti-aircraft gun on stabilizer outriggers whose head slowly traverses while
-the barrel sweeps its elevation arc).
+the barrel sweeps its elevation arc), and the **Military Truck** (army-green
+cargo truck — cabin with windshield/mirrors/bull bar, tan canopy, spinning
+wheels).
 
 ## Stack
 
@@ -109,7 +111,24 @@ same traps plus a new one:
 - Scaled 0.6× inside the model (natural build is ~4.4 units tall at full
   elevation) to meet the catalog's ~2.5-unit framing convention.
 
-### Round 2 additions (truck)
+### The Military Truck adaptation
+
+Model #3 (round 4) was the cleanest arrival yet — the same venue strip
+(Canvas/lights/ground/OrbitControls dropped, ground offset removed, wheel
+spin gated on `animate`), plus:
+
+- **Geometry-rotation bug (lesson #76, third catch):** the `RoundPlate`
+  lights put `rotation={[Math.PI/2,0,0]}` on `<cylinderGeometry>` — the
+  headlights and roof beacon would have rendered as flat discs lying in the
+  faces. Moved to the meshes.
+- **Shadow props stripped:** the source set `castShadow`/`receiveShadow`
+  everywhere, but the stage doesn't enable shadows — inert noise in a
+  catalog model.
+- Its `glossyPlastic` shared style was already a plain prop object (the
+  lesson #79 pattern) and its cabin half-turn already faced the truck +Z —
+  kept verbatim, no scaling needed (~3.8 units long frames fine).
+
+### Round 2 additions (SWAT truck)
 
 - **Siren strobe** — the three lightbar materials carry refs and their own
   colour as `emissive`; the wheel `useFrame` also flips `emissiveIntensity`

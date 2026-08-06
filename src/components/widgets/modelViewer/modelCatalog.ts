@@ -1,6 +1,7 @@
 import type { ComponentType } from 'react'
 import LegoSwatTruck from './models/LegoSwatTruck'
 import AaTurret from './models/AaTurret'
+import MilitaryTruck from './models/MilitaryTruck'
 
 /**
  * The Model Viewer's model catalog. Each entry is a user-provided
@@ -20,7 +21,7 @@ export interface ModelComponentProps {
   animate: boolean
 }
 
-export const MODEL_IDS = ['legoSwatTruck', 'aaTurret'] as const
+export const MODEL_IDS = ['legoSwatTruck', 'aaTurret', 'militaryTruck'] as const
 export type ModelId = (typeof MODEL_IDS)[number]
 
 export interface ModelMeta {
@@ -32,6 +33,7 @@ export interface ModelMeta {
 export const MODEL_CATALOG: ModelMeta[] = [
   { id: 'legoSwatTruck', name: 'SWAT Truck', Component: LegoSwatTruck },
   { id: 'aaTurret', name: 'AA Turret', Component: AaTurret },
+  { id: 'militaryTruck', name: 'Military Truck', Component: MilitaryTruck },
 ]
 
 export const modelById = Object.fromEntries(
