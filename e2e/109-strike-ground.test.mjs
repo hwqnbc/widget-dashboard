@@ -1,14 +1,15 @@
 /**
- * Drone Strike ground-target suite. Pure module (deterministic): from wave 2
- * the seeded wave includes static supply trucks (`ground`) sitting on the
- * deck (low y); from TURRET_WAVE it includes AA turrets (`turret`); trucks
- * are difficulty-independent while turrets follow the difficulty preset
- * (hp + shared return-fire gate). From CAR_WAVE_START it also includes
- * moving `car` targets bound to the city's road lanes (fixed cross-coord on
- * a road, constant travel velocity via stepDrift). DOM: clear wave 1
- * closed-loop and confirm wave 2 fields the seeded target count (now
- * including the ground trucks) — proof the app actually spawns them
- * (101-style). The hit model is a normal pos+radius sphere, covered by 100.
+ * Drone Strike ground-target suite. Pure module (deterministic): from wave 1
+ * the seeded wave includes military supply trucks (`ground`) — moving road
+ * vehicles bound to the city's lanes (fixed cross-coord on a road, constant
+ * travel velocity via stepDrift), sitting on the deck (low y); from
+ * TURRET_WAVE it includes AA turrets (`turret`); trucks are
+ * difficulty-independent while turrets follow the difficulty preset
+ * (hp + shared return-fire gate). From CAR_WAVE_START it also includes moving
+ * `car` targets, road-bound the same way. DOM: clear wave 1 closed-loop and
+ * confirm wave 2 fields the seeded target count — proof the app actually
+ * spawns the seeded vehicles (101-style). The hit model is a normal
+ * pos+radius sphere, covered by 100.
  */
 import {
   addStrikeWidget,
@@ -38,14 +39,24 @@ const { combat } = strikeReaders(page)
 
 check('wave 1 goes active', await waitForWaveState(page, 'active'))
 
-// --- pure module: ground trucks + AA turrets in the seeded campaign ---
+// --- pure module: military supply trucks (moving road vehicles) from wave 1 ---
 const layout = buildWorldLayout(DEFAULT_SEED)
-const w2 = buildWave(DEFAULT_SEED, GROUND_WAVE_START, layout)
-const ground2 = w2.targets.filter((t) => t.kind === 'ground')
-check('ground trucks appear from wave 2', ground2.length > 0, `n=${ground2.length}`)
-check('trucks sit on the deck (low y)', ground2.every((t) => t.y <= 2), `ys=${ground2.map((t) => t.y)}`)
-check('trucks die in one hit', ground2.every((t) => t.hp === 1))
-check('no turrets before TURRET_WAVE', w2.targets.every((t) => t.kind !== 'turret'))
+const w1 = buildWave(DEFAULT_SEED, GROUND_WAVE_START, layout)
+const ground1 = w1.targets.filter((t) => t.kind === 'ground')
+check('ground trucks appear from wave 1', ground1.length > 0, `n=${ground1.length}`)
+check('trucks sit on the deck (low y)', ground1.every((t) => t.y <= 2), `ys=${ground1.map((t) => t.y)}`)
+check('trucks die in one hit', ground1.every((t) => t.hp === 1))
+check('trucks are moving road vehicles', ground1.every((t) => t.driftSpeed !== 0))
+// Road-bound: the fixed cross-coordinate matches a road lane (±the 0.8 offset).
+const trucksOnRoad = ground1.every((g) => {
+  const alongX = g.driftAxis === 0
+  const cross = alongX ? g.z : g.x
+  return layout.roads.some(
+    (r) => r.axis === (alongX ? 'x' : 'z') && Math.abs(cross - r.at) <= 1,
+  )
+})
+check('trucks are bound to a road lane', trucksOnRoad)
+check('no turrets before TURRET_WAVE', w1.targets.every((t) => t.kind !== 'turret'))
 
 const wT = buildWave(DEFAULT_SEED, TURRET_WAVE, layout)
 const turretsT = wT.targets.filter((t) => t.kind === 'turret')
@@ -111,7 +122,20 @@ check('car moves along its road axis', Math.abs(move1 - move0) > 0.1, `${move0.t
 check('car holds its lane (cross axis fixed)', Math.abs(cross1 - cross0) < 1e-6)
 check('car velocity equals its travel speed', Math.abs(vel0 - carState.driftSpeed) < 1e-6)
 
-// --- DOM: the app fields the seeded wave-2 targets (trucks included) ---
+// The military truck rides the same road branch — drives its axis, holds lane.
+const truckState = states.find((s) => s.alive && s.kind === 'ground')
+const truckAlongX = truckState.driftAxis === 0
+stepDrift(truckState, 0)
+const tMove0 = truckAlongX ? truckState.pos.x : truckState.pos.z
+const tCross0 = truckAlongX ? truckState.pos.z : truckState.pos.x
+stepDrift(truckState, 0.5)
+const tMove1 = truckAlongX ? truckState.pos.x : truckState.pos.z
+const tCross1 = truckAlongX ? truckState.pos.z : truckState.pos.x
+check('truck moves along its road axis', Math.abs(tMove1 - tMove0) > 0.1, `${tMove0.toFixed(2)}→${tMove1.toFixed(2)}`)
+check('truck holds its lane (cross axis fixed)', Math.abs(tCross1 - tCross0) < 1e-6)
+
+// --- DOM: the app fields the seeded wave-2 targets ---
+const w2 = buildWave(DEFAULT_SEED, 2, layout)
 const pilot = await createStrikePilot(page, context)
 await pilot.touchStart()
 let cleared = true
@@ -132,9 +156,9 @@ check('wave 2 goes active', await waitForWaveState(page, 'active', 8000))
 const c2 = await combat()
 check('wave counter advanced', c2.wave === 2, `wave=${c2.wave}`)
 check(
-  'wave 2 fields the seeded target count (trucks included)',
+  'wave 2 fields the seeded target count',
   c2.targetsLeft === w2.targets.length,
-  `app=${c2.targetsLeft} expected=${w2.targets.length} (ground=${ground2.length})`,
+  `app=${c2.targetsLeft} expected=${w2.targets.length}`,
 )
 
 await finish(browser)

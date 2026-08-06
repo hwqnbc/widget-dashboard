@@ -1055,3 +1055,22 @@ carried over; these are the new ones.
     and each kind keeps its own refs. Leave a genuinely divergent case bespoke
     if migrating it isn't covered by a live test (turrets appear too late for
     any closed-loop suite) rather than refactor blind.
+
+83. **A transmissive `meshPhysicalMaterial` costs a full-scene render pass
+    *per transmissive object* every frame — fine for a one-off showcase,
+    ruinous for a multi-instance game model.** The `MilitaryTruck` model has
+    three glass panes with `transmission: 0.9`; showing it as a Drone Strike
+    ground target (up to 4 on screen) added ~4× the per-frame scene renders
+    under swiftshader. The symptom was not a visual one but a **timing** one:
+    the frame loop slowed so much that pointer events queued, and suite 107's
+    tap/double-tap gesture (which rides real-time thresholds — 400 ms tap /
+    500 ms double-tap in the handler) silently missed, so the gimbal never
+    recentered. The tell was that the model was *mounted but hidden* before
+    (three.js skips transmission for invisible objects) and only regressed
+    once it became visible in wave 1. Fix at the source: give multi-instance
+    game models a cheap non-transmissive glass path (a `simpleGlass` prop → a
+    tinted `meshStandardMaterial`), keeping the physical glass for the
+    single-model Model Viewer. When a heavy render makes a *timing* assertion
+    flake, suspect per-frame GPU cost (transmission, big shadow maps,
+    post-processing) before touching the test — the fix belongs in the render,
+    and it helps real mobile devices too, not just the headless suite.

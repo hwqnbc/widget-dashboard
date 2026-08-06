@@ -69,8 +69,9 @@ check('wave becomes active', await waitForWaveState(page, 'active'))
 const c0 = await combat()
 check('wave 1 reported', c0.wave === 1, `wave=${c0.wave}`)
 
-// The wave is seeded: the app must field exactly the targets the pure
-// module predicts (wave 1 = a static balloon gallery plus one slow road car).
+// The wave is seeded: the app must field exactly the targets the pure module
+// predicts (wave 1 = a static balloon gallery plus moving road vehicles — a
+// SWAT car and a military supply truck driving the lanes).
 const wave1 = buildWave(DEFAULT_SEED, 1, buildWorldLayout(DEFAULT_SEED))
 check(
   'seeded wave-1 target count',
@@ -85,10 +86,14 @@ check(
   'wave 1 fields a moving road car',
   wave1.targets.some((t) => t.kind === 'car' && t.driftSpeed !== 0),
 )
+check(
+  'wave 1 fields a moving military truck',
+  wave1.targets.some((t) => t.kind === 'ground' && t.driftSpeed !== 0),
+)
 const beacon = await target()
 check(
   'nearest-target beacon published',
-  beacon !== null && (beacon.kind === 'balloon' || beacon.kind === 'car'),
+  beacon !== null && ['balloon', 'car', 'ground'].includes(beacon.kind),
   `kind=${beacon?.kind}`,
 )
 

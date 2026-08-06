@@ -105,7 +105,7 @@ await page.waitForTimeout(90)
 await tapScene(page, context)
 await page.waitForTimeout(300)
 const g4 = await gimbal()
-check('double-tap recenters', Math.abs(g4.yaw) < 0.01 && Math.abs(g4.pitch) < 0.01)
+check('double-tap recenters', Math.abs(g4.yaw) < 0.01 && Math.abs(g4.pitch) < 0.01, `yaw=${g4.yaw} pitch=${g4.pitch}`)
 
 // A pilot for the hover section below.
 const pilot = await createStrikePilot(page, context)

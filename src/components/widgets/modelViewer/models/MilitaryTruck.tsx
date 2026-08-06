@@ -30,6 +30,22 @@ const GLASS = {
   ior: 1.5,
 }
 
+/**
+ * The cab glass. Physical transmission looks great for the single-model Model
+ * Viewer, but three.js runs a full-scene transmission pass **per transmissive
+ * object** every frame — with several trucks on screen (Drone Strike targets)
+ * that tanks the framerate on software GL / low-end mobile. `simple` swaps in
+ * a cheap tinted-transparent standard material (no transmission pass) for
+ * those multi-instance venues; the Model Viewer keeps the default glass.
+ */
+function Glass({ simple }: { simple?: boolean }) {
+  return simple ? (
+    <meshStandardMaterial color="#aec6d8" transparent opacity={0.55} roughness={0.1} metalness={0} />
+  ) : (
+    <meshPhysicalMaterial {...GLASS} />
+  )
+}
+
 function Stud({ position, color = ARMY_GREEN }: { position: [number, number, number]; color?: string }) {
   return (
     <mesh position={position}>
@@ -72,7 +88,16 @@ function Wheel({
   )
 }
 
-export default function MilitaryTruck({ animate }: { animate: boolean }) {
+export default function MilitaryTruck({
+  animate,
+  simpleGlass,
+}: {
+  animate: boolean
+  /** Use cheap (non-transmissive) glass — for multi-instance venues like the
+   * Drone Strike targets where the per-object transmission pass is too costly
+   * on software GL / mobile. The Model Viewer omits it for the fancy glass. */
+  simpleGlass?: boolean
+}) {
   const frontWheelLeft = useRef<Group>(null)
   const frontWheelRight = useRef<Group>(null)
   const backWheelLeft = useRef<Group>(null)
@@ -107,7 +132,7 @@ export default function MilitaryTruck({ animate }: { animate: boolean }) {
         {/* Front windshield */}
         <mesh position={[0, 0.3, -0.61]}>
           <boxGeometry args={[1.58, 0.4, 0.05]} />
-          <meshPhysicalMaterial {...GLASS} />
+          <Glass simple={simpleGlass} />
         </mesh>
 
         {/* Top sun visor */}
@@ -119,11 +144,11 @@ export default function MilitaryTruck({ animate }: { animate: boolean }) {
         {/* Side windows */}
         <mesh position={[0.81, 0.2, 0]}>
           <boxGeometry args={[0.05, 0.5, 0.9]} />
-          <meshPhysicalMaterial {...GLASS} />
+          <Glass simple={simpleGlass} />
         </mesh>
         <mesh position={[-0.81, 0.2, 0]}>
           <boxGeometry args={[0.05, 0.5, 0.9]} />
-          <meshPhysicalMaterial {...GLASS} />
+          <Glass simple={simpleGlass} />
         </mesh>
 
         {/* Side mirrors */}

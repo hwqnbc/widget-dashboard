@@ -128,21 +128,24 @@ mulberry32 stream per wave, independent of the world stream):
 
 | Wave | Content |
 | --- | --- |
-| 1 | 6 static balloons + one slow moving road car (the truck model) |
-| 2 | 7 targets, half drifting (`ringDrone`, sinusoidal, velocity published for leading); + ground supply trucks (2, `MilitaryTruck` model); + car |
-| 3–4 | + enemy drones (1 then 2), orbit patrol + evade; + more trucks + cars (faster); AA turrets from wave 4 |
+| 1 | 4 static balloons + two slow moving road vehicles: a military supply truck (`MilitaryTruck`) and a SWAT car (`LegoSwatTruck`) |
+| 2 | ~5 targets, half drifting (`ringDrone`, sinusoidal, velocity published for leading); + more road vehicles |
+| 3–4 | + enemy drones (1 then 2), orbit patrol + evade; + more/faster trucks + cars; AA turrets from wave 4 |
 | 5+ | enemies + turrets return fire (Normal/Hard); player has 3 HP per wave attempt |
-| scaling | more/smaller/faster targets, up to 4 enemies, up to 4 trucks + 3 cars + 2 turrets, `MAX_TARGETS` 24 |
+| scaling | more/smaller balloons (cap 8) + faster vehicles, up to 4 enemies, up to 4 trucks + 3 cars + 2 turrets, `MAX_TARGETS` 24 |
 
 **Ground targets** (unlocked by the gimbal's −70° look-down): deck-level
-kinds mixed into the gallery. **Supply trucks** (`ground`, olive, 20 pts,
-one hit) appear from wave 2 — pure points targets that reward aiming down,
-so placement and count are **fully difficulty-independent** (drawn before
-the enemy block so their seeded positions don't shift with difficulty),
-rendered as the **`MilitaryTruck`** model (the primitive-built army cargo
-truck reused from the Model Viewer widget) via `GroundTargets` — a parked
-model pool seated on the deck, far more legible than the old olive box.
-**AA turrets** (`turret`,
+kinds mixed into the gallery. **Military supply trucks** (`ground`, 20 pts,
+one hit) are **moving road vehicles from wave 1** — like the SWAT cars they
+drive the city's lanes (see the road-vehicle model below), rendered as the
+**`MilitaryTruck`** model (the primitive-built army cargo truck reused from
+the Model Viewer widget) via `GroundTargets` (the shared `ModelTargets`
+pool, `faceVelocity` + `animate` so the wheels spin as it drives). The
+in-game truck uses the model's cheap-glass path (`simpleGlass` — a tinted
+standard material instead of the Model Viewer's physical transmission,
+which runs a costly full-scene pass **per** transmissive object; several
+trucks on screen would tank software-GL / mobile framerates). Their count
+is difficulty-independent (drawn before the enemy block). **AA turrets** (`turret`,
 30 pts) appear from wave 4 — a *static ground enemy*: `stepTurret` is the
 return-fire half of `stepEnemy` with no movement, lobbing slow unled bolts
 up the player's line of sight (dodgeable), gated by the same difficulty
@@ -154,22 +157,21 @@ the player**: `TurretTargets` feeds each model an optional `aimRef` (the
 bearing + elevation from the emplacement to the drone), which `AaTurret`
 slews its head yaw and barrel elevation toward (clamped to the gun's arc),
 so the gun visibly points where `stepTurret` shoots. (Omitting `aimRef` —
-as the Model Viewer does — keeps the canned scan sweep.) **Cars** (`car`, 25 pts, one hit) appear from **wave 1** — a *moving* deck
-target that drives the city's road lanes: each is placed on one of the
-world's seeded `roads`, and `stepDrift`'s `car` branch reuses `RichWorld`'s
-decorative-traffic formula (`along = ((offset + dir·speed·t) mod span) −
-WORLD_HALF` at the road's fixed cross-coord), so it rides the visible road
-and wraps at the far edge. Its velocity is the constant travel speed (not a
-per-frame delta), so shot leading stays correct across the wrap. Speed is
-**wave-scaled** — a gentle ~2.5–5 u/s mover in wave 1 (a fair intro to
-leading) ramping to ~4–8 by wave 5. Cars render as the **`LegoSwatTruck`**
-model (the primitive-built truck reused from the Model Viewer widget) via
-`CarTargets` — a small pool of model instances positioned/yawed per frame
-(the `EnemyDrones` pattern), each wheels-on-deck, nose (+Z) into travel, far
-more legible than the old instanced box. Trucks and cars are
-difficulty-independent (drawn before the difficulty-gated enemy block so
-their seeded positions don't shift with difficulty); count and hp of the
-turrets follow the preset. All use the normal pos+radius hit sphere, so the
+as the Model Viewer does — keeps the canned scan sweep.) **SWAT cars** (`car`, 25 pts, one hit) are the other **wave-1 road
+vehicle**, rendered as the **`LegoSwatTruck`** model via `CarTargets` (the
+same `ModelTargets` pool). **Road-vehicle model (shared by trucks + cars):**
+a `placeRoadVehicle` helper puts each vehicle on one of the world's seeded
+`roads` with a random direction, start offset and **wave-scaled** speed
+(gentle ~2.5–5 u/s in wave 1 — a fair intro to leading — ramping to ~4–8 by
+wave 5), and a shared `laneSlot` allocator spreads trucks and cars across
+the lanes instead of stacking. `stepDrift`'s road branch drives every road
+vehicle with `RichWorld`'s decorative-traffic formula
+(`along = ((offset + dir·speed·t) mod span) − WORLD_HALF` at the road's
+fixed cross-coord), so they ride the visible roads and wrap at the far
+edge; the published velocity is the constant travel speed (not a per-frame
+delta), so shot leading stays correct across the wrap. Both kinds are
+difficulty-independent (placed before the difficulty-gated enemy block);
+count and hp of the turrets follow the preset. All use the normal pos+radius hit sphere, so the
 fire sweep / lock / scoring paths are unchanged. Ground targets are easiest
 in Reticle/Gunner (the gimbal looks down); in Classic you nose-down or
 descend — and the car needs leading on top.

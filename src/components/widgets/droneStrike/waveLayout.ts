@@ -50,8 +50,8 @@ export interface WaveSpec {
 export const ENEMY_WAVE_START = 3
 /** ...and shoot back from this one (normal; difficulty shifts it). */
 export const ENEMY_FIRE_WAVE = 5
-/** Ground supply trucks appear from this wave (static points targets). */
-export const GROUND_WAVE_START = 2
+/** Military supply trucks (moving road vehicles) appear from this wave. */
+export const GROUND_WAVE_START = 1
 /** Moving cars (road-bound) appear from this wave — from the very first
  * wave, gently (see the wave-scaled speed in buildWave). */
 export const CAR_WAVE_START = 1
@@ -186,7 +186,8 @@ export function buildWave(
   }
 
   // Gallery targets: count and drift scale with the wave, size shrinks.
-  const balloons = Math.min(5 + waveIndex, 9)
+  // Kept lean so the deck now shares the wave with road vehicles (below).
+  const balloons = Math.min(3 + waveIndex, 8)
   const radius = Math.max(0.8, 1.4 - waveIndex * 0.06)
   const drifters = waveIndex >= 2 ? Math.ceil(balloons / 2) : 0
   for (let i = 0; i < balloons; i++) {
@@ -203,38 +204,19 @@ export function buildWave(
     })
   }
 
-  // Ground supply trucks (wave 2+): static points targets rewarding the
-  // gimbal look-down. Fully difficulty-independent (count AND position), so
-  // drawn before the difficulty-gated enemy block keeps their placement
-  // identical across Easy/Normal/Hard — pure target practice.
-  const trucks =
-    waveIndex >= GROUND_WAVE_START
-      ? Math.min(2 + Math.floor(waveIndex / 3), 4)
-      : 0
-  for (let i = 0; i < trucks; i++) {
-    place({
-      kind: 'ground',
-      radius: 1.1,
-      driftAmp: 0,
-      driftSpeed: 0,
-      driftPhase: 0,
-      driftAxis: 0,
-      hp: 1,
-      points: POINTS.ground,
-    })
-  }
-
-  // Moving cars (wave 3+): road-bound targets that drive the city's lanes,
-  // reusing the world's road network + the decorative-traffic motion model
-  // (see stepDrift's 'car' branch). Drawn before the difficulty-gated enemy
-  // block so their count and road/speed draws stay difficulty-independent.
-  const cars =
-    layout.roads.length > 0 && waveIndex >= CAR_WAVE_START
-      ? Math.min(1 + Math.floor(waveIndex / 3), 3, layout.roads.length)
-      : 0
-  for (let i = 0; i < cars; i++) {
-    if (targets.length >= MAX_TARGETS) break
-    const road = layout.roads[i % layout.roads.length]
+  // Road vehicles — military supply trucks (`ground`, MilitaryTruck model) +
+  // SWAT cars (`car`, LegoSwatTruck model): both road-bound movers that drive
+  // the city's lanes, reusing the world's road network + the decorative-
+  // traffic motion model (see stepDrift's road branch). Trucks and cars share
+  // one lane allocator (`laneSlot`) so the two kinds spread across the city's
+  // lanes instead of stacking. Drawn before the difficulty-gated enemy block
+  // so their counts and road/speed draws stay difficulty-independent (pure
+  // practice, identical across Easy/Normal/Hard — lesson #54).
+  let laneSlot = 0
+  const placeRoadVehicle = (kind: TargetKind, radius: number, points: number) => {
+    if (targets.length >= MAX_TARGETS || layout.roads.length === 0) return
+    const road = layout.roads[laneSlot % layout.roads.length]
+    laneSlot++
     const dir = rand() < 0.5 ? 1 : -1
     // Wave-scaled speed: gentle movers early (wave 1 ≈ 2.5–5 u/s) ramping to
     // ≈4–8 by wave 5 — fair to lead as a new mechanic, harder as waves climb.
@@ -244,21 +226,37 @@ export function buildWave(
     const lane = road.at + (dir > 0 ? 0.8 : -0.8)
     const alongX = road.axis === 'x'
     targets.push({
-      kind: 'car',
+      kind,
       // The moving axis is overwritten each frame; the fixed axis is the
       // lane. y ≈ 1 seats the hit sphere just above the deck.
       x: alongX ? 0 : lane,
       y: 1,
       z: alongX ? lane : 0,
-      radius: 1,
+      radius,
       driftAmp: 0,
       driftSpeed: speed, // signed → direction of travel
       driftPhase: start, // start offset along the road
       driftAxis: alongX ? 0 : 2,
       hp: 1,
-      points: POINTS.car,
+      points,
     })
   }
+
+  // Military supply trucks (wave 1+): moving road vehicles — like the SWAT
+  // cars, they now drive from the very first wave (the model spins its wheels
+  // as it moves), gently at first via the wave-scaled speed.
+  const trucks =
+    layout.roads.length > 0 && waveIndex >= GROUND_WAVE_START
+      ? Math.min(1 + Math.floor(waveIndex / 3), 4)
+      : 0
+  for (let i = 0; i < trucks; i++) placeRoadVehicle('ground', 1.1, POINTS.ground)
+
+  // SWAT cars (wave 1+): moving road vehicles.
+  const cars =
+    layout.roads.length > 0 && waveIndex >= CAR_WAVE_START
+      ? Math.min(1 + Math.floor(waveIndex / 3), 3, layout.roads.length)
+      : 0
+  for (let i = 0; i < cars; i++) placeRoadVehicle('car', 1, POINTS.car)
 
   // Enemy drones (wave 3+): placed like targets, moved by the AI at runtime.
   // The drift fields carry their orbit: amp = orbit radius (so placement
@@ -377,11 +375,13 @@ export function loadWave(states: TargetState[], wave: WaveSpec): void {
  * velocity derivative so shot leading sees the real motion. */
 export function stepDrift(t: TargetState, timeS: number): void {
   if (!t.alive) return
-  // Cars drive along a road lane at constant speed, wrapping at the world
-  // edge — the same pure linear-wrap the decorative traffic uses (RichWorld),
-  // so the target rides the visible road. Velocity is the constant travel
-  // speed (not a pos delta), so the once-per-lap wrap never spikes leading.
-  if (t.kind === 'car') {
+  // Road vehicles (SWAT cars + military supply trucks) drive along a road
+  // lane at constant speed, wrapping at the world edge — the same pure
+  // linear-wrap the decorative traffic uses (RichWorld), so the target rides
+  // the visible road. Velocity is the constant travel speed (not a pos
+  // delta), so the once-per-lap wrap never spikes leading. Guarded on
+  // driftSpeed so a (fallback) static ground truck skips this branch.
+  if ((t.kind === 'car' || t.kind === 'ground') && t.driftSpeed !== 0) {
     const span = WORLD_HALF * 2
     const raw = t.driftPhase + t.driftSpeed * timeS
     const along = (((raw % span) + span) % span) - WORLD_HALF
