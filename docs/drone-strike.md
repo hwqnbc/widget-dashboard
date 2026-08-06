@@ -77,7 +77,10 @@ Key decisions:
   fullscreen sizes stacked the fire button onto the top toolbar on an
   iPhone's ~330 px landscape viewport and pushed the scope button
   off-screen; suite `106-strike-mobile` pins the fix on a phone-sized
-  viewport.
+  viewport. Toggling full screen **preserves the live game** — the board
+  reparents this one widget instance between its card and the overlay rather
+  than remounting it, so the flight, wave and score keep running across the
+  toggle (see `docs/fullscreen.md`; `118-fullscreen-continuity`).
 - **Aim assist** (off/mild/strong) sets the lock cone (`AIM_CONE_RAD`,
   widened by each target's angular size, occlusion-checked) and how far a
   fired bolt bends toward the locked target (`bendAim`) after first-order

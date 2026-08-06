@@ -3,23 +3,28 @@ import { Box, Dialog, IconButton, Stack, Typography } from '@mui/material'
 import CloseFullscreenIcon from '@mui/icons-material/CloseFullscreen'
 import ScreenRotationIcon from '@mui/icons-material/ScreenRotation'
 import { useAppSelector } from '../../app/hooks'
-import { widgetComponents } from '../../registry/widgetRegistry'
 import { widgetMetaByType } from '../../features/widgets/widgetCatalog'
 import { useViewport } from '../../hooks/useViewport'
-import { PresentationContext } from './presentation'
 
 /**
- * The fullscreen overlay for a single widget. Re-mounts the same `<Widget id>` in
- * a themed, portaled MUI `Dialog` at viewport size (boards scale off their
- * container, so bigger container ⇒ bigger board). Shows a rotate hint when the
- * widget declares a `preferredOrientation` the device isn't currently in.
+ * The fullscreen overlay for a single widget. Renders a themed, portaled MUI
+ * `Dialog` at viewport size (boards scale off their container, so bigger
+ * container ⇒ bigger board) whose body is an **empty host**: the board keeps
+ * the widget mounted continuously and reparents its live DOM (portal host)
+ * into this host via `onHost`, so the running game/canvas is preserved rather
+ * than remounted. Shows a rotate hint when the widget declares a
+ * `preferredOrientation` the device isn't currently in.
  */
 export default function FullscreenView({
   id,
   onClose,
+  onHost,
 }: {
   id: string | null
   onClose: () => void
+  /** Reports the overlay body element (or null when closed) up to the
+   * provider, so the board can reparent the live widget into it. */
+  onHost: (el: HTMLElement | null) => void
 }) {
   const instance = useAppSelector((s) =>
     id ? s.widgets.instances.find((w) => w.id === id) ?? null : null,
@@ -33,7 +38,6 @@ export default function FullscreenView({
 
   if (!instance) return null
 
-  const Widget = widgetComponents[instance.type]
   const meta = widgetMetaByType[instance.type]
   const wantsRotate =
     !!meta.preferredOrientation && vp.orientation !== meta.preferredOrientation
@@ -62,9 +66,13 @@ export default function FullscreenView({
         </Stack>
 
         <Box sx={{ flex: 1, minHeight: 0, position: 'relative' }}>
-          <PresentationContext.Provider value={{ fullscreen: true }}>
-            <Widget id={instance.id} />
-          </PresentationContext.Provider>
+          {/* Empty host — the board reparents the live widget's portal DOM in
+           * here (see WidgetBoard's BoardWidget). Callback ref reports it up
+           * (and reports null on unmount, so the widget returns to its card). */}
+          <Box
+            ref={(el: HTMLElement | null) => onHost(el)}
+            sx={{ position: 'absolute', inset: 0 }}
+          />
 
           {wantsRotate && (
             <Stack

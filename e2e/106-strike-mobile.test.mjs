@@ -15,7 +15,8 @@ const { check, finish } = reporter('strike-mobile')
 const { browser, context, page } = await launch({ viewport: PHONE })
 await addStrikeWidget(page)
 
-// Enter fullscreen (the same widget instance re-mounts in the overlay).
+// Enter fullscreen (the same widget instance is reparented into the overlay —
+// no remount; see 118-fullscreen-continuity).
 await page.getByRole('button', { name: 'full screen Drone Strike widget' }).click()
 await page.waitForTimeout(800)
 check(

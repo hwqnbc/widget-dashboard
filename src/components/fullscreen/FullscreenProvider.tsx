@@ -43,6 +43,10 @@ function releaseOrientation() {
 export default function FullscreenProvider({ children }: { children: ReactNode }) {
   const instances = useAppSelector((s) => s.widgets.instances)
   const [fullscreenId, setFullscreenId] = useState<string | null>(null)
+  // The overlay's body element (set by FullscreenView while open). Kept as
+  // state — not a ref — so the board re-renders and reparents the live widget
+  // into it the moment it attaches.
+  const [overlayHost, setOverlayHost] = useState<HTMLElement | null>(null)
 
   const open = useCallback(
     (id: string) => {
@@ -61,9 +65,9 @@ export default function FullscreenProvider({ children }: { children: ReactNode }
   }, [])
 
   return (
-    <FullscreenContext.Provider value={{ fullscreenId, open, close }}>
+    <FullscreenContext.Provider value={{ fullscreenId, open, close, overlayHost }}>
       {children}
-      <FullscreenView id={fullscreenId} onClose={close} />
+      <FullscreenView id={fullscreenId} onClose={close} onHost={setOverlayHost} />
     </FullscreenContext.Provider>
   )
 }

@@ -1009,3 +1009,30 @@ carried over; these are the new ones.
     measurement's noise scales with what you're rendering, you're measuring
     the renderer, not the feature — pull the invariant down to the pure layer
     (siblings #55/#56: make the assertable contract the deterministic thing).
+
+81. **Full-screen must *reparent* the live widget, not remount a copy —
+    otherwise ref-held / WebGL state is wiped.** Full screen used to swap the
+    grid card's `<Widget>` for a placeholder and mount a *fresh* `<Widget>` in
+    the overlay `Dialog`. Board games survived (their whole state is persisted
+    redux `data`), but the WebGL games — Drone Sim/Strike, Tank — keep their
+    session in **refs** (flight pose, wave, score, projectile/target pools) read
+    in `useFrame`, so every toggle mounted a new instance and **restarted the
+    game** (the user's report: "toggle full screen and it restarts"). Fix: keep
+    **one** instance per cell, mounted once into a stable host `<div>` via
+    `createPortal`, and `appendChild` that host into either the card slot or the
+    overlay body as full screen toggles (`WidgetBoard`'s `BoardWidget` +
+    `overlayHost` on `FullscreenContext`). Moving a DOM node does **not** remount
+    its React subtree — same fibers, same `<canvas>`/WebGL context — so the game
+    keeps running. Two traps this avoids: (a) swapping a portal's `container`
+    arg *does* remount, so the host must be stable and only its DOM parent
+    changes; (b) `position:fixed` can't escape a react-grid-layout item because
+    the grid item carries a CSS `transform` (a containing block for fixed) — but
+    the MUI `Dialog` already portals to `document.body`, outside that transform,
+    so reparenting into it works. Drive the reparent off **state** (callback-ref
+    slot + `overlayHost` state), not a bare ref, so the layout effect re-runs the
+    moment the target element attaches — no child-before-parent effect-ordering
+    hazard. `PresentationContext` is supplied by `BoardWidget` (it follows the
+    React tree through the portal), so `usePresentation().fullscreen` flips live
+    on the same instance. Probe continuity with a ref-held datum that a remount
+    would zero (`data-shots`), never a persisted one (`data-world-seed` survives
+    a remount too) — `e2e/118-fullscreen-continuity.test.mjs`.

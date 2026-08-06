@@ -9,29 +9,44 @@ a landscape-biased game (Archery) nudges the device to landscape.
   (`fullscreenId`), held in React (`components/fullscreen/FullscreenProvider.tsx`),
   **not** redux — the `ui` slice is fully persisted and we don't want fullscreen to
   survive reloads. `FullscreenProvider` is mounted once around the app shell
-  (`AppLayout`) and exposes `{ fullscreenId, open, close }` via
+  (`AppLayout`) and exposes `{ fullscreenId, open, close, overlayHost }` via
   `useFullscreen()` (`fullscreen/fullscreenContext.ts`).
 - The **maximise button** lives in `WidgetCard`'s header (an optional
-  `onFullscreen` prop; `WidgetBoard` wires it to `open(inst.id)`). Every widget
-  gets it. Same `widget-no-drag` + `stopPropagation` treatment as the remove button.
+  `onFullscreen` prop; `WidgetBoard`'s `BoardWidget` wires it to `open(id)`). Every
+  widget gets it. Same `widget-no-drag` + `stopPropagation` treatment as remove.
 - The overlay is `components/fullscreen/FullscreenView.tsx`: a themed, portaled MUI
   `Dialog fullScreen` (same pattern as `ConfirmDialog`) with a slim title bar +
-  exit button, re-rendering the **same** `<Widget id>` at viewport size. Because
-  every board sizes off its container (container queries), a bigger container ⇒ a
-  bigger board for free. `Esc`/exit close it; it self-dismisses if the instance is
-  removed.
-- **Single live mount:** while a widget is fullscreen, `WidgetBoard` renders a
-  placeholder ("Opened in full screen") in its grid card instead of the widget, so
-  the widget is mounted only in the overlay — no duplicate rAF/animation loops.
-  Game state lives in redux, so entering/exiting loses only transient animation
-  state, never the game.
+  exit button. Its body is an **empty host** element (not the widget) whose DOM
+  node is reported up to the provider via a callback ref (`onHost` →
+  `overlayHost`). Because every board sizes off its container (container queries),
+  a bigger container ⇒ a bigger board for free. `Esc`/exit close it; it
+  self-dismisses if the instance is removed.
+- **Single live instance — reparented, never remounted.** Each grid cell's
+  `BoardWidget` (`WidgetBoard.tsx`) mounts its `<Widget>` exactly once, into a
+  **stable host `<div>`** via `createPortal`. A layout effect `appendChild`s that
+  host into either the card's slot (normal) or `overlayHost` (fullscreen). Moving
+  a DOM node does **not** remount its React subtree — fibers, refs, effects, and
+  crucially the live `<canvas>`/WebGL context all survive. So the running game
+  (flight, wave, score, projectile/target pools — much of it ref-held, not redux)
+  keeps going across enter **and** exit. This was a real regression once: the old
+  design swapped the card's `<Widget>` for a placeholder and mounted a *fresh*
+  copy in the overlay, which restarted the WebGL games (Drone Sim/Strike, Tank)
+  on every toggle. The MUI `Dialog` portals to `document.body`, i.e. outside the
+  react-grid-layout item's CSS `transform` — so the reparented host escapes the
+  grid cleanly (a `position:fixed` escape would be trapped by that transform, and
+  swapping the portal's `container` arg would itself remount). Covered by
+  `e2e/118-fullscreen-continuity.test.mjs`.
 
 ## Telling a widget it's fullscreen
 `components/fullscreen/presentation.ts` — a tiny `PresentationContext`
-(`{ fullscreen: boolean }`, default `false`). The overlay wraps its widget in
-`<PresentationContext.Provider value={{ fullscreen: true }}>`; widgets read
-`usePresentation()`. Kept separate from `useViewport` so widgets that only need the
-boolean don't re-render on resize. **Only the two capped board games consume it:**
+(`{ fullscreen: boolean }`, default `false`). `BoardWidget` supplies it — the
+portal's React subtree is `<PresentationContext.Provider value={{ fullscreen:
+isFullscreen }}><Widget/></...>` — so the flag **flips live on the same instance**
+as it moves between card and overlay (context follows the React tree through a
+portal, regardless of where the host DOM sits). Widgets read `usePresentation()`.
+Kept separate from `useViewport` so widgets that only need the boolean don't
+re-render on resize. **The two capped board games and the WebGL widgets consume
+it** (the latter for control sizing) —
 Tic-Tac-Toe and Memory relax their fixed px cap when fullscreen
 (`min(100cqmin, 88vmin/92vmin)` instead of `340px`/`460px`). Connect 4 and Archery
 are uncapped already and grow automatically.
@@ -65,8 +80,10 @@ reorganises by orientation additionally reads `useViewport()`.
 ## Verifying
 `npm run build` + `npm run lint`, then headless Chromium: add a widget, click the
 maximise button (`aria-label` contains "full screen"), assert a `role="dialog"`
-appears and the board's bounding box grew past the old cap; while open, the grid
-card shows the placeholder (single board in the DOM); `Esc` closes and the card
-returns. Archery in a portrait viewport shows `data-testid="rotate-hint"`; landscape
-hides it; TTT/Memory show no hint. Native fullscreen/lock failing headlessly is
-caught (no console errors).
+appears and the board's bounding box grew past the old cap; the widget stays a
+**single** instance in the DOM (its canvas reparents into `.MuiDialog-root`, no
+second copy); `Esc`/exit closes and the widget reparents back into its card.
+`118-fullscreen-continuity` proves a running Drone Strike game (ref-held
+`data-shots`) survives the toggle instead of restarting. Archery in a portrait
+viewport shows `data-testid="rotate-hint"`; landscape hides it; TTT/Memory show no
+hint. Native fullscreen/lock failing headlessly is caught (no console errors).
