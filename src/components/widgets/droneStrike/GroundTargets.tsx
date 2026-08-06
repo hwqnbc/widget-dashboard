@@ -27,7 +27,7 @@ export default function GroundTargets({ targets }: { targets: readonly TargetSta
       max={MAX_GROUND_RENDER}
       scale={SCALE}
       faceVelocity
-      renderModel={() => <MilitaryTruck animate simpleGlass />}
+      renderModel={() => <MilitaryTruck animate lowSpec />}
     />
   )
 }

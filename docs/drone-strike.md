@@ -140,12 +140,13 @@ one hit) are **moving road vehicles from wave 1** — like the SWAT cars they
 drive the city's lanes (see the road-vehicle model below), rendered as the
 **`MilitaryTruck`** model (the primitive-built army cargo truck reused from
 the Model Viewer widget) via `GroundTargets` (the shared `ModelTargets`
-pool, `faceVelocity` + `animate` so the wheels spin as it drives). The
-in-game truck uses the model's cheap-glass path (`simpleGlass` — a tinted
-standard material instead of the Model Viewer's physical transmission,
-which runs a costly full-scene pass **per** transmissive object; several
-trucks on screen would tank software-GL / mobile framerates). Their count
-is difficulty-independent (drawn before the enemy block). **AA turrets** (`turret`,
+pool, `faceVelocity` + `animate` so the wheels spin as it drives). As a
+representative target it uses the model's **`lowSpec`** render — cheap
+opaque glass (no physical transmission, which runs a costly full-scene pass
+**per** transmissive object and would tank software-GL / mobile framerates
+with several trucks on screen), a matte finish (no specular glints) and no
+decorative head/roof lights — while the Model Viewer keeps the full-quality
+look. Their count is difficulty-independent (drawn before the enemy block). **AA turrets** (`turret`,
 30 pts) appear from wave 4 — a *static ground enemy*: `stepTurret` is the
 return-fire half of `stepEnemy` with no movement, lobbing slow unled bolts
 up the player's line of sight (dodgeable), gated by the same difficulty

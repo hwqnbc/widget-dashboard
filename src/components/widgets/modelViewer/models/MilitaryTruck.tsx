@@ -13,9 +13,15 @@ import type { RefObject } from 'react'
  * light rotations moved from <cylinderGeometry> (where R3F ignores
  * transforms — lesson #76) onto the parent <mesh>. The cabin group's
  * half-turn puts the windshield toward +Z, matching the catalog convention.
+ *
+ * `lowSpec` is a lightweight render for multi-instance venues (the Drone
+ * Strike ground targets): it drops the costly glass transmission, the shiny
+ * specular finish and the decorative head/roof lights — see the prop doc.
  */
 
+/** Full-quality finish (subtle specular) vs the low-spec matte finish. */
 const GLOSSY = { roughness: 0.2, metalness: 0.1 }
+const MATTE = { roughness: 1, metalness: 0 }
 
 const ARMY_GREEN = '#3f6212'
 const CANOPY_TAN = '#a39480'
@@ -35,28 +41,37 @@ const GLASS = {
  * Viewer, but three.js runs a full-scene transmission pass **per transmissive
  * object** every frame — with several trucks on screen (Drone Strike targets)
  * that tanks the framerate on software GL / low-end mobile. `simple` swaps in
- * a cheap tinted-transparent standard material (no transmission pass) for
- * those multi-instance venues; the Model Viewer keeps the default glass.
+ * a cheap **opaque** tinted material (no transmission pass, no alpha sort) —
+ * still reads as a tinted windscreen — for those multi-instance venues.
  */
 function Glass({ simple }: { simple?: boolean }) {
   return simple ? (
-    <meshStandardMaterial color="#aec6d8" transparent opacity={0.55} roughness={0.1} metalness={0} />
+    <meshStandardMaterial color="#33414f" roughness={0.6} metalness={0} />
   ) : (
     <meshPhysicalMaterial {...GLASS} />
   )
 }
 
-function Stud({ position, color = ARMY_GREEN }: { position: [number, number, number]; color?: string }) {
+function Stud({
+  position,
+  color = ARMY_GREEN,
+  finish = GLOSSY,
+}: {
+  position: [number, number, number]
+  color?: string
+  finish?: { roughness: number; metalness: number }
+}) {
   return (
     <mesh position={position}>
       <cylinderGeometry args={[0.12, 0.12, 0.08, 16]} />
-      <meshStandardMaterial color={color} {...GLOSSY} />
+      <meshStandardMaterial color={color} {...finish} />
     </mesh>
   )
 }
 
-/** Round 1x1 plate on a vertical face (lights) — the cylinder is minted
- * along Y, so the mesh (not the geometry) rotates it to point along Z. */
+/** Round 1x1 plate on a vertical face (head/roof lights) — the cylinder is
+ * minted along Y, so the mesh (not the geometry) rotates it to point along Z.
+ * Only drawn in the full-quality render; the low-spec target drops these. */
 function RoundPlate({ position, color }: { position: [number, number, number]; color: string }) {
   return (
     <mesh position={position} rotation={[Math.PI / 2, 0, 0]}>
@@ -70,9 +85,11 @@ function RoundPlate({ position, color }: { position: [number, number, number]; c
 function Wheel({
   position,
   wheelRef,
+  finish = GLOSSY,
 }: {
   position: [number, number, number]
   wheelRef: RefObject<Group | null>
+  finish?: { roughness: number; metalness: number }
 }) {
   return (
     <group position={position} ref={wheelRef}>
@@ -82,7 +99,7 @@ function Wheel({
       </mesh>
       <mesh rotation={[0, 0, Math.PI / 2]}>
         <cylinderGeometry args={[0.2, 0.2, 0.24, 16]} />
-        <meshStandardMaterial color={ARMY_GREEN} {...GLOSSY} />
+        <meshStandardMaterial color={ARMY_GREEN} {...finish} />
       </mesh>
     </group>
   )
@@ -90,18 +107,23 @@ function Wheel({
 
 export default function MilitaryTruck({
   animate,
-  simpleGlass,
+  lowSpec,
 }: {
   animate: boolean
-  /** Use cheap (non-transmissive) glass — for multi-instance venues like the
-   * Drone Strike targets where the per-object transmission pass is too costly
-   * on software GL / mobile. The Model Viewer omits it for the fancy glass. */
-  simpleGlass?: boolean
+  /** Low-spec render for multi-instance venues (Drone Strike targets): cheap
+   * opaque glass (no per-object transmission pass), a matte finish (no
+   * specular glints) and no decorative head/roof lights — a representative
+   * truck that stays light on software GL / mobile. The Model Viewer omits
+   * it for the full-quality look. */
+  lowSpec?: boolean
 }) {
   const frontWheelLeft = useRef<Group>(null)
   const frontWheelRight = useRef<Group>(null)
   const backWheelLeft = useRef<Group>(null)
   const backWheelRight = useRef<Group>(null)
+
+  // Full-quality vs low-spec surface finish (see the consts above).
+  const finish = lowSpec ? MATTE : GLOSSY
 
   // Wheel rotation — refs mutated in the frame loop, never React state.
   useFrame((_, delta) => {
@@ -118,7 +140,7 @@ export default function MilitaryTruck({
       {/* 1. Chassis base */}
       <mesh position={[0, 0.35, 0]}>
         <boxGeometry args={[1.5, 0.2, 3.8]} />
-        <meshStandardMaterial color="#0c0a09" {...GLOSSY} />
+        <meshStandardMaterial color="#0c0a09" {...finish} />
       </mesh>
 
       {/* 2. Cabin assembly (green front section; the half-turn faces it +Z) */}
@@ -126,29 +148,29 @@ export default function MilitaryTruck({
         {/* Main cabin body block */}
         <mesh position={[0, 0, 0]}>
           <boxGeometry args={[1.6, 1.0, 1.2]} />
-          <meshStandardMaterial color={ARMY_GREEN} {...GLOSSY} />
+          <meshStandardMaterial color={ARMY_GREEN} {...finish} />
         </mesh>
 
         {/* Front windshield */}
         <mesh position={[0, 0.3, -0.61]}>
           <boxGeometry args={[1.58, 0.4, 0.05]} />
-          <Glass simple={simpleGlass} />
+          <Glass simple={lowSpec} />
         </mesh>
 
         {/* Top sun visor */}
         <mesh position={[0, 0.55, -0.6]}>
           <boxGeometry args={[1.6, 0.1, 0.15]} />
-          <meshStandardMaterial color={BLACK_HARDWARE} {...GLOSSY} />
+          <meshStandardMaterial color={BLACK_HARDWARE} {...finish} />
         </mesh>
 
         {/* Side windows */}
         <mesh position={[0.81, 0.2, 0]}>
           <boxGeometry args={[0.05, 0.5, 0.9]} />
-          <Glass simple={simpleGlass} />
+          <Glass simple={lowSpec} />
         </mesh>
         <mesh position={[-0.81, 0.2, 0]}>
           <boxGeometry args={[0.05, 0.5, 0.9]} />
-          <Glass simple={simpleGlass} />
+          <Glass simple={lowSpec} />
         </mesh>
 
         {/* Side mirrors */}
@@ -196,14 +218,19 @@ export default function MilitaryTruck({
           {/* Main central bumper */}
           <mesh position={[0, -0.35, 0.02]}>
             <boxGeometry args={[1.5, 0.15, 0.1]} />
-            <meshStandardMaterial color={BLACK_HARDWARE} {...GLOSSY} />
+            <meshStandardMaterial color={BLACK_HARDWARE} {...finish} />
           </mesh>
         </group>
 
-        {/* Lights */}
-        <RoundPlate position={[0.5, -0.15, -0.67]} color="#f59e0b" />
-        <RoundPlate position={[-0.5, -0.15, -0.67]} color="#f59e0b" />
-        <RoundPlate position={[0.3, 0.73, -0.4]} color="#f97316" />
+        {/* Lights (decorative) — full-quality only; the low-spec target drops
+         * these to shed the extra glints/meshes. */}
+        {!lowSpec && (
+          <>
+            <RoundPlate position={[0.5, -0.15, -0.67]} color="#f59e0b" />
+            <RoundPlate position={[-0.5, -0.15, -0.67]} color="#f59e0b" />
+            <RoundPlate position={[0.3, 0.73, -0.4]} color="#f97316" />
+          </>
+        )}
       </group>
 
       {/* 3. Cargo bay assembly (rear green bed + tan canopy) */}
@@ -211,44 +238,44 @@ export default function MilitaryTruck({
         {/* Lower green bed */}
         <mesh position={[0, -0.15, 0]}>
           <boxGeometry args={[1.6, 0.7, 2.4]} />
-          <meshStandardMaterial color={ARMY_GREEN} {...GLOSSY} />
+          <meshStandardMaterial color={ARMY_GREEN} {...finish} />
         </mesh>
 
         {/* Studs on the bottom rail corners */}
-        <Stud position={[0.7, -0.4, 1.1]} />
-        <Stud position={[-0.7, -0.4, 1.1]} />
-        <Stud position={[0.7, -0.4, -1.1]} />
-        <Stud position={[-0.7, -0.4, -1.1]} />
+        <Stud position={[0.7, -0.4, 1.1]} finish={finish} />
+        <Stud position={[-0.7, -0.4, 1.1]} finish={finish} />
+        <Stud position={[0.7, -0.4, -1.1]} finish={finish} />
+        <Stud position={[-0.7, -0.4, -1.1]} finish={finish} />
 
         {/* Tan cargo canopy */}
         <group position={[0, 0.55, 0]}>
           {/* Main top section */}
           <mesh position={[0, 0, 0]}>
             <boxGeometry args={[1.6, 0.7, 2.4]} />
-            <meshStandardMaterial color={CANOPY_TAN} {...GLOSSY} />
+            <meshStandardMaterial color={CANOPY_TAN} {...finish} />
           </mesh>
           {/* Crosswise roof-bow fillet */}
           <mesh position={[0, 0.35, 0]} rotation={[0, 0, Math.PI / 2]}>
             <cylinderGeometry args={[0.08, 0.08, 1.6, 16]} />
-            <meshStandardMaterial color={CANOPY_TAN} {...GLOSSY} />
+            <meshStandardMaterial color={CANOPY_TAN} {...finish} />
           </mesh>
           {/* Front/back end caps */}
           <mesh position={[0, 0, 1.21]}>
             <boxGeometry args={[1.6, 0.7, 0.02]} />
-            <meshStandardMaterial color={CANOPY_TAN} {...GLOSSY} />
+            <meshStandardMaterial color={CANOPY_TAN} {...finish} />
           </mesh>
           <mesh position={[0, 0, -1.21]}>
             <boxGeometry args={[1.6, 0.7, 0.02]} />
-            <meshStandardMaterial color={CANOPY_TAN} {...GLOSSY} />
+            <meshStandardMaterial color={CANOPY_TAN} {...finish} />
           </mesh>
         </group>
       </group>
 
       {/* 4. Four wheels */}
-      <Wheel position={[-0.8, 0.35, 1.2]} wheelRef={frontWheelLeft} />
-      <Wheel position={[0.8, 0.35, 1.2]} wheelRef={frontWheelRight} />
-      <Wheel position={[-0.8, 0.35, -0.7]} wheelRef={backWheelLeft} />
-      <Wheel position={[0.8, 0.35, -0.7]} wheelRef={backWheelRight} />
+      <Wheel position={[-0.8, 0.35, 1.2]} wheelRef={frontWheelLeft} finish={finish} />
+      <Wheel position={[0.8, 0.35, 1.2]} wheelRef={frontWheelRight} finish={finish} />
+      <Wheel position={[-0.8, 0.35, -0.7]} wheelRef={backWheelLeft} finish={finish} />
+      <Wheel position={[0.8, 0.35, -0.7]} wheelRef={backWheelRight} finish={finish} />
     </group>
   )
 }

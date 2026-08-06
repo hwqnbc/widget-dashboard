@@ -1068,9 +1068,9 @@ carried over; these are the new ones.
     recentered. The tell was that the model was *mounted but hidden* before
     (three.js skips transmission for invisible objects) and only regressed
     once it became visible in wave 1. Fix at the source: give multi-instance
-    game models a cheap non-transmissive glass path (a `simpleGlass` prop → a
-    tinted `meshStandardMaterial`), keeping the physical glass for the
-    single-model Model Viewer. When a heavy render makes a *timing* assertion
+    game models a cheap `lowSpec` path (opaque tinted glass instead of
+    transmission, a matte finish, no decorative light meshes), keeping the
+    full-quality look for the single-model Model Viewer. When a heavy render makes a *timing* assertion
     flake, suspect per-frame GPU cost (transmission, big shadow maps,
     post-processing) before touching the test — the fix belongs in the render,
     and it helps real mobile devices too, not just the headless suite.
