@@ -1069,7 +1069,8 @@ carried over; these are the new ones.
     (three.js skips transmission for invisible objects) and only regressed
     once it became visible in wave 1. Fix at the source: give multi-instance
     game models a cheap `lowSpec` path (opaque tinted glass instead of
-    transmission, a matte finish, no decorative light meshes), keeping the
+    transmission, a matte finish, no decorative light meshes — both truck
+    models, `MilitaryTruck` and `LegoSwatTruck`, carry it), keeping the
     full-quality look for the single-model Model Viewer. When a heavy render makes a *timing* assertion
     flake, suspect per-frame GPU cost (transmission, big shadow maps,
     post-processing) before touching the test — the fix belongs in the render,

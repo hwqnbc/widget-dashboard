@@ -27,7 +27,7 @@ export default function CarTargets({ targets }: { targets: readonly TargetState[
       scale={SCALE}
       groundLift={GROUND_LIFT}
       faceVelocity
-      renderModel={() => <LegoSwatTruck animate />}
+      renderModel={() => <LegoSwatTruck animate lowSpec />}
     />
   )
 }

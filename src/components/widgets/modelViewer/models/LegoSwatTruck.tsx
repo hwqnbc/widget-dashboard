@@ -12,10 +12,21 @@ import type { RefObject } from 'react'
  * wheel spin gated on the `animate` prop, and the head/tail light rotations
  * moved from <cylinderGeometry> (where R3F ignores transforms) onto the
  * parent <mesh>.
+ *
+ * `lowSpec` is a lightweight render for multi-instance venues (the Drone
+ * Strike car targets): cheap opaque windshield (no per-object transmission
+ * pass), matte finish, no decorative head/tail lights, and a static
+ * (non-emissive, non-strobing) roof lightbar — a representative SWAT truck
+ * that stays light on software GL / mobile. The Model Viewer omits it for the
+ * full-quality look (transmission + strobe + gloss).
  */
 
 const LEGO_BLUE = '#1e40af'
 const DARK_CHASSIS = '#09090b'
+
+/** Full-quality finish (subtle specular) vs the low-spec matte finish. */
+const GLOSSY = { roughness: 0.2, metalness: 0.1 }
+const MATTE = { roughness: 1, metalness: 0 }
 
 /** How long each side of the red/blue strobe stays lit (seconds). */
 const STROBE_PERIOD = 0.4
@@ -59,11 +70,19 @@ function SwatDecal({ side }: { side: 1 | -1 }) {
   )
 }
 
-function Stud({ position, color = LEGO_BLUE }: { position: [number, number, number]; color?: string }) {
+function Stud({
+  position,
+  color = LEGO_BLUE,
+  finish = GLOSSY,
+}: {
+  position: [number, number, number]
+  color?: string
+  finish?: { roughness: number; metalness: number }
+}) {
   return (
     <mesh position={position}>
       <cylinderGeometry args={[0.12, 0.12, 0.08, 16]} />
-      <meshStandardMaterial color={color} roughness={0.2} metalness={0.1} />
+      <meshStandardMaterial color={color} {...finish} />
     </mesh>
   )
 }
@@ -92,7 +111,8 @@ function Wheel({
 }
 
 /** A round light on a vertical face — the cylinder is minted along Y, so the
- * mesh (not the geometry) rotates it to point along Z. */
+ * mesh (not the geometry) rotates it to point along Z. Full-quality only; the
+ * low-spec target drops these decorative lights. */
 function FaceLight({ position, color }: { position: [number, number, number]; color: string }) {
   return (
     <mesh position={position} rotation={[Math.PI / 2, 0, 0]}>
@@ -102,7 +122,17 @@ function FaceLight({ position, color }: { position: [number, number, number]; co
   )
 }
 
-export default function LegoSwatTruck({ animate }: { animate: boolean }) {
+export default function LegoSwatTruck({
+  animate,
+  lowSpec,
+}: {
+  animate: boolean
+  /** Low-spec render for multi-instance venues (Drone Strike car targets):
+   * cheap opaque windshield (no per-object transmission pass), matte finish,
+   * no decorative head/tail lights and a static non-emissive lightbar. The
+   * Model Viewer omits it for the full-quality look. */
+  lowSpec?: boolean
+}) {
   const frontWheelLeft = useRef<Group>(null)
   const frontWheelRight = useRef<Group>(null)
   const backWheelLeft = useRef<Group>(null)
@@ -111,8 +141,12 @@ export default function LegoSwatTruck({ animate }: { animate: boolean }) {
   const redSirenMat = useRef<MeshStandardMaterial>(null)
   const amberSirenMat = useRef<MeshStandardMaterial>(null)
 
+  // Full-quality vs low-spec surface finish (see the consts above).
+  const finish = lowSpec ? MATTE : GLOSSY
+
   // Wheel rotation + siren strobe — refs mutated in the frame loop, never
-  // React state.
+  // React state. In low-spec the siren refs are absent (static lightbar), so
+  // the emissive mutations below are guarded no-ops; the wheels still spin.
   useFrame(({ clock }, delta) => {
     const blue = blueSirenMat.current
     const red = redSirenMat.current
@@ -148,72 +182,92 @@ export default function LegoSwatTruck({ animate }: { animate: boolean }) {
       {/* 2. Lower body (dark blue block) */}
       <mesh position={[0, 0.75, 0]}>
         <boxGeometry args={[1.4, 0.6, 2.4]} />
-        <meshStandardMaterial color={LEGO_BLUE} roughness={0.2} metalness={0.1} />
+        <meshStandardMaterial color={LEGO_BLUE} {...finish} />
       </mesh>
 
       {/* 3. Rear container body (SWAT van rear) */}
       <mesh position={[0, 1.35, -0.3]}>
         <boxGeometry args={[1.4, 0.6, 1.8]} />
-        <meshStandardMaterial color={LEGO_BLUE} roughness={0.2} metalness={0.1} />
+        <meshStandardMaterial color={LEGO_BLUE} {...finish} />
       </mesh>
 
-      {/* 4. Transparent windshield brick */}
+      {/* 4. Windshield brick — physical transmission for the Model Viewer;
+       * cheap opaque tint for the low-spec car targets. */}
       <mesh position={[0, 1.25, 0.8]}>
         <boxGeometry args={[1.38, 0.45, 0.6]} />
-        <meshPhysicalMaterial
-          color="#a5f3fc"
-          transparent
-          opacity={0.65}
-          roughness={0.1}
-          transmission={0.8}
-          ior={1.5}
-        />
+        {lowSpec ? (
+          <meshStandardMaterial color="#7fb8c9" roughness={0.5} metalness={0} />
+        ) : (
+          <meshPhysicalMaterial
+            color="#a5f3fc"
+            transparent
+            opacity={0.65}
+            roughness={0.1}
+            transmission={0.8}
+            ior={1.5}
+          />
+        )}
       </mesh>
 
-      {/* 5. Front headlights */}
-      <group position={[0, 0.65, 1.21]}>
-        <FaceLight position={[-0.45, 0, 0]} color="#f59e0b" />
-        <FaceLight position={[0.45, 0, 0]} color="#f59e0b" />
-      </group>
+      {/* 5/6. Decorative head + tail lights — full-quality only. */}
+      {!lowSpec && (
+        <>
+          <group position={[0, 0.65, 1.21]}>
+            <FaceLight position={[-0.45, 0, 0]} color="#f59e0b" />
+            <FaceLight position={[0.45, 0, 0]} color="#f59e0b" />
+          </group>
+          <group position={[0, 0.75, -1.21]}>
+            <FaceLight position={[-0.45, 0, 0]} color="#dc2626" />
+            <FaceLight position={[0.45, 0, 0]} color="#dc2626" />
+          </group>
+        </>
+      )}
 
-      {/* 6. Rear red tail lights */}
-      <group position={[0, 0.75, -1.21]}>
-        <FaceLight position={[-0.45, 0, 0]} color="#dc2626" />
-        <FaceLight position={[0.45, 0, 0]} color="#dc2626" />
-      </group>
-
-      {/* 7. Roof police lightbar — the strobe mutates emissiveIntensity via
-       * the material refs while Animate is on */}
+      {/* 7. Roof police lightbar. Full-quality: emissive blocks the strobe
+       * animates via the material refs. Low-spec: static, non-emissive blocks
+       * (keeps the SWAT silhouette without the light effect). */}
       <group position={[0, 1.7, 0.3]}>
         <mesh position={[-0.4, 0, 0]}>
           <boxGeometry args={[0.25, 0.12, 0.25]} />
-          <meshStandardMaterial
-            ref={blueSirenMat}
-            color="#3b82f6"
-            emissive="#3b82f6"
-            emissiveIntensity={0.15}
-            roughness={0.1}
-          />
+          {lowSpec ? (
+            <meshStandardMaterial color="#3b82f6" {...finish} />
+          ) : (
+            <meshStandardMaterial
+              ref={blueSirenMat}
+              color="#3b82f6"
+              emissive="#3b82f6"
+              emissiveIntensity={0.15}
+              roughness={0.1}
+            />
+          )}
         </mesh>
         <mesh position={[0, 0, 0]}>
           <boxGeometry args={[0.25, 0.12, 0.25]} />
-          <meshStandardMaterial
-            ref={redSirenMat}
-            color="#dc2626"
-            emissive="#dc2626"
-            emissiveIntensity={0.15}
-            roughness={0.1}
-          />
+          {lowSpec ? (
+            <meshStandardMaterial color="#dc2626" {...finish} />
+          ) : (
+            <meshStandardMaterial
+              ref={redSirenMat}
+              color="#dc2626"
+              emissive="#dc2626"
+              emissiveIntensity={0.15}
+              roughness={0.1}
+            />
+          )}
         </mesh>
         <mesh position={[0.4, 0, 0]}>
           <boxGeometry args={[0.25, 0.12, 0.25]} />
-          <meshStandardMaterial
-            ref={amberSirenMat}
-            color="#f59e0b"
-            emissive="#f59e0b"
-            emissiveIntensity={0.15}
-            roughness={0.1}
-          />
+          {lowSpec ? (
+            <meshStandardMaterial color="#f59e0b" {...finish} />
+          ) : (
+            <meshStandardMaterial
+              ref={amberSirenMat}
+              color="#f59e0b"
+              emissive="#f59e0b"
+              emissiveIntensity={0.15}
+              roughness={0.1}
+            />
+          )}
         </mesh>
       </group>
 
@@ -222,10 +276,10 @@ export default function LegoSwatTruck({ animate }: { animate: boolean }) {
       <SwatDecal side={-1} />
 
       {/* 8. LEGO studs on the roof */}
-      <Stud position={[-0.4, 1.7, -0.6]} />
-      <Stud position={[0.4, 1.7, -0.6]} />
-      <Stud position={[-0.4, 1.7, -1.0]} />
-      <Stud position={[0.4, 1.7, -1.0]} />
+      <Stud position={[-0.4, 1.7, -0.6]} finish={finish} />
+      <Stud position={[0.4, 1.7, -0.6]} finish={finish} />
+      <Stud position={[-0.4, 1.7, -1.0]} finish={finish} />
+      <Stud position={[0.4, 1.7, -1.0]} finish={finish} />
 
       {/* 9. Four independent wheels */}
       <Wheel position={[-0.8, 0.35, 0.7]} wheelRef={frontWheelLeft} />

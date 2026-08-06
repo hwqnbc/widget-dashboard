@@ -160,7 +160,9 @@ slews its head yaw and barrel elevation toward (clamped to the gun's arc),
 so the gun visibly points where `stepTurret` shoots. (Omitting `aimRef` —
 as the Model Viewer does — keeps the canned scan sweep.) **SWAT cars** (`car`, 25 pts, one hit) are the other **wave-1 road
 vehicle**, rendered as the **`LegoSwatTruck`** model via `CarTargets` (the
-same `ModelTargets` pool). **Road-vehicle model (shared by trucks + cars):**
+same `ModelTargets` pool) — also in the model's `lowSpec` render (opaque
+windshield, matte finish, static non-emissive lightbar), so both in-game
+vehicles stay light while the Model Viewer keeps the full-quality look. **Road-vehicle model (shared by trucks + cars):**
 a `placeRoadVehicle` helper puts each vehicle on one of the world's seeded
 `roads` with a random direction, start offset and **wave-scaled** speed
 (gentle ~2.5–5 u/s in wave 1 — a fair intro to leading — ramping to ~4–8 by
