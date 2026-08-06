@@ -129,7 +129,7 @@ mulberry32 stream per wave, independent of the world stream):
 | Wave | Content |
 | --- | --- |
 | 1 | 6 static balloons + one slow moving road car (the truck model) |
-| 2 | 7 targets, half drifting (`ringDrone`, sinusoidal, velocity published for leading); + ground supply trucks (2); + car |
+| 2 | 7 targets, half drifting (`ringDrone`, sinusoidal, velocity published for leading); + ground supply trucks (2, `MilitaryTruck` model); + car |
 | 3–4 | + enemy drones (1 then 2), orbit patrol + evade; + more trucks + cars (faster); AA turrets from wave 4 |
 | 5+ | enemies + turrets return fire (Normal/Hard); player has 3 HP per wave attempt |
 | scaling | more/smaller/faster targets, up to 4 enemies, up to 4 trucks + 3 cars + 2 turrets, `MAX_TARGETS` 24 |
@@ -139,7 +139,10 @@ kinds mixed into the gallery. **Supply trucks** (`ground`, olive, 20 pts,
 one hit) appear from wave 2 — pure points targets that reward aiming down,
 so placement and count are **fully difficulty-independent** (drawn before
 the enemy block so their seeded positions don't shift with difficulty),
-rendered as instanced boxes (`GroundTargets`). **AA turrets** (`turret`,
+rendered as the **`MilitaryTruck`** model (the primitive-built army cargo
+truck reused from the Model Viewer widget) via `GroundTargets` — a parked
+model pool seated on the deck, far more legible than the old olive box.
+**AA turrets** (`turret`,
 30 pts) appear from wave 4 — a *static ground enemy*: `stepTurret` is the
 return-fire half of `stepEnemy` with no movement, lobbing slow unled bolts
 up the player's line of sight (dodgeable), gated by the same difficulty
@@ -295,11 +298,16 @@ New pure modules:
 Components: `StrikeRig` (the `useFrame` loop: input → flight → targets/AI →
 fire intent → sweeps → events → wave-clear → pose → telemetry),
 `StrikeCameraRig` (FPV + chase with the boom clip), `Targets` (one
-InstancedMesh of spheres for the balloon/ring-drone gallery), `GroundTargets`
-(one InstancedMesh of boxes for the static deck supply trucks), `CarTargets`
-(≤3 `LegoSwatTruck` models — reused from the Model Viewer widget —
-slot-assigned per frame, wheels-on-deck, yawed into travel), `TurretTargets`
-(≤2 `AaTurret` models, seated on the deck, self-scanning), `EnemyDrones`
+InstancedMesh of spheres for the balloon/ring-drone gallery), `ModelTargets`
+(the shared generic model-target pool: a fixed pool of groups, per-frame
+slot assignment for one `kind`, deck seating, optional face-velocity and an
+`onFrame` aim seam — see below), `GroundTargets`
+(≤4 `MilitaryTruck` models — reused from the Model Viewer widget — parked
+supply trucks on the deck, via `ModelTargets`), `CarTargets`
+(≤3 `LegoSwatTruck` models via `ModelTargets`, wheels-on-deck, yawed into
+travel), `TurretTargets`
+(≤2 `AaTurret` models, seated on the deck, self-scanning + player-tracking
+`aimRef`), `EnemyDrones`
 (≤4 `DroneModel`s with red beacons, slot-assigned per frame), `Tracers`
 (one InstancedMesh for all bolts,
 oriented along velocity), `Reticle`/`FireButton`/`HitMarkers`/
@@ -374,15 +382,37 @@ kind of list).
 
 ### Enemies & waves
 - ~~Ground-target waves~~ — **shipped** (deck-level supply trucks from
-  wave 2 (`GroundTargets` boxes), AA turrets from wave 4 (`stepTurret`,
-  rendered as the `AaTurret` model via `TurretTargets`), and road-bound
-  **moving cars** from wave 1 (`stepDrift` road-traffic branch, rendered as
-  the `LegoSwatTruck` model via `CarTargets`); the payoff the gimbal
-  look-down unlocked — see the Gameplay section). Room to extend: **tents/depots** as further static kinds; a
+  wave 2 (rendered as the `MilitaryTruck` model via `GroundTargets`), AA
+  turrets from wave 4 (`stepTurret`, rendered as the `AaTurret` model via
+  `TurretTargets`), and road-bound **moving cars** from wave 1 (`stepDrift`
+  road-traffic branch, rendered as the `LegoSwatTruck` model via
+  `CarTargets`); the payoff the gimbal look-down unlocked — see the Gameplay
+  section). All three model kinds now share the generic `ModelTargets` pool.
+  Room to extend: **tents/depots** as further static kinds; a
   **convoy** (several cars nose-to-tail on one lane, phase-offset); letting
   cars **turn at intersections** (hop lanes where two roads cross); and
   distinct **model variants** per ground kind now that the Model Viewer
   catalog is a home for primitive vehicles.
+- **Avatar-soldier ground enemies** — reuse the weaponized avatar 3D models
+  (Bazooka Joe, Scar) as infantry targets/enemies. The reuse path is already
+  in place: `avatarVisualById[id].Model3D` (`registry/avatarRegistry.tsx`) is
+  a mesh-level model that faces +Z with feet at y=0 and takes an `action`
+  prop (e.g. `launch`/`breach` for a firing pose) — the same primitive the
+  Drone Sim reuses as its RC operator. Integration points:
+  - a new `TargetKind` (`'soldier'`) in `waveLayout.ts` (POINTS, wave gate,
+    count) — static or patrolling;
+  - render through a `ModelTargets` pool wrapped in `<Suspense>` (three.js is
+    already in this canvas), `renderModel` returning the chosen avatar's
+    lazy `Model3D`;
+  - **rooftop-stationed**: a `place()` variant that seats them on a building
+    top (sample a `layout` building, `y` = its roof height) instead of the
+    deck's low-y path;
+  - **walking patrol**: a `stepSoldier` movement (like `stepDrift`/`stepEnemy`)
+    between waypoints — `ModelTargets`' `faceVelocity` already yaws a mover
+    into its travel direction;
+  - **shooting**: a stationed soldier reuses `stepTurret` (the
+    fire-without-movement AI step) + the `ModelTargets` `onFrame` aim hook
+    (as `TurretTargets` uses `aimRef`) to point the weapon at the player.
 - **Enemy variety** — a *chaser* that pursues the player (waypoint =
   player position, capped speed, `resolveCollisions` for safety), a
   *kamikaze* that dives once locked, a *shielded* drone only hurt from

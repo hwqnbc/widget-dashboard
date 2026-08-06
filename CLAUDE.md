@@ -145,7 +145,12 @@ Reusable primitives for new widgets: `hooks/useNow` (ticking clock),
 `features/widgets/useWidgetField` (typed persisted-`data` selector),
 `components/widgets/TapStage` (tap-to-animate button),
 `components/widgets/droneSim/webAudio` (synthesized Web Audio SFX engine —
-`tone`/`noise`/`unlockAudio`, no asset files), and the per-avatar
+`tone`/`noise`/`unlockAudio`, no asset files),
+`components/widgets/droneStrike/ModelTargets` (generic model-target pool: a
+fixed group pool, per-frame slot assignment for one target `kind`, deck
+seating, optional face-velocity + an `onFrame` aim seam — backs the ground
+trucks / cars, and the extension point for new model-rendered ground kinds),
+and the per-avatar
 character folders under `components/widgets/characters/` — `toy/` (`ToyHead`,
 `ToyFigure`, `SixSevenFigure`, `ToyCelebration`, `ToyFigure3D`, `ToyModel3D`,
 `toyParts`, `toyPalette`),
@@ -230,7 +235,8 @@ See `docs/drone-strike.md` for the Drone Strike widget (FPV wave shooter on
 the Drone Sim's flight model and city — fly-to-aim reticle, fire button +
 auto-fire, aim assist with target leading, segment-swept tracer bolts,
 seeded waves with enemy AI drones plus deck-level ground targets (supply
-trucks + AA turrets + road-bound moving cars), four aim modes
+trucks + AA turrets + road-bound moving cars, all rendered from Model Viewer
+models via the shared `ModelTargets` pool), four aim modes
 (Classic/Reticle/Gunner/Hover gimbal),
 Easy/Normal/Hard difficulty, ADS zoom with three gyro fine-aim modes,
 synthesized Web Audio sound effects (no assets),

@@ -93,7 +93,14 @@ await setStrikeSwitch(page, 'strike-mode-toggle', false)
 await setStrikeSwitch(page, 'strike-battery-toggle', true)
 check('battery reports on', (await root.getAttribute('data-battery')) === 'on')
 const fill = page.locator('[data-testid="strike-battery-fill"]')
-check('bar appears full', (await fill.getAttribute('data-level')) === '100')
+// The battery starts at 100 but drains from the moment the mode is enabled
+// (BATTERY_DRAIN_BASE 0.8 %/s idle hover), and `data-level` is `toFixed(0)`,
+// so by the time this reads (a few frames after the toggle) it's ~99.6. An
+// exact `=== '100'` is knife-edge against that sub-1 % dip — heavier scenes
+// (e.g. the model-rendered ground targets) tip it to 99 under load. Assert
+// "appears full" as ≥ 99; the actual drain + recharge are proven below.
+const startLevel = parseInt(await fill.getAttribute('data-level'), 10)
+check('bar appears full', startLevel >= 99, `level=${startLevel}`)
 
 // Reset to the pad first (restart is free of progress loss here: score 0).
 await page.locator('[data-testid="strike-restart"]').click()

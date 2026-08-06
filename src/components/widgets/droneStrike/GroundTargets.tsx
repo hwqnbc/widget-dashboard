@@ -1,66 +1,32 @@
-import { useMemo, useRef } from 'react'
-import { useFrame } from '@react-three/fiber'
-import { Color, Matrix4, Quaternion, Vector3 } from 'three'
-import type { InstancedMesh } from 'three'
+import MilitaryTruck from '../modelViewer/models/MilitaryTruck'
+import ModelTargets from './ModelTargets'
 import type { TargetState } from './waveLayout'
-import { MAX_TARGETS } from './waveLayout'
 
-const TRUCK_COLOR = new Color('#6b8e23') // olive supply truck
-const FLASH_COLOR = new Color('#ffffff')
-const NO_ROT = new Quaternion()
+/** Waves field at most this many supply trucks at once (see waveLayout's cap:
+ * `min(2 + ⌊wave/3⌋, 4)`). */
+const MAX_GROUND_RENDER = 4
+/** The ~3.8-unit-long MilitaryTruck trimmed so its footprint matches the old
+ * box (radius 1.1 → ~2.4 long) / the ~1-radius hit sphere. */
+const SCALE = 0.6
 
 /**
- * Static ground supply trucks as one InstancedMesh of boxes (a single draw
- * call), sitting on the deck. Positions/colour are written imperatively each
- * frame from the shared target pool (dead slots and other kinds scale to 0).
- * A fresh hit tints the box white for its hitFlash. (Cars render as the
- * LegoSwatTruck model in `CarTargets`; AA turrets as the AaTurret model in
+ * Static ground supply trucks rendered as the MilitaryTruck model (reused
+ * from the Model Viewer widget) — far more legible than the old olive box.
+ * A model pool via the shared `ModelTargets`: parked (wheels still, so
+ * `animate={false}`), seated on the deck (the model's base sits at its own
+ * origin, so no lift), each slot given a deterministic yaw for variety. Hit
+ * detection is unchanged (keyed on the target's `pos`/`radius`); hp 1 =
+ * instant kill, so no hit-flash tint. (Cars → `CarTargets`, AA turrets →
  * `TurretTargets`.)
  */
-export default function GroundTargets({ targets }: { targets: TargetState[] }) {
-  const meshRef = useRef<InstancedMesh>(null)
-  const temps = useMemo(
-    () => ({
-      matrix: new Matrix4(),
-      color: new Color(),
-      pos: new Vector3(),
-      scale: new Vector3(),
-    }),
-    [],
-  )
-
-  useFrame(() => {
-    const mesh = meshRef.current
-    if (!mesh) return
-    const { matrix, color, pos, scale } = temps
-    for (let i = 0; i < targets.length; i++) {
-      const t = targets[i]
-      // Only supply trucks are boxes here; cars/turrets render as models.
-      if (t.alive && t.kind === 'ground') {
-        scale.set(t.radius * 1.6, t.radius * 0.9, t.radius * 2.2)
-        color.copy(TRUCK_COLOR)
-        // Seat the box on the deck (hit-sphere centre is at pos.y).
-        pos.set(t.pos.x, t.pos.y, t.pos.z)
-        matrix.compose(pos, NO_ROT, scale)
-        if (t.hitFlash > 0) color.lerp(FLASH_COLOR, Math.min(1, t.hitFlash * 6))
-      } else {
-        matrix.makeScale(0, 0, 0)
-      }
-      mesh.setMatrixAt(i, matrix)
-      mesh.setColorAt(i, color)
-    }
-    mesh.instanceMatrix.needsUpdate = true
-    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true
-  })
-
+export default function GroundTargets({ targets }: { targets: readonly TargetState[] }) {
   return (
-    <instancedMesh
-      ref={meshRef}
-      args={[undefined, undefined, MAX_TARGETS]}
-      frustumCulled={false}
-    >
-      <boxGeometry args={[1, 1, 1]} />
-      <meshStandardMaterial />
-    </instancedMesh>
+    <ModelTargets
+      targets={targets}
+      kind="ground"
+      max={MAX_GROUND_RENDER}
+      scale={SCALE}
+      renderModel={() => <MilitaryTruck animate={false} />}
+    />
   )
 }

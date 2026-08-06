@@ -1036,3 +1036,22 @@ carried over; these are the new ones.
     on the same instance. Probe continuity with a ref-held datum that a remount
     would zero (`data-shots`), never a persisted one (`data-world-seed` survives
     a remount too) — `e2e/118-fullscreen-continuity.test.mjs`.
+
+82. **Model-rendered targets are one pool, not one component per kind — the
+    variation is a handful of props, and an `onFrame` hook is the seam for
+    aiming/animated variants.** Drone Strike grew three near-identical
+    renderers (`CarTargets`, `TurretTargets`, the ground trucks) that each
+    allocated a fixed pool of `<group>`s, assigned alive targets of one `kind`
+    to slots per frame, placed them on the deck, and hid spares — differing
+    only in scale, ground-lift, whether they yaw into velocity, and (turret)
+    an aim ref. Collapsing them into a generic `ModelTargets`
+    (`kind`/`max`/`scale`/`groundLift`/`faceVelocity`/`onFrame`/`renderModel`)
+    made adding the `MilitaryTruck` ground truck a ~10-line wrapper and turned
+    "cater for future ground kinds" (rooftop/patrolling avatar-soldier enemies)
+    into filling in the same props — `renderModel` returns the avatar's lazy
+    `Model3D`, `onFrame` computes the bearing to the player for a weapon slew.
+    Keep per-slot mutable state (aim refs) owned by the *caller* and passed
+    through `renderModel(slot)`/`onFrame`, so the generic pool stays stateless
+    and each kind keeps its own refs. Leave a genuinely divergent case bespoke
+    if migrating it isn't covered by a live test (turrets appear too late for
+    any closed-loop suite) rather than refactor blind.
