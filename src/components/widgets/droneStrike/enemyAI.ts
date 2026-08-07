@@ -133,10 +133,12 @@ export function stepEnemy(
 }
 
 /**
- * One frame for one AA turret: static ground emplacement, so no movement —
- * just the return-fire half of `stepEnemy`. When armed, within range and
- * with a clear line of sight, it lobs a slow bolt UP at the player (unled,
- * so a moving drone can dodge it). Shares the `fireCooldown` slot.
+ * One frame for one static emplacement — an AA turret OR a rooftop soldier:
+ * no movement, just the return-fire half of `stepEnemy`. When armed, within
+ * range and with a clear line of sight, it fires a slow bolt at the player
+ * (unled, so a moving drone can dodge it). Shares the `fireCooldown` slot.
+ * Both kinds are stationed shooters with identical fire behaviour, so they
+ * share this step; the soldier differs only in how it renders (SoldierTargets).
  */
 export function stepTurret(
   t: TargetState,
@@ -149,7 +151,7 @@ export function stepTurret(
   enemyPool: Projectile[],
   weapon: WeaponSpec,
 ): void {
-  if (!t.alive || t.kind !== 'turret') return
+  if (!t.alive || (t.kind !== 'turret' && t.kind !== 'soldier')) return
   if (!canShoot) return
 
   const dx = t.pos.x - playerPos.x

@@ -83,6 +83,7 @@ const BLIP_COLORS: Record<TargetKind, string> = {
   ground: '#9ccc65',
   turret: '#ff6e40',
   car: '#42a5f5',
+  soldier: '#ffca28',
 }
 /** Enemy bolts never hit other targets (no friendly fire). */
 const NO_TARGETS: TargetState[] = []
@@ -468,7 +469,9 @@ export default function StrikeRig({
           ENEMY_BOLT,
           enemyMove,
         )
-      } else if (waveActive && t.kind === 'turret') {
+      } else if (waveActive && (t.kind === 'turret' || t.kind === 'soldier')) {
+        // AA turrets and rooftop soldiers are both static stationed shooters —
+        // same fire behaviour, gated + LOS-checked identically.
         stepTurret(
           t,
           enemyAI[i],

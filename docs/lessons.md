@@ -1088,3 +1088,32 @@ carried over; these are the new ones.
     gets no prop. The knob is for the *expensive* features; the standard is
     "author game targets cheap, and only carry a `lowSpec` toggle where a
     showcase needs the expensive version too."
+
+84. **Reusing an avatar `Model3D` as a multi-instance in-game enemy: the cost
+    is draw calls, not materials — resolve the lazy component *outside* the
+    registry, one `<Suspense>` per slot, cap the pool, drive pose/facing from
+    the pool's `onFrame`.** Drone Strike's rooftop soldiers reuse the Scar /
+    Bazooka Joe avatar `Model3D`s (the same figures Avatar Actions shows) as
+    enemies via a `SoldierTargets` wrapper over the generic `ModelTargets`
+    pool (#82). Four things made it a clean reuse rather than a special case:
+    (a) **the avatar `Model3D`s were already low-spec by construction** — only
+    `meshStandardMaterial`, no transmission/physical/persistent emissive (the
+    lesson #83 killer) — so unlike the trucks they needed *no* `lowSpec` prop;
+    the only budget is their ~45–60 meshes = draw calls, so the pool is capped
+    at 2. (b) **Import the models with a direct `lazy(() => import('.../ScarModel3D'))`
+    in the pool, NOT through `avatarRegistry`** — the registry's whole point is
+    to keep three.js out of the main chunk, and importing a `Model3D` eagerly
+    (even transitively via the registry barrel) would drag three into it; a
+    direct `lazy` keeps each model in its own split chunk that loads only when
+    a soldier first appears. (c) **`ModelTargets` seats every slot on the deck
+    (its y ignores `t.pos.y`)** — a rooftop target overrides Y in `onFrame`
+    (`g.position.y = t.pos.y - torsoLift`) instead of touching the pool; the
+    same hook yaws the figure to face the player (models face +Z, so a plain
+    `atan2(dx, dz)`, no negation). (d) **Behaviour was pure reuse** — a
+    stationed shooter is exactly `stepTurret` (the fire-without-movement AI
+    step), so the AI guard widened to `kind !== 'turret' && kind !== 'soldier'`
+    and StrikeRig dispatched the new kind down the same branch; no new AI, no
+    new fire/score path. The general pattern: a figure authored for one surface
+    (an avatar viewer) drops into another (an enemy pool) when you respect the
+    chunk boundary and express the surface's differences (roof Y, facing) as
+    pool-hook overrides, not forks of the shared code.

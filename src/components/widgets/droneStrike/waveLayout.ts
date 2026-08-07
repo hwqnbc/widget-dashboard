@@ -8,7 +8,8 @@
  *
  * Wave curve: **every target kind can appear from wave 1** — static balloons,
  * drifting ring-drones, road vehicles (military trucks + SWAT cars),
- * patrolling enemy drones and AA turrets. There is no per-kind appearance
+ * patrolling enemy drones, AA turrets and rooftop-stationed avatar soldiers.
+ * There is no per-kind appearance
  * gate; instead the *difficulty* preset (count/speed/evade), a **wave-scaled
  * enemy throttle** (`enemyAggressionScale` — early drones crawl) and the
  * return-fire gate (`ENEMY_FIRE_WAVE`, so enemies + turrets hold fire on
@@ -26,6 +27,7 @@ export type TargetKind =
   | 'ground'
   | 'turret'
   | 'car'
+  | 'soldier'
 
 export interface TargetSpec {
   kind: TargetKind
@@ -62,11 +64,15 @@ export const CAR_WAVE_START = 1
 /** AA turrets (static ground enemies) appear from this wave — wave 1, but
  * they hold fire until the difficulty's fireWave (all > 1). */
 export const TURRET_WAVE = 1
+/** Rooftop-stationed avatar soldiers (static, rendered from the Scar /
+ * Bazooka Joe avatar `Model3D`s) appear from this wave — wave 1, holding
+ * fire until the difficulty's fireWave like the AA turrets. */
+export const SOLDIER_WAVE = 1
 /** Hard cap on simultaneous targets (perf budget: one InstancedMesh).
  * Sized for the worst case: gallery balloons + drifters + enemy drones +
- * ground trucks + moving cars + AA turrets. Pool + instanced capacity are
- * pre-allocated so headroom is free. */
-export const MAX_TARGETS = 24
+ * ground trucks + moving cars + AA turrets + rooftop soldiers. Pool +
+ * instanced capacity are pre-allocated so headroom is free. */
+export const MAX_TARGETS = 26
 
 /**
  * Wave-scaled enemy-aggression throttle. Enemy drones can appear from wave 1
@@ -116,6 +122,7 @@ export const POINTS: Record<TargetKind, number> = {
   ground: 20,
   turret: 30,
   car: 25,
+  soldier: 40,
 }
 
 /** Same PRNG as the world builder — copied, not exported from worldLayout,
@@ -317,6 +324,57 @@ export function buildWave(
       hp: diff.enemyHp,
       points: POINTS.turret,
     })
+  }
+
+  // Rooftop soldiers (SOLDIER_WAVE+): static avatar-model enemies stationed
+  // on a building roof, rendered from the Scar / Bazooka Joe `Model3D`s (see
+  // SoldierTargets). Placement is bespoke — unlike every other kind they sit
+  // ON a building, so they bypass `clearOfBuildings` and seat their hit
+  // sphere just above the roof (`b.h + 0.9`, torso height). We pick from the
+  // buildings that make a fair sniper perch: tall enough to see over the
+  // skyline but not the megatowers, a footprint the model fits on, and away
+  // from the spawn pad. Gated by difficulty like the drones/turrets (count
+  // clamped by enemyCap, hp + return fire follow the preset).
+  const soldiers =
+    waveIndex >= SOLDIER_WAVE
+      ? Math.min(1 + Math.floor(waveIndex / 3), 2, diff.enemyCap)
+      : 0
+  if (soldiers > 0) {
+    const perches = layout.buildings
+      .map((b, bi) => ({ b, bi }))
+      .filter(
+        ({ b }) =>
+          b.h >= 5 &&
+          b.h <= 16 &&
+          b.w >= 2.5 &&
+          b.d >= 2.5 &&
+          Math.hypot(b.x - SPAWN.x, b.z - SPAWN.z) > MIN_FROM_SPAWN,
+      )
+    const usedBuildings = new Set<number>()
+    for (let i = 0; i < soldiers; i++) {
+      if (targets.length >= MAX_TARGETS || perches.length === 0) break
+      // Draw an unused perch (bounded retry; fall back to allowing reuse only
+      // if every candidate is taken — never stacks two on one roof otherwise).
+      let pick = perches[Math.floor(rand() * perches.length)]
+      for (let a = 0; a < 8 && usedBuildings.has(pick.bi); a++) {
+        pick = perches[Math.floor(rand() * perches.length)]
+      }
+      if (usedBuildings.has(pick.bi) && usedBuildings.size >= perches.length) break
+      usedBuildings.add(pick.bi)
+      targets.push({
+        kind: 'soldier',
+        x: pick.b.x,
+        y: pick.b.h + 0.9,
+        z: pick.b.z,
+        radius: 1,
+        driftAmp: 0,
+        driftSpeed: 0,
+        driftPhase: 0,
+        driftAxis: 0,
+        hp: diff.enemyHp,
+        points: POINTS.soldier,
+      })
+    }
   }
 
   return { index: waveIndex, targets, enemiesShoot: waveIndex >= diff.fireWave }

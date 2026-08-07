@@ -136,10 +136,10 @@ Normal 5, Hard 4). So wave 1 is a gentle full-variety wave, not a bare gallery.
 
 | Wave | Content |
 | --- | --- |
-| 1 | the full mix, gentle: static balloons + drifting ring-drones + a moving military truck + a moving SWAT car + **1 throttled, non-firing enemy drone** + **1 non-firing AA turret** |
-| 2–4 | same kinds, ramping — more/faster enemies (throttle climbs), more road vehicles, up to 2 turrets |
-| 5+ | enemies + turrets return fire (Normal/Hard; Easy at 7); enemy throttle at full; player has 3 HP per wave attempt |
-| scaling | more/smaller balloons (cap 8), up to 4 enemies, 4 trucks + 3 cars + 2 turrets, `MAX_TARGETS` 24 |
+| 1 | the full mix, gentle: static balloons + drifting ring-drones + a moving military truck + a moving SWAT car + **1 throttled, non-firing enemy drone** + **1 non-firing AA turret** + **1 non-firing rooftop soldier** |
+| 2–4 | same kinds, ramping — more/faster enemies (throttle climbs), more road vehicles, up to 2 turrets, up to 2 rooftop soldiers |
+| 5+ | enemies + turrets + soldiers return fire (Normal/Hard; Easy at 7); enemy throttle at full; player has 3 HP per wave attempt |
+| scaling | more/smaller balloons (cap 8), up to 4 enemies, 4 trucks + 3 cars + 2 turrets + 2 soldiers, `MAX_TARGETS` 26 |
 
 **Ground targets** (unlocked by the gimbal's −70° look-down): deck-level
 kinds mixed into the gallery. **Military supply trucks** (`ground`, 20 pts,
@@ -189,6 +189,31 @@ count and hp of the turrets follow the preset. All use the normal pos+radius hit
 fire sweep / lock / scoring paths are unchanged. Ground targets are easiest
 in Reticle/Gunner (the gimbal looks down); in Classic you nose-down or
 descend — and the car needs leading on top.
+
+**Rooftop soldiers** (`soldier`, 40 pts) are the highest-value fixed threat and
+a distinctive new one — the deck already carries trucks/cars/turrets, so
+soldiers claim the *rooftops*, rewarding looking around and up over the city.
+They reuse the game's **weaponized avatar 3D models as in-game enemies**: each
+soldier renders as the **Scar** or **Bazooka Joe** avatar `Model3D` (alternating
+per pool slot), the same figures the Avatar Actions / Settings surfaces use.
+Placement is bespoke — unlike every other kind they sit *on* a building, so
+`buildWave` bypasses `clearOfBuildings`, picks a building that makes a fair
+sniper perch (height ~5–16, a footprint the figure fits on, away from the
+spawn pad) and seats the hit sphere at `b.h + 0.9` (torso above the roof).
+They are static (no drift) and fire with the AA turret's exact behaviour —
+StrikeRig dispatches `soldier` through the same `stepTurret` (slow, unled,
+line-of-sight-checked bolts, gated by the shared return-fire wave, so they
+**hold fire on wave 1** and arm from the difficulty's fireWave); hp follows
+the difficulty preset and the count is clamped small (≤2). They render via
+**`SoldierTargets`** — the shared `ModelTargets` pool with two extra knobs
+driven through its `onFrame` hook (no pool change): it overrides the deck Y
+to plant the boots on the building roof and yaws the figure to **face the
+player** (a stationed sniper tracking the drone). The avatar `Model3D`s are
+low-spec by construction (only `meshStandardMaterial`, no transmission), so
+the only cost is draw calls — hence the small pool and the direct
+`lazy(() => import(...))` of each model (three.js stays out of the main
+chunk, the same discipline `avatarRegistry` uses; the pool does **not** import
+through the registry).
 
 **Enemy difficulty** (settings, persisted `difficulty`, **default Easy**)
 scales only the AI drones — the gallery targets are untouched. The presets
@@ -323,7 +348,11 @@ supply trucks on the deck, via `ModelTargets`), `CarTargets`
 (≤3 `LegoSwatTruck` models via `ModelTargets`, wheels-on-deck, yawed into
 travel), `TurretTargets`
 (≤2 `AaTurret` models, seated on the deck, self-scanning + player-tracking
-`aimRef`), `EnemyDrones`
+`aimRef`), `SoldierTargets`
+(≤2 rooftop soldiers rendered from the **Scar / Bazooka Joe avatar
+`Model3D`s** via `ModelTargets`, its `onFrame` hook overriding the roof Y +
+facing the player; the models are `lazy`-imported directly so three.js stays
+out of the main chunk), `EnemyDrones`
 (≤4 `DroneModel`s with red beacons, slot-assigned per frame), `Tracers`
 (one InstancedMesh for all bolts,
 oriented along velocity), `Reticle`/`FireButton`/`HitMarkers`/
@@ -409,26 +438,28 @@ kind of list).
   cars **turn at intersections** (hop lanes where two roads cross); and
   distinct **model variants** per ground kind now that the Model Viewer
   catalog is a home for primitive vehicles.
-- **Avatar-soldier ground enemies** — reuse the weaponized avatar 3D models
-  (Bazooka Joe, Scar) as infantry targets/enemies. The reuse path is already
-  in place: `avatarVisualById[id].Model3D` (`registry/avatarRegistry.tsx`) is
-  a mesh-level model that faces +Z with feet at y=0 and takes an `action`
-  prop (e.g. `launch`/`breach` for a firing pose) — the same primitive the
-  Drone Sim reuses as its RC operator. Integration points:
-  - a new `TargetKind` (`'soldier'`) in `waveLayout.ts` (POINTS, wave gate,
-    count) — static or patrolling;
-  - render through a `ModelTargets` pool wrapped in `<Suspense>` (three.js is
-    already in this canvas), `renderModel` returning the chosen avatar's
-    lazy `Model3D`;
-  - **rooftop-stationed**: a `place()` variant that seats them on a building
-    top (sample a `layout` building, `y` = its roof height) instead of the
-    deck's low-y path;
-  - **walking patrol**: a `stepSoldier` movement (like `stepDrift`/`stepEnemy`)
-    between waypoints — `ModelTargets`' `faceVelocity` already yaws a mover
-    into its travel direction;
-  - **shooting**: a stationed soldier reuses `stepTurret` (the
-    fire-without-movement AI step) + the `ModelTargets` `onFrame` aim hook
-    (as `TurretTargets` uses `aimRef`) to point the weapon at the player.
+- ~~Avatar-soldier ground enemies~~ — **shipped** (v1: **rooftop-stationed
+  soldiers** rendered from the Scar / Bazooka Joe avatar `Model3D`s via
+  `SoldierTargets`, from wave 1, firing via the shared `stepTurret` gated by
+  the return-fire wave — see the Gameplay "Rooftop soldiers" section). The
+  pattern this proved: an avatar `Model3D` reused as a *multi-instance* enemy
+  — resolve the lazy component **outside** the registry (direct
+  `lazy(() => import(...))` so three.js stays out of the main chunk), one
+  `<Suspense>` per pool slot, cap the pool small (the cost is draw calls, the
+  materials are already low-spec), and drive rooftop-Y + player-facing from
+  `ModelTargets`' `onFrame` hook. Room to extend:
+  - **walking-patrol soldiers** — a `stepSoldier` movement (like
+    `stepDrift`/`stepEnemy`) between deck/roof waypoints; `ModelTargets`'
+    `faceVelocity` already yaws a mover into its travel direction, and a
+    `stepSoldier` fire branch mirrors `stepEnemy`'s return fire;
+  - **firing-pose action** — pass the model's `action` (Scar `breach` /
+    Bazooka Joe `launch`) while `stepTurret` is on cooldown-to-fire, so the
+    figure visibly shoulders the weapon on each shot;
+  - **more avatars / a mix** — widen the pool beyond Scar/Bazooka Joe (any
+    registered `Model3D` works) and let a wave seed which avatar mans which
+    roof;
+  - **deck-level squads** — soldiers on the ground beside the trucks/turrets
+    (the deck-Y path, skipping the roof override), for a combined-arms wave.
 - **Enemy variety** — a *chaser* that pursues the player (waypoint =
   player position, capped speed, `resolveCollisions` for safety), a
   *kamikaze* that dives once locked, a *shielded* drone only hurt from

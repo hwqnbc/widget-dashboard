@@ -73,6 +73,7 @@ import Targets from './Targets'
 import GroundTargets from './GroundTargets'
 import CarTargets from './CarTargets'
 import TurretTargets from './TurretTargets'
+import SoldierTargets from './SoldierTargets'
 import EnemyDrones from './EnemyDrones'
 import Tracers from './Tracers'
 import Reticle from './Reticle'
@@ -747,6 +748,7 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
           <GroundTargets targets={targets} />
           <CarTargets targets={targets} />
           <TurretTargets targets={targets} playerPos={flight.pos} />
+          <SoldierTargets targets={targets} playerPos={flight.pos} />
           <EnemyDrones targets={targets} />
           <Tracers combat={combat} tracerLen={BOLT.tracerLen} />
           <StrikeRig
