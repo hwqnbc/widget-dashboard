@@ -234,18 +234,27 @@ helmet with the flatter 8-seg dome, NVG mount, earmuffs + mic boom over
 the stubbled, scarred face (red scar slabs on the right cheek, slash on
 the left), MOLLE vest with three mag pouches, the suppressed SMG
 pistol-gripped in the right fist and the red-banded flashbang standing
-out of the left; action Breach & Clear — a ~2.4 s phase timeline: the
-left arm winds back and hurls the canister (`visible` OFF at release,
-an emissive white burst pops up-forward-left), then three right-elbow
-recoil pulses lay covering fire with muzzle-flash windows at the
-suppressor), and bazookajoe (`BazookaJoeModel3D` — black cap with the
+out of the left; actions `[breach "Breach & Clear"]` — a ~2.4 s phase
+timeline: the left arm winds back and hurls the canister (`visible` OFF at
+release, an emissive white burst pops up-forward-left), then three
+right-elbow recoil pulses lay covering fire with muzzle-flash windows at the
+suppressor — and `[sight "Sight & Fire"]`, the shoulder-and-track aiming
+loop (SMG elevated, gentle pitch sweep, controlled bursts, no throw)),
+and bazookajoe (`BazookaJoeModel3D` — black cap with the
 forward visor over the sunglasses band + cocky smirk, tactical vest with
 pocket slabs + silver buckles, the RPG shouldered pistol-grip in the
 right fist: black rear cone + tube, white ridged mid, TRANSLUCENT red
-warhead (`transparent opacity` — the source art's flagged fix); action
-Rocket Launch — one recoil pulse with an orange backblast window at the
-rear opening, the warhead `visible` OFF at the shot and a big emissive
-fireball popping at a far up-forward offset). **Every avatar
+warhead (`transparent opacity` — the source art's flagged fix); actions
+`[launch "Rocket Launch"]` — one recoil pulse with an orange backblast
+window at the rear opening, the warhead `visible` OFF at the shot and a big
+emissive fireball popping at a far up-forward offset — and
+`[aim "Take Aim"]`, the same launch timeline plus a tracking elevation
+sweep). Scar's Sight & Fire and Bazooka Joe's Take Aim are the **canned
+counterparts of the in-game aim** these models gained for Drone Strike's
+rooftop soldiers: the enemy path drives a live `aimRef` (`{ pitch, fire }`)
+the model reads each frame (weapon elevation + one-shot fire pose), while
+the widget actions play the same pose on a self-contained clock (see
+`docs/drone-strike.md`). **Every avatar
 now ships a 3D figure** — the Avatar Actions "no 3D figure yet"
 placeholder and the Drone Sim's `data-op-figure="basic"` value are no
 longer reachable from any current avatar; both code paths stay as

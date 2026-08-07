@@ -25,6 +25,13 @@ const EVADE_JINK = 1.5
 /** Enemies only shoot inside this range (and with clear line of sight). */
 export const ENEMY_FIRE_RANGE = 50
 const BOB_AMP = 1.2
+/** Seconds a soldier's firing pose (recoil / muzzle flash / launch) plays
+ * after each shot; SoldierTargets normalises the countdown for the model. */
+export const SOLDIER_FIRE_CLIP = 0.5
+/** Soldier muzzle offset from the torso hit-sphere (`t.pos`): forward along
+ * the aim + a small lift, so the shot leaves the raised weapon, not the chest. */
+const SOLDIER_MUZZLE_FWD = 0.7
+const SOLDIER_MUZZLE_UP = 0.25
 
 export interface EnemyAIState {
   angle: number
@@ -166,9 +173,22 @@ export function stepTurret(
   FIRE_DIR.x = -dx * inv
   FIRE_DIR.y = -dy * inv
   FIRE_DIR.z = -dz * inv
-  spawnProjectile(enemyPool, t.pos, FIRE_DIR, weapon)
+  // Soldiers fire from the raised weapon's muzzle (forward + up of the torso),
+  // not the chest, and play their firing pose; the static AA turret keeps its
+  // own origin (`t.pos`).
+  if (t.kind === 'soldier') {
+    MUZZLE.x = t.pos.x + FIRE_DIR.x * SOLDIER_MUZZLE_FWD
+    MUZZLE.y = t.pos.y + FIRE_DIR.y * SOLDIER_MUZZLE_FWD + SOLDIER_MUZZLE_UP
+    MUZZLE.z = t.pos.z + FIRE_DIR.z * SOLDIER_MUZZLE_FWD
+    spawnProjectile(enemyPool, MUZZLE, FIRE_DIR, weapon)
+    t.fireTimer = SOLDIER_FIRE_CLIP
+  } else {
+    spawnProjectile(enemyPool, t.pos, FIRE_DIR, weapon)
+  }
   ai.fireCooldown = weapon.cooldown + (index % 3) * 0.4
 }
 
 /** Scratch vector reused by every return-fire spawn (allocation-free loop). */
 const FIRE_DIR: Vec3 = { x: 0, y: 0, z: -1 }
+/** Scratch muzzle position for soldier fire (allocation-free). */
+const MUZZLE: Vec3 = { x: 0, y: 0, z: 0 }

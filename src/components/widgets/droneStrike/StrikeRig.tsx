@@ -36,6 +36,8 @@ import {
   AIM_CONE_RAD_ZOOM,
   AUTO_FIRE_HOLD_S,
   ENEMY_BOLT,
+  SOLDIER_ROCKET,
+  SOLDIER_SMG,
   bendAim,
   createHitEvents,
   findLockTarget,
@@ -471,7 +473,14 @@ export default function StrikeRig({
         )
       } else if (waveActive && (t.kind === 'turret' || t.kind === 'soldier')) {
         // AA turrets and rooftop soldiers are both static stationed shooters —
-        // same fire behaviour, gated + LOS-checked identically.
+        // same fire step, gated + LOS-checked identically. Soldiers fire their
+        // variant's weapon (rocket / SMG); turrets keep the plain enemy bolt.
+        const weapon =
+          t.kind === 'soldier'
+            ? t.variant === 1
+              ? SOLDIER_SMG
+              : SOLDIER_ROCKET
+            : ENEMY_BOLT
         stepTurret(
           t,
           enemyAI[i],
@@ -481,10 +490,11 @@ export default function StrikeRig({
           colliders,
           enemiesShoot && !playerSafe,
           combat.enemy,
-          ENEMY_BOLT,
+          weapon,
         )
       }
       if (t.hitFlash > 0) t.hitFlash = Math.max(0, t.hitFlash - dt)
+      if (t.fireTimer > 0) t.fireTimer = Math.max(0, t.fireTimer - dt)
     }
     if (audioOn) {
       let enemyBoltsAfter = 0

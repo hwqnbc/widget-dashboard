@@ -16,6 +16,10 @@ import type { Collider, Vec3 } from '../droneSim/flightModel'
 import { boomClipT } from '../droneSim/flightModel'
 
 export type WeaponKind = 'bolt' | 'laser' | 'ballistic'
+/** How a projectile is drawn — a *visual* tag independent of the ballistic
+ * `kind`. `'bolt'` is the stretched tracer box (Tracers); `'rocket'` is the
+ * warhead + smoke trail (EnemyRockets). Defaults to `'bolt'`. */
+export type ProjectileVisual = 'bolt' | 'rocket'
 
 export interface WeaponSpec {
   kind: WeaponKind
@@ -29,6 +33,8 @@ export interface WeaponSpec {
   maxRange: number
   /** Visible tracer length, world units. */
   tracerLen: number
+  /** How a spawned projectile is drawn (defaults to `'bolt'`). */
+  projectile?: ProjectileVisual
 }
 
 /** The player's gun: fast enough to feel snappy, slow enough that leading
@@ -42,7 +48,8 @@ export const BOLT: WeaponSpec = {
   tracerLen: 1.4,
 }
 
-/** Enemy return fire (wave 5+): slow and dodgeable by design. */
+/** Enemy return fire (wave 5+): slow and dodgeable by design. Used by drones
+ * and AA turrets. */
 export const ENEMY_BOLT: WeaponSpec = {
   kind: 'bolt',
   speed: 14,
@@ -50,6 +57,30 @@ export const ENEMY_BOLT: WeaponSpec = {
   gravity: 0,
   maxRange: 70,
   tracerLen: 1.0,
+}
+
+/** Rooftop Bazooka Joe soldier: launches a slow rocket you can see incoming
+ * and dodge (drawn as a warhead + smoke trail by EnemyRockets). */
+export const SOLDIER_ROCKET: WeaponSpec = {
+  kind: 'bolt',
+  speed: 16,
+  cooldown: 3,
+  gravity: 0,
+  maxRange: 75,
+  tracerLen: 1.4,
+  projectile: 'rocket',
+}
+
+/** Rooftop Scar soldier: an SMG — faster, shorter-cadence bolt bursts from
+ * the muzzle (drawn as the tracer box like other bolts). */
+export const SOLDIER_SMG: WeaponSpec = {
+  kind: 'bolt',
+  speed: 40,
+  cooldown: 1.4,
+  gravity: 0,
+  maxRange: 70,
+  tracerLen: 1.2,
+  projectile: 'bolt',
 }
 
 export const MAX_PLAYER_PROJECTILES = 24
@@ -64,6 +95,9 @@ export interface Projectile {
   age: number
   /** Seconds of flight after which the bolt despawns (range/speed). */
   maxAge: number
+  /** How to draw it — set from the firing weapon's `projectile` (default
+   * `'bolt'`). Lets one enemy pool render as a mix of bolts and rockets. */
+  visual: ProjectileVisual
 }
 
 export interface CombatState {
@@ -83,6 +117,7 @@ function createProjectile(): Projectile {
     vel: { x: 0, y: 0, z: 0 },
     age: 0,
     maxAge: 0,
+    visual: 'bolt',
   }
 }
 
@@ -187,6 +222,7 @@ export function spawnProjectile(
     p.vel.z = dir.z * weapon.speed
     p.age = 0
     p.maxAge = weapon.maxRange / weapon.speed
+    p.visual = weapon.projectile ?? 'bolt'
     return true
   }
   return false

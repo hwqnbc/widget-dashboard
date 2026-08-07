@@ -25,9 +25,15 @@
 // Loaded only via lazy() (the avatar registry's Model3D/Figure3D fields) —
 // never re-export from bazookajoe/index.ts, or three.js lands in the main chunk.
 import { useRef } from 'react'
+import type { RefObject } from 'react'
 import { useFrame } from '@react-three/fiber'
 import type { Group } from 'three'
 import { BJ } from './bazookaJoePalette'
+import type { AimPose } from '../shared/aimPose'
+
+/** How far pitch can raise/lower the launcher (radians). */
+const AIM_PITCH_MIN = -0.3
+const AIM_PITCH_MAX = 0.9
 
 const CLOTH = { roughness: 0.7, metalness: 0 }
 const STEEL = { roughness: 0.35, metalness: 0.4 }
@@ -72,7 +78,15 @@ function FireBurst({ scale = 1 }: { scale?: number }) {
   )
 }
 
-export default function BazookaJoeModel3D({ action }: { action?: string }) {
+export default function BazookaJoeModel3D({
+  action,
+  aimRef,
+}: {
+  action?: string
+  /** When set (in-game soldier mode), overrides `action`: live launcher
+   * elevation + a one-shot launch pose driven by the ref, no re-renders. */
+  aimRef?: RefObject<AimPose | null>
+}) {
   const armLRef = useRef<Group>(null)
   const armRRef = useRef<Group>(null)
   const elbowLRef = useRef<Group>(null)
@@ -99,26 +113,42 @@ export default function BazookaJoeModel3D({ action }: { action?: string }) {
     if (!armL || !armR || !elbowL || !elbowR || !warhead || !blast || !boomG) return
 
     // Per-action pose; every mutable written every frame (self-correcting).
+    const aim = aimRef?.current
     let elbR = R_ELBOW
     let sway = 0
+    let armRPitch = 0
     let warheadOn = true
     let blastOn = false
     let boomOn = false
 
-    if (action === 'launch') {
+    if (aim) {
+      // In-game soldier: live launcher elevation toward the drone + a one-shot
+      // launch pose from `fire` (no far detonation — the rocket is a real
+      // projectile the pool renders and flies at the player).
+      armRPitch = -Math.max(AIM_PITCH_MIN, Math.min(AIM_PITCH_MAX, aim.pitch))
+      const f = aim.fire
+      if (f > 0) {
+        elbR = R_ELBOW + KICK_AMP * f // recoil kick, strongest at the shot
+        warheadOn = f < 0.6 // warhead gone as the rocket leaves the tube
+        blastOn = f > 0.5 // backblast flares at the muzzle
+      }
+    } else if (action === 'launch' || action === 'aim') {
+      // Both fire the RPG on the same timeline; 'aim' (Avatar Actions widget)
+      // adds a tracking elevation sweep so the launcher visibly aims.
       const tau = (t - t0Ref.current) % LAUNCH_T
       const dt = tau - FIRE
       if (dt >= 0 && dt < KICK_T) elbR = R_ELBOW + KICK_AMP * Math.sin((Math.PI * dt) / KICK_T)
       warheadOn = tau < FIRE
       blastOn = tau >= FIRE && tau < BLAST_OFF
       boomOn = tau >= BOOM_ON && tau < BOOM_OFF
+      if (action === 'aim') armRPitch = -0.4 - 0.12 * Math.sin(tau * 1.2)
     } else {
       sway = Math.sin(t * 1.7) * 0.04 // idle: both arms breathe together
     }
 
     armR.rotation.z = R_SHZ + sway
     armR.rotation.y = R_SHY
-    armR.rotation.x = 0
+    armR.rotation.x = armRPitch
     armL.rotation.z = -(L_SHZ + sway)
     armL.rotation.y = -L_SHY
     armL.rotation.x = 0

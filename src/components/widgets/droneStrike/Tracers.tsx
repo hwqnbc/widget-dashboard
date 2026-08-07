@@ -40,8 +40,8 @@ export default function Tracers({
     if (!mesh) return
     const { matrix, quat, dir, pos, scale } = temps
     let i = 0
-    const write = (p: Projectile, color: Color, len: number) => {
-      if (p.active) {
+    const write = (p: Projectile, color: Color, len: number, draw = true) => {
+      if (p.active && draw) {
         dir.set(p.vel.x, p.vel.y, p.vel.z)
         const speed = dir.length()
         if (speed > 0) dir.divideScalar(speed)
@@ -62,7 +62,9 @@ export default function Tracers({
       i++
     }
     for (const p of combat.player) write(p, PLAYER_COLOR, tracerLen)
-    for (const p of combat.enemy) write(p, ENEMY_COLOR, tracerLen * 0.7)
+    // Rocket-visual enemy bolts (soldier RPGs) are drawn by EnemyRockets, not
+    // as a tracer box — collapse their slot here so the pools stay aligned.
+    for (const p of combat.enemy) write(p, ENEMY_COLOR, tracerLen * 0.7, p.visual !== 'rocket')
     mesh.instanceMatrix.needsUpdate = true
     if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true
   })

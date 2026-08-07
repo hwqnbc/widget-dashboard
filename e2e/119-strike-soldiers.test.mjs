@@ -7,10 +7,13 @@
  * torso offset (well above the deck's y≈1), so it is genuinely roof-stationed,
  * not a ground target. Fire is the AA turret's behaviour (`stepTurret`): held
  * on wave 1, armed by the shared return-fire gate. hp follows difficulty; the
- * count is clamped small (draw-call budget). DOM confirms the app fields the
- * seeded wave-1 count (soldiers included). The live rooftop soldier is static,
- * so the closed-loop clear is covered by 100/101/109 (which now clear a
- * wave-1 that includes it).
+ * count is clamped small (draw-call budget). Each soldier is a weapon-matched
+ * `variant` (0 = rocket/Bazooka Joe, 1 = SMG/Scar), and the matching weapon
+ * tags its projectile's visual — rocket vs bolt — via `spawnProjectile`, so
+ * one enemy pool renders as both. DOM confirms the app fields the seeded
+ * wave-1 count (soldiers included). The live rooftop soldier is static, so the
+ * closed-loop clear is covered by 100/101/109 (which now clear a wave-1 that
+ * includes it).
  */
 import {
   addStrikeWidget,
@@ -22,6 +25,12 @@ import {
 } from './helpers.mjs'
 import { buildWorldLayout, DEFAULT_SEED } from './.bundle/worldLayout.js'
 import { SOLDIER_WAVE, buildWave } from './.bundle/waveLayout.js'
+import {
+  SOLDIER_ROCKET,
+  SOLDIER_SMG,
+  createCombatState,
+  spawnProjectile,
+} from './.bundle/combatModel.js'
 
 const { check, finish } = reporter('strike-soldiers')
 const { browser, page } = await launch()
@@ -88,6 +97,29 @@ check(
   'soldiers ride the shared fire gate (armed by wave 5 on normal)',
   buildWave(DEFAULT_SEED, 5, layout, 'normal').enemiesShoot,
 )
+
+// --- weapon-matched variants ---
+// Each soldier carries a variant (0 = rocket/Bazooka Joe, 1 = SMG/Scar),
+// assigned by order — so wave 1's lone soldier is the rocketeer (variant 0).
+check('wave-1 soldier is the rocketeer (variant 0)', soldiers1.every((s) => s.variant === 0))
+// Find a wave that fields two soldiers and confirm one of each variant.
+let pair = null
+for (let w = 1; w <= 12 && !pair; w++) {
+  const ss = buildWave(DEFAULT_SEED, w, layout, 'normal').targets.filter((t) => t.kind === 'soldier')
+  if (ss.length === 2) pair = ss
+}
+check('a two-soldier wave fields one of each variant', pair !== null && pair[0].variant !== pair[1].variant, pair ? `variants=${pair.map((s) => s.variant)}` : 'no 2-soldier wave')
+
+// The variant's weapon tags the projectile's visual (one enemy pool renders as
+// both a rocket and a bolt).
+check('SOLDIER_ROCKET fires a rocket-visual projectile', SOLDIER_ROCKET.projectile === 'rocket')
+check('SOLDIER_SMG fires a bolt-visual projectile', SOLDIER_SMG.projectile === 'bolt')
+const combatState = createCombatState()
+const dir = { x: 0, y: 0, z: 1 }
+spawnProjectile(combatState.enemy, { x: 0, y: 5, z: 0 }, dir, SOLDIER_ROCKET)
+check('spawned rocket projectile is tagged visual=rocket', combatState.enemy[0].visual === 'rocket')
+spawnProjectile(combatState.enemy, { x: 0, y: 5, z: 0 }, dir, SOLDIER_SMG)
+check('spawned SMG projectile is tagged visual=bolt', combatState.enemy[1].visual === 'bolt')
 
 // --- DOM: the app fields the seeded wave-1 targets (soldiers included) ---
 const c1 = await combat()

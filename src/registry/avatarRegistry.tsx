@@ -139,7 +139,10 @@ export const avatarVisualById: Record<AvatarId, AvatarVisual> = {
     Celebration: ScarCelebration,
     Figure3D: ScarFigure3D,
     Model3D: ScarModel3D,
-    actions3d: [{ id: 'breach', name: 'Breach & Clear' }],
+    actions3d: [
+      { id: 'breach', name: 'Breach & Clear' },
+      { id: 'sight', name: 'Sight & Fire' },
+    ],
   },
   bazookajoe: {
     Head: BazookaJoeHead,
@@ -147,6 +150,9 @@ export const avatarVisualById: Record<AvatarId, AvatarVisual> = {
     Celebration: BazookaJoeCelebration,
     Figure3D: BazookaJoeFigure3D,
     Model3D: BazookaJoeModel3D,
-    actions3d: [{ id: 'launch', name: 'Rocket Launch' }],
+    actions3d: [
+      { id: 'launch', name: 'Rocket Launch' },
+      { id: 'aim', name: 'Take Aim' },
+    ],
   },
 }

@@ -23,12 +23,18 @@
 // Loaded only via lazy() (the avatar registry's Model3D/Figure3D fields) —
 // never re-export from scar/index.ts, or three.js lands in the main chunk.
 import { useRef } from 'react'
+import type { RefObject } from 'react'
 import { useFrame } from '@react-three/fiber'
 import type { Group } from 'three'
 import { SC } from './scarPalette'
+import type { AimPose } from '../shared/aimPose'
 
 const CLOTH = { roughness: 0.7, metalness: 0 }
 const STEEL = { roughness: 0.35, metalness: 0.4 }
+
+/** How far pitch can raise/lower the SMG (radians). */
+const AIM_PITCH_MIN = -0.3
+const AIM_PITCH_MAX = 0.9
 
 const lerp = (a: number, b: number, k: number) => a + (b - a) * k
 const smooth = (k: number) => (k <= 0 ? 0 : k >= 1 ? 1 : k * k * (3 - 2 * k))
@@ -52,6 +58,9 @@ const SHOTS = [0.9, 1.25, 1.6] // covering-fire trigger times
 const KICK_T = 0.22
 const FLASH_T = 0.1
 const KICK_AMP = 0.32
+/** 'sight' (Avatar Actions widget): shoulder + track + burst, no throw. */
+const SIGHT_T = 2.0
+const SIGHT_SHOTS = [0.45, 0.75, 1.05, 1.35]
 
 /** Emissive white flash burst (core + crossed spikes + forward cone so it
  * reads even pointing at the camera); parent toggles `visible`. */
@@ -169,7 +178,15 @@ function Flashbang() {
   )
 }
 
-export default function ScarModel3D({ action }: { action?: string }) {
+export default function ScarModel3D({
+  action,
+  aimRef,
+}: {
+  action?: string
+  /** When set (in-game soldier mode), overrides `action`: live SMG elevation
+   * + a one-shot fire pose (recoil + muzzle flash) driven by the ref. */
+  aimRef?: RefObject<AimPose | null>
+}) {
   const armLRef = useRef<Group>(null)
   const armRRef = useRef<Group>(null)
   const elbowLRef = useRef<Group>(null)
@@ -196,14 +213,25 @@ export default function ScarModel3D({ action }: { action?: string }) {
     if (!armL || !armR || !elbowL || !elbowR || !canister || !burstG || !muzzle) return
 
     // Per-action pose; every mutable written every frame (self-correcting).
+    const aim = aimRef?.current
     let shXL = 0
     let elbR = R_ELBOW
     let sway = 0
+    let armRPitch = 0
     let canisterOn = true
     let burstOn = false
     let muzzleOn = false
 
-    if (action === 'breach') {
+    if (aim) {
+      // In-game soldier: live SMG elevation toward the drone + a one-shot fire
+      // pose (recoil + muzzle flash) from `fire`. No flashbang throw here.
+      armRPitch = -Math.max(AIM_PITCH_MIN, Math.min(AIM_PITCH_MAX, aim.pitch))
+      const f = aim.fire
+      if (f > 0) {
+        elbR = R_ELBOW + KICK_AMP * f // recoil kick, strongest at the shot
+        muzzleOn = f > 0.5 // muzzle flash right after the trigger
+      }
+    } else if (action === 'breach') {
       const tau = (t - t0Ref.current) % BREACH_T
       // toss: wind back, hurl overhead-forward, settle home
       if (tau < WIND_END) shXL = lerp(0, WIND_SHX, smooth(tau / WIND_END))
@@ -217,13 +245,22 @@ export default function ScarModel3D({ action }: { action?: string }) {
         if (dt >= 0 && dt < KICK_T) elbR = R_ELBOW + KICK_AMP * Math.sin((Math.PI * dt) / KICK_T)
         if (dt >= 0 && dt < FLASH_T) muzzleOn = true
       }
+    } else if (action === 'sight') {
+      // Shoulder the SMG, sweep-track and fire controlled bursts (no throw).
+      const tau = (t - t0Ref.current) % SIGHT_T
+      armRPitch = -0.3 - 0.18 * Math.sin(tau * 1.4)
+      for (const s of SIGHT_SHOTS) {
+        const dt = tau - s
+        if (dt >= 0 && dt < KICK_T) elbR = R_ELBOW + KICK_AMP * Math.sin((Math.PI * dt) / KICK_T)
+        if (dt >= 0 && dt < FLASH_T) muzzleOn = true
+      }
     } else {
       sway = Math.sin(t * 1.7) * 0.04 // idle: both arms breathe together
     }
 
     armR.rotation.z = R_SHZ + sway
     armR.rotation.y = R_SHY
-    armR.rotation.x = 0
+    armR.rotation.x = armRPitch
     armL.rotation.z = -(L_SHZ + sway)
     armL.rotation.y = -L_SHY
     armL.rotation.x = shXL

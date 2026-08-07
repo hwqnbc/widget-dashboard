@@ -76,6 +76,7 @@ import TurretTargets from './TurretTargets'
 import SoldierTargets from './SoldierTargets'
 import EnemyDrones from './EnemyDrones'
 import Tracers from './Tracers'
+import EnemyRockets from './EnemyRockets'
 import Reticle from './Reticle'
 import FireButton from './FireButton'
 import type { HitMarker } from './HitMarkers'
@@ -751,6 +752,7 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
           <SoldierTargets targets={targets} playerPos={flight.pos} />
           <EnemyDrones targets={targets} />
           <Tracers combat={combat} tracerLen={BOLT.tracerLen} />
+          <EnemyRockets combat={combat} />
           <StrikeRig
             controls={controls}
             flight={flight}

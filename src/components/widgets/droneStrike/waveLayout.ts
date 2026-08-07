@@ -42,6 +42,10 @@ export interface TargetSpec {
   driftAxis: 0 | 1 | 2
   hp: number
   points: number
+  /** Soldier only: 0 = rocket (Bazooka Joe), 1 = SMG (Scar). Drives both the
+   * weapon fired (StrikeRig) and the rendered model (SoldierTargets), so the
+   * two always agree. Undefined / 0 for every other kind. */
+  variant?: 0 | 1
 }
 
 export interface WaveSpec {
@@ -373,6 +377,9 @@ export function buildWave(
         driftAxis: 0,
         hp: diff.enemyHp,
         points: POINTS.soldier,
+        // Alternate rocketeer (Bazooka Joe) / gunner (Scar) by order, so wave
+        // 1's lone soldier is the rocketeer and a pair is one of each.
+        variant: (i % 2) as 0 | 1,
       })
     }
   }
@@ -399,6 +406,12 @@ export interface TargetState {
   driftAxis: 0 | 1 | 2
   /** Seconds of hit-flash tint remaining. */
   hitFlash: number
+  /** Soldier weapon/model variant (0 = rocket/Bazooka, 1 = SMG/Scar). */
+  variant: 0 | 1
+  /** Soldier only: seconds of firing-pose animation remaining. Set on each
+   * shot (stepTurret), decayed each frame; SoldierTargets feeds it to the
+   * model's aim ref so the figure plays its recoil/muzzle/launch pose. */
+  fireTimer: number
 }
 
 export function createTargetStates(): TargetState[] {
@@ -416,6 +429,8 @@ export function createTargetStates(): TargetState[] {
     driftPhase: 0,
     driftAxis: 0 as 0 | 1 | 2,
     hitFlash: 0,
+    variant: 0 as 0 | 1,
+    fireTimer: 0,
   }))
 }
 
@@ -447,6 +462,8 @@ export function loadWave(states: TargetState[], wave: WaveSpec): void {
     s.driftPhase = spec.driftPhase
     s.driftAxis = spec.driftAxis
     s.hitFlash = 0
+    s.variant = spec.variant ?? 0
+    s.fireTimer = 0
   }
 }
 

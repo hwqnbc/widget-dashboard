@@ -1117,3 +1117,31 @@ carried over; these are the new ones.
     (an avatar viewer) drops into another (an enemy pool) when you respect the
     chunk boundary and express the surface's differences (roof Y, facing) as
     pool-hook overrides, not forks of the shared code.
+
+85. **Live aim + a one-shot fire pose on a zero-render model come from a ref,
+    not the `action` prop or React state; and one projectile pool renders as
+    two things via a `visual` tag.** Making Drone Strike's rooftop soldiers
+    *visibly aim and shoot* (instead of a red tracer from the torso) needed the
+    avatar `Model3D`s to (a) elevate the weapon toward a moving target every
+    frame and (b) play a recoil/muzzle/launch pose on each shot — both in a
+    component whose whole discipline is *no re-renders* (all animation mutates
+    refs in `useFrame`). The `action` prop is the wrong tool: it's a discrete
+    string that restarts a canned loop, and switching it per shot would churn
+    React and can't carry a continuous aim angle. Instead the models gained an
+    `aimRef: RefObject<{ pitch; fire }>` (the `AaTurret` `TurretAim` precedent):
+    the pool writes `pitch` (target elevation) and `fire` (the target's
+    `fireTimer` countdown normalised to (0,1]) into the ref each frame, and the
+    model reads `.current` in its own `useFrame` — elevating the weapon elbow
+    and playing the fire pose keyed on `fire`, zero renders. The `action` prop
+    stays for the Avatar Actions widget (canned loops on the model's own clock);
+    the same pose code serves both, driven by two different sources. Separately,
+    to make a *soldier's* shot a rocket while drones/turrets keep the bolt —
+    all sharing one `combat.enemy` pool — the fix was a **visual tag on the
+    projectile** (`Projectile.visual: 'bolt' | 'rocket'`, copied from the firing
+    `WeaponSpec.projectile` in `spawnProjectile`), NOT a second pool: `Tracers`
+    skips `visual==='rocket'` and a sibling `EnemyRockets` draws those, so one
+    pool renders as two things by a per-item tag. And keep the render↔logic
+    agreement seeded, not slot-derived: the soldier's rocket-vs-SMG `variant`
+    lives on the target (read by both StrikeRig for the weapon and the pool for
+    which model is visible), so a compacting pool never shows a launcher firing
+    bullets.
