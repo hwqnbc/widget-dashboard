@@ -1,13 +1,15 @@
 /**
  * Drone Strike waves suite: clear wave 1 closed-loop, verify the
- * cleared → intro → active progression into wave 2, check the seeded
- * difficulty curve (drifters from wave 2, enemies from wave 3, return fire
- * from wave 5) via the pure module, and confirm best score/wave persist
- * across a reload (redux-persist).
+ * cleared → intro → active progression into wave 2, check the seeded wave
+ * model (every kind can appear from wave 1; the easing is difficulty + the
+ * wave-scaled enemy throttle + the return-fire gate, not an appearance ramp)
+ * via the pure module, and confirm best score/wave persist across a reload
+ * (redux-persist).
  */
 import {
   addStrikeWidget,
   createStrikePilot,
+  setStrikeAssist,
   launch,
   reporter,
   setStrikeSwitch,
@@ -15,7 +17,11 @@ import {
   waitForWaveState,
 } from './helpers.mjs'
 import { buildWorldLayout, DEFAULT_SEED } from './.bundle/worldLayout.js'
-import { buildWave, ENEMY_FIRE_WAVE, ENEMY_WAVE_START } from './.bundle/waveLayout.js'
+import {
+  buildWave,
+  ENEMY_FIRE_WAVE,
+  enemyAggressionScale,
+} from './.bundle/waveLayout.js'
 
 const { check, finish } = reporter('strike-waves')
 const { browser, context, page } = await launch()
@@ -26,20 +32,32 @@ const { combat } = strikeReaders(page)
 
 check('wave 1 goes active', await waitForWaveState(page, 'active'))
 
-// The seeded campaign curve, straight from the pure module the app runs.
+// Every kind can appear from wave 1, straight from the pure module the app runs.
 const layout = buildWorldLayout(DEFAULT_SEED)
+const w1 = buildWave(DEFAULT_SEED, 1, layout)
 const w2 = buildWave(DEFAULT_SEED, 2, layout)
-const w3 = buildWave(DEFAULT_SEED, ENEMY_WAVE_START, layout)
 const w5 = buildWave(DEFAULT_SEED, ENEMY_FIRE_WAVE, layout)
-check('wave 2 introduces drifting targets', w2.targets.some((t) => t.driftAmp > 0))
-check('wave 3 introduces enemy drones', w3.targets.some((t) => t.kind === 'enemy'))
+check('wave 1 fields drifting targets', w1.targets.some((t) => t.driftAmp > 0))
+check('wave 1 fields enemy drones', w1.targets.some((t) => t.kind === 'enemy'))
 check(
   'enemies get orbit envelopes',
-  w3.targets.filter((t) => t.kind === 'enemy').every((t) => t.driftAmp >= 4),
+  w1.targets.filter((t) => t.kind === 'enemy').every((t) => t.driftAmp >= 4),
 )
-check('enemies hold fire before wave 5', !w3.enemiesShoot && w5.enemiesShoot)
+check('enemies + turrets hold fire on wave 1, armed by wave 5', !w1.enemiesShoot && w5.enemiesShoot)
+// Wave-scaled enemy throttle: wave 1 is much gentler than the ramp's ceiling
+// (applied to enemyMove in the body — orbit + evade + jink — not the seed).
+check(
+  'enemy aggression ramps with the wave',
+  enemyAggressionScale(1) < enemyAggressionScale(5) &&
+    enemyAggressionScale(1) <= 0.2 &&
+    enemyAggressionScale(6) === 1,
+  `w1=${enemyAggressionScale(1)} w5=${enemyAggressionScale(5)} w6=${enemyAggressionScale(6)}`,
+)
 
 // Clear wave 1: engage the nearest-target beacon until nothing is left.
+// Strong aim assist so the pilot can lead the wave-1 movers (drifters +
+// throttled enemy) it otherwise can't hit.
+await setStrikeAssist(page, 'strong')
 const pilot = await createStrikePilot(page, context)
 await pilot.touchStart()
 let cleared = true

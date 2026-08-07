@@ -6,12 +6,14 @@
  * pre-allocated fixed-size pool mutated in place (lesson #30: pure module,
  * no Date.now/Math.random inside step functions).
  *
- * Difficulty curve: waves 1–2 are a pure shooting gallery (static balloons,
- * then drifting ring-drones); ENEMY_WAVE_START adds patrolling enemy drones
- * and ENEMY_FIRE_WAVE arms them. From wave 2 the gallery also seeds ground
- * targets — static supply trucks (`ground`, pure points for the gimbal's
- * look-down) — and from TURRET_WAVE, AA turrets (`turret`, a static ground
- * enemy that fires back up, difficulty-gated like the drones).
+ * Wave curve: **every target kind can appear from wave 1** — static balloons,
+ * drifting ring-drones, road vehicles (military trucks + SWAT cars),
+ * patrolling enemy drones and AA turrets. There is no per-kind appearance
+ * gate; instead the *difficulty* preset (count/speed/evade), a **wave-scaled
+ * enemy throttle** (`enemyAggressionScale` — early drones crawl) and the
+ * return-fire gate (`ENEMY_FIRE_WAVE`, so enemies + turrets hold fire on
+ * wave 1) do the easing. (`*_WAVE_START` / `TURRET_WAVE` are all 1 now; kept
+ * as named anchors for the count ramps.)
  */
 import type { Vec3 } from '../droneSim/flightModel'
 import { SPAWN, WORLD_HALF } from '../droneSim/flightModel'
@@ -46,22 +48,38 @@ export interface WaveSpec {
   enemiesShoot: boolean
 }
 
-/** Enemy drones appear from this wave... */
-export const ENEMY_WAVE_START = 3
-/** ...and shoot back from this one (normal; difficulty shifts it). */
+/** Enemy drones appear from this wave — wave 1, but wave-throttled
+ * (`enemyAggressionScale`) so early drones crawl; difficulty scales the rest. */
+export const ENEMY_WAVE_START = 1
+/** ...and shoot back from this one (normal; difficulty shifts it). Every
+ * difficulty's fireWave is > 1, so wave-1 enemies + turrets hold fire. */
 export const ENEMY_FIRE_WAVE = 5
 /** Military supply trucks (moving road vehicles) appear from this wave. */
 export const GROUND_WAVE_START = 1
 /** Moving cars (road-bound) appear from this wave — from the very first
  * wave, gently (see the wave-scaled speed in buildWave). */
 export const CAR_WAVE_START = 1
-/** AA turrets (static ground enemies that fire back) appear from this wave. */
-export const TURRET_WAVE = 4
+/** AA turrets (static ground enemies) appear from this wave — wave 1, but
+ * they hold fire until the difficulty's fireWave (all > 1). */
+export const TURRET_WAVE = 1
 /** Hard cap on simultaneous targets (perf budget: one InstancedMesh).
  * Sized for the worst case: gallery balloons + drifters + enemy drones +
  * ground trucks + moving cars + AA turrets. Pool + instanced capacity are
  * pre-allocated so headroom is free. */
 export const MAX_TARGETS = 24
+
+/**
+ * Wave-scaled enemy-aggression throttle. Enemy drones can appear from wave 1
+ * now, so their whole movement — orbit rate, evade burst AND the vertical
+ * evade jink — is scaled up with the wave: **wave 1 = 15 %**, reaching full by
+ * ~wave 6, so an early drone is a near-static hover that's trivial to track.
+ * Applied in the body when it builds the `enemyMove` fed to `stepEnemy`
+ * (scales `orbitMult`, eases `evadeMult` toward 1, and carries a `jinkScale`),
+ * NOT baked into the seeded spec — so placement seeds are untouched.
+ */
+export function enemyAggressionScale(waveIndex: number): number {
+  return Math.min(1, 0.15 + 0.17 * (waveIndex - 1))
+}
 
 /** Enemy difficulty — scales how hard the AI drones are to hit and how
  * much pressure they apply. Easy is the default (see widgetCatalog). */
@@ -189,7 +207,8 @@ export function buildWave(
   // Kept lean so the deck now shares the wave with road vehicles (below).
   const balloons = Math.min(3 + waveIndex, 8)
   const radius = Math.max(0.8, 1.4 - waveIndex * 0.06)
-  const drifters = waveIndex >= 2 ? Math.ceil(balloons / 2) : 0
+  // Drifting ring-drones from wave 1 (no appearance gate) — half the gallery.
+  const drifters = Math.ceil(balloons / 2)
   for (let i = 0; i < balloons; i++) {
     const drifting = i < drifters
     place({
@@ -258,9 +277,11 @@ export function buildWave(
       : 0
   for (let i = 0; i < cars; i++) placeRoadVehicle('car', 1, POINTS.car)
 
-  // Enemy drones (wave 3+): placed like targets, moved by the AI at runtime.
+  // Enemy drones (wave 1+): placed like targets, moved by the AI at runtime.
   // The drift fields carry their orbit: amp = orbit radius (so placement
   // clears the whole envelope), speed = angular rate, phase = start angle.
+  // The wave throttle (`enemyAggressionScale`) is applied in the body's
+  // `enemyMove`, not baked here, so the seeded spec stays deterministic.
   const enemies =
     waveIndex >= ENEMY_WAVE_START
       ? Math.min(waveIndex - ENEMY_WAVE_START + 1, diff.enemyCap)

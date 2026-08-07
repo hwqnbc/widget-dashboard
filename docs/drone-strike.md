@@ -126,13 +126,20 @@ Key decisions:
 Wave-based, seeded (`buildWave(seed, waveIndex, layout)` — its own
 mulberry32 stream per wave, independent of the world stream):
 
+**No appearance ramp — every target kind can appear from wave 1.** There is
+no per-kind wave gate; the easing comes from (a) the **difficulty** preset
+(enemy count/orbit/evade + the return-fire wave), (b) a **wave-scaled enemy
+throttle** (`enemyAggressionScale` — wave 1 ≈ 30 %, full by ~wave 5, so early
+drones crawl and barely juke), and (c) the **return-fire gate** (enemies +
+turrets **hold fire on wave 1** on every difficulty — Easy arms at wave 7,
+Normal 5, Hard 4). So wave 1 is a gentle full-variety wave, not a bare gallery.
+
 | Wave | Content |
 | --- | --- |
-| 1 | 4 static balloons + two slow moving road vehicles: a military supply truck (`MilitaryTruck`) and a SWAT car (`LegoSwatTruck`) |
-| 2 | ~5 targets, half drifting (`ringDrone`, sinusoidal, velocity published for leading); + more road vehicles |
-| 3–4 | + enemy drones (1 then 2), orbit patrol + evade; + more/faster trucks + cars; AA turrets from wave 4 |
-| 5+ | enemies + turrets return fire (Normal/Hard); player has 3 HP per wave attempt |
-| scaling | more/smaller balloons (cap 8) + faster vehicles, up to 4 enemies, up to 4 trucks + 3 cars + 2 turrets, `MAX_TARGETS` 24 |
+| 1 | the full mix, gentle: static balloons + drifting ring-drones + a moving military truck + a moving SWAT car + **1 throttled, non-firing enemy drone** + **1 non-firing AA turret** |
+| 2–4 | same kinds, ramping — more/faster enemies (throttle climbs), more road vehicles, up to 2 turrets |
+| 5+ | enemies + turrets return fire (Normal/Hard; Easy at 7); enemy throttle at full; player has 3 HP per wave attempt |
+| scaling | more/smaller balloons (cap 8), up to 4 enemies, 4 trucks + 3 cars + 2 turrets, `MAX_TARGETS` 24 |
 
 **Ground targets** (unlocked by the gimbal's −70° look-down): deck-level
 kinds mixed into the gallery. **Military supply trucks** (`ground`, 20 pts,
@@ -147,10 +154,11 @@ opaque glass (no physical transmission, which runs a costly full-scene pass
 with several trucks on screen), a matte finish (no specular glints) and no
 decorative head/roof lights — while the Model Viewer keeps the full-quality
 look. Their count is difficulty-independent (drawn before the enemy block). **AA turrets** (`turret`,
-30 pts) appear from wave 4 — a *static ground enemy*: `stepTurret` is the
+30 pts) appear from wave 1 — a *static ground enemy*: `stepTurret` is the
 return-fire half of `stepEnemy` with no movement, lobbing slow unled bolts
 up the player's line of sight (dodgeable), gated by the same difficulty
-preset as the drones (HP + the shared return-fire wave). Turrets render as
+preset as the drones (HP + the shared return-fire wave — so they **hold fire
+on wave 1** and only open up from the difficulty's fireWave). Turrets render as
 the **`AaTurret`** model (the primitive-built emplacement reused from the
 Model Viewer widget) via `TurretTargets` — a small pool of model instances
 seated on the deck (the `EnemyDrones` pattern). The head + barrel **track
@@ -239,9 +247,9 @@ Taking a hit flashes a red **damage vignette** around the screen edge
 zero React renders), and the last heart keeps a faint constant red edge.
 `data-flash` on `strike-damage` counts the flashes and `data-low-hp`
 mirrors the edge — the live behaviour was verified against real enemy fire
-on a dev build with `ENEMY_WAVE_START`/`ENEMY_FIRE_WAVE` temporarily set
-to 1 (flash count tracked the hp loss exactly, the edge appeared at one
-heart and reset on the wave restart); the committed suites assert the
+on a dev build with `ENEMY_FIRE_WAVE` temporarily set to 1 (enemies already
+spawn from wave 1; flash count tracked the hp loss exactly, the edge
+appeared at one heart and reset on the wave restart); the committed suites assert the
 at-rest contract, since reaching wave-5 fire closed-loop is impractical.
 
 **Sound effects** (settings toggle `audio`, **default on**): synthesized
@@ -389,13 +397,13 @@ kind of list).
   `HitEvent` coordinates (RainField's single-draw-call Points pattern).
 
 ### Enemies & waves
-- ~~Ground-target waves~~ — **shipped** (deck-level supply trucks from
-  wave 2 (rendered as the `MilitaryTruck` model via `GroundTargets`), AA
-  turrets from wave 4 (`stepTurret`, rendered as the `AaTurret` model via
-  `TurretTargets`), and road-bound **moving cars** from wave 1 (`stepDrift`
-  road-traffic branch, rendered as the `LegoSwatTruck` model via
-  `CarTargets`); the payoff the gimbal look-down unlocked — see the Gameplay
-  section). All three model kinds now share the generic `ModelTargets` pool.
+- ~~Ground-target waves~~ — **shipped** (deck-level supply trucks (rendered
+  as the `MilitaryTruck` model via `GroundTargets`), AA turrets (`stepTurret`,
+  rendered as the `AaTurret` model via `TurretTargets`), and road-bound
+  **moving cars** (`stepDrift` road-traffic branch, rendered as the
+  `LegoSwatTruck` model via `CarTargets`) — all from wave 1 now; the payoff
+  the gimbal look-down unlocked — see the Gameplay section). All three model
+  kinds share the generic `ModelTargets` pool.
   Room to extend: **tents/depots** as further static kinds; a
   **convoy** (several cars nose-to-tail on one lane, phase-offset); letting
   cars **turn at intersections** (hop lanes where two roads cross); and

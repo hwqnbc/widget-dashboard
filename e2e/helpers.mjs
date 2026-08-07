@@ -252,6 +252,9 @@ export function strikeReaders(page) {
         x: parseFloat(await hud.getAttribute('data-tgt-x')),
         y: parseFloat(await hud.getAttribute('data-tgt-y')),
         z: parseFloat(await hud.getAttribute('data-tgt-z')),
+        vx: parseFloat(await hud.getAttribute('data-tgt-vx')) || 0,
+        vy: parseFloat(await hud.getAttribute('data-tgt-vy')) || 0,
+        vz: parseFloat(await hud.getAttribute('data-tgt-vz')) || 0,
       }
     },
   }
@@ -347,6 +350,17 @@ export async function setStrikeSwitch(page, testId, desired) {
   await closeStrikeSettings(page)
 }
 
+/** Set the aim-assist level (off/mild/strong) via the settings panel. Strong
+ * assist widens the lock cone and bends fired bolts toward the velocity-led
+ * target, so the closed-loop pilot can clear wave-1 movers (drifters, the
+ * throttled enemy) it otherwise can't lead. */
+export async function setStrikeAssist(page, level) {
+  await openStrikeSettings(page)
+  await page.locator(`[data-testid="strike-assist-${level}"]`).click()
+  await page.waitForTimeout(150)
+  await closeStrikeSettings(page)
+}
+
 /** Tap a fire button once via CDP touch (independent of the stick rig). */
 export async function tapFire(page, context, holdMs = 120, testId = 'strike-fire') {
   const c = await stickCenter(page, testId)
@@ -435,10 +449,18 @@ export async function createStrikePilot(page, context) {
         const tgt = await target()
         if (!tgt) return (await combat()).targetsLeft < start
         const t = await telemetry()
-        const dx = tgt.x - t.x
-        const dz = tgt.z - t.z
+        // Lead a moving beacon: aim where it will be, so the nose keeps up
+        // with fast movers (road cars can be the nearest target). Static
+        // targets have zero velocity → no change. Strong assist's bolt-bend
+        // finishes the lead once we're firing roughly on it.
+        const LEAD = 0.5
+        const ax = tgt.x + tgt.vx * LEAD
+        const ay = tgt.y + tgt.vy * LEAD
+        const az = tgt.z + tgt.vz * LEAD
+        const dx = ax - t.x
+        const dz = az - t.z
         const dxz = Math.hypot(dx, dz)
-        const dy = tgt.y - t.alt
+        const dy = ay - t.alt
         const err = wrap(Math.atan2(-dx, -dz) - t.yaw)
         const yawInput = clamp(-2.0 * err, -1, 1)
         const climb = clamp(dy * 0.8, -1, 1)

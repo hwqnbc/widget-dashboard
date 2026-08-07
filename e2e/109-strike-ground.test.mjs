@@ -3,9 +3,9 @@
  * the seeded wave includes military supply trucks (`ground`) — moving road
  * vehicles bound to the city's lanes (fixed cross-coord on a road, constant
  * travel velocity via stepDrift), sitting on the deck (low y); from
- * TURRET_WAVE it includes AA turrets (`turret`); trucks are
- * difficulty-independent while turrets follow the difficulty preset
- * (hp + shared return-fire gate). From CAR_WAVE_START it also includes moving
+ * wave 1 it also includes AA turrets (`turret`) — which hold fire until the
+ * difficulty's return-fire wave; trucks are difficulty-independent while
+ * turrets follow the difficulty preset (hp + shared return-fire gate). From CAR_WAVE_START it also includes moving
  * `car` targets, road-bound the same way. DOM: clear wave 1 closed-loop and
  * confirm wave 2 fields the seeded target count — proof the app actually
  * spawns the seeded vehicles (101-style). The hit model is a normal
@@ -14,6 +14,7 @@
 import {
   addStrikeWidget,
   createStrikePilot,
+  setStrikeAssist,
   launch,
   reporter,
   setStrikeSwitch,
@@ -56,7 +57,10 @@ const trucksOnRoad = ground1.every((g) => {
   )
 })
 check('trucks are bound to a road lane', trucksOnRoad)
-check('no turrets before TURRET_WAVE', w1.targets.every((t) => t.kind !== 'turret'))
+check(
+  'wave-1 turrets hold fire on every difficulty',
+  ['easy', 'normal', 'hard'].every((d) => !buildWave(DEFAULT_SEED, 1, layout, d).enemiesShoot),
+)
 
 const wT = buildWave(DEFAULT_SEED, TURRET_WAVE, layout)
 const turretsT = wT.targets.filter((t) => t.kind === 'turret')
@@ -135,6 +139,8 @@ check('truck moves along its road axis', Math.abs(tMove1 - tMove0) > 0.1, `${tMo
 check('truck holds its lane (cross axis fixed)', Math.abs(tCross1 - tCross0) < 1e-6)
 
 // --- DOM: the app fields the seeded wave-2 targets ---
+// Strong aim assist so the pilot can lead the wave-1 movers to clear them.
+await setStrikeAssist(page, 'strong')
 const w2 = buildWave(DEFAULT_SEED, 2, layout)
 const pilot = await createStrikePilot(page, context)
 await pilot.touchStart()

@@ -76,8 +76,10 @@ export function stepEnemy(
   canShoot: boolean,
   enemyPool: Projectile[],
   weapon: WeaponSpec,
-  /** Difficulty movement scaling: how fast the enemy orbits and evades. */
-  move: { orbitMult: number; evadeMult: number; evadeTime: number },
+  /** Difficulty + wave movement scaling: orbit rate, evade burst, and the
+   * vertical evade jink (`jinkScale`, 1 = full; low early waves make the
+   * drone a near-static hover). */
+  move: { orbitMult: number; evadeMult: number; evadeTime: number; jinkScale?: number },
 ): void {
   if (!t.alive || t.kind !== 'enemy') return
 
@@ -106,7 +108,7 @@ export function stepEnemy(
   const orbitR = t.driftAmp
   const bob =
     Math.sin(ai.angle * 2.3) * BOB_AMP +
-    (evading ? Math.sin(ai.evadeTimer * 8) * EVADE_JINK : 0)
+    (evading ? Math.sin(ai.evadeTimer * 8) * EVADE_JINK * (move.jinkScale ?? 1) : 0)
   t.pos.x = t.base.x + Math.cos(ai.angle) * orbitR
   t.pos.y = t.base.y + bob
   t.pos.z = t.base.z + Math.sin(ai.angle) * orbitR

@@ -248,8 +248,9 @@ export default function StrikeRig({
   /** performance.now() of the last manual aim input (drag) — the rig also
    * bumps it on hover-stick activity; idle-recenter waits on it. */
   aimInputRef: { current: number }
-  /** Difficulty movement scaling for the enemy AI (orbit + evade). */
-  enemyMove: { orbitMult: number; evadeMult: number; evadeTime: number }
+  /** Difficulty + wave movement scaling for the enemy AI (orbit + evade +
+   * the vertical jink via `jinkScale`). */
+  enemyMove: { orbitMult: number; evadeMult: number; evadeTime: number; jinkScale?: number }
   /** Session score — runtime-only, rendered via the telemetry tick. */
   scoreRef: { current: number }
   onWaveCleared: () => void
@@ -728,6 +729,11 @@ export default function StrikeRig({
           hud.dataset.tgtX = nearest.pos.x.toFixed(2)
           hud.dataset.tgtY = nearest.pos.y.toFixed(2)
           hud.dataset.tgtZ = nearest.pos.z.toFixed(2)
+          // Published so the e2e pilot can lead a moving beacon (movers can be
+          // the nearest target from wave 1); the game itself reads refs.
+          hud.dataset.tgtVx = nearest.vel.x.toFixed(2)
+          hud.dataset.tgtVy = nearest.vel.y.toFixed(2)
+          hud.dataset.tgtVz = nearest.vel.z.toFixed(2)
           hud.dataset.tgtKind = nearest.kind
         } else {
           hud.dataset.tgtKind = 'none'

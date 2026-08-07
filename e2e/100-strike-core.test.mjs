@@ -7,6 +7,7 @@
 import {
   addStrikeWidget,
   createStrikePilot,
+  setStrikeAssist,
   launch,
   reporter,
   setStrikeSwitch,
@@ -70,8 +71,10 @@ const c0 = await combat()
 check('wave 1 reported', c0.wave === 1, `wave=${c0.wave}`)
 
 // The wave is seeded: the app must field exactly the targets the pure module
-// predicts (wave 1 = a static balloon gallery plus moving road vehicles — a
-// SWAT car and a military supply truck driving the lanes).
+// predicts. Wave 1 now has no per-kind appearance gate — a mixed wave of
+// static balloons, drifting ring-drones, moving road vehicles (SWAT car +
+// military truck), a (throttled, non-firing) enemy drone and a (non-firing)
+// AA turret.
 const wave1 = buildWave(DEFAULT_SEED, 1, buildWorldLayout(DEFAULT_SEED))
 check(
   'seeded wave-1 target count',
@@ -79,7 +82,7 @@ check(
   `app=${c0.targetsLeft} expected=${wave1.targets.length}`,
 )
 check(
-  'wave 1 balloons are a static gallery',
+  'wave 1 balloons are static',
   wave1.targets.filter((t) => t.kind === 'balloon').every((t) => t.driftAmp === 0),
 )
 check(
@@ -90,10 +93,15 @@ check(
   'wave 1 fields a moving military truck',
   wave1.targets.some((t) => t.kind === 'ground' && t.driftSpeed !== 0),
 )
+// Every kind can appear from wave 1 — the newly-ungated ones are present.
+for (const kind of ['ringDrone', 'enemy', 'turret']) {
+  check(`wave 1 fields a ${kind}`, wave1.targets.some((t) => t.kind === kind))
+}
+check('wave 1 enemies + turrets hold fire', !wave1.enemiesShoot)
 const beacon = await target()
 check(
   'nearest-target beacon published',
-  beacon !== null && ['balloon', 'car', 'ground'].includes(beacon.kind),
+  beacon !== null,
   `kind=${beacon?.kind}`,
 )
 
@@ -111,7 +119,9 @@ const c2 = await combat()
 const burst = c2.shots - c1.shots
 check('held fire obeys the cooldown', burst >= 3 && burst <= 8, `burst=${burst}`)
 
-// Closed-loop engagement: chase the beacon and take a target down.
+// Closed-loop engagement: chase the beacon and take a target down. Strong
+// aim assist so the pilot can lead a wave-1 mover (drifter / throttled enemy).
+await setStrikeAssist(page, 'strong')
 const pilot = await createStrikePilot(page, context)
 await pilot.touchStart()
 const killed = await pilot.engage({ timeout: 60000 })

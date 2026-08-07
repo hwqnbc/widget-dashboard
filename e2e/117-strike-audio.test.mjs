@@ -12,6 +12,7 @@
 import {
   addStrikeWidget,
   createStrikePilot,
+  setStrikeAssist,
   launch,
   reporter,
   setStrikeSwitch,
@@ -73,7 +74,9 @@ check('audio on by default', (await root.getAttribute('data-audio')) === 'on')
 check('sfx counters start at zero', (await sfx('fire')) === 0 && (await sfx('pop')) === 0)
 
 // Clear wave 1 closed-loop: bolts fire (sfx-fire), targets pop (sfx-pop),
-// and the last kill plays the wave-clear sting (sfx-clear).
+// and the last kill plays the wave-clear sting (sfx-clear). Strong aim assist
+// so the pilot can lead the wave-1 movers.
+await setStrikeAssist(page, 'strong')
 const pilot = await createStrikePilot(page, context)
 await pilot.touchStart()
 let cleared = true

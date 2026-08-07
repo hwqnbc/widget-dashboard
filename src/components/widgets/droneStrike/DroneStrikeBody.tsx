@@ -53,6 +53,7 @@ import {
   buildWave,
   coerceDifficulty,
   createTargetStates,
+  enemyAggressionScale,
   loadWave,
 } from './waveLayout'
 import { createEnemyAIStates, seedEnemyAIStates } from './enemyAI'
@@ -240,6 +241,20 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
   }, [])
 
   const [wave, setWave] = useState(1)
+  // Enemy movement fed to the rig: the difficulty preset scaled by the
+  // wave-aggression throttle, so wave-1 drones are near-static hovers
+  // (orbit + evade burst + vertical jink all eased down) ramping to full by
+  // ~wave 6. Recomputed on wave/difficulty change (rare — not per frame).
+  const enemyMove = useMemo(() => {
+    const preset = DIFFICULTY[difficulty]
+    const agg = enemyAggressionScale(wave)
+    return {
+      orbitMult: preset.orbitMult * agg,
+      evadeMult: 1 + (preset.evadeMult - 1) * agg,
+      evadeTime: preset.evadeTime,
+      jinkScale: agg,
+    }
+  }, [difficulty, wave])
   const [phase, setPhase] = useState<WavePhase>('intro')
   const [banner, setBanner] = useState<string | null>(null)
   const [confirm, setConfirm] = useState<null | 'restart' | 'shuffle'>(null)
@@ -774,7 +789,7 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
             aimMode={aimMode}
             gimbalRef={gimbalRef}
             aimInputRef={aimInputRef}
-            enemyMove={DIFFICULTY[difficulty]}
+            enemyMove={enemyMove}
             scoreRef={scoreRef}
             onWaveCleared={onWaveCleared}
             onTargetDown={onTargetDown}
