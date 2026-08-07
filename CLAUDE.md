@@ -175,6 +175,19 @@ character folders under `components/widgets/characters/` — `toy/` (`ToyHead`,
 `shared/Hand`, `shared/FigureStage3D` (R3F turntable stage
 for the lazy 3D figures), `boy/Boy`.
 
+**Low-spec game-target models (convention).** A 3D model reused as a
+**multi-instance in-game target** (the Drone Strike `MilitaryTruck` /
+`LegoSwatTruck` / `AaTurret` pools render up to 4/3/2 at once) must render
+cheaply: **no `transmission`** (the headline cost — three.js runs a
+full-scene pass *per transmissive object* every frame), no needless
+`emissive`, matte/minimal `meshStandardMaterial`, modest segment counts.
+When the same model is *also* shown full-quality in a single-model showcase
+(the Model Viewer widget), give it an optional **`lowSpec?: boolean`** prop:
+the game render pools (`GroundTargets`/`CarTargets`/`TurretTargets`) pass
+`lowSpec`; the showcase uses the default full-quality look. Models authored
+minimal already (e.g. `droneSim/DroneModel` — default materials, no
+metalness/transmission/emissive) need no prop. See `docs/lessons.md` for why.
+
 ## Avatars (players vs seats)
 
 Games have two fixed **seats**, `'toy'` and `'ninja'` (`features/avatars/types.ts`

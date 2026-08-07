@@ -15,11 +15,30 @@ import type { Group } from 'three'
  * R3F ignores transforms — lesson #76) onto the parent <mesh>; and the
  * traverse/elevation animation accumulates its own phase by delta while
  * `animate` is on, so pausing freezes the pose instead of snapping.
+ *
+ * `lowSpec` is the standard game-target render (see the low-spec convention
+ * in CLAUDE.md): the metallic finishes drop to matte (no specular) — this
+ * model has no transmission/emissive, so it's already cheap; the knob keeps
+ * every multi-instance target model uniform. The Model Viewer keeps the metal.
  */
 
-const OLIVE = { color: '#475536', roughness: 0.9, metalness: 0.1 }
-const DARK_METAL = { color: '#262626', roughness: 0.7, metalness: 0.5 }
-const LIGHT_METAL = { color: '#525252', roughness: 0.6, metalness: 0.4 }
+type Mat = { color: string; roughness: number; metalness: number }
+
+/** Full-quality finishes (subtle-to-strong specular) … */
+const OLIVE: Mat = { color: '#475536', roughness: 0.9, metalness: 0.1 }
+const DARK_METAL: Mat = { color: '#262626', roughness: 0.7, metalness: 0.5 }
+const LIGHT_METAL: Mat = { color: '#525252', roughness: 0.6, metalness: 0.4 }
+/** … and their matte low-spec counterparts (same colour, no specular). */
+const OLIVE_M: Mat = { color: '#475536', roughness: 1, metalness: 0 }
+const DARK_M: Mat = { color: '#262626', roughness: 1, metalness: 0 }
+const LIGHT_M: Mat = { color: '#525252', roughness: 1, metalness: 0 }
+
+/** The three finishes for a render, chosen by `lowSpec`. */
+interface Finishes {
+  olive: Mat
+  dark: Mat
+  light: Mat
+}
 
 /** Optional aim target: head yaw + barrel elevation (radians), consumed each
  * frame so an owner (e.g. Drone Strike) can make the gun track a target. */
@@ -40,37 +59,39 @@ const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v
 function StabilizerLeg({
   position,
   rotation,
+  olive,
 }: {
   position: [number, number, number]
   rotation?: [number, number, number]
+  olive: Mat
 }) {
   return (
     <group position={position} rotation={rotation}>
       {/* Main beam */}
       <mesh position={[0, 0.15, 0]}>
         <boxGeometry args={[1.5, 0.1, 0.3]} />
-        <meshStandardMaterial {...OLIVE} />
+        <meshStandardMaterial {...olive} />
       </mesh>
       {/* Ground pad */}
       <mesh position={[0.7, 0.01, 0]}>
         <cylinderGeometry args={[0.2, 0.2, 0.03, 16]} />
-        <meshStandardMaterial {...OLIVE} />
+        <meshStandardMaterial {...olive} />
       </mesh>
       {/* Small support block */}
       <mesh position={[0.3, 0.1, 0]}>
         <boxGeometry args={[0.2, 0.1, 0.2]} />
-        <meshStandardMaterial {...OLIVE} />
+        <meshStandardMaterial {...olive} />
       </mesh>
     </group>
   )
 }
 
 /** One shell segment of the rear ammo rack. */
-function AmmoRackSegment({ position }: { position: [number, number, number] }) {
+function AmmoRackSegment({ position, olive }: { position: [number, number, number]; olive: Mat }) {
   return (
     <mesh position={position}>
       <boxGeometry args={[0.08, 0.7, 0.35]} />
-      <meshStandardMaterial {...OLIVE} />
+      <meshStandardMaterial {...olive} />
     </mesh>
   )
 }
@@ -78,18 +99,26 @@ function AmmoRackSegment({ position }: { position: [number, number, number] }) {
 export default function AaTurret({
   animate,
   aimRef,
+  lowSpec,
 }: {
   animate: boolean
   /** When set (and non-null), the gun slews to track this aim instead of
    * running the canned scan — the Model Viewer omits it, Drone Strike feeds
    * the player's bearing so the turret aims where it shoots. */
   aimRef?: RefObject<TurretAim | null>
+  /** Matte game-target render (no specular) — the Model Viewer omits it for
+   * the metallic look. See the low-spec convention in CLAUDE.md. */
+  lowSpec?: boolean
 }) {
   const turretGroupRef = useRef<Group>(null)
   const barrelCradleRef = useRef<Group>(null)
   // Animation phase in seconds, advanced only while animating — the pose is
   // always derived from it, so Animate off freezes and on resumes smoothly.
   const phaseRef = useRef(0)
+
+  const { olive, dark, light }: Finishes = lowSpec
+    ? { olive: OLIVE_M, dark: DARK_M, light: LIGHT_M }
+    : { olive: OLIVE, dark: DARK_METAL, light: LIGHT_METAL }
 
   useFrame((_, delta) => {
     const head = turretGroupRef.current
@@ -127,18 +156,18 @@ export default function AaTurret({
       {/* 1. Fixed base & stabilizers */}
       <mesh position={[0, 0.15, 0]}>
         <boxGeometry args={[1.0, 0.3, 1.0]} />
-        <meshStandardMaterial {...OLIVE} />
+        <meshStandardMaterial {...olive} />
       </mesh>
       {/* Four outriggers */}
-      <StabilizerLeg position={[1.2, 0, 1.2]} rotation={[0, -Math.PI / 4, 0]} />
-      <StabilizerLeg position={[-1.2, 0, 1.2]} rotation={[0, Math.PI / 4, 0]} />
-      <StabilizerLeg position={[1.2, 0, -1.2]} rotation={[0, Math.PI + Math.PI / 4, 0]} />
-      <StabilizerLeg position={[-1.2, 0, -1.2]} rotation={[0, Math.PI - Math.PI / 4, 0]} />
+      <StabilizerLeg position={[1.2, 0, 1.2]} rotation={[0, -Math.PI / 4, 0]} olive={olive} />
+      <StabilizerLeg position={[-1.2, 0, 1.2]} rotation={[0, Math.PI / 4, 0]} olive={olive} />
+      <StabilizerLeg position={[1.2, 0, -1.2]} rotation={[0, Math.PI + Math.PI / 4, 0]} olive={olive} />
+      <StabilizerLeg position={[-1.2, 0, -1.2]} rotation={[0, Math.PI - Math.PI / 4, 0]} olive={olive} />
 
       {/* Central pedestal mount */}
       <mesh position={[0, 0.55, 0]}>
         <cylinderGeometry args={[0.5, 0.6, 0.6, 24]} />
-        <meshStandardMaterial {...OLIVE} />
+        <meshStandardMaterial {...olive} />
       </mesh>
 
       {/* 2. Rotating turret head */}
@@ -146,22 +175,22 @@ export default function AaTurret({
         {/* Turret floor plate */}
         <mesh position={[0, 0.05, 0]}>
           <cylinderGeometry args={[0.7, 0.7, 0.1, 16]} />
-          <meshStandardMaterial {...LIGHT_METAL} />
+          <meshStandardMaterial {...light} />
         </mesh>
 
         {/* Armour hull (angled olive plating) */}
         <group position={[0, 0.3, 0]}>
           <mesh position={[0.4, 0.3, 0.3]} rotation={[0, -0.15, 0]}>
             <boxGeometry args={[0.8, 0.6, 0.1]} />
-            <meshStandardMaterial {...OLIVE} roughness={0.95} />
+            <meshStandardMaterial {...olive} roughness={0.95} />
           </mesh>
           <mesh position={[-0.4, 0.3, 0.3]} rotation={[0, 0.15, 0]}>
             <boxGeometry args={[0.8, 0.6, 0.1]} />
-            <meshStandardMaterial {...OLIVE} />
+            <meshStandardMaterial {...olive} />
           </mesh>
           <mesh position={[0, 0.3, 0]}>
             <boxGeometry args={[0.4, 0.6, 0.6]} />
-            <meshStandardMaterial {...OLIVE} />
+            <meshStandardMaterial {...olive} />
           </mesh>
         </group>
 
@@ -169,13 +198,13 @@ export default function AaTurret({
         <group position={[0, 0.45, -0.6]} rotation={[0, Math.PI, 0]}>
           <mesh position={[0, -0.05, 0]}>
             <boxGeometry args={[0.7, 0.1, 0.45]} />
-            <meshStandardMaterial {...OLIVE} />
+            <meshStandardMaterial {...olive} />
           </mesh>
-          <AmmoRackSegment position={[-0.25, 0.35, 0]} />
-          <AmmoRackSegment position={[-0.1, 0.35, 0]} />
-          <AmmoRackSegment position={[0.05, 0.35, 0]} />
-          <AmmoRackSegment position={[0.2, 0.35, 0]} />
-          <AmmoRackSegment position={[0.35, 0.35, 0]} />
+          <AmmoRackSegment position={[-0.25, 0.35, 0]} olive={olive} />
+          <AmmoRackSegment position={[-0.1, 0.35, 0]} olive={olive} />
+          <AmmoRackSegment position={[0.05, 0.35, 0]} olive={olive} />
+          <AmmoRackSegment position={[0.2, 0.35, 0]} olive={olive} />
+          <AmmoRackSegment position={[0.35, 0.35, 0]} olive={olive} />
         </group>
 
         {/* 3. Gun cradle & barrel (elevation group) */}
@@ -183,21 +212,21 @@ export default function AaTurret({
           {/* Breech/cradle mechanism */}
           <mesh position={[0, 0.15, -0.1]}>
             <boxGeometry args={[0.3, 0.4, 0.6]} />
-            <meshStandardMaterial {...DARK_METAL} />
+            <meshStandardMaterial {...dark} />
           </mesh>
           <mesh position={[0, 0.35, -0.2]}>
             <boxGeometry args={[0.15, 0.2, 0.3]} />
-            <meshStandardMaterial {...LIGHT_METAL} />
+            <meshStandardMaterial {...light} />
           </mesh>
 
           {/* Elevation pistons */}
           <mesh position={[-0.15, -0.1, 0.15]} rotation={[0.4, 0, 0]}>
             <cylinderGeometry args={[0.04, 0.04, 0.5, 8]} />
-            <meshStandardMaterial {...LIGHT_METAL} />
+            <meshStandardMaterial {...light} />
           </mesh>
           <mesh position={[0.15, -0.1, 0.15]} rotation={[0.4, 0, 0]}>
             <cylinderGeometry args={[0.04, 0.04, 0.5, 8]} />
-            <meshStandardMaterial {...LIGHT_METAL} />
+            <meshStandardMaterial {...light} />
           </mesh>
 
           {/* The gun barrel — cylinders are minted along Y, so each mesh
@@ -206,17 +235,17 @@ export default function AaTurret({
             {/* Thick breech section */}
             <mesh position={[0, 0, 0.4]} rotation={[Math.PI / 2, 0, 0]}>
               <cylinderGeometry args={[0.07, 0.08, 0.8, 12]} />
-              <meshStandardMaterial {...OLIVE} />
+              <meshStandardMaterial {...olive} />
             </mesh>
             {/* Main long barrel */}
             <mesh position={[0, 0, 2.0]} rotation={[Math.PI / 2, 0, 0]}>
               <cylinderGeometry args={[0.035, 0.035, 2.4, 12]} />
-              <meshStandardMaterial {...DARK_METAL} />
+              <meshStandardMaterial {...dark} />
             </mesh>
             {/* Muzzle brake */}
             <mesh position={[0, 0, 3.25]} rotation={[Math.PI / 2, 0, 0]}>
               <cylinderGeometry args={[0.07, 0.04, 0.15, 12, 1]} />
-              <meshStandardMaterial {...DARK_METAL} />
+              <meshStandardMaterial {...dark} />
             </mesh>
           </group>
         </group>

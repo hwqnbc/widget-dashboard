@@ -1069,9 +1069,22 @@ carried over; these are the new ones.
     (three.js skips transmission for invisible objects) and only regressed
     once it became visible in wave 1. Fix at the source: give multi-instance
     game models a cheap `lowSpec` path (opaque tinted glass instead of
-    transmission, a matte finish, no decorative light meshes — both truck
-    models, `MilitaryTruck` and `LegoSwatTruck`, carry it), keeping the
-    full-quality look for the single-model Model Viewer. When a heavy render makes a *timing* assertion
-    flake, suspect per-frame GPU cost (transmission, big shadow maps,
-    post-processing) before touching the test — the fix belongs in the render,
-    and it helps real mobile devices too, not just the headless suite.
+    transmission, a matte finish, no decorative light meshes), keeping the
+    full-quality look for the single-model Model Viewer. When a heavy render
+    makes a *timing* assertion flake, suspect per-frame GPU cost (transmission,
+    big shadow maps, post-processing) before touching the test — the fix
+    belongs in the render, and it helps real mobile devices too, not just the
+    headless suite.
+
+    **This became a convention (see CLAUDE.md):** every model reused as a
+    multi-instance in-game target renders low-spec. Models shown *both* as a
+    showcase and as a target expose a `lowSpec?: boolean` prop the render pool
+    passes — `MilitaryTruck` / `LegoSwatTruck` (drop transmission + strobe,
+    matte, no decorative lights) and `AaTurret` (matte; it had no
+    transmission/emissive, so the knob is just uniformity). Why not mechanically
+    add the prop everywhere: audit first — `droneSim/DroneModel` (the enemy +
+    player craft) already uses default matte materials with no
+    metalness/transmission/emissive, so it is low-spec by construction and
+    gets no prop. The knob is for the *expensive* features; the standard is
+    "author game targets cheap, and only carry a `lowSpec` toggle where a
+    showcase needs the expensive version too."

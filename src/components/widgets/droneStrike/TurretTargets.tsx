@@ -75,7 +75,7 @@ export default function TurretTargets({
           visible={false}
           scale={SCALE}
         >
-          <AaTurret animate={false} aimRef={aimRefs[i]} />
+          <AaTurret animate={false} aimRef={aimRefs[i]} lowSpec />
         </group>
       ))}
     </>

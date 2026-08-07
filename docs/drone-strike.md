@@ -158,7 +158,10 @@ the player**: `TurretTargets` feeds each model an optional `aimRef` (the
 bearing + elevation from the emplacement to the drone), which `AaTurret`
 slews its head yaw and barrel elevation toward (clamped to the gun's arc),
 so the gun visibly points where `stepTurret` shoots. (Omitting `aimRef` —
-as the Model Viewer does — keeps the canned scan sweep.) **SWAT cars** (`car`, 25 pts, one hit) are the other **wave-1 road
+as the Model Viewer does — keeps the canned scan sweep.) The turret renders
+in the model's `lowSpec` mode too (matte, no specular) — it has no
+transmission/emissive so it was already cheap, but the knob keeps every
+game-target model uniform (see the low-spec convention in `CLAUDE.md`). **SWAT cars** (`car`, 25 pts, one hit) are the other **wave-1 road
 vehicle**, rendered as the **`LegoSwatTruck`** model via `CarTargets` (the
 same `ModelTargets` pool) — also in the model's `lowSpec` render (opaque
 windshield, matte finish, static non-emissive lightbar), so both in-game
