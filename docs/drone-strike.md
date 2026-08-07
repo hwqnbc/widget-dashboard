@@ -219,8 +219,10 @@ plays a firing pose: `SoldierTargets` writes a per-slot **aim ref**
 flash (Scar) or launch + backblast (Bazooka Joe) in its own `useFrame` (a
 zero-render path, the `AaTurret` `aimRef` precedent). The rocket itself is a
 real projectile: `SOLDIER_ROCKET` tags its `Projectile.visual = 'rocket'`, so
-`Tracers` skips it and **`EnemyRockets`** draws a warhead + glowing exhaust +
-smoke streak flying at you; SMG bolts stay the tracer box.
+`Tracers` skips it and **`EnemyRockets`** draws a warhead + glowing exhaust
+flying at you, trailing a **persistent world-space smoke contrail** (puffs left
+hanging along the flight path, fading a beat after the rocket passes — the
+incoming-missile read); SMG bolts stay the tracer box.
 
 *Rendering* is via **`SoldierTargets`** — the shared `ModelTargets` pool with
 its `onFrame` hook overriding the deck Y (boots on the roof), yawing the body to
@@ -376,8 +378,12 @@ and toggling the visible model by the target's weapon `variant`; the models are
 (≤4 `DroneModel`s with red beacons, slot-assigned per frame), `Tracers`
 (one InstancedMesh for all bolts, oriented along velocity — skips
 rocket-`visual` enemy shots), `EnemyRockets`
-(soldier rockets: a warhead + exhaust + smoke streak per active
-`visual: 'rocket'` enemy projectile, oriented along velocity),
+(soldier rockets: a warhead + exhaust per active `visual: 'rocket'` enemy
+projectile oriented along velocity, plus a **persistent world-space smoke
+contrail** — one `<points>` cloud, single draw call, puffs dropped at the
+positions the rocket flew through and left hanging in the air, fading + growing
+by age via a tiny inline `alpha`-attribute shader; keyed by the stable
+enemy-pool index so a reused slot resets its own trail),
 `Reticle`/`FireButton`/`HitMarkers`/`StrikeMinimap`/`StrikeSettingsPanel`.
 
 ### Weapon variants (recorded, not built)
@@ -481,9 +487,11 @@ kind of list).
     `stepDrift`/`stepEnemy`) between deck/roof waypoints; `ModelTargets`'
     `faceVelocity` already yaws a mover into its travel direction, and a
     `stepSoldier` fire branch mirrors `stepEnemy`'s return fire;
-  - **persistent smoke trail** — `EnemyRockets` draws a motion streak; a true
-    world-space contrail (a ring-buffer of past positions per rocket, the
-    `RainField` `Points` pattern) would sell the "incoming" read even more;
+  - ~~persistent smoke trail~~ — **shipped** (`EnemyRockets` drops a
+    world-space puff contrail — a per-rocket ring buffer of past positions in
+    one `Points` cloud, faded by age with an inline shader — so the smoke line
+    hangs along the flight path and lingers after the rocket passes; see the
+    `EnemyRockets` architecture note);
   - **more avatars / a mix** — widen the pool beyond Scar/Bazooka Joe (any
     registered `Model3D` works, e.g. Gold Gunner) and let a wave seed which
     avatar mans which roof, with a matching projectile per weapon;

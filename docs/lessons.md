@@ -1145,3 +1145,28 @@ carried over; these are the new ones.
     lives on the target (read by both StrikeRig for the weapon and the pool for
     which model is visible), so a compacting pool never shows a launcher firing
     bullets.
+
+86. **A persistent world-space trail (a rocket contrail) is puffs left in
+    place and faded by age — keyed by the STABLE pool index, not the compacting
+    render slot — and `PointsMaterial` can't fade per-vertex, so a tiny
+    `alpha`-attribute points shader does it in one draw call.** The soldier
+    rocket's first trail was a cone glued to the warhead (a motion streak): it
+    moved with the rocket and vanished on despawn, so it never marked the flight
+    path. A real contrail (`EnemyRockets`) instead **emits puffs into world
+    space** at the rocket's position every `EMIT_DIST` units and never moves
+    them — they hang where they were dropped and fade over `LIFETIME`, so the
+    smoke line lingers a beat after the rocket passes or detonates. Three things
+    made it clean: (a) **key the per-rocket puff ring by the enemy *pool* index,
+    not the render slot** — the pool `Projectile` objects are stable across a
+    rocket's life while the compacted warhead slots shift as rockets despawn;
+    keying by render slot would splice two rockets' trails together. Detect the
+    pool slot being reused (an inactive→active edge) and clear that block, or a
+    new rocket inherits the dead one's smoke. (b) **Emit by distance, not per
+    frame**, for framerate-independent spacing, and size the ring so a puff ages
+    out before it's overwritten (`PUFFS * EMIT_DIST > LIFETIME * speed`). (c)
+    **Fade needs a shader**: `PointsMaterial` has one global size/opacity and
+    `vertexColors` carries no alpha, so a ~15-line `<shaderMaterial>` with a
+    per-vertex `alpha` attribute (size-attenuated, growing as it fades) keeps
+    the whole effect a single draw call — the `RainField` `Points` discipline,
+    plus per-point life. All buffers pre-allocated and mutated in place (the
+    zero-alloc `useFrame` rule).
