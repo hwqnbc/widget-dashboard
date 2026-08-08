@@ -12,19 +12,20 @@ import { LL } from './lloydPalette'
 function GoldenSword() {
   return (
     <g strokeLinejoin="round">
-      {/* curved scimitar blade (up, tip left) */}
+      {/* curved scimitar blade (up, tip left) — broad and long, like the
+          source art's blade */}
       <path
-        d="M -6,-16 C -11,-58 -19,-88 -34,-108 C -21,-101 -5,-76 2,-40 C 5,-27 6,-20 6,-16 Z"
+        d="M -9,-16 C -16,-64 -27,-106 -50,-150 C -31,-139 -8,-100 5,-48 C 9,-32 10,-22 9,-16 Z"
         fill="url(#lloyd-gold-grad)"
         stroke={LL.goldLine}
         strokeWidth={2}
       />
-      <path d="M -5,-20 C -10,-56 -17,-84 -30,-102 C -19,-95 -6,-72 0,-40 C 2,-30 3,-24 3,-20 Z" fill="url(#lloyd-gold-light)" opacity={0.8} />
-      <path d="M -2,-20 C -6,-52 -13,-80 -26,-99" fill="none" stroke="#fff" strokeWidth={1.6} opacity={0.7} />
+      <path d="M -7,-20 C -13,-62 -23,-100 -44,-140 C -28,-129 -8,-94 2,-48 C 5,-36 6,-26 5,-20 Z" fill="url(#lloyd-gold-light)" opacity={0.8} />
+      <path d="M -3,-20 C -9,-58 -18,-94 -38,-132" fill="none" stroke="#fff" strokeWidth={2} opacity={0.7} />
       {/* guard flare */}
-      <path d="M -12,-12 C -16,-25 16,-25 12,-12 C 5,-17 -5,-17 -12,-12 Z" fill="url(#lloyd-gold-grad)" stroke={LL.goldLine} strokeWidth={1.5} />
+      <path d="M -14,-12 C -18,-26 18,-26 14,-12 C 6,-17 -6,-17 -14,-12 Z" fill="url(#lloyd-gold-grad)" stroke={LL.goldLine} strokeWidth={1.5} />
       {/* handle shaft through the fist */}
-      <rect x={-5} y={-14} width={10} height={40} rx={5} fill="url(#lloyd-gold-grad)" stroke={LL.goldLine} strokeWidth={1.2} />
+      <rect x={-6} y={-14} width={12} height={40} rx={6} fill="url(#lloyd-gold-grad)" stroke={LL.goldLine} strokeWidth={1.2} />
       {/* pommel ring */}
       <circle cx={0} cy={34} r={9} fill="none" stroke="url(#lloyd-gold-grad)" strokeWidth={4} />
       <circle cx={0} cy={34} r={9} fill="none" stroke={LL.goldLine} strokeWidth={1.2} />
@@ -231,9 +232,10 @@ export default function ChopFigure({ chopping = false }: { chopping?: boolean })
         <g transform="translate(138 362) scale(1.5)">
           <GoldenSword />
         </g>
-        {/* normal-size gripping fist over the handle */}
-        <circle cx={138} cy={362} r={9} fill={LL.hand} stroke="#000" strokeWidth={2.5} />
-        <path d="M 131,356 C 135,353 141,353 145,356" fill="none" stroke={LL.handHi} strokeWidth={1.6} />
+        {/* chunky minifig gripping fist over the handle */}
+        <circle cx={138} cy={362} r={14} fill={LL.hand} stroke="#000" strokeWidth={3} />
+        <path d="M 127,353 C 133,348 143,348 149,353" fill="none" stroke={LL.handHi} strokeWidth={2} />
+        <path d="M 128,370 C 134,374 142,374 148,370" fill="none" stroke={LL.handHi} strokeWidth={1.6} opacity={0.7} />
       </Box>
     </svg>
   )
