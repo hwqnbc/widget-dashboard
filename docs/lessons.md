@@ -1319,3 +1319,24 @@ carried over; these are the new ones.
     in the swing plane. Apply #64's two-angle check to whatever you
     authored: face-on the blade must thin to an edge line, side-on it must
     show the broad face.
+
+93. **An "effective value = runtime override ?? persisted setting" split keeps
+    a pickup system honest.** The Drone Strike weapon crates needed a picked-up
+    gun to override the settings pick *until the run ends* without touching
+    persistence. One derived line — `effectiveWeapon = crateWeapon ?? weaponId`
+    (React state ?? `useWidgetField`) — and every consumer (rig `weapon` prop,
+    Tracers length, heat-bar/arc conditionals, the root `data-weapon`) reads
+    the *effective* id, while the settings panel keeps showing the *persisted*
+    one. Reset semantics become explicit setter calls at the run boundaries
+    (`restart()`, the wave-'failed' branch) instead of implicit lifecycle.
+    Two hazards found on the way: (1) **clear the projectile pool on ANY
+    weapon switch** — `stepProjectiles` sweeps the pool with the *current*
+    spec, so an in-flight bolt would retro-inherit the new weapon's
+    gravity/maxAge (key the clearing effect on the effective id, not the
+    setting); (2) **a non-target world entity should live BESIDE the target
+    pool, not in it** — a `crate` TargetKind would have leaked into
+    `aliveCount` (wave never clears), the hit sweep (shootable), minimap blips
+    and the pool renderers; an optional `WaveSpec.crate` field + its own tiny
+    runtime state costs one interface line. And seeding it as the LAST rand()
+    consumers of the wave stream keeps every existing placement byte-identical
+    (the append-only seed-stability rule, #54).

@@ -55,10 +55,24 @@ export interface TargetSpec {
   routeAngle?: number
 }
 
+/** A rooftop weapon crate — NOT a target: it isn't shootable, doesn't count
+ * toward the wave clear, and lives beside the target list on the WaveSpec.
+ * Flying onto it swaps the player's gun (kept until the run ends). */
+export interface CrateSpec {
+  x: number
+  z: number
+  /** Roof height the crate sits on (the disc's y). */
+  top: number
+  /** The weapon the crate grants. */
+  weapon: 'laser' | 'lob'
+}
+
 export interface WaveSpec {
   index: number
   targets: TargetSpec[]
   enemiesShoot: boolean
+  /** Rooftop weapon crate, from CRATE_FROM_WAVE on (when a roof qualifies). */
+  crate?: CrateSpec
 }
 
 /** Enemy drones appear from this wave — wave 1, but wave-throttled
@@ -503,7 +517,50 @@ export function buildWave(
     }
   }
 
-  return { index: waveIndex, targets, enemiesShoot: waveIndex >= diff.fireWave }
+  // Rooftop weapon crate — deliberately the LAST consumers of this wave's
+  // seeded stream (appending draws never moves any placement above; lesson
+  // #54). From CRATE_FROM_WAVE on, put a crate on a qualifying roof no
+  // soldier pacer owns this wave; the granted weapon alternates by wave
+  // parity so both special guns rotate through a run.
+  let crate: CrateSpec | undefined
+  if (waveIndex >= CRATE_FROM_WAVE && perches.length > 0) {
+    let pick = perches[Math.floor(rand() * perches.length)]
+    for (let a = 0; a < 8 && usedBuildings.has(pick.bi); a++) {
+      pick = perches[Math.floor(rand() * perches.length)]
+    }
+    if (!usedBuildings.has(pick.bi)) {
+      crate = {
+        x: pick.b.x,
+        z: pick.b.z,
+        top: pick.b.h,
+        weapon: waveIndex % 2 === 0 ? 'laser' : 'lob',
+      }
+    }
+  }
+
+  return { index: waveIndex, targets, enemiesShoot: waveIndex >= diff.fireWave, crate }
+}
+
+/* ------------------------------ weapon crate ----------------------------- */
+
+/** Crates appear from this wave (wave 1 stays a clean tutorial mix). */
+export const CRATE_FROM_WAVE = 2
+/** Horizontal pickup radius around the crate disc. */
+export const CRATE_RADIUS = 1.8
+/** Vertical pickup window: from just below the roof lip to a low hover. */
+export const CRATE_PICKUP_HEIGHT = 1.6
+
+/**
+ * True when the drone is on/over the crate's disc — one distance check per
+ * frame (the landing-pad pattern). Pure so the rig and the e2e suite share it.
+ */
+export function crateReached(
+  pos: Vec3,
+  crate: { x: number; z: number; top: number },
+): boolean {
+  const dy = pos.y - crate.top
+  if (dy < -0.6 || dy > CRATE_PICKUP_HEIGHT) return false
+  return Math.hypot(pos.x - crate.x, pos.z - crate.z) <= CRATE_RADIUS
 }
 
 /* --------------------------- runtime target pool ------------------------- */

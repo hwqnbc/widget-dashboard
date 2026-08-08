@@ -27,7 +27,17 @@ import { PAD_CENTER, PAD_START_RADIUS } from '../droneSim/lapTimer'
 import type { ExternalState } from '../droneSim/externalInput'
 import { pollGamepad } from '../droneSim/externalInput'
 import { CRASH_PULSE, vibrate } from '../droneSim/haptics'
-import { playAlert, playClear, playCrash, playFire, playHit, playOverheat, playPop, playZap } from './strikeSounds'
+import {
+  playAlert,
+  playClear,
+  playCrash,
+  playFire,
+  playHit,
+  playOverheat,
+  playPickup,
+  playPop,
+  playZap,
+} from './strikeSounds'
 import DroneModel from '../droneSim/DroneModel'
 import type {
   AimAssistLevel,
@@ -61,7 +71,8 @@ import {
   stepProjectiles,
 } from './combatModel'
 import type { TargetKind, TargetState } from './waveLayout'
-import { aliveCount, stepDrift } from './waveLayout'
+import { aliveCount, crateReached, stepDrift } from './waveLayout'
+import type { CrateState } from './WeaponCrates'
 import type { EnemyAIState } from './enemyAI'
 import { stepEnemy, stepTurret } from './enemyAI'
 import type { AimOffset } from './aimModel'
@@ -184,6 +195,9 @@ export default function StrikeRig({
   sparks,
   beams,
   aimRay,
+  crate,
+  onCratePickup,
+  minimapCrateRef,
   onHeatEvent,
   heatBarRef,
   aimRef,
@@ -256,6 +270,13 @@ export default function StrikeRig({
   /** Live aim ray (muzzle + fire direction), published every frame for the
    * ballistic TrajectoryArc hint. */
   aimRay: AimRay
+  /** The wave's rooftop weapon crate — consumed here on touch (one distance
+   * check per frame, the landing-pad pattern). */
+  crate: CrateState
+  /** The player reached the crate — the body swaps the equipped weapon. */
+  onCratePickup: (weapon: 'laser' | 'lob') => void
+  /** Minimap crate marker — position/colour/visibility written on the tick. */
+  minimapCrateRef: RefObject<SVGRectElement | null>
   /** Heat latch tripped / cleared (the body banners it, battery-style). */
   onHeatEvent: (event: HeatEvent) => void
   /** Laser heat bar fill — width/colour/data-level written on the tick. */
@@ -317,7 +338,7 @@ export default function StrikeRig({
   // Monotonic sound-effect counters — one per SfxKind, published on the HUD
   // tick as data-sfx-* (the e2e audio contract; the actual voices are fired
   // imperatively at each event via strikeSounds, gated on `audioOn`).
-  const sfx = useRef({ fire: 0, pop: 0, hit: 0, alert: 0, clear: 0, crash: 0, zap: 0 }).current
+  const sfx = useRef({ fire: 0, pop: 0, hit: 0, alert: 0, clear: 0, crash: 0, zap: 0, pickup: 0 }).current
   const events = useRef(createHitEvents()).current
   const scan = useRef(createHitscanResult()).current
   // Scratch HitEvent for feeding a hitscan outcome through the shared
@@ -425,6 +446,18 @@ export default function StrikeRig({
     // goes offline — the pad is for resting, not sniping.
     const playerSafe = !crash.active && onPad(flight)
     padStateRef.current = playerSafe ? 'active' : 'idle'
+
+    // Weapon-crate pickup — one distance check per frame (the landing-pad
+    // pattern). Consumed on touch (single-use per wave, so no re-arm
+    // hysteresis needed); the body swaps the equipped weapon.
+    if (crate.active && waveActive && !crash.active && crateReached(flight.pos, crate)) {
+      crate.active = false
+      if (audioOn) {
+        sfx.pickup++
+        playPickup()
+      }
+      onCratePickup(crate.weapon)
+    }
 
     const aim = aimRef.current
     const gimbal = gimbalRef.current
@@ -827,6 +860,12 @@ export default function StrikeRig({
         hud.dataset.sfxClear = String(sfx.clear)
         hud.dataset.sfxCrash = String(sfx.crash)
         hud.dataset.sfxZap = String(sfx.zap)
+        hud.dataset.sfxPickup = String(sfx.pickup)
+        // Weapon-crate beacon (suites find the crate without window globals).
+        hud.dataset.crateActive = crate.active ? 'yes' : 'no'
+        hud.dataset.crateX = crate.x.toFixed(1)
+        hud.dataset.crateZ = crate.z.toFixed(1)
+        hud.dataset.crateWeapon = crate.weapon
         // Monotonic spark-burst count (muzzle flashes + impact showers) — the
         // e2e signal that the particle system fired without needing pixels.
         hud.dataset.sparks = String(sparks.spawned)
@@ -909,6 +948,17 @@ export default function StrikeRig({
             Math.PI
           ).toFixed(1)})`,
         )
+      }
+      const crateMarker = minimapCrateRef.current
+      if (crateMarker) {
+        if (crate.active) {
+          crateMarker.setAttribute('x', (crate.x - 1.5).toFixed(1))
+          crateMarker.setAttribute('y', (crate.z - 1.5).toFixed(1))
+          crateMarker.setAttribute('fill', crate.weapon === 'laser' ? '#4fc3f7' : '#ffd54f')
+          crateMarker.removeAttribute('display')
+        } else {
+          crateMarker.setAttribute('display', 'none')
+        }
       }
       const blips = minimapTargetRefs.current
       if (blips) {

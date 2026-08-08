@@ -454,6 +454,8 @@ plus a custom `tint` colour attribute; enemy hits on the *player* deliberately
 spark nothing — the damage vignette is that feedback),
 `LaserBeams` (hitscan beams, instanced boxes fading by thickness),
 `TrajectoryArc` (the lob's live aim hint — see "Player weapons"),
+`WeaponCrates` (the rooftop pickup disc + beacon, driven from the shared
+`CrateState` in useFrame — zero renders),
 `Reticle`/`FireButton`/`HitMarkers`/`StrikeMinimap`/`StrikeSettingsPanel`.
 The rig's player-fire consequences (sparks for every impact, damage/score/sfx
 for targets) are one `applyPlayerHitEvent` closure — the seam any future
@@ -499,9 +501,29 @@ persisted `weapon` field, root `data-weapon`) selects among `WEAPON_SPECS`:
   straight-line flight-time assumption undershoots moving targets with the
   lob.
 
+**Rooftop weapon crates** put the special guns *in the game*: from wave 2, a
+pulsing disc + crate + beacon column (`WeaponCrates`, the LandingPads recipe,
+cyan for laser / amber for lob) sits on a qualifying rooftop no soldier pacer
+owns, seeded as the **last** consumers of the wave's RNG stream (appending
+draws keeps every existing placement identical — the seed-stability lesson);
+the granted weapon alternates by wave parity. A crate is **not a target** — it
+lives beside the target list as `WaveSpec.crate` (not a `TargetKind`, so it's
+unshootable and never counts toward the wave clear). Fly onto the disc
+(`crateReached`, one distance check per frame — the landing-pad pattern; the
+rig consumes it single-use) and the **crate weapon overrides the settings
+pick**: `effectiveWeapon = crateWeapon ?? settings weapon` (runtime-only React
+state, deliberately not persisted), bannered LASER ONLINE / LOB CANNON ONLINE
+with a pickup chime (`data-sfx-pickup`). You keep it until the **run ends** —
+losing all hearts (wave failed) or restarting clears it back to the settings
+pick; a failed-wave retry does NOT keep it (that's the price of the wipe). The
+HUD publishes a crate beacon (`data-crate-active/-x/-z/-weapon`) and the
+minimap draws a small weapon-coloured square so the crate can be found.
+
 **Switching weapons despawns in-flight player bolts** and starts the new gun
 cold — `stepProjectiles` sweeps the pool with the *current* spec, so a live
-bolt must not retro-inherit another weapon's gravity/maxAge.
+bolt must not retro-inherit another weapon's gravity/maxAge. This applies to
+both switch paths (settings pick and crate pickup) — the effect keys on the
+*effective* weapon.
 
 ## Test contract (data-*)
 
@@ -512,8 +534,9 @@ Root `drone-strike-root`: `data-world-seed/-view/-auto-fire/-aim-assist/
 `data-x/-z/-alt/-yaw/-speed/-wave/-wave-state(intro|active|cleared|failed)/
 -score/-shots/-hits/-targets-left/-lock/-proj/-enemy-proj/-hp/
 -input-source`, the **sound-effect counters**
-`data-sfx-fire/-pop/-hit/-alert/-clear/-crash/-zap`, the monotonic spark-burst
-count `data-sparks`, plus the
+`data-sfx-fire/-pop/-hit/-alert/-clear/-crash/-zap/-pickup`, the monotonic
+spark-burst count `data-sparks`, the **weapon-crate beacon**
+`data-crate-active/-x/-z/-weapon`, plus the
 **nearest-alive-target beacon** `data-tgt-x/-y/-z/-kind` that lets suites
 aim closed-loop without window globals. Chips: `strike-score` (`data-score/-wave/-best-score/-best-wave`),
 `strike-hp`, `strike-reticle` (`data-lock`), `strike-fire`
@@ -522,8 +545,8 @@ aim closed-loop without window globals. Chips: `strike-score` (`data-score/-wave
 equipped), joysticks/buttons/settings testids mirror the sim's.
 
 E2E: suites `100-strike-core` … `109-strike-ground` plus `117-strike-audio`,
-`119-strike-soldiers`, `123-strike-sparks`, `124-strike-laser` and
-`125-strike-lob`
+`119-strike-soldiers`, `123-strike-sparks`, `124-strike-laser`,
+`125-strike-lob` and `126-strike-crates`
 (see `e2e/README.md`); pure modules are esbuild-bundled for the suites in a
 second flat pass in `run.mjs`.
 
@@ -557,9 +580,12 @@ kind of list).
 - ~~Ballistic lob~~ — **shipped** (the `LOB` spec + the `TrajectoryArc`
   hint sampled from the same integration via `sampleTrajectory` and the
   rig-published live `aimRay` — see "Player weapons").
-- **Weapon switching / pickups** — per-wave weapon crates on rooftops
-  (LandingPads-style discs); the rig already takes `weapon` as a prop, so
-  switching is a state change in the body.
+- ~~Weapon switching / pickups~~ — **shipped** (the settings weapon picker +
+  per-wave rooftop crates: `WaveSpec.crate` seeded last in the stream,
+  `crateReached` pickup, `effectiveWeapon = crate ?? settings` kept until the
+  run ends — see "Player weapons"). The whole Weapons backlog is now shipped;
+  room to extend: more specs (shotgun spread, homing), crate variants
+  (shield/battery pickups), or a timed power-up flavour.
 - ~~Muzzle flash + impact sparks~~ — **shipped** (the pure `sparkModel.ts`
   burst pool + `SparkField` single-draw-call Points renderer: a muzzle flash
   on every shot, impact showers at `HitEvent` coordinates — targets, world,

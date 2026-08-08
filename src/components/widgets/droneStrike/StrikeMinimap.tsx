@@ -14,12 +14,16 @@ export default function StrikeMinimap({
   buildings,
   droneRef,
   targetRefs,
+  crateRef,
   size,
 }: {
   buildings: readonly BuildingSpec[]
   droneRef: RefObject<SVGGElement | null>
   /** One <circle> per target slot, written on the tick. */
   targetRefs: RefObject<(SVGCircleElement | null)[]>
+  /** The weapon-crate marker (a square, distinct from the round target
+   * blips) — position/colour/visibility written on the tick. */
+  crateRef: RefObject<SVGRectElement | null>
   size: number
 }) {
   return (
@@ -70,6 +74,9 @@ export default function StrikeMinimap({
             display="none"
           />
         ))}
+
+        {/* weapon-crate marker: x/y/fill/display written on the tick */}
+        <rect ref={crateRef} width={3} height={3} display="none" />
 
         {/* drone marker: transform written by StrikeRig on the tick */}
         <g ref={droneRef} data-testid="strike-minimap-drone">

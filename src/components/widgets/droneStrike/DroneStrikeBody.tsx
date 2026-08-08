@@ -85,6 +85,8 @@ import { createSparkPool } from './sparkModel'
 import LaserBeams from './LaserBeams'
 import TrajectoryArc from './TrajectoryArc'
 import type { AimRay } from './TrajectoryArc'
+import WeaponCrates from './WeaponCrates'
+import type { CrateState } from './WeaponCrates'
 import Reticle from './Reticle'
 import FireButton from './FireButton'
 import type { HitMarker } from './HitMarkers'
@@ -207,7 +209,11 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
   const audio = useWidgetField(id, 'audio', true)
   const zoomPower = useWidgetField<ZoomPower>(id, 'zoomPower', 2, coerceZoomPower)
   const weaponId = useWidgetField<WeaponId>(id, 'weapon', 'bolt', coerceWeapon)
-  const weaponSpec = WEAPON_SPECS[weaponId]
+  // A picked-up crate weapon OVERRIDES the settings pick until the run ends
+  // (lose all hearts or restart) — runtime-only, deliberately not persisted.
+  const [crateWeapon, setCrateWeapon] = useState<'laser' | 'lob' | null>(null)
+  const effectiveWeapon: WeaponId = crateWeapon ?? weaponId
+  const weaponSpec = WEAPON_SPECS[effectiveWeapon]
   const zoomFov = zoomFovFor(zoomPower)
   const zoomSens = zoomSensFor(zoomPower)
 
@@ -229,6 +235,15 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
     origin: { x: 0, y: 2, z: 0 },
     dir: { x: 0, y: 0, z: -1 },
   }).current
+  // The wave's rooftop weapon crate — loaded from the wave spec on each
+  // intro, consumed by the rig on touch, drawn by WeaponCrates.
+  const crateState = useRef<CrateState>({
+    active: false,
+    x: 0,
+    top: 0,
+    z: 0,
+    weapon: 'laser',
+  }).current
   const targets = useRef(createTargetStates()).current
   const enemyAI = useRef(createEnemyAIStates()).current
   const aimRef = useRef(createAimOffset())
@@ -249,6 +264,7 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
   const bannerTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const minimapDroneRef = useRef<SVGGElement>(null)
   const minimapTargetRefs = useRef<(SVGCircleElement | null)[]>([])
+  const minimapCrateRef = useRef<SVGRectElement>(null)
   const markerId = useRef(0)
 
   // Live root height (ResizeObserver) — drives the touch-control sizing.
@@ -346,8 +362,19 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
       setHp(PLAYER_HP)
       const t = setTimeout(() => {
         clearProjectiles(combat)
-        loadWave(targets, buildWave(worldSeed, wave, layout, difficulty))
+        const spec = buildWave(worldSeed, wave, layout, difficulty)
+        loadWave(targets, spec)
         seedEnemyAIStates(enemyAI, targets)
+        // Load (or clear) the wave's rooftop weapon crate.
+        if (spec.crate) {
+          crateState.active = true
+          crateState.x = spec.crate.x
+          crateState.top = spec.crate.top
+          crateState.z = spec.crate.z
+          crateState.weapon = spec.crate.weapon
+        } else {
+          crateState.active = false
+        }
         setPhase('active')
         setBanner(null)
       }, INTRO_MS)
@@ -363,10 +390,12 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
     }
     if (phase === 'failed') {
       setBanner('WAVE FAILED — TRY AGAIN')
+      // Losing all hearts forfeits a crate weapon (back to the settings pick).
+      setCrateWeapon(null)
       const t = setTimeout(() => setPhase('intro'), FAILED_MS)
       return () => clearTimeout(t)
     }
-  }, [phase, wave, worldSeed, layout, targets, combat, enemyAI, difficulty])
+  }, [phase, wave, worldSeed, layout, targets, combat, enemyAI, difficulty, crateState])
 
   // Out of hit points mid-wave → the wave is failed.
   useEffect(() => {
@@ -442,15 +471,27 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
     [showBanner],
   )
 
-  // Switching weapons: despawn in-flight player bolts (they must not
-  // retro-inherit the new spec's gravity/maxAge — stepProjectiles sweeps the
-  // pool with the CURRENT weapon) and start the new gun cold.
+  // Switching weapons (settings pick OR crate pickup): despawn in-flight
+  // player bolts (they must not retro-inherit the new spec's gravity/maxAge —
+  // stepProjectiles sweeps the pool with the CURRENT weapon) and start the
+  // new gun cold.
   useEffect(() => {
     for (const p of combat.player) p.active = false
     combat.heat = 0
     combat.overheated = false
     combat.cooldown = 0
-  }, [weaponId, combat])
+  }, [effectiveWeapon, combat])
+
+  // Crate pickup — the rig consumed the crate; swap the equipped weapon
+  // until the run ends and banner the new gun.
+  const onCratePickup = useCallback(
+    (weapon: 'laser' | 'lob') => {
+      setCrateWeapon(weapon)
+      vibrate(GATE_PULSE)
+      showBanner(weapon === 'laser' ? 'LASER ONLINE' : 'LOB CANNON ONLINE')
+    },
+    [showBanner],
+  )
 
   // Crash: the tumble costs a heart (same feedback as taking a bolt);
   // the end of the tumble respawns the drone on the pad.
@@ -514,6 +555,8 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
     setConfirm(null)
     resetFlightState(flight)
     resetCombatState(combat)
+    setCrateWeapon(null)
+    crateState.active = false
     resetBatteryState(batteryRef.current)
     crashRef.current.active = false
     resetGimbal(gimbalRef.current)
@@ -681,7 +724,7 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
       data-minimap={minimap ? 'on' : 'off'}
       data-zoom={zoom ? 'on' : 'off'}
       data-zoom-power={zoomPower}
-      data-weapon={weaponId}
+      data-weapon={effectiveWeapon}
       data-weather={weather}
       data-rich={richWorld ? 'on' : 'off'}
       data-mode={flightMode}
@@ -804,7 +847,8 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
           <EnemyRockets combat={combat} />
           <SparkField sparks={sparks} />
           <LaserBeams beams={beams} />
-          {weaponId === 'lob' && <TrajectoryArc aimRay={aimRay} weapon={weaponSpec} />}
+          {effectiveWeapon === 'lob' && <TrajectoryArc aimRay={aimRay} weapon={weaponSpec} />}
+          <WeaponCrates crate={crateState} />
           <StrikeRig
             controls={controls}
             flight={flight}
@@ -834,6 +878,9 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
             sparks={sparks}
             beams={beams}
             aimRay={aimRay}
+            crate={crateState}
+            onCratePickup={onCratePickup}
+            minimapCrateRef={minimapCrateRef}
             onHeatEvent={onHeatEvent}
             heatBarRef={heatBarRef}
             aimRef={aimRef}
@@ -900,6 +947,7 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
         data-tgt-kind="none"
         data-input-source="touch"
         data-sparks="0"
+        data-crate-active="no"
         sx={{
           position: 'absolute',
           top: 8,
@@ -990,7 +1038,7 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
       {/* Laser heat — same bar recipe as the battery, stacked below it when
        * both are on (the offset arithmetic mirrors the battery's, +14 when
        * the battery bar occupies the slot). Fill = heat 0→100, rig-written. */}
-      {weaponId === 'laser' && (
+      {effectiveWeapon === 'laser' && (
         <Box
           data-testid="strike-heat"
           sx={{
@@ -1098,6 +1146,7 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
           buildings={layout.buildings}
           droneRef={minimapDroneRef}
           targetRefs={minimapTargetRefs}
+          crateRef={minimapCrateRef}
           size={fullscreen ? 140 : 100}
         />
       )}

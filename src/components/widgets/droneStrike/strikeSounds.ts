@@ -8,7 +8,13 @@ import { noise, tone } from '../droneSim/webAudio'
 import type { TargetKind } from './waveLayout'
 
 /** The distinct effects, mirrored by the widget's `data-sfx-*` counters. */
-export type SfxKind = 'fire' | 'pop' | 'hit' | 'alert' | 'clear' | 'crash' | 'zap'
+export type SfxKind = 'fire' | 'pop' | 'hit' | 'alert' | 'clear' | 'crash' | 'zap' | 'pickup'
+
+/** Weapon-crate pickup — a bright two-note chime (new gun online). */
+export function playPickup(): void {
+  tone({ freq: 880, dur: 0.09, type: 'triangle', gain: 0.16 })
+  tone({ freq: 1318.5, dur: 0.16, type: 'triangle', gain: 0.16, delay: 0.09 })
+}
 
 /** Hitscan laser shot — a bright upward zip, distinct from the bolt chirp
  * (the cooldown-pitched `playFire` would sound wrong at the laser's tick). */
