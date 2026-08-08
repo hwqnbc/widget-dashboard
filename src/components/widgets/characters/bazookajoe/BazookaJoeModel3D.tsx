@@ -88,6 +88,7 @@ const KNEEL_REAR = 1.45 // rear (launcher-side) leg folded back
 const KNEEL_FRONT = 1.15 // front leg extended forward
 const BRACE_SHX = -0.5 // left arm leans onto the front knee
 const BRACE_ELB = -0.4
+const WEAPON_LIFT = 0.12 // raises the tube from through-the-cap to resting ON it
 
 /** Emissive fireball burst (orange core + crossed spikes + forward cone so
  * it reads even pointing at the camera); parent toggles `visible`. */
@@ -130,6 +131,7 @@ export default function BazookaJoeModel3D({
   const legLRef = useRef<Group>(null)
   const legRRef = useRef<Group>(null)
   const bodyRef = useRef<Group>(null)
+  const weaponRef = useRef<Group>(null)
   const warheadRef = useRef<Group>(null)
   const blastRef = useRef<Group>(null)
   const boomRef = useRef<Group>(null)
@@ -149,10 +151,11 @@ export default function BazookaJoeModel3D({
     const legL = legLRef.current
     const legR = legRRef.current
     const body = bodyRef.current
+    const weapon = weaponRef.current
     const warhead = warheadRef.current
     const blast = blastRef.current
     const boomG = boomRef.current
-    if (!armL || !armR || !elbowL || !elbowR || !legL || !legR || !body || !warhead || !blast || !boomG) return
+    if (!armL || !armR || !elbowL || !elbowR || !legL || !legR || !body || !weapon || !warhead || !blast || !boomG) return
 
     // Per-action pose; every mutable written every frame (self-correcting).
     const aim = aimRef?.current
@@ -228,6 +231,7 @@ export default function BazookaJoeModel3D({
     elbowR.rotation.x = elbR
     elbowL.rotation.x = L_ELBOW + (BRACE_ELB - L_ELBOW) * kneelK
     body.position.y = -KNEEL_DROP * kneelK
+    weapon.position.y = -0.26 + WEAPON_LIFT * kneelK // tube up onto the shoulder cap
     legR.rotation.x = KNEEL_REAR * kneelK // launcher-side shin folds under
     legL.rotation.x = -KNEEL_FRONT * kneelK // front leg extends ahead
     warhead.visible = warheadOn
@@ -366,8 +370,10 @@ export default function BazookaJoeModel3D({
             <meshStandardMaterial color={BJ.skinShade} {...CLOTH} />
           </mesh>
           {/* the RPG in the fist; tube ⊥ forearm (pistol grip) — rear cone
-           * back past the wrist, white mid ahead, warhead at the front */}
-          <group position={[0, -0.26, 0]}>
+           * back past the wrist, white mid ahead, warhead at the front.
+           * Lifted slightly while aiming so the tube RESTS on the shoulder
+           * cap (the arm chain alone can't reach that high). */}
+          <group ref={weaponRef} position={[0, -0.26, 0]}>
             {/* grip block over the fist */}
             <mesh position={[0, 0, -0.02]}>
               <boxGeometry args={[0.04, 0.08, 0.05]} />
