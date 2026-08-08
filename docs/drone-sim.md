@@ -356,10 +356,13 @@ The view button cycles `tp → fp → los → tp` (persisted `view`):
   (`OperatorFigure.tsx`) renders in `tp`/`fp` and hides in `los`/`walk` —
   the camera stands at its eyes. **The operator is Player 1's avatar**: when
   the avatar chosen for seat `'toy'` on the Settings page carries a
-  mesh-level `Model3D` (see `docs/avatars.md` — toy, ninja and fireninja
-  have one), that lazy 3D
+  mesh-level `Model3D` (see `docs/avatars.md` — every avatar has one now),
+  that lazy 3D
   figure stands in the world (turned to the drone-yaw heading convention,
-  scaled to the ~1.7 u human size); avatars without one fall back to the
+  scaled to the ~1.7 u human size), and it **strides its legs while walking** —
+  `OperatorFigure` passes the shared `walk` action (the `characters/shared/
+  legGait` rig) whenever the op's `walkPhase` is advancing, on top of the
+  step-bob; avatars without one fall back to the
   original primitive figure, which is also the `<Suspense>` fallback while
   the model chunk loads, so the operator never blinks out. Either way it
   holds the RC transmitter. The seat's avatar is resolved OUTSIDE the canvas

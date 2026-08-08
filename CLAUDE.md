@@ -211,7 +211,11 @@ Player 1's avatar) and a `Figure3D` viewer (the model on the shared
 named **action library** (`actions3d` registry metadata; `action` prop) that
 grows one id per added move (e.g. ninja has Pump + Draw); a future avatar
 without a 3D render would show a "no 3D figure yet" placeholder in 3D view
-(see `docs/avatars.md`).
+(see `docs/avatars.md`). Every avatar also carries a shared **`walk`** action —
+the leg-gait rig (`components/widgets/characters/shared/legGait`, hip-pivot leg
+`<group>`s swung by a walk phase) — which also drives the Drone Sim RC operator
+(`OperatorFigure` passes `action="walk"` while moving) and, via `AimPose.speed`,
+the Drone Strike patrol soldiers.
 
 ### Adding an avatar (figure)
 

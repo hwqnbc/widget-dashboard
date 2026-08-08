@@ -534,14 +534,15 @@ kind of list).
     registered `Model3D` works, e.g. Gold Gunner) and let a wave seed which
     avatar patrols where, with a matching projectile per weapon;
   - ~~real leg gait~~ — **shipped** (`characters/shared/legGait` — a hip-pivot
-    leg-swing rig driven by ground speed via `AimPose.speed`; Scar + Bazooka Joe
-    adopt it and any avatar can via the documented convention; see *Movement*);
+    leg-swing rig; now adopted by **all nine** avatar `Model3D`s (a shared
+    `walk` action), driven by ground speed via `AimPose.speed` for the soldiers
+    and a canned `WALK_ACTION_SPEED` for the widget/operator; see *Movement*);
   - ~~diagonal / looping routes~~ — **shipped** (`routeKind`/`routeAngle`:
     ground patrols walk a diagonal line or a circular loop, rooftop pacers an
     axis-aligned line; all in `stepDrift`'s soldier branch);
-  - **operator gait** — the Drone Sim's RC operator (an avatar `Model3D` via
-    `OperatorFigure`) walks with only a body-bob; drive its legs from the shared
-    `legGait` off `operatorWalk`'s distance for a matching stride;
+  - ~~operator gait~~ — **shipped** (the Drone Sim RC operator strides its legs
+    via the shared rig — `OperatorFigure` passes `action="walk"` while Player
+    1's avatar is moving; see `docs/drone-sim.md`);
   - **turning gait / waypoint loops** — legs swing but feet still slide on the
     turns; foot-planting (IK) and multi-segment waypoint routes are the next
     fidelity step.

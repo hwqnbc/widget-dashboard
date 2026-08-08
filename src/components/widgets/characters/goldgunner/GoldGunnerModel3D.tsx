@@ -27,6 +27,8 @@ import { useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import type { Group } from 'three'
 import { GG } from './goldGunnerPalette'
+import { GAIT_RATE, WALK_ACTION_SPEED, legGait } from '../shared/legGait'
+import type { LegSwing } from '../shared/legGait'
 
 const CLOTH = { roughness: 0.7, metalness: 0 }
 const STEEL = { roughness: 0.35, metalness: 0.4 }
@@ -177,10 +179,14 @@ export default function GoldGunnerModel3D({ action }: { action?: string }) {
   const elbowRRef = useRef<Group>(null)
   const flashRRef = useRef<Group>(null)
   const flashLRef = useRef<Group>(null)
+  const legLRef = useRef<Group>(null)
+  const legRRef = useRef<Group>(null)
   const t0Ref = useRef(0)
   const prevActionRef = useRef<string | undefined>(undefined)
+  const walkPhaseRef = useRef(0)
+  const gaitRef = useRef<LegSwing>({ left: 0, right: 0 }).current
 
-  useFrame((state) => {
+  useFrame((state, delta) => {
     const t = state.clock.elapsedTime
     if (action !== prevActionRef.current) {
       prevActionRef.current = action
@@ -192,7 +198,9 @@ export default function GoldGunnerModel3D({ action }: { action?: string }) {
     const elbowR = elbowRRef.current
     const flashR = flashRRef.current
     const flashL = flashLRef.current
-    if (!armL || !armR || !elbowL || !elbowR || !flashR || !flashL) return
+    const legL = legLRef.current
+    const legR = legRRef.current
+    if (!armL || !armR || !elbowL || !elbowR || !flashR || !flashL || !legL || !legR) return
 
     // Per-action pose; every mutable written every frame (self-correcting).
     let elbR = R_ELBOW
@@ -200,6 +208,8 @@ export default function GoldGunnerModel3D({ action }: { action?: string }) {
     let sway = 0
     let showR = false
     let showL = false
+    let gaitL = 0
+    let gaitR = 0
 
     if (action === 'blaze') {
       // rifle fires on the first half-beat, blaster on the second; each
@@ -209,6 +219,11 @@ export default function GoldGunnerModel3D({ action }: { action?: string }) {
       elbL = L_ELBOW + L_KICK * (tau >= HALF ? pulse(tau - HALF) : 0)
       showR = tau < FLASH_T
       showL = tau >= HALF && tau < HALF + FLASH_T
+    } else if (action === 'walk') {
+      walkPhaseRef.current += WALK_ACTION_SPEED * delta * GAIT_RATE
+      const g = legGait(walkPhaseRef.current, WALK_ACTION_SPEED, gaitRef)
+      gaitL = g.left
+      gaitR = g.right
     } else {
       sway = Math.sin(t * 1.7) * 0.04 // idle: both arms breathe together
     }
@@ -223,43 +238,39 @@ export default function GoldGunnerModel3D({ action }: { action?: string }) {
     elbowL.rotation.x = elbL
     flashR.visible = showR
     flashL.visible = showL
+    legL.rotation.x = gaitL // walk gait (0 in every other branch)
+    legR.rotation.x = gaitR
   })
 
   return (
     <group>
-      {/* black tactical legs with panel prints + knee pads, darkest boots */}
-      <mesh position={[-0.14, 0.27, 0]}>
-        <boxGeometry args={[0.24, 0.46, 0.26]} />
-        <meshStandardMaterial color={GG.pants} {...CLOTH} />
-      </mesh>
-      <mesh position={[0.14, 0.27, 0]}>
-        <boxGeometry args={[0.24, 0.46, 0.26]} />
-        <meshStandardMaterial color={GG.pants} {...CLOTH} />
-      </mesh>
-      <mesh position={[-0.14, 0.42, 0.14]}>
-        <boxGeometry args={[0.14, 0.05, 0.02]} />
-        <meshStandardMaterial color={GG.panel} {...CLOTH} />
-      </mesh>
-      <mesh position={[0.14, 0.42, 0.14]}>
-        <boxGeometry args={[0.14, 0.05, 0.02]} />
-        <meshStandardMaterial color={GG.panel} {...CLOTH} />
-      </mesh>
-      <mesh position={[-0.14, 0.26, 0.14]} rotation-x={Math.PI / 2}>
-        <cylinderGeometry args={[0.045, 0.045, 0.02, 10]} />
-        <meshStandardMaterial color={GG.pantsShade} {...CLOTH} />
-      </mesh>
-      <mesh position={[0.14, 0.26, 0.14]} rotation-x={Math.PI / 2}>
-        <cylinderGeometry args={[0.045, 0.045, 0.02, 10]} />
-        <meshStandardMaterial color={GG.pantsShade} {...CLOTH} />
-      </mesh>
-      <mesh position={[-0.14, 0.05, 0.03]}>
-        <boxGeometry args={[0.26, 0.1, 0.32]} />
-        <meshStandardMaterial color={GG.pantsShade} {...CLOTH} />
-      </mesh>
-      <mesh position={[0.14, 0.05, 0.03]}>
-        <boxGeometry args={[0.26, 0.1, 0.32]} />
-        <meshStandardMaterial color={GG.pantsShade} {...CLOTH} />
-      </mesh>
+      {/* black tactical legs with panel prints + knee pads, darkest boots —
+       * each on a hip pivot [±0.14, 0.5, 0] (shared leg-gait convention) so the
+       * walk gait swings the leg (panel + knee pad + boot ride along);
+       * children −0.5 y */}
+      {[
+        { ref: legLRef, x: -0.14 },
+        { ref: legRRef, x: 0.14 },
+      ].map(({ ref, x }) => (
+        <group key={x} ref={ref} position={[x, 0.5, 0]}>
+          <mesh position={[0, -0.23, 0]}>
+            <boxGeometry args={[0.24, 0.46, 0.26]} />
+            <meshStandardMaterial color={GG.pants} {...CLOTH} />
+          </mesh>
+          <mesh position={[0, -0.08, 0.14]}>
+            <boxGeometry args={[0.14, 0.05, 0.02]} />
+            <meshStandardMaterial color={GG.panel} {...CLOTH} />
+          </mesh>
+          <mesh position={[0, -0.24, 0.14]} rotation-x={Math.PI / 2}>
+            <cylinderGeometry args={[0.045, 0.045, 0.02, 10]} />
+            <meshStandardMaterial color={GG.pantsShade} {...CLOTH} />
+          </mesh>
+          <mesh position={[0, -0.45, 0.03]}>
+            <boxGeometry args={[0.26, 0.1, 0.32]} />
+            <meshStandardMaterial color={GG.pantsShade} {...CLOTH} />
+          </mesh>
+        </group>
+      ))}
       {/* waist with the buckle plate */}
       <mesh position={[0, 0.57, 0]}>
         <boxGeometry args={[0.54, 0.14, 0.32]} />

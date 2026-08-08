@@ -26,6 +26,8 @@ import { useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import type { Group } from 'three'
 import { FR } from './frakPalette'
+import { GAIT_RATE, WALK_ACTION_SPEED, legGait } from '../shared/legGait'
+import type { LegSwing } from '../shared/legGait'
 
 const CLOTH = { roughness: 0.7, metalness: 0 }
 const STEEL = { roughness: 0.35, metalness: 0.4 }
@@ -111,10 +113,14 @@ export default function FrakModel3D({ action }: { action?: string }) {
   const elbowRRef = useRef<Group>(null)
   const heldLRef = useRef<Group>(null)
   const heldRRef = useRef<Group>(null)
+  const legLRef = useRef<Group>(null)
+  const legRRef = useRef<Group>(null)
   const t0Ref = useRef(0)
   const prevActionRef = useRef<string | undefined>(undefined)
+  const walkPhaseRef = useRef(0)
+  const gaitRef = useRef<LegSwing>({ left: 0, right: 0 }).current
 
-  useFrame((state) => {
+  useFrame((state, delta) => {
     const t = state.clock.elapsedTime
     if (action !== prevActionRef.current) {
       prevActionRef.current = action
@@ -127,7 +133,9 @@ export default function FrakModel3D({ action }: { action?: string }) {
     const elbowR = elbowRRef.current
     const heldL = heldLRef.current
     const heldR = heldRRef.current
-    if (!body || !armL || !armR || !elbowL || !elbowR || !heldL || !heldR) return
+    const legL = legLRef.current
+    const legR = legRRef.current
+    if (!body || !armL || !armR || !elbowL || !elbowR || !heldL || !heldR || !legL || !legR) return
 
     // Per-action pose; every mutable written every frame (self-correcting).
     // Right-arm scalars + the left arm's own strike progress (antiphase).
@@ -140,6 +148,8 @@ export default function FrakModel3D({ action }: { action?: string }) {
     let shZL = IDLE_SHZ
     let elbL = IDLE_ELBOW
     let bodyY = 0
+    let gaitL = 0
+    let gaitR = 0
 
     if (action === 'flurry') {
       const te = t - t0Ref.current
@@ -159,6 +169,11 @@ export default function FrakModel3D({ action }: { action?: string }) {
       elbL = lerp(IDLE_ELBOW, lerp(RAISE_ELBOW, STRIKE_ELBOW, kL), raise)
       // a small dip as each chop lands
       bodyY = -0.03 * Math.sin(Math.PI * Math.min((tau % HALF) / TWEEN, 1)) * raise
+    } else if (action === 'walk') {
+      walkPhaseRef.current += WALK_ACTION_SPEED * delta * GAIT_RATE
+      const g = legGait(walkPhaseRef.current, WALK_ACTION_SPEED, gaitRef)
+      gaitL = g.left
+      gaitR = g.right
     } else {
       const sway = Math.sin(t * 1.7) * 0.05
       shZR = IDLE_SHZ + sway // both arms breathe out/in together (mirrored)
@@ -176,40 +191,49 @@ export default function FrakModel3D({ action }: { action?: string }) {
     elbowL.rotation.x = elbL
     heldR.rotation.x = WRIST_TILT
     heldL.rotation.x = WRIST_TILT
+    legL.rotation.x = gaitL // walk gait (0 in every other branch)
+    legR.rotation.x = gaitR
   })
 
   return (
     <group ref={bodyRef}>
-      {/* printed grey legs + black boots */}
-      <mesh position={[-0.14, 0.27, 0]}>
-        <boxGeometry args={[0.24, 0.46, 0.26]} />
-        <meshStandardMaterial color={FR.legs} {...CLOTH} />
-      </mesh>
-      <mesh position={[0.14, 0.27, 0]}>
-        <boxGeometry args={[0.24, 0.46, 0.26]} />
-        <meshStandardMaterial color={FR.legs} {...CLOTH} />
-      </mesh>
-      {/* lime thigh patch (left) + green diagonal slashes (right) */}
-      <mesh position={[-0.14, 0.42, 0.14]}>
-        <boxGeometry args={[0.09, 0.06, 0.02]} />
-        <meshStandardMaterial color={FR.lime} {...CLOTH} />
-      </mesh>
-      <mesh position={[0.14, 0.42, 0.14]} rotation-z={0.6}>
-        <boxGeometry args={[0.1, 0.022, 0.02]} />
-        <meshStandardMaterial color={FR.green} {...CLOTH} />
-      </mesh>
-      <mesh position={[0.14, 0.34, 0.14]} rotation-z={0.6}>
-        <boxGeometry args={[0.1, 0.022, 0.02]} />
-        <meshStandardMaterial color={FR.green} {...CLOTH} />
-      </mesh>
-      <mesh position={[-0.14, 0.05, 0.03]}>
-        <boxGeometry args={[0.26, 0.1, 0.32]} />
-        <meshStandardMaterial color={FR.glove} {...CLOTH} />
-      </mesh>
-      <mesh position={[0.14, 0.05, 0.03]}>
-        <boxGeometry args={[0.26, 0.1, 0.32]} />
-        <meshStandardMaterial color={FR.glove} {...CLOTH} />
-      </mesh>
+      {/* printed grey legs + black boots — each on a hip pivot [±0.14, 0.5, 0]
+       * (shared leg-gait convention) so the walk gait swings the leg (patches
+       * + boot ride along); children −0.5 y */}
+      <group ref={legLRef} position={[-0.14, 0.5, 0]}>
+        <mesh position={[0, -0.23, 0]}>
+          <boxGeometry args={[0.24, 0.46, 0.26]} />
+          <meshStandardMaterial color={FR.legs} {...CLOTH} />
+        </mesh>
+        {/* lime thigh patch */}
+        <mesh position={[0, -0.08, 0.14]}>
+          <boxGeometry args={[0.09, 0.06, 0.02]} />
+          <meshStandardMaterial color={FR.lime} {...CLOTH} />
+        </mesh>
+        <mesh position={[0, -0.45, 0.03]}>
+          <boxGeometry args={[0.26, 0.1, 0.32]} />
+          <meshStandardMaterial color={FR.glove} {...CLOTH} />
+        </mesh>
+      </group>
+      <group ref={legRRef} position={[0.14, 0.5, 0]}>
+        <mesh position={[0, -0.23, 0]}>
+          <boxGeometry args={[0.24, 0.46, 0.26]} />
+          <meshStandardMaterial color={FR.legs} {...CLOTH} />
+        </mesh>
+        {/* green diagonal slashes */}
+        <mesh position={[0, -0.08, 0.14]} rotation-z={0.6}>
+          <boxGeometry args={[0.1, 0.022, 0.02]} />
+          <meshStandardMaterial color={FR.green} {...CLOTH} />
+        </mesh>
+        <mesh position={[0, -0.16, 0.14]} rotation-z={0.6}>
+          <boxGeometry args={[0.1, 0.022, 0.02]} />
+          <meshStandardMaterial color={FR.green} {...CLOTH} />
+        </mesh>
+        <mesh position={[0, -0.45, 0.03]}>
+          <boxGeometry args={[0.26, 0.1, 0.32]} />
+          <meshStandardMaterial color={FR.glove} {...CLOTH} />
+        </mesh>
+      </group>
       {/* belt with the lime bar */}
       <mesh position={[0, 0.57, 0]}>
         <boxGeometry args={[0.54, 0.14, 0.32]} />

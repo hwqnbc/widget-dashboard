@@ -80,6 +80,7 @@ export const avatarVisualById: Record<AvatarId, AvatarVisual> = {
     actions3d: [
       { id: 'dance', name: 'Dance' },
       { id: 'sixsevenshow', name: '6 7 Show' },
+      { id: 'walk', name: 'Walk' },
     ],
   },
   ninja: {
@@ -91,6 +92,7 @@ export const avatarVisualById: Record<AvatarId, AvatarVisual> = {
     actions3d: [
       { id: 'pump', name: 'Pump' },
       { id: 'draw', name: 'Draw' },
+      { id: 'walk', name: 'Walk' },
     ],
   },
   fireninja: {
@@ -99,7 +101,10 @@ export const avatarVisualById: Record<AvatarId, AvatarVisual> = {
     Celebration: FireNinjaCelebration,
     Figure3D: FireNinjaFigure3D,
     Model3D: FireNinjaModel3D,
-    actions3d: [{ id: 'blaze', name: 'Fire Blade' }],
+    actions3d: [
+      { id: 'blaze', name: 'Fire Blade' },
+      { id: 'walk', name: 'Walk' },
+    ],
   },
   darkarin: {
     Head: DarkArinHead,
@@ -107,7 +112,10 @@ export const avatarVisualById: Record<AvatarId, AvatarVisual> = {
     Celebration: DarkArinCelebration,
     Figure3D: DarkArinFigure3D,
     Model3D: DarkArinModel3D,
-    actions3d: [{ id: 'cross', name: 'Twin Cross' }],
+    actions3d: [
+      { id: 'cross', name: 'Twin Cross' },
+      { id: 'walk', name: 'Walk' },
+    ],
   },
   frak: {
     Head: FrakHead,
@@ -115,7 +123,10 @@ export const avatarVisualById: Record<AvatarId, AvatarVisual> = {
     Celebration: FrakCelebration,
     Figure3D: FrakFigure3D,
     Model3D: FrakModel3D,
-    actions3d: [{ id: 'flurry', name: 'Blade Flurry' }],
+    actions3d: [
+      { id: 'flurry', name: 'Blade Flurry' },
+      { id: 'walk', name: 'Walk' },
+    ],
   },
   imperium: {
     Head: ImperiumHead,
@@ -123,7 +134,10 @@ export const avatarVisualById: Record<AvatarId, AvatarVisual> = {
     Celebration: ImperiumCelebration,
     Figure3D: ImperiumFigure3D,
     Model3D: ImperiumModel3D,
-    actions3d: [{ id: 'slash', name: 'Claw Slash' }],
+    actions3d: [
+      { id: 'slash', name: 'Claw Slash' },
+      { id: 'walk', name: 'Walk' },
+    ],
   },
   goldgunner: {
     Head: GoldGunnerHead,
@@ -131,7 +145,10 @@ export const avatarVisualById: Record<AvatarId, AvatarVisual> = {
     Celebration: GoldGunnerCelebration,
     Figure3D: GoldGunnerFigure3D,
     Model3D: GoldGunnerModel3D,
-    actions3d: [{ id: 'blaze', name: 'Guns Blazing' }],
+    actions3d: [
+      { id: 'blaze', name: 'Guns Blazing' },
+      { id: 'walk', name: 'Walk' },
+    ],
   },
   scar: {
     Head: ScarHead,
@@ -142,6 +159,7 @@ export const avatarVisualById: Record<AvatarId, AvatarVisual> = {
     actions3d: [
       { id: 'breach', name: 'Breach & Clear' },
       { id: 'sight', name: 'Sight & Fire' },
+      { id: 'walk', name: 'Walk' },
     ],
   },
   bazookajoe: {
@@ -153,6 +171,7 @@ export const avatarVisualById: Record<AvatarId, AvatarVisual> = {
     actions3d: [
       { id: 'launch', name: 'Rocket Launch' },
       { id: 'aim', name: 'Take Aim' },
+      { id: 'walk', name: 'Walk' },
     ],
   },
 }

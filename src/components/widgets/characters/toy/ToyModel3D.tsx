@@ -26,6 +26,8 @@ import { useFrame } from '@react-three/fiber'
 import { Quaternion } from 'three'
 import type { Group, Mesh } from 'three'
 import { TOY as T } from './toyPalette'
+import { GAIT_RATE, WALK_ACTION_SPEED, legGait } from '../shared/legGait'
+import type { LegSwing } from '../shared/legGait'
 
 /** Scratch quaternion for the numeral billboarding (no per-frame allocs). */
 const TMP_Q = new Quaternion()
@@ -52,10 +54,14 @@ export default function ToyModel3D({ action }: { action?: string }) {
   const mouthORef = useRef<Mesh>(null)
   const num6Ref = useRef<Group>(null)
   const num7Ref = useRef<Group>(null)
+  const legLRef = useRef<Group>(null)
+  const legRRef = useRef<Group>(null)
   const t0Ref = useRef(0)
   const prevActionRef = useRef<string | undefined>(undefined)
+  const walkPhaseRef = useRef(0)
+  const gaitRef = useRef<LegSwing>({ left: 0, right: 0 }).current
 
-  useFrame((state) => {
+  useFrame((state, delta) => {
     const t = state.clock.elapsedTime
     if (action !== prevActionRef.current) {
       prevActionRef.current = action
@@ -104,6 +110,17 @@ export default function ToyModel3D({ action }: { action?: string }) {
       elbowRRef.current.rotation.x = elbowXOpp
     }
     if (bodyRef.current) bodyRef.current.position.y = bodyY
+    // Walk gait — the shared leg swing (widget Walk button + Drone Sim operator).
+    let gaitL = 0
+    let gaitR = 0
+    if (action === 'walk') {
+      walkPhaseRef.current += WALK_ACTION_SPEED * delta * GAIT_RATE
+      const g = legGait(walkPhaseRef.current, WALK_ACTION_SPEED, gaitRef)
+      gaitL = g.left
+      gaitR = g.right
+    }
+    if (legLRef.current) legLRef.current.rotation.x = gaitL
+    if (legRRef.current) legRRef.current.rotation.x = gaitR
     // hyped open mouth while dancing, smile otherwise (the 2D mouth swap)
     if (smileRef.current) smileRef.current.visible = !dancing
     if (mouthORef.current) mouthORef.current.visible = dancing
@@ -134,15 +151,21 @@ export default function ToyModel3D({ action }: { action?: string }) {
 
   return (
     <group ref={bodyRef}>
-      {/* legs */}
-      <mesh position={[-0.14, 0.25, 0]}>
-        <boxGeometry args={[0.24, 0.5, 0.26]} />
-        <meshStandardMaterial color={T.leg} {...PLASTIC} />
-      </mesh>
-      <mesh position={[0.14, 0.25, 0]}>
-        <boxGeometry args={[0.24, 0.5, 0.26]} />
-        <meshStandardMaterial color={T.leg} {...PLASTIC} />
-      </mesh>
+      {/* legs — each on a hip pivot [±0.14, 0.5, 0] (shared leg-gait
+       * convention) so the walk gait swings the leg; the 0.5-tall box sits at
+       * local y −0.25 (feet at y=0). The pelvis "hips" slab stays outside. */}
+      <group ref={legLRef} position={[-0.14, 0.5, 0]}>
+        <mesh position={[0, -0.25, 0]}>
+          <boxGeometry args={[0.24, 0.5, 0.26]} />
+          <meshStandardMaterial color={T.leg} {...PLASTIC} />
+        </mesh>
+      </group>
+      <group ref={legRRef} position={[0.14, 0.5, 0]}>
+        <mesh position={[0, -0.25, 0]}>
+          <boxGeometry args={[0.24, 0.5, 0.26]} />
+          <meshStandardMaterial color={T.leg} {...PLASTIC} />
+        </mesh>
+      </group>
       {/* hips */}
       <mesh position={[0, 0.56, 0]}>
         <boxGeometry args={[0.52, 0.12, 0.3]} />

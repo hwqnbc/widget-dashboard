@@ -22,6 +22,8 @@ import { useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import type { Group, MeshStandardMaterial } from 'three'
 import { F } from './fireNinjaPalette'
+import { GAIT_RATE, WALK_ACTION_SPEED, legGait } from '../shared/legGait'
+import type { LegSwing } from '../shared/legGait'
 
 const CLOTH = { roughness: 0.7, metalness: 0 }
 const STEEL = { roughness: 0.35, metalness: 0.4 }
@@ -56,10 +58,14 @@ export default function FireNinjaModel3D({ action }: { action?: string }) {
   const wristRef = useRef<Group>(null)
   const bladeRef = useRef<Group>(null)
   const coreMatRef = useRef<MeshStandardMaterial>(null)
+  const legLRef = useRef<Group>(null)
+  const legRRef = useRef<Group>(null)
   const t0Ref = useRef(0)
   const prevActionRef = useRef<string | undefined>(undefined)
+  const walkPhaseRef = useRef(0)
+  const gaitRef = useRef<LegSwing>({ left: 0, right: 0 }).current
 
-  useFrame((state) => {
+  useFrame((state, delta) => {
     const t = state.clock.elapsedTime
     if (action !== prevActionRef.current) {
       prevActionRef.current = action
@@ -71,7 +77,9 @@ export default function FireNinjaModel3D({ action }: { action?: string }) {
     const elbowR = elbowRRef.current
     const wrist = wristRef.current
     const blade = bladeRef.current
-    if (!armL || !armR || !elbowL || !elbowR || !wrist || !blade) return
+    const legL = legLRef.current
+    const legR = legRRef.current
+    if (!armL || !armR || !elbowL || !elbowR || !wrist || !blade || !legL || !legR) return
 
     let armRz = REST
     let armRx = 0
@@ -80,6 +88,8 @@ export default function FireNinjaModel3D({ action }: { action?: string }) {
     let wristX = WRIST_TILT * 0.6 // relaxed obtuse grip at rest
     let bladeScale = 0
     let flicker = 1
+    let gaitL = 0
+    let gaitR = 0
 
     if (action === 'blaze') {
       const tau = t - t0Ref.current
@@ -106,6 +116,11 @@ export default function FireNinjaModel3D({ action }: { action?: string }) {
         // living flame: two incommensurate wobbles + emissive pulse
         flicker = 1 + Math.sin(t * 13) * 0.05 + Math.sin(t * 7.3) * 0.04
       }
+    } else if (action === 'walk') {
+      walkPhaseRef.current += WALK_ACTION_SPEED * delta * GAIT_RATE
+      const g = legGait(walkPhaseRef.current, WALK_ACTION_SPEED, gaitRef)
+      gaitL = g.left
+      gaitR = g.right
     } else {
       const sway = Math.sin(t * 1.7) * 0.05
       armLz = -(REST + sway)
@@ -122,27 +137,34 @@ export default function FireNinjaModel3D({ action }: { action?: string }) {
     blade.visible = bladeScale > 0.03
     blade.scale.set(1 + (flicker - 1) * 0.6, bladeScale * flicker, 1 + (flicker - 1) * 0.6)
     if (coreMatRef.current) coreMatRef.current.emissiveIntensity = 1.1 + (flicker - 1) * 6
+    legL.rotation.x = gaitL // walk gait (0 in every other branch)
+    legR.rotation.x = gaitR
   })
 
   return (
     <group>
-      {/* legs + black boots */}
-      <mesh position={[-0.14, 0.27, 0]}>
-        <boxGeometry args={[0.24, 0.46, 0.26]} />
-        <meshStandardMaterial color={F.gi} {...CLOTH} />
-      </mesh>
-      <mesh position={[0.14, 0.27, 0]}>
-        <boxGeometry args={[0.24, 0.46, 0.26]} />
-        <meshStandardMaterial color={F.gi} {...CLOTH} />
-      </mesh>
-      <mesh position={[-0.14, 0.05, 0.03]}>
-        <boxGeometry args={[0.26, 0.1, 0.32]} />
-        <meshStandardMaterial color={F.sash} {...CLOTH} />
-      </mesh>
-      <mesh position={[0.14, 0.05, 0.03]}>
-        <boxGeometry args={[0.26, 0.1, 0.32]} />
-        <meshStandardMaterial color={F.sash} {...CLOTH} />
-      </mesh>
+      {/* legs + black boots — each on a hip pivot [±0.14, 0.5, 0] (shared
+       * leg-gait convention) so the walk gait swings the leg; children −0.5 y */}
+      <group ref={legLRef} position={[-0.14, 0.5, 0]}>
+        <mesh position={[0, -0.23, 0]}>
+          <boxGeometry args={[0.24, 0.46, 0.26]} />
+          <meshStandardMaterial color={F.gi} {...CLOTH} />
+        </mesh>
+        <mesh position={[0, -0.45, 0.03]}>
+          <boxGeometry args={[0.26, 0.1, 0.32]} />
+          <meshStandardMaterial color={F.sash} {...CLOTH} />
+        </mesh>
+      </group>
+      <group ref={legRRef} position={[0.14, 0.5, 0]}>
+        <mesh position={[0, -0.23, 0]}>
+          <boxGeometry args={[0.24, 0.46, 0.26]} />
+          <meshStandardMaterial color={F.gi} {...CLOTH} />
+        </mesh>
+        <mesh position={[0, -0.45, 0.03]}>
+          <boxGeometry args={[0.26, 0.1, 0.32]} />
+          <meshStandardMaterial color={F.sash} {...CLOTH} />
+        </mesh>
+      </group>
       {/* black obi belt + knot */}
       <mesh position={[0, 0.57, 0]}>
         <boxGeometry args={[0.54, 0.14, 0.32]} />

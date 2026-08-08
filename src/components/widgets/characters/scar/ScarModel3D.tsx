@@ -28,7 +28,7 @@ import { useFrame } from '@react-three/fiber'
 import type { Group } from 'three'
 import { SC } from './scarPalette'
 import type { AimPose } from '../shared/aimPose'
-import { GAIT_RATE, legGait } from '../shared/legGait'
+import { GAIT_RATE, WALK_ACTION_SPEED, legGait } from '../shared/legGait'
 import type { LegSwing } from '../shared/legGait'
 
 const CLOTH = { roughness: 0.7, metalness: 0 }
@@ -285,6 +285,13 @@ export default function ScarModel3D({
         if (dt >= 0 && dt < KICK_T) elbR = elbBase + KICK_AMP * Math.sin((Math.PI * dt) / KICK_T)
         if (dt >= 0 && dt < FLASH_T) muzzleOn = true
       }
+    } else if (action === 'walk') {
+      // Canned walk-in-place: the shared leg gait on a self-clock (widget Walk
+      // button + the Drone Sim operator).
+      walkPhaseRef.current += WALK_ACTION_SPEED * delta * GAIT_RATE
+      const g = legGait(walkPhaseRef.current, WALK_ACTION_SPEED, gaitRef)
+      gaitL = g.left
+      gaitR = g.right
     } else {
       sway = Math.sin(t * 1.7) * 0.04 // idle: both arms breathe together
     }

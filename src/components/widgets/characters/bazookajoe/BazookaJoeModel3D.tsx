@@ -38,7 +38,7 @@ import { useFrame } from '@react-three/fiber'
 import type { Group } from 'three'
 import { BJ } from './bazookaJoePalette'
 import type { AimPose } from '../shared/aimPose'
-import { GAIT_RATE, legGait } from '../shared/legGait'
+import { GAIT_RATE, WALK_ACTION_SPEED, legGait } from '../shared/legGait'
 import type { LegSwing } from '../shared/legGait'
 
 /** How far pitch can raise/lower the launcher (radians). */
@@ -235,6 +235,13 @@ export default function BazookaJoeModel3D({
       warheadOn = tau < AIM_FIRE
       blastOn = tau >= AIM_FIRE && tau < AIM_FIRE + 0.2
       boomOn = tau >= AIM_BOOM_ON && tau < AIM_BOOM_OFF
+    } else if (action === 'walk') {
+      // Canned walk-in-place: the shared leg gait on a self-clock (widget Walk
+      // button + the Drone Sim operator).
+      walkPhaseRef.current += WALK_ACTION_SPEED * dt * GAIT_RATE
+      const g = legGait(walkPhaseRef.current, WALK_ACTION_SPEED, gaitRef)
+      gaitL = g.left
+      gaitR = g.right
     } else {
       sway = Math.sin(t * 1.7) * 0.04 // idle: both arms breathe together
     }

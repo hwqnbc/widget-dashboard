@@ -24,6 +24,8 @@ import { useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import type { Group } from 'three'
 import { N } from './ninjaPalette'
+import { GAIT_RATE, WALK_ACTION_SPEED, legGait } from '../shared/legGait'
+import type { LegSwing } from '../shared/legGait'
 
 const CLOTH = { roughness: 0.7, metalness: 0 }
 const STEEL = { roughness: 0.35, metalness: 0.4 }
@@ -72,10 +74,14 @@ export default function NinjaModel3D({ action }: { action?: string }) {
   const backRRef = useRef<Group>(null)
   /** Back katana over the LEFT shoulder — the one 'pump' holds drawn. */
   const backLRef = useRef<Group>(null)
+  const legLRef = useRef<Group>(null)
+  const legRRef = useRef<Group>(null)
   const t0Ref = useRef(0)
   const prevActionRef = useRef<string | undefined>(undefined)
+  const walkPhaseRef = useRef(0)
+  const gaitRef = useRef<LegSwing>({ left: 0, right: 0 }).current
 
-  useFrame((state) => {
+  useFrame((state, delta) => {
     const t = state.clock.elapsedTime
     if (action !== prevActionRef.current) {
       prevActionRef.current = action
@@ -89,7 +95,9 @@ export default function NinjaModel3D({ action }: { action?: string }) {
     const held = heldRef.current
     const backR = backRRef.current
     const backL = backLRef.current
-    if (!body || !armL || !armR || !elbowL || !elbowR || !held || !backR || !backL) return
+    const legL = legLRef.current
+    const legR = legRRef.current
+    if (!body || !armL || !armR || !elbowL || !elbowR || !held || !backR || !backL || !legL || !legR) return
 
     // Per-action pose; every mutable written every frame (self-correcting).
     let armRz = REST
@@ -101,6 +109,8 @@ export default function NinjaModel3D({ action }: { action?: string }) {
     let heldVisible = false
     let backRVisible = true
     let backLVisible = true
+    let gaitL = 0
+    let gaitR = 0
 
     if (action === 'pump') {
       // overhead pump: blade as the straight arm's extension — elbow open
@@ -159,6 +169,11 @@ export default function NinjaModel3D({ action }: { action?: string }) {
         elbowRX = lerp(-0.15, ELBOW_REST, k)
         bodyY = -0.05 * (1 - k)
       }
+    } else if (action === 'walk') {
+      walkPhaseRef.current += WALK_ACTION_SPEED * delta * GAIT_RATE
+      const g = legGait(walkPhaseRef.current, WALK_ACTION_SPEED, gaitRef)
+      gaitL = g.left
+      gaitR = g.right
     } else {
       const sway = Math.sin(t * 1.7) * 0.05
       armLz = -(REST + sway)
@@ -176,27 +191,34 @@ export default function NinjaModel3D({ action }: { action?: string }) {
     held.rotation.x = wristX // …tilted up a touch: obtuse, never folded back
     backR.visible = backRVisible
     backL.visible = backLVisible
+    legL.rotation.x = gaitL // walk gait (0 in every other branch)
+    legR.rotation.x = gaitR
   })
 
   return (
     <group ref={bodyRef}>
-      {/* legs + tabi feet */}
-      <mesh position={[-0.14, 0.27, 0]}>
-        <boxGeometry args={[0.24, 0.46, 0.26]} />
-        <meshStandardMaterial color={N.robe} {...CLOTH} />
-      </mesh>
-      <mesh position={[0.14, 0.27, 0]}>
-        <boxGeometry args={[0.24, 0.46, 0.26]} />
-        <meshStandardMaterial color={N.robe} {...CLOTH} />
-      </mesh>
-      <mesh position={[-0.14, 0.05, 0.03]}>
-        <boxGeometry args={[0.26, 0.1, 0.32]} />
-        <meshStandardMaterial color={N.robeShade2} {...CLOTH} />
-      </mesh>
-      <mesh position={[0.14, 0.05, 0.03]}>
-        <boxGeometry args={[0.26, 0.1, 0.32]} />
-        <meshStandardMaterial color={N.robeShade2} {...CLOTH} />
-      </mesh>
+      {/* legs + tabi feet — each on a hip pivot [±0.14, 0.5, 0] (shared
+       * leg-gait convention) so the walk gait swings the leg; children −0.5 y */}
+      <group ref={legLRef} position={[-0.14, 0.5, 0]}>
+        <mesh position={[0, -0.23, 0]}>
+          <boxGeometry args={[0.24, 0.46, 0.26]} />
+          <meshStandardMaterial color={N.robe} {...CLOTH} />
+        </mesh>
+        <mesh position={[0, -0.45, 0.03]}>
+          <boxGeometry args={[0.26, 0.1, 0.32]} />
+          <meshStandardMaterial color={N.robeShade2} {...CLOTH} />
+        </mesh>
+      </group>
+      <group ref={legRRef} position={[0.14, 0.5, 0]}>
+        <mesh position={[0, -0.23, 0]}>
+          <boxGeometry args={[0.24, 0.46, 0.26]} />
+          <meshStandardMaterial color={N.robe} {...CLOTH} />
+        </mesh>
+        <mesh position={[0, -0.45, 0.03]}>
+          <boxGeometry args={[0.26, 0.1, 0.32]} />
+          <meshStandardMaterial color={N.robeShade2} {...CLOTH} />
+        </mesh>
+      </group>
       {/* gold obi belt + knot */}
       <mesh position={[0, 0.57, 0]}>
         <boxGeometry args={[0.54, 0.14, 0.32]} />

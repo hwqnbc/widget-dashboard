@@ -126,6 +126,19 @@ forearm (local +z of the elbow group), so the elbow's hinge IS the
 swing — with a slight outward shoulder yaw so the sagittal arc stays
 readable face-on.
 
+**Every avatar also has a shared `walk` action** ("Walk", appended last to each
+`actions3d`) — the first move that animates *legs*. It's the shared leg-gait
+rig (`characters/shared/legGait.ts`): each model wraps its legs in hip-pivot
+`<group>`s at `[±0.14, 0.5, 0]` (children −0.5 in y; toy's single 0.5-tall leg
+box uses −0.25) and, in a `action === 'walk'` branch, advances a `walkPhase` off
+the frame delta at `WALK_ACTION_SPEED` and swings the two hips in opposite phase
+via `legGait(phase, speed)`. The same rig, driven by live ground speed instead
+of a canned rate, powers the Drone Strike patrol soldiers (`AimPose.speed`) and
+the **Drone Sim RC operator** — `OperatorFigure` passes `action="walk"` while
+Player 1's avatar is moving, so whichever avatar is the operator strides its
+legs (models predate the rig gracefully: an unknown action just leaves the legs
+neutral).
+
 The render is split into a venue-neutral **model** and a viewer **figure**,
 so the same character can stand in a game world:
 

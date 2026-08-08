@@ -24,6 +24,10 @@ export const GAIT_STRIDE = 0.7
 export const GAIT_RATE = 2.2
 /** Speed (u/s) at which the stride reaches full amplitude. */
 const GAIT_FULL_SPEED = 1.4
+/** Nominal speed a canned `action: 'walk'` walk-in-place strides at (full
+ * amplitude) — shared by every avatar model's `'walk'` branch and the Drone
+ * Sim operator so a walking figure looks the same everywhere. */
+export const WALK_ACTION_SPEED = 1.4
 
 export interface LegSwing {
   left: number

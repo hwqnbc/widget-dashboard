@@ -23,6 +23,8 @@ import { useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import type { Group } from 'three'
 import { D } from './darkArinPalette'
+import { GAIT_RATE, WALK_ACTION_SPEED, legGait } from '../shared/legGait'
+import type { LegSwing } from '../shared/legGait'
 
 const CLOTH = { roughness: 0.7, metalness: 0 }
 const STEEL = { roughness: 0.35, metalness: 0.4 }
@@ -94,10 +96,14 @@ export default function DarkArinModel3D({ action }: { action?: string }) {
   const elbowRRef = useRef<Group>(null)
   const heldLRef = useRef<Group>(null)
   const heldRRef = useRef<Group>(null)
+  const legLRef = useRef<Group>(null)
+  const legRRef = useRef<Group>(null)
   const t0Ref = useRef(0)
   const prevActionRef = useRef<string | undefined>(undefined)
+  const walkPhaseRef = useRef(0)
+  const gaitRef = useRef<LegSwing>({ left: 0, right: 0 }).current
 
-  useFrame((state) => {
+  useFrame((state, delta) => {
     const t = state.clock.elapsedTime
     if (action !== prevActionRef.current) {
       prevActionRef.current = action
@@ -110,7 +116,9 @@ export default function DarkArinModel3D({ action }: { action?: string }) {
     const elbowR = elbowRRef.current
     const heldL = heldLRef.current
     const heldR = heldRRef.current
-    if (!body || !armL || !armR || !elbowL || !elbowR || !heldL || !heldR) return
+    const legL = legLRef.current
+    const legR = legRRef.current
+    if (!body || !armL || !armR || !elbowL || !elbowR || !heldL || !heldR || !legL || !legR) return
 
     // Per-action pose; every mutable written every frame (self-correcting).
     // One right-arm scalar set — the left arm mirrors z and y below.
@@ -119,6 +127,8 @@ export default function DarkArinModel3D({ action }: { action?: string }) {
     let shX = 0
     let elbow = READY_ELBOW
     let bodyY = 0
+    let gaitL = 0
+    let gaitR = 0
 
     if (action === 'cross') {
       const tau = (t - t0Ref.current) % CROSS_T
@@ -136,6 +146,11 @@ export default function DarkArinModel3D({ action }: { action?: string }) {
       shX = lerp(0, CROSS_SHX, k)
       if (tau < 0.7 || tau >= 1.3) elbow = lerp(READY_ELBOW, CROSS_ELBOW, k)
       bodyY = -0.05 * k // slight crouch behind the guard
+    } else if (action === 'walk') {
+      walkPhaseRef.current += WALK_ACTION_SPEED * delta * GAIT_RATE
+      const g = legGait(walkPhaseRef.current, WALK_ACTION_SPEED, gaitRef)
+      gaitL = g.left
+      gaitR = g.right
     } else {
       const sway = Math.sin(t * 1.7) * 0.05
       shZ = READY_SHZ + sway // both arms breathe out/in together (mirrored)
@@ -152,35 +167,36 @@ export default function DarkArinModel3D({ action }: { action?: string }) {
     elbowR.rotation.x = elbow
     heldL.rotation.x = WRIST_TILT
     heldR.rotation.x = WRIST_TILT
+    legL.rotation.x = gaitL // walk gait (0 in every other branch)
+    legR.rotation.x = gaitR
   })
 
   return (
     <group ref={bodyRef}>
-      {/* legs with black shin wraps + tabi feet */}
-      <mesh position={[-0.14, 0.27, 0]}>
-        <boxGeometry args={[0.24, 0.46, 0.26]} />
-        <meshStandardMaterial color={D.gi} {...CLOTH} />
-      </mesh>
-      <mesh position={[0.14, 0.27, 0]}>
-        <boxGeometry args={[0.24, 0.46, 0.26]} />
-        <meshStandardMaterial color={D.gi} {...CLOTH} />
-      </mesh>
-      {[-0.14, 0.14].map((x) =>
-        [0.2, 0.12].map((y) => (
-          <mesh key={`${x}${y}`} position={[x, y, 0]}>
-            <boxGeometry args={[0.26, 0.045, 0.28]} />
+      {/* legs with black shin wraps + tabi feet — each on a hip pivot
+       * [±0.14, 0.5, 0] (shared leg-gait convention) so the walk gait swings
+       * the leg (shin wraps + boot ride along); children −0.5 y */}
+      {[
+        { ref: legLRef, x: -0.14 },
+        { ref: legRRef, x: 0.14 },
+      ].map(({ ref, x }) => (
+        <group key={x} ref={ref} position={[x, 0.5, 0]}>
+          <mesh position={[0, -0.23, 0]}>
+            <boxGeometry args={[0.24, 0.46, 0.26]} />
+            <meshStandardMaterial color={D.gi} {...CLOTH} />
+          </mesh>
+          {[0.2, 0.12].map((y) => (
+            <mesh key={y} position={[0, y - 0.5, 0]}>
+              <boxGeometry args={[0.26, 0.045, 0.28]} />
+              <meshStandardMaterial color={D.mask} {...CLOTH} />
+            </mesh>
+          ))}
+          <mesh position={[0, -0.45, 0.03]}>
+            <boxGeometry args={[0.26, 0.1, 0.32]} />
             <meshStandardMaterial color={D.mask} {...CLOTH} />
           </mesh>
-        )),
-      )}
-      <mesh position={[-0.14, 0.05, 0.03]}>
-        <boxGeometry args={[0.26, 0.1, 0.32]} />
-        <meshStandardMaterial color={D.mask} {...CLOTH} />
-      </mesh>
-      <mesh position={[0.14, 0.05, 0.03]}>
-        <boxGeometry args={[0.26, 0.1, 0.32]} />
-        <meshStandardMaterial color={D.mask} {...CLOTH} />
-      </mesh>
+        </group>
+      ))}
       {/* black obi belt + knot */}
       <mesh position={[0, 0.57, 0]}>
         <boxGeometry args={[0.54, 0.14, 0.32]} />

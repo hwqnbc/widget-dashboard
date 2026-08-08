@@ -6,10 +6,12 @@
  * Covers: 2D default, toggling to 3D lazy-loads the three.js chunk and
  * renders a WebGL canvas for every avatar (ALL nine carry a Figure3D now),
  * the action toggle lists the 3D model's named-move library (registry
- * `actions3d`: toy [Dance, 6 7 Show], ninja [Pump, Draw], fireninja
- * [Fire Blade], darkarin [Twin Cross], frak [Blade Flurry], imperium
- * [Claw Slash], goldgunner [Guns Blazing], scar [Breach & Clear, Sight & Fire],
- * bazookajoe [Rocket Launch, Take Aim]) and each
+ * `actions3d`; **every avatar now also has a shared Walk (leg-gait) action
+ * appended last**): toy [Dance, 6 7 Show, Walk], ninja [Pump, Draw, Walk],
+ * fireninja [Fire Blade, Walk], darkarin [Twin Cross, Walk], frak
+ * [Blade Flurry, Walk], imperium [Claw Slash, Walk], goldgunner
+ * [Guns Blazing, Walk], scar [Breach & Clear, Sight & Fire, Walk],
+ * bazookajoe [Rocket Launch, Take Aim, Walk]) and each
  * action drives
  * `data-action`/`data-playing`, tapping the 3D figure toggles the turntable
  * (`data-spin`, one uniform rule for every avatar, persisted per widget),
@@ -65,7 +67,7 @@ await page.waitForTimeout(150)
 check('tapping again restarts it', (await attr('data-spin')) === 'on')
 
 // the action toggle lists the toy's move library and drives the 3D model
-check('toy 3d actions: Idle + Dance + 6 7 Show', (await celebration.count()) === 3)
+check('toy 3d actions: Idle + Dance + 6 7 Show + Walk', (await celebration.count()) === 4)
 await celebration.nth(1).click() // 'Dance'
 await page.waitForTimeout(150)
 check('Dance starts the 3d action', (await attr('data-playing')) === 'yes')
@@ -75,6 +77,10 @@ await celebration.nth(2).click() // '6 7 Show' — the numerals variant
 await page.waitForTimeout(150)
 check('6 7 Show takes over', (await attr('data-action')) === 'sixsevenshow')
 check('show keeps playing', (await attr('data-playing')) === 'yes')
+await celebration.nth(3).click() // 'Walk' — the shared leg-gait action
+await page.waitForTimeout(150)
+check('Walk plays on toy', (await attr('data-action')) === 'walk')
+check('Walk sets playing', (await attr('data-playing')) === 'yes')
 await celebration.nth(0).click()
 await page.waitForTimeout(150)
 check('Idle stops it', (await attr('data-playing')) === 'no')
@@ -88,7 +94,7 @@ check('ninja 3d view renders a WebGL canvas', (await stageCanvas.count()) === 1)
 await stage3d.click() // the same tap toggle on every avatar
 await page.waitForTimeout(150)
 check('spin toggle works on ninja too', (await attr('data-spin')) === 'off')
-check('ninja 3d actions: Idle + Pump + Draw', (await celebration.count()) === 3)
+check('ninja 3d actions: Idle + Pump + Draw + Walk', (await celebration.count()) === 4)
 await celebration.nth(2).click() // Draw
 await page.waitForTimeout(150)
 check('Draw plays', (await attr('data-action')) === 'draw')
@@ -106,7 +112,7 @@ await page.waitForTimeout(150)
 check('fireninja advertises an available 3D figure', (await attr('data-figure3d')) === 'available')
 await page.waitForSelector('[data-testid="figure3d-stage"] canvas', { timeout: 20000 })
 check('fireninja 3d view renders a WebGL canvas', (await stageCanvas.count()) === 1)
-check('fireninja 3d actions: Idle + Fire Blade', (await celebration.count()) === 2)
+check('fireninja 3d actions: Idle + Fire Blade + Walk', (await celebration.count()) === 3)
 await celebration.nth(1).click() // Fire Blade
 await page.waitForTimeout(150)
 check('Fire Blade plays', (await attr('data-action')) === 'blaze')
@@ -120,7 +126,7 @@ await page.waitForTimeout(150)
 check('darkarin advertises an available 3D figure', (await attr('data-figure3d')) === 'available')
 await page.waitForSelector('[data-testid="figure3d-stage"] canvas', { timeout: 20000 })
 check('darkarin 3d view renders a WebGL canvas', (await stageCanvas.count()) === 1)
-check('darkarin 3d actions: Idle + Twin Cross', (await celebration.count()) === 2)
+check('darkarin 3d actions: Idle + Twin Cross + Walk', (await celebration.count()) === 3)
 await celebration.nth(1).click() // Twin Cross
 await page.waitForTimeout(150)
 check('Twin Cross plays', (await attr('data-action')) === 'cross')
@@ -135,7 +141,7 @@ await page.waitForTimeout(150)
 check('frak advertises an available 3D figure', (await attr('data-figure3d')) === 'available')
 await page.waitForSelector('[data-testid="figure3d-stage"] canvas', { timeout: 20000 })
 check('frak 3d view renders a WebGL canvas', (await stageCanvas.count()) === 1)
-check('frak 3d actions: Idle + Blade Flurry', (await celebration.count()) === 2)
+check('frak 3d actions: Idle + Blade Flurry + Walk', (await celebration.count()) === 3)
 await celebration.nth(1).click() // Blade Flurry
 await page.waitForTimeout(150)
 check('Blade Flurry plays', (await attr('data-action')) === 'flurry')
@@ -150,7 +156,7 @@ await page.waitForTimeout(150)
 check('imperium advertises an available 3D figure', (await attr('data-figure3d')) === 'available')
 await page.waitForSelector('[data-testid="figure3d-stage"] canvas', { timeout: 20000 })
 check('imperium 3d view renders a WebGL canvas', (await stageCanvas.count()) === 1)
-check('imperium 3d actions: Idle + Claw Slash', (await celebration.count()) === 2)
+check('imperium 3d actions: Idle + Claw Slash + Walk', (await celebration.count()) === 3)
 await celebration.nth(1).click() // Claw Slash
 await page.waitForTimeout(150)
 check('Claw Slash plays', (await attr('data-action')) === 'slash')
@@ -165,7 +171,7 @@ await page.waitForTimeout(150)
 check('goldgunner advertises an available 3D figure', (await attr('data-figure3d')) === 'available')
 await page.waitForSelector('[data-testid="figure3d-stage"] canvas', { timeout: 20000 })
 check('goldgunner 3d view renders a WebGL canvas', (await stageCanvas.count()) === 1)
-check('goldgunner 3d actions: Idle + Guns Blazing', (await celebration.count()) === 2)
+check('goldgunner 3d actions: Idle + Guns Blazing + Walk', (await celebration.count()) === 3)
 await celebration.nth(1).click() // Guns Blazing
 await page.waitForTimeout(150)
 check('Guns Blazing plays', (await attr('data-action')) === 'blaze')
@@ -180,7 +186,7 @@ await page.waitForTimeout(150)
 check('scar advertises an available 3D figure', (await attr('data-figure3d')) === 'available')
 await page.waitForSelector('[data-testid="figure3d-stage"] canvas', { timeout: 20000 })
 check('scar 3d view renders a WebGL canvas', (await stageCanvas.count()) === 1)
-check('scar 3d actions: Idle + Breach & Clear + Sight & Fire', (await celebration.count()) === 3)
+check('scar 3d actions: Idle + Breach & Clear + Sight & Fire + Walk', (await celebration.count()) === 4)
 await celebration.nth(1).click() // Breach & Clear
 await page.waitForTimeout(150)
 check('Breach & Clear plays', (await attr('data-action')) === 'breach')
@@ -189,6 +195,10 @@ await celebration.nth(2).click() // Sight & Fire (the new aiming action)
 await page.waitForTimeout(150)
 check('Sight & Fire plays', (await attr('data-action')) === 'sight')
 check('Sight & Fire sets playing', (await attr('data-playing')) === 'yes')
+await celebration.nth(3).click() // Walk (the shared leg-gait action)
+await page.waitForTimeout(150)
+check('Walk plays on scar', (await attr('data-action')) === 'walk')
+check('Walk sets playing', (await attr('data-playing')) === 'yes')
 await celebration.nth(0).click()
 await page.waitForTimeout(150)
 check('Idle resets the scar action', (await attr('data-action')) === 'idle')
@@ -199,7 +209,7 @@ await page.waitForTimeout(150)
 check('bazookajoe advertises an available 3D figure', (await attr('data-figure3d')) === 'available')
 await page.waitForSelector('[data-testid="figure3d-stage"] canvas', { timeout: 20000 })
 check('bazookajoe 3d view renders a WebGL canvas', (await stageCanvas.count()) === 1)
-check('bazookajoe 3d actions: Idle + Rocket Launch + Take Aim', (await celebration.count()) === 3)
+check('bazookajoe 3d actions: Idle + Rocket Launch + Take Aim + Walk', (await celebration.count()) === 4)
 await celebration.nth(1).click() // Rocket Launch
 await page.waitForTimeout(150)
 check('Rocket Launch plays', (await attr('data-action')) === 'launch')

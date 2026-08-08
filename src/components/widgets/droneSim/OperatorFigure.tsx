@@ -1,4 +1,4 @@
-import { Suspense, useRef } from 'react'
+import { Suspense, useRef, useState } from 'react'
 import type { ComponentType } from 'react'
 import { useFrame } from '@react-three/fiber'
 import type { Group } from 'three'
@@ -26,6 +26,13 @@ export default function OperatorFigure({
   model?: ComponentType<{ action?: string }>
 }) {
   const groupRef = useRef<Group>(null)
+  // Feed the avatar model a `walk` action while the operator is moving so its
+  // legs stride (the shared leg-gait rig); toggled off when idle. Only flips on
+  // start/stop (rare) so the state churn is negligible; models without a leg
+  // rig ignore the unknown action and keep the body-bob.
+  const [walking, setWalking] = useState(false)
+  const walkingRef = useRef(false)
+  const prevPhaseRef = useRef(0)
 
   useFrame(() => {
     const g = groupRef.current
@@ -33,6 +40,12 @@ export default function OperatorFigure({
     const op = operator.current
     g.position.set(op.x, Math.abs(Math.sin(op.walkPhase * 4.4)) * 0.05, op.z)
     g.rotation.y = op.heading
+    const moving = op.walkPhase - prevPhaseRef.current > 1e-4
+    prevPhaseRef.current = op.walkPhase
+    if (moving !== walkingRef.current) {
+      walkingRef.current = moving
+      setWalking(moving)
+    }
   })
 
   if (!visible) return null
@@ -44,7 +57,7 @@ export default function OperatorFigure({
            * models face +Z, so turn them round. ~1.85u model vs the basic
            * figure's ~1.7u — scale to match. */}
           <group rotation-y={Math.PI} scale={0.92}>
-            <Model />
+            <Model action={walking ? 'walk' : undefined} />
           </group>
         </Suspense>
       ) : (

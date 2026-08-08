@@ -25,6 +25,8 @@ import { useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import type { Group } from 'three'
 import { IM } from './imperiumPalette'
+import { GAIT_RATE, WALK_ACTION_SPEED, legGait } from '../shared/legGait'
+import type { LegSwing } from '../shared/legGait'
 
 const CLOTH = { roughness: 0.7, metalness: 0 }
 const STEEL = { roughness: 0.35, metalness: 0.4 }
@@ -96,10 +98,14 @@ export default function ImperiumModel3D({ action }: { action?: string }) {
   const armRRef = useRef<Group>(null)
   const elbowLRef = useRef<Group>(null)
   const elbowRRef = useRef<Group>(null)
+  const legLRef = useRef<Group>(null)
+  const legRRef = useRef<Group>(null)
   const t0Ref = useRef(0)
   const prevActionRef = useRef<string | undefined>(undefined)
+  const walkPhaseRef = useRef(0)
+  const gaitRef = useRef<LegSwing>({ left: 0, right: 0 }).current
 
-  useFrame((state) => {
+  useFrame((state, delta) => {
     const t = state.clock.elapsedTime
     if (action !== prevActionRef.current) {
       prevActionRef.current = action
@@ -109,11 +115,15 @@ export default function ImperiumModel3D({ action }: { action?: string }) {
     const armR = armRRef.current
     const elbowL = elbowLRef.current
     const elbowR = elbowRRef.current
-    if (!armL || !armR || !elbowL || !elbowR) return
+    const legL = legLRef.current
+    const legR = legRRef.current
+    if (!armL || !armR || !elbowL || !elbowR || !legL || !legR) return
 
     // Per-action pose; every mutable written every frame (self-correcting).
     let elbR = R_ELBOW
     let swayR = 0
+    let gaitL = 0
+    let gaitR = 0
 
     if (action === 'slash') {
       // the 2D celebration: a symmetric ease-in-out sweep of ONLY the right
@@ -121,6 +131,11 @@ export default function ImperiumModel3D({ action }: { action?: string }) {
       const tau = (t - t0Ref.current) % SLASH_T
       const k = (1 - Math.cos((tau / SLASH_T) * Math.PI * 2)) / 2
       elbR = R_ELBOW + lerp(SLASH_LOW, SLASH_HIGH, k)
+    } else if (action === 'walk') {
+      walkPhaseRef.current += WALK_ACTION_SPEED * delta * GAIT_RATE
+      const g = legGait(walkPhaseRef.current, WALK_ACTION_SPEED, gaitRef)
+      gaitL = g.left
+      gaitR = g.right
     } else {
       swayR = Math.sin(t * 1.7) * 0.04 // idle: the sword arm breathes a touch
     }
@@ -133,35 +148,43 @@ export default function ImperiumModel3D({ action }: { action?: string }) {
     armL.rotation.x = 0
     elbowR.rotation.x = elbR
     elbowL.rotation.x = LHIP_ELBOW
+    legL.rotation.x = gaitL // walk gait (0 in every other branch)
+    legR.rotation.x = gaitR
   })
 
   return (
     <group>
-      {/* black-armor legs with orange circuit accents + darkest boots */}
-      <mesh position={[-0.14, 0.27, 0]}>
-        <boxGeometry args={[0.24, 0.46, 0.26]} />
-        <meshStandardMaterial color={IM.armor} {...CLOTH} />
-      </mesh>
-      <mesh position={[0.14, 0.27, 0]}>
-        <boxGeometry args={[0.24, 0.46, 0.26]} />
-        <meshStandardMaterial color={IM.armor} {...CLOTH} />
-      </mesh>
-      <mesh position={[-0.14, 0.34, 0.14]}>
-        <boxGeometry args={[0.02, 0.16, 0.02]} />
-        <meshStandardMaterial color={IM.circuit} {...CLOTH} />
-      </mesh>
-      <mesh position={[0.14, 0.24, 0.14]}>
-        <boxGeometry args={[0.09, 0.02, 0.02]} />
-        <meshStandardMaterial color={IM.circuit} {...CLOTH} />
-      </mesh>
-      <mesh position={[-0.14, 0.05, 0.03]}>
-        <boxGeometry args={[0.26, 0.1, 0.32]} />
-        <meshStandardMaterial color={IM.line} {...CLOTH} />
-      </mesh>
-      <mesh position={[0.14, 0.05, 0.03]}>
-        <boxGeometry args={[0.26, 0.1, 0.32]} />
-        <meshStandardMaterial color={IM.line} {...CLOTH} />
-      </mesh>
+      {/* black-armor legs with orange circuit accents + darkest boots — each
+       * on a hip pivot [±0.14, 0.5, 0] (shared leg-gait convention) so the walk
+       * gait swings the leg (accent + boot ride along); children −0.5 y */}
+      <group ref={legLRef} position={[-0.14, 0.5, 0]}>
+        <mesh position={[0, -0.23, 0]}>
+          <boxGeometry args={[0.24, 0.46, 0.26]} />
+          <meshStandardMaterial color={IM.armor} {...CLOTH} />
+        </mesh>
+        <mesh position={[0, -0.16, 0.14]}>
+          <boxGeometry args={[0.02, 0.16, 0.02]} />
+          <meshStandardMaterial color={IM.circuit} {...CLOTH} />
+        </mesh>
+        <mesh position={[0, -0.45, 0.03]}>
+          <boxGeometry args={[0.26, 0.1, 0.32]} />
+          <meshStandardMaterial color={IM.line} {...CLOTH} />
+        </mesh>
+      </group>
+      <group ref={legRRef} position={[0.14, 0.5, 0]}>
+        <mesh position={[0, -0.23, 0]}>
+          <boxGeometry args={[0.24, 0.46, 0.26]} />
+          <meshStandardMaterial color={IM.armor} {...CLOTH} />
+        </mesh>
+        <mesh position={[0, -0.26, 0.14]}>
+          <boxGeometry args={[0.09, 0.02, 0.02]} />
+          <meshStandardMaterial color={IM.circuit} {...CLOTH} />
+        </mesh>
+        <mesh position={[0, -0.45, 0.03]}>
+          <boxGeometry args={[0.26, 0.1, 0.32]} />
+          <meshStandardMaterial color={IM.line} {...CLOTH} />
+        </mesh>
+      </group>
       {/* waist with the gold belt line */}
       <mesh position={[0, 0.57, 0]}>
         <boxGeometry args={[0.54, 0.14, 0.32]} />

@@ -1237,3 +1237,24 @@ carried over; these are the new ones.
     deriving the angular rate `= WALK_SPEED / amp` (a big loop radius otherwise
     sprints). Validate a loop by sampling points around the ring at seed time,
     same "never needs runtime collision" trick as the line's endpoints.
+
+90. **A shared rig pays off when the skeleton is uniform — and one canned
+    `action` can serve two very different callers.** Rolling the leg-gait rig
+    (#89) out to all nine avatars was cheap because six of the models place
+    their legs at byte-identical coordinates (Scar's), so wrapping them into
+    hip-pivot groups was a mechanical "hoist to a group at y=0.5, subtract 0.5
+    from each child's y" — the outlier (toy: a 0.5-tall single leg box, offset
+    −0.25) and decoration meshes on the leg's x-column (shin wraps, thigh
+    patches, knee pads) that had to move *into* the swinging group were the only
+    per-model care. The payoff of the *shared* rig is exactly this uniformity:
+    audit the coordinates first; if they match, the change is copy-paste. And a
+    single `action: 'walk'` (a canned, self-clocked `legGait` on a fixed
+    `WALK_ACTION_SPEED`) served BOTH the Avatar Actions widget (a Walk button,
+    appended last to each `actions3d` so existing e2e `nth()` indices stay
+    stable) AND the Drone Sim operator — the operator just passes
+    `action="walk"` while its `walkPhase` advances and `undefined` when idle.
+    An `action` string is the right tool when the caller only needs on/off (no
+    continuous speed); a ref (`AimPose.speed`, the soldiers) is the right tool
+    when the amplitude must track live speed. Same rig, two drivers, no
+    registry-type change (models already take `action`), and avatars that
+    predate the rig ignore the unknown action gracefully — a no-op, not a crash.
