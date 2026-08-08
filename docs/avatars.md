@@ -248,8 +248,14 @@ warhead (`transparent opacity` — the source art's flagged fix); actions
 `[launch "Rocket Launch"]` — one recoil pulse with an orange backblast
 window at the rear opening, the warhead `visible` OFF at the shot and a big
 emissive fireball popping at a far up-forward offset — and
-`[aim "Take Aim"]`, the same launch timeline plus a tracking elevation
-sweep). Scar's Sight & Fire and Bazooka Joe's Take Aim are the **canned
+`[aim "Take Aim"]`, its own longer ~4.2 s deliberate arc — the arm raises
+the launcher from the carry into a LEVEL chest-height sighting hold,
+tracks with elevation + yaw sweeps that settle before the trigger, fires
+ONCE, and lowers back to the carry as the loop wraps. It originally
+shared the launch timeline with only a subtle elevation bob — the two
+actions read as identical, user-reported — so the pose arc and pacing
+now differ, not just a modifier on the same beats). Scar's Sight & Fire
+and Bazooka Joe's Take Aim are the **canned
 counterparts of the in-game aim** these models gained for Drone Strike's
 rooftop soldiers: the enemy path drives a live `aimRef` (`{ pitch, fire }`)
 the model reads each frame (weapon elevation + one-shot fire pose), while

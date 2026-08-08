@@ -16,6 +16,11 @@
 //   window at the rear opening; the warhead group goes `visible` OFF at
 //   the shot (back ON when the loop wraps) and a big emissive fireball
 //   pops at a far up-forward offset where it detonates.
+// - 'aim' (Take Aim): a longer ~4.2 s deliberate arc, visually distinct
+//   from 'launch' — the arm raises the launcher from the carry into a
+//   LEVEL sighting hold, tracks with elevation + yaw sweeps that settle
+//   before the trigger, fires ONCE (same shot beats at the later times),
+//   then lowers back to the carry as the loop wraps.
 // Grip note: the launcher is a PISTOL grip like the imperium claw — the
 // tube rides PERPENDICULAR to the forearm (local +z of the elbow group),
 // so the elbow's x-rotation aims it; the deep elbow bend shoulders the
@@ -38,6 +43,9 @@ const AIM_PITCH_MAX = 0.9
 const CLOTH = { roughness: 0.7, metalness: 0 }
 const STEEL = { roughness: 0.35, metalness: 0.4 }
 
+const lerp = (a: number, b: number, k: number) => a + (b - a) * k
+const smooth = (k: number) => (k <= 0 ? 0 : k >= 1 ? 1 : k * k * (3 - 2 * k))
+
 /** Pose + launch-timeline targets (loop matches the 2D's 2.6 s). */
 const R_SHZ = 0.15
 const R_SHY = 0.3 // outward yaw (#61) so the shouldered tube reads face-on
@@ -52,6 +60,22 @@ const KICK_AMP = 0.34
 const BLAST_OFF = 0.5 // backblast window: [FIRE, BLAST_OFF]
 const BOOM_ON = 0.85 // fireball window
 const BOOM_OFF = 1.15
+/** 'aim' (Take Aim) — a longer, deliberate arc, distinct from the quick
+ * 'launch': raise into a LEVEL sighting hold (elbow up, tube near level —
+ * shoulder x + elbow x sum to ~-0.15 so the perpendicular tube points
+ * forward, barely up), track with elevation + yaw sweeps, settle, ONE shot,
+ * lower back to the carry as the loop wraps. */
+const AIM_T = 4.2
+const AIM_RAISE = 0.6 // carry → sighting blend done
+const AIM_SETTLE = 2.9 // tracking sweeps faded out
+const AIM_FIRE = 3.05 // the shot
+const AIM_LOWER = 3.6 // sighting → carry blend starts
+const AIM_BOOM_ON = 3.45
+const AIM_BOOM_OFF = 3.75
+const SH_AIM = -1.6 // shoulder swung up-forward, upper arm near horizontal…
+const ELB_AIM = 1.45 // …forearm dropped vertical: total ≈ -0.15 → tube level at chest
+const AIM_SWEEP_EL = 0.18 // tracking elevation sweep
+const AIM_SWEEP_YAW = 0.14 // tracking yaw sweep
 
 /** Emissive fireball burst (orange core + crossed spikes + forward cone so
  * it reads even pointing at the camera); parent toggles `visible`. */
@@ -117,6 +141,7 @@ export default function BazookaJoeModel3D({
     let elbR = R_ELBOW
     let sway = 0
     let armRPitch = 0
+    let armRYaw = R_SHY
     let warheadOn = true
     let blastOn = false
     let boomOn = false
@@ -132,22 +157,46 @@ export default function BazookaJoeModel3D({
         warheadOn = f < 0.6 // warhead gone as the rocket leaves the tube
         blastOn = f > 0.5 // backblast flares at the muzzle
       }
-    } else if (action === 'launch' || action === 'aim') {
-      // Both fire the RPG on the same timeline; 'aim' (Avatar Actions widget)
-      // adds a tracking elevation sweep so the launcher visibly aims.
+    } else if (action === 'launch') {
+      // the 2D celebration: a quick fire-and-boom from the shoulder carry
       const tau = (t - t0Ref.current) % LAUNCH_T
       const dt = tau - FIRE
       if (dt >= 0 && dt < KICK_T) elbR = R_ELBOW + KICK_AMP * Math.sin((Math.PI * dt) / KICK_T)
       warheadOn = tau < FIRE
       blastOn = tau >= FIRE && tau < BLAST_OFF
       boomOn = tau >= BOOM_ON && tau < BOOM_OFF
-      if (action === 'aim') armRPitch = -0.4 - 0.12 * Math.sin(tau * 1.2)
+    } else if (action === 'aim') {
+      // Take Aim: raise into the level sighting hold, track (elevation + yaw
+      // sweeps that settle before the trigger), ONE shot, lower to the carry.
+      const tau = (t - t0Ref.current) % AIM_T
+      let elbBase = R_ELBOW
+      if (tau < AIM_RAISE) {
+        const k = smooth(tau / AIM_RAISE)
+        armRPitch = lerp(0, SH_AIM, k)
+        elbBase = lerp(R_ELBOW, ELB_AIM, k)
+      } else if (tau < AIM_LOWER) {
+        armRPitch = SH_AIM
+        elbBase = ELB_AIM
+        const amp =
+          smooth(Math.min((tau - AIM_RAISE) / 0.3, 1)) * smooth(Math.min((AIM_SETTLE - tau) / 0.4, 1))
+        armRPitch += AIM_SWEEP_EL * Math.sin((tau - AIM_RAISE) * 2.2) * amp
+        armRYaw = R_SHY + AIM_SWEEP_YAW * Math.sin((tau - AIM_RAISE) * 1.5) * amp
+      } else {
+        const k = smooth((tau - AIM_LOWER) / (AIM_T - AIM_LOWER))
+        armRPitch = lerp(SH_AIM, 0, k)
+        elbBase = lerp(ELB_AIM, R_ELBOW, k)
+      }
+      const dt = tau - AIM_FIRE
+      elbR = elbBase + (dt >= 0 && dt < KICK_T ? KICK_AMP * Math.sin((Math.PI * dt) / KICK_T) : 0)
+      warheadOn = tau < AIM_FIRE
+      blastOn = tau >= AIM_FIRE && tau < AIM_FIRE + 0.2
+      boomOn = tau >= AIM_BOOM_ON && tau < AIM_BOOM_OFF
     } else {
       sway = Math.sin(t * 1.7) * 0.04 // idle: both arms breathe together
     }
 
     armR.rotation.z = R_SHZ + sway
-    armR.rotation.y = R_SHY
+    armR.rotation.y = armRYaw
     armR.rotation.x = armRPitch
     armL.rotation.z = -(L_SHZ + sway)
     armL.rotation.y = -L_SHY

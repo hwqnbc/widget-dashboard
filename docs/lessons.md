@@ -1170,3 +1170,16 @@ carried over; these are the new ones.
     the whole effect a single draw call — the `RainField` `Points` discipline,
     plus per-point life. All buffers pre-allocated and mutated in place (the
     zero-alloc `useFrame` rule).
+
+87. **Two actions that share a timeline read as ONE action — differentiate
+    by pose arc and pacing, not by a modifier layered on the same beats.**
+    Bazooka Joe's Take Aim was Rocket Launch's exact 2.6 s loop (recoil,
+    backblast, warhead-away, fireball) plus a ±7° elevation bob — the bob
+    was invisible next to the explosion firing every loop, and the user
+    reported the two actions as identical. The fix restructured Take Aim
+    into its own arc (raise into a level chest-height sighting hold →
+    track with settling sweeps → ONE shot → lower, ~4.2 s): different
+    silhouette, different rhythm, the shared beats reused only inside the
+    distinct arc. Rule of thumb: if two moves differ only by a low-amplitude
+    modulation on top of identical dominant events, viewers will see one
+    move — give each action its own dominant event order or hold pose.
