@@ -136,10 +136,10 @@ Normal 5, Hard 4). So wave 1 is a gentle full-variety wave, not a bare gallery.
 
 | Wave | Content |
 | --- | --- |
-| 1 | the full mix, gentle: static balloons + drifting ring-drones + a moving military truck + a moving SWAT car + **1 throttled, non-firing enemy drone** + **1 non-firing AA turret** + **1 non-firing rooftop soldier** |
-| 2–4 | same kinds, ramping — more/faster enemies (throttle climbs), more road vehicles, up to 2 turrets, up to 2 rooftop soldiers |
+| 1 | the full mix, gentle: static balloons + drifting ring-drones + a moving military truck + a moving SWAT car + **1 throttled, non-firing enemy drone** + **1 non-firing AA turret** + **1 non-firing rooftop-patrol soldier** |
+| 2–4 | same kinds, ramping — more/faster enemies (throttle climbs), more road vehicles, up to 2 turrets, up to 2 soldiers (rooftop pacers + a ground patrol from wave 3) |
 | 5+ | enemies + turrets + soldiers return fire (Normal/Hard; Easy at 7); enemy throttle at full; player has 3 HP per wave attempt |
-| scaling | more/smaller balloons (cap 8), up to 4 enemies, 4 trucks + 3 cars + 2 turrets + 2 soldiers, `MAX_TARGETS` 26 |
+| scaling | more/smaller balloons (cap 8), up to 4 enemies, 4 trucks + 3 cars + 2 turrets + 3 patrolling soldiers (rooftop + ground), `MAX_TARGETS` 28 |
 
 **Ground targets** (unlocked by the gimbal's −70° look-down): deck-level
 kinds mixed into the gallery. **Military supply trucks** (`ground`, 20 pts,
@@ -190,22 +190,34 @@ fire sweep / lock / scoring paths are unchanged. Ground targets are easiest
 in Reticle/Gunner (the gimbal looks down); in Classic you nose-down or
 descend — and the car needs leading on top.
 
-**Rooftop soldiers** (`soldier`, 40 pts) are the highest-value fixed threat and
-a distinctive one — the deck already carries trucks/cars/turrets, so soldiers
-claim the *rooftops*, rewarding looking around and up over the city. They reuse
-the game's **weaponized avatar 3D models as in-game enemies**, and they are
-**weapon-matched**: each soldier is one of two `variant`s (seeded into the wave
-spec, so weapon and model always agree) — **variant 0 = Bazooka Joe**, which
-**launches a rocket**, or **variant 1 = Scar**, which fires **SMG bursts**.
-Variants are assigned by order, so wave 1's lone soldier is the rocketeer and a
-pair is one of each.
+**Patrolling soldiers** (`soldier`, 40 pts) are the highest-value threat and a
+distinctive one — they reuse the game's **weaponized avatar 3D models as
+in-game enemies** and **patrol on the move**. Two things vary per soldier, both
+seeded into the wave spec: its **weapon `variant`** (0 = Bazooka Joe, which
+**launches a rocket**; 1 = Scar, which fires **SMG bursts** — model and weapon
+always agree, assigned by order so wave 1's lone soldier is the rocketeer) and
+where it patrols — a building **rooftop** or the open **ground**.
 
-*Placement* is bespoke — unlike every other kind they sit *on* a building, so
-`buildWave` bypasses `clearOfBuildings`, picks a building that makes a fair
-sniper perch (height ~5–16, a footprint the figure fits on, away from the spawn
-pad) and seats the hit sphere at `b.h + 0.9` (torso above the roof). They are
-static (no drift); hp follows the difficulty preset and the count is clamped
-small (≤2).
+*Placement* — the first ⌈count/2⌉ soldiers are **rooftop pacers**, the rest
+**ground patrols**; a wave with ≥2 fields both. Rooftop placement is bespoke
+(unlike every other kind they sit *on* a building, so `buildWave` bypasses
+`clearOfBuildings`): pick a fair sentry perch (height ~5–16, a footprint the
+figure fits on, away from spawn), seat the torso at `b.h + 0.9`, and pace along
+the roof's longer axis with the half-beat clamped so the boots never leave the
+roof (a roof too small to pace becomes a standing sentry). Ground patrols walk a
+**free-roam beat anywhere on open ground** — a sampled centre + axis + beat
+length whose *whole* span (centre + both endpoints) is validated clear of
+buildings (so the route never enters a wall — it is deliberately **not** bound
+to the road lanes the vehicles use), seated at torso height `0.9`. hp follows
+the difficulty preset; count clamped small (≤3).
+
+*Movement needs no bespoke step* — a patrol is just the seeded **sinusoidal
+`stepDrift`** (the same branch the drifting ring-drones use) applied to a
+soldier: `driftAmp > 0` + a horizontal `driftAxis` paces it around its `base`,
+easing to a stop and turning at each end, and writes the true velocity
+derivative so shot-leading sees the motion. `stepDrift` already runs for every
+target before the fire dispatch, so a moving soldier fires from its current
+position with no extra wiring.
 
 *Aim & fire* — you see the soldier **aim its weapon and shoot**, not a beam from
 the torso. `StrikeRig` dispatches `soldier` through the shared `stepTurret`
@@ -225,11 +237,15 @@ hanging along the flight path, fading a beat after the rocket passes — the
 incoming-missile read); SMG bolts stay the tracer box.
 
 *Rendering* is via **`SoldierTargets`** — the shared `ModelTargets` pool with
-its `onFrame` hook overriding the deck Y (boots on the roof), yawing the body to
-**face the player**, writing the aim ref, and toggling which of the two
-per-slot models (Bazooka / Scar) is visible by the assigned target's `variant`
-(so the model always matches the weapon, even if a sibling soldier dies and the
-pool compacts). The avatar `Model3D`s are low-spec by construction (only
+its `onFrame` hook overriding the deck Y so the boots plant on the surface
+(roof `b.h` or ground `0` — the same `t.pos.y - 0.9` seats both) plus a subtle
+**walk bob** while moving (position-derived, no leg gait — the operator-figure
+trick), arbitrating the single body yaw between **travel direction while
+walking** and **the player while firing** (slewed shortest-arc), writing the aim
+ref, and toggling which of the two per-slot models (Bazooka / Scar) is visible
+by the assigned target's `variant` (so the model always matches the weapon, even
+if a sibling soldier dies and the pool compacts). The avatar `Model3D`s are
+low-spec by construction (only
 `meshStandardMaterial`, no transmission), so the only cost is draw calls — hence
 the small pool and the direct `lazy(() => import(...))` of each model (three.js
 stays out of the main chunk, the same discipline `avatarRegistry` uses; the
@@ -369,11 +385,13 @@ supply trucks on the deck, via `ModelTargets`), `CarTargets`
 travel), `TurretTargets`
 (≤2 `AaTurret` models, seated on the deck, self-scanning + player-tracking
 `aimRef`), `SoldierTargets`
-(≤2 rooftop soldiers rendered from the **Scar / Bazooka Joe avatar
-`Model3D`s** via `ModelTargets`, its `onFrame` hook overriding the roof Y,
-facing + aiming the weapon and driving the firing pose via a per-slot aim ref,
-and toggling the visible model by the target's weapon `variant`; the models are
-`lazy`-imported directly so three.js stays out of the main chunk),
+(≤3 patrolling soldiers rendered from the **Scar / Bazooka Joe avatar
+`Model3D`s** via `ModelTargets`, its `onFrame` hook seating the feet on the
+surface (roof or ground) + walk bob, arbitrating body yaw between travel and
+the player, aiming the weapon + firing pose via a per-slot aim ref, and toggling
+the visible model by the target's weapon `variant`; movement is the seeded
+`stepDrift` sinusoid, no bespoke step; the models are `lazy`-imported directly
+so three.js stays out of the main chunk),
 `EnemyDrones`
 (≤4 `DroneModel`s with red beacons, slot-assigned per frame), `Tracers`
 (one InstancedMesh for all bolts, oriented along velocity — skips
@@ -481,12 +499,15 @@ kind of list).
   projectile drawn by `EnemyRockets` with a warhead + smoke streak — or Scar
   fires SMG bursts; both **elevate the weapon** toward the drone and play a
   **firing pose** via the model's new `aimRef` (`{ pitch, fire }`), and the
-  shot spawns from a **muzzle offset**, not the torso — see "Rooftop
+  shot spawns from a **muzzle offset**, not the torso — see "Patrolling
   soldiers"). Room to extend:
-  - **walking-patrol soldiers** — a `stepSoldier` movement (like
-    `stepDrift`/`stepEnemy`) between deck/roof waypoints; `ModelTargets`'
-    `faceVelocity` already yaws a mover into its travel direction, and a
-    `stepSoldier` fire branch mirrors `stepEnemy`'s return fire;
+  - ~~walking-patrol soldiers~~ — **shipped** (soldiers now patrol: rooftop
+    pacers walk their roof, ground patrols walk a free-roam beat anywhere on
+    open ground; movement is the seeded sinusoidal `stepDrift` — no bespoke
+    step — with body yaw facing travel while walking / the player while firing
+    and a position-derived walk bob; see "Patrolling soldiers"). This also
+    covered the old **deck-level squads** idea (ground soldiers beside the
+    trucks/turrets). Room to extend further:
   - ~~persistent smoke trail~~ — **shipped** (`EnemyRockets` drops a
     world-space puff contrail — a per-rocket ring buffer of past positions in
     one `Points` cloud, faded by age with an inline shader — so the smoke line
@@ -494,9 +515,14 @@ kind of list).
     `EnemyRockets` architecture note);
   - **more avatars / a mix** — widen the pool beyond Scar/Bazooka Joe (any
     registered `Model3D` works, e.g. Gold Gunner) and let a wave seed which
-    avatar mans which roof, with a matching projectile per weapon;
-  - **deck-level squads** — soldiers on the ground beside the trucks/turrets
-    (the deck-Y path, skipping the roof override), for a combined-arms wave.
+    avatar patrols where, with a matching projectile per weapon;
+  - **real leg gait** — the patrol is sold by translation + facing + a body
+    bob (no leg animation, as nothing in the repo animates legs); a shared
+    `characters/shared` hip-pivot leg rig swung from a walk phase would upgrade
+    every patrolling avatar at once;
+  - **diagonal / multi-leg routes** — routes are axis-aligned back-and-forth
+    today (reusing the sinusoid drift's single axis); a stored direction vector
+    or waypoint list would allow diagonal beats and patrol loops.
 - **Enemy variety** — a *chaser* that pursues the player (waypoint =
   player position, capped speed, `resolveCollisions` for safety), a
   *kamikaze* that dives once locked, a *shielded* drone only hurt from

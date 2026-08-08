@@ -250,12 +250,14 @@ auto-fire, aim assist with target leading, segment-swept tracer bolts,
 seeded waves with enemy AI drones plus deck-level ground targets (road-bound
 moving military trucks + SWAT cars from wave 1 + static AA turrets, all
 rendered from Model Viewer models via the shared `ModelTargets` pool) plus
-rooftop-stationed avatar soldiers (the Scar / Bazooka Joe avatar `Model3D`s
-reused as multi-instance enemies via `SoldierTargets`, weapon-matched: a
-Bazooka Joe launches a rocket — a `visual:'rocket'` projectile drawn by
-`EnemyRockets` — or a Scar fires SMG bursts, both aiming the weapon + playing
-a firing pose via the model's `aimRef` and firing from a muzzle offset via the
-AA turret's `stepTurret`), four aim modes
+patrolling avatar soldiers (the Scar / Bazooka Joe avatar `Model3D`s reused as
+multi-instance enemies via `SoldierTargets` — rooftop pacers + free-roam ground
+patrols, moving via the seeded `stepDrift` sinusoid, facing travel while
+walking / the player while firing; weapon-matched: a Bazooka Joe launches a
+rocket — a `visual:'rocket'` projectile drawn by `EnemyRockets` with a
+world-space smoke contrail — or a Scar fires SMG bursts, both aiming the weapon
++ playing a firing pose via the model's `aimRef` and firing from a muzzle offset
+via the AA turret's `stepTurret`), four aim modes
 (Classic/Reticle/Gunner/Hover gimbal),
 Easy/Normal/Hard difficulty, ADS zoom with three gyro fine-aim modes,
 synthesized Web Audio sound effects (no assets),

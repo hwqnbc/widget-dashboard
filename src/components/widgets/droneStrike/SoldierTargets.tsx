@@ -16,35 +16,41 @@ import type { AimPose } from '../characters/shared/aimPose'
 const ScarModel3D = lazy(() => import('../characters/scar/ScarModel3D'))
 const BazookaJoeModel3D = lazy(() => import('../characters/bazookajoe/BazookaJoeModel3D'))
 
-/** Waves field at most this many rooftop soldiers at once (see waveLayout's
- * cap: `min(1 + ⌊wave/3⌋, 2, enemyCap)`). */
-const MAX_SOLDIER_RENDER = 2
+/** Waves field at most this many soldiers at once (see waveLayout's cap:
+ * `min(1 + ⌊wave/3⌋, 3, enemyCap)` — rooftop + ground combined). */
+const MAX_SOLDIER_RENDER = 3
 /** Avatar models stand ~1.85u; a slight upscale reads as a full-size figure
- * on the roof without dwarfing the AA turret beside it. */
+ * without dwarfing the AA turret beside it. */
 const SCALE = 1.2
-/** The hit sphere is seated at `b.h + 0.9` (torso); the model's feet are at
- * its own origin, so drop the group by that torso offset to plant the boots
- * on the roof surface (`b.h`). */
+/** The hit sphere is seated at feet + 0.9 (torso) — `b.h + 0.9` on a roof,
+ * `0.9` on the ground; drop the group by that offset to plant the boots on
+ * the surface (roof or y = 0). */
 const TORSO_LIFT = 0.9
+/** Speed (u/s) above which a soldier is "walking" (drives facing + bob). */
+const WALK_EPS = 0.05
 
 /**
- * Rooftop-stationed avatar soldiers — a distinctive threat that rewards
- * looking around the city. Each soldier is one of two **variants** (from the
+ * Patrolling avatar soldiers — a distinctive threat that rewards looking
+ * around (and up over) the city. Each is one of two **variants** (from the
  * wave spec, so weapon + model always agree): variant 0 = **Bazooka Joe**
- * (launches a rocket) or variant 1 = **Scar** (SMG). Rendered via the shared
- * `ModelTargets` pool with three soldier-specific behaviours driven through
- * its `onFrame` hook (no `ModelTargets` change):
- *  - **rooftop Y** — `ModelTargets` seats every slot on the deck (y ignores
- *    `t.pos.y`); we override it to plant the soldier on its building roof.
- *  - **face + aim the weapon** — the body yaws to the player, and a per-slot
- *    aim ref (`{ pitch, fire }`, the `TurretTargets` pattern) is written each
- *    frame: `pitch` elevates the weapon toward the drone; `fire` (the target's
- *    `fireTimer` normalised) plays the model's one-shot recoil / muzzle-flash /
- *    launch pose. The model reads the ref in its own `useFrame` (zero renders).
+ * (rocket) or variant 1 = **Scar** (SMG); and it patrols either a **rooftop**
+ * (paces its building) or the **open ground** (a free-roam beat). Movement is
+ * the seeded sinusoidal `stepDrift` (no bespoke step) — SoldierTargets only
+ * renders. Rendered via the shared `ModelTargets` pool with soldier-specific
+ * behaviours driven through its `onFrame` hook (no `ModelTargets` change):
+ *  - **feet on the surface** — `ModelTargets` seats every slot on the deck (y
+ *    ignores `t.pos.y`); we override it to `t.pos.y - TORSO_LIFT`, which plants
+ *    the boots on the roof (`b.h`) or the ground (`0`) alike, plus a small
+ *    **walk bob** while moving (no leg gait — the operator-figure trick).
+ *  - **face + aim** — the body yaws into its **travel** direction while
+ *    walking and snaps to the **player** while firing (a single body yaw,
+ *    arbitrated by `fireTimer`, slewed shortest-arc); a per-slot aim ref
+ *    (`{ pitch, fire }`, the `TurretTargets` pattern) elevates the weapon
+ *    toward the drone and plays the model's one-shot fire pose. The model
+ *    reads the ref in its own `useFrame` (zero renders).
  *  - **variant model** — both models are mounted per slot; `onFrame` toggles
- *    which is visible by the assigned target's `variant`, so a Bazooka target
- *    always shows the launcher and a Scar target the SMG even if a sibling
- *    soldier dies and the pool compacts slots.
+ *    which is visible by the assigned target's `variant` (robust to pool
+ *    compaction when a sibling soldier dies).
  * Fire itself is the AA turret's behaviour (`stepTurret` in StrikeRig), with
  * the variant's weapon (rocket / SMG) and a muzzle-offset origin.
  */
@@ -66,6 +72,10 @@ export default function SoldierTargets({
   // matching the assigned target's variant and hide the other.
   const rocketRefs = useRef<(Group | null)[]>([])
   const gunRefs = useRef<(Group | null)[]>([])
+  // Per-slot body yaw we own — `ModelTargets` resets `g.rotation.y` before
+  // `onFrame`, so we can't slew off the group; keep our own and set it
+  // absolutely each frame (undefined = snap on first sight).
+  const yawState = useRef<number[]>([]).current
 
   return (
     <ModelTargets
@@ -74,11 +84,27 @@ export default function SoldierTargets({
       max={MAX_SOLDIER_RENDER}
       scale={SCALE}
       onFrame={(t, slot, g) => {
-        g.position.y = t.pos.y - TORSO_LIFT
         const dx = playerPos.x - t.pos.x
         const dy = playerPos.y - t.pos.y
         const dz = playerPos.z - t.pos.z
-        if (dx !== 0 || dz !== 0) g.rotation.y = Math.atan2(dx, dz)
+        const speed = Math.hypot(t.vel.x, t.vel.z)
+        const walking = speed > WALK_EPS
+        // Body yaw: face travel while walking, face the player while firing (or
+        // standing). One yaw, slewed shortest-arc from our own accumulator.
+        const targetYaw =
+          t.fireTimer > 0 || !walking ? Math.atan2(dx, dz) : Math.atan2(t.vel.x, t.vel.z)
+        let cur = yawState[slot]
+        if (cur === undefined) cur = targetYaw
+        let d = targetYaw - cur
+        d = Math.atan2(Math.sin(d), Math.cos(d))
+        cur += d * 0.2
+        yawState[slot] = cur
+        g.rotation.y = cur
+        // Feet on the surface + a subtle walk bob (position-derived, fades at
+        // the beat's turnarounds where speed → 0; no leg animation).
+        const along = t.driftAxis === 0 ? t.pos.x : t.pos.z
+        const bob = walking ? Math.abs(Math.sin(along * 6)) * 0.05 * Math.min(1, speed / 0.8) : 0
+        g.position.y = t.pos.y - TORSO_LIFT + bob
         const aim = aimRefs[slot].current
         if (aim) {
           aim.pitch = Math.atan2(dy, Math.hypot(dx, dz))

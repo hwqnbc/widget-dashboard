@@ -74,9 +74,9 @@ export const TURRET_WAVE = 1
 export const SOLDIER_WAVE = 1
 /** Hard cap on simultaneous targets (perf budget: one InstancedMesh).
  * Sized for the worst case: gallery balloons + drifters + enemy drones +
- * ground trucks + moving cars + AA turrets + rooftop soldiers. Pool +
- * instanced capacity are pre-allocated so headroom is free. */
-export const MAX_TARGETS = 26
+ * ground trucks + moving cars + AA turrets + patrolling soldiers (rooftop +
+ * ground). Pool + instanced capacity are pre-allocated so headroom is free. */
+export const MAX_TARGETS = 28
 
 /**
  * Wave-scaled enemy-aggression throttle. Enemy drones can appear from wave 1
@@ -145,6 +145,22 @@ const MIN_TARGET_GAP = 6
 const MIN_FROM_SPAWN = 14
 const ALT_MIN = 3
 const ALT_MAX = 22
+
+/* Soldier patrol tuning. A patrol reuses `stepDrift`'s sinusoid branch: the
+ * soldier paces around its `base` along `driftAxis` (0/2) with amplitude
+ * `driftAmp` at angular rate `driftSpeed` (peak linear speed ≈ amp·rate). */
+const SOLDIER_PACE_RATE = 0.7
+/** Keep a pacing rooftop soldier's feet on the roof (margin from the edge). */
+const SOLDIER_ROOF_MARGIN = 0.8
+/** Cap a rooftop beat so big roofs don't give a marathon pace. */
+const SOLDIER_ROOF_PACE_CAP = 2.4
+/** Below this half-beat a roof is too small to pace → a standing sentry. */
+const SOLDIER_MIN_PACE = 1
+/** Ground patrol half-beat length (world units). */
+const SOLDIER_GROUND_BEAT_MIN = 4
+const SOLDIER_GROUND_BEAT_VAR = 3
+/** Torso height of a soldier's hit sphere above its feet. */
+const SOLDIER_TORSO = 0.9
 
 /** Would a target (with its drift envelope) intersect a building? */
 function clearOfBuildings(
@@ -330,57 +346,116 @@ export function buildWave(
     })
   }
 
-  // Rooftop soldiers (SOLDIER_WAVE+): static avatar-model enemies stationed
-  // on a building roof, rendered from the Scar / Bazooka Joe `Model3D`s (see
-  // SoldierTargets). Placement is bespoke — unlike every other kind they sit
-  // ON a building, so they bypass `clearOfBuildings` and seat their hit
-  // sphere just above the roof (`b.h + 0.9`, torso height). We pick from the
-  // buildings that make a fair sniper perch: tall enough to see over the
-  // skyline but not the megatowers, a footprint the model fits on, and away
-  // from the spawn pad. Gated by difficulty like the drones/turrets (count
-  // clamped by enemyCap, hp + return fire follow the preset).
+  // Patrolling soldiers (SOLDIER_WAVE+): avatar-model enemies rendered from the
+  // Scar / Bazooka Joe `Model3D`s (see SoldierTargets), now on the MOVE. The
+  // first ⌈count/2⌉ are **rooftop** soldiers that pace their roof; the rest are
+  // **ground** soldiers that patrol a free-roam beat anywhere on open ground
+  // (not road-bound). Both pace via `stepDrift`'s sinusoid branch — seeded with
+  // `driftAmp > 0` + a horizontal `driftAxis` — so no bespoke movement step is
+  // needed; the fire step (`stepTurret`) reads the moving `t.pos` unchanged.
+  // Weapon `variant` alternates (rocket/SMG); gated by difficulty like the
+  // drones/turrets (count clamped by enemyCap, hp + return fire per preset).
   const soldiers =
     waveIndex >= SOLDIER_WAVE
-      ? Math.min(1 + Math.floor(waveIndex / 3), 2, diff.enemyCap)
+      ? Math.min(1 + Math.floor(waveIndex / 3), 3, diff.enemyCap)
       : 0
-  if (soldiers > 0) {
-    const perches = layout.buildings
-      .map((b, bi) => ({ b, bi }))
-      .filter(
-        ({ b }) =>
-          b.h >= 5 &&
-          b.h <= 16 &&
-          b.w >= 2.5 &&
-          b.d >= 2.5 &&
-          Math.hypot(b.x - SPAWN.x, b.z - SPAWN.z) > MIN_FROM_SPAWN,
-      )
-    const usedBuildings = new Set<number>()
-    for (let i = 0; i < soldiers; i++) {
-      if (targets.length >= MAX_TARGETS || perches.length === 0) break
-      // Draw an unused perch (bounded retry; fall back to allowing reuse only
-      // if every candidate is taken — never stacks two on one roof otherwise).
-      let pick = perches[Math.floor(rand() * perches.length)]
-      for (let a = 0; a < 8 && usedBuildings.has(pick.bi); a++) {
-        pick = perches[Math.floor(rand() * perches.length)]
+  const rooftopSoldiers = Math.ceil(soldiers / 2)
+
+  // Rooftop pacers — bespoke placement: unlike every other kind they sit ON a
+  // building, so they bypass `clearOfBuildings` and seat their torso just above
+  // the roof (`b.h + SOLDIER_TORSO`). Perch = a fair sentry post (tall enough
+  // to see over the skyline but not a megatower, a footprint the model fits on,
+  // away from spawn). The pace runs along the roof's longer axis, its half-beat
+  // clamped so the soldier never walks off the edge; a roof too small to pace
+  // falls back to a standing sentry (`driftAmp = 0`).
+  const perches = layout.buildings
+    .map((b, bi) => ({ b, bi }))
+    .filter(
+      ({ b }) =>
+        b.h >= 5 &&
+        b.h <= 16 &&
+        b.w >= 2.5 &&
+        b.d >= 2.5 &&
+        Math.hypot(b.x - SPAWN.x, b.z - SPAWN.z) > MIN_FROM_SPAWN,
+    )
+  const usedBuildings = new Set<number>()
+  for (let i = 0; i < rooftopSoldiers; i++) {
+    if (targets.length >= MAX_TARGETS || perches.length === 0) break
+    let pick = perches[Math.floor(rand() * perches.length)]
+    for (let a = 0; a < 8 && usedBuildings.has(pick.bi); a++) {
+      pick = perches[Math.floor(rand() * perches.length)]
+    }
+    if (usedBuildings.has(pick.bi) && usedBuildings.size >= perches.length) break
+    usedBuildings.add(pick.bi)
+    const alongX = pick.b.w >= pick.b.d
+    const half = (alongX ? pick.b.w : pick.b.d) / 2 - SOLDIER_ROOF_MARGIN
+    const amp = half >= SOLDIER_MIN_PACE ? Math.min(half, SOLDIER_ROOF_PACE_CAP) : 0
+    targets.push({
+      kind: 'soldier',
+      x: pick.b.x,
+      y: pick.b.h + SOLDIER_TORSO,
+      z: pick.b.z,
+      radius: 1,
+      driftAmp: amp,
+      driftSpeed: amp > 0 ? SOLDIER_PACE_RATE : 0,
+      driftPhase: rand() * Math.PI * 2,
+      driftAxis: alongX ? 0 : 2,
+      hp: diff.enemyHp,
+      points: POINTS.soldier,
+      // Alternate rocketeer (Bazooka Joe) / gunner (Scar) by order.
+      variant: (i % 2) as 0 | 1,
+    })
+  }
+
+  // Ground patrols — walk a free-roam beat ANYWHERE on open ground (not tied to
+  // road lanes). Sample a centre clear of the spawn/buildings, pick an axis and
+  // a beat, and validate the WHOLE beat (centre + both endpoints) clears the
+  // city so the soldier never paces into a wall. Seat the torso at ground level
+  // (`SOLDIER_TORSO`); SoldierTargets plants the feet at y = 0.
+  for (let i = rooftopSoldiers; i < soldiers; i++) {
+    if (targets.length >= MAX_TARGETS) break
+    for (let attempt = 0; attempt < 60; attempt++) {
+      const x = (rand() * 2 - 1) * (WORLD_HALF - 8)
+      const z = (rand() * 2 - 1) * (WORLD_HALF - 8)
+      if (Math.hypot(x - SPAWN.x, z - SPAWN.z) < MIN_FROM_SPAWN) continue
+      const alongX = rand() < 0.5
+      const amp = SOLDIER_GROUND_BEAT_MIN + rand() * SOLDIER_GROUND_BEAT_VAR
+      const y = SOLDIER_TORSO
+      const reach = 1 + 0.6
+      const e1x = alongX ? x - amp : x
+      const e1z = alongX ? z : z - amp
+      const e2x = alongX ? x + amp : x
+      const e2z = alongX ? z : z + amp
+      if (
+        Math.abs(e1x) > WORLD_HALF - 4 ||
+        Math.abs(e2x) > WORLD_HALF - 4 ||
+        Math.abs(e1z) > WORLD_HALF - 4 ||
+        Math.abs(e2z) > WORLD_HALF - 4
+      ) {
+        continue
       }
-      if (usedBuildings.has(pick.bi) && usedBuildings.size >= perches.length) break
-      usedBuildings.add(pick.bi)
+      if (
+        !clearOfBuildings(layout, x, y, z, reach) ||
+        !clearOfBuildings(layout, e1x, y, e1z, reach) ||
+        !clearOfBuildings(layout, e2x, y, e2z, reach)
+      ) {
+        continue
+      }
       targets.push({
         kind: 'soldier',
-        x: pick.b.x,
-        y: pick.b.h + 0.9,
-        z: pick.b.z,
+        x,
+        y,
+        z,
         radius: 1,
-        driftAmp: 0,
-        driftSpeed: 0,
-        driftPhase: 0,
-        driftAxis: 0,
+        driftAmp: amp,
+        driftSpeed: SOLDIER_PACE_RATE,
+        driftPhase: rand() * Math.PI * 2,
+        driftAxis: alongX ? 0 : 2,
         hp: diff.enemyHp,
         points: POINTS.soldier,
-        // Alternate rocketeer (Bazooka Joe) / gunner (Scar) by order, so wave
-        // 1's lone soldier is the rocketeer and a pair is one of each.
         variant: (i % 2) as 0 | 1,
       })
+      break
     }
   }
 

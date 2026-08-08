@@ -1183,3 +1183,31 @@ carried over; these are the new ones.
     distinct arc. Rule of thumb: if two moves differ only by a low-amplitude
     modulation on top of identical dominant events, viewers will see one
     move — give each action its own dominant event order or hold pose.
+
+88. **A patrolling enemy needed NO new movement code — a mover is the existing
+    sinusoidal drift seeded onto a new kind — and a believable walk is sold by
+    translation + facing + a body bob, no leg gait.** Turning the static rooftop
+    soldiers into walking patrols (rooftop pacers + free-roam ground patrols)
+    looked like it wanted a bespoke `stepSoldier`; it didn't. `stepDrift`'s
+    sinusoid branch (the drifting ring-drones' code) already paces a target
+    around its `base` along an axis and writes the true velocity derivative for
+    shot-leading — so seeding a soldier with `driftAmp > 0` + a horizontal
+    `driftAxis` makes it patrol for free (ease-in-out at the turnarounds is a
+    bonus), and the fire step (`stepTurret`) reads the moving `t.pos` unchanged.
+    The lesson: before writing a new step function, check whether an existing
+    one *parameterises* to the new behaviour. Three supporting points: (a)
+    **no model in this repo animates legs** — the operator "walks" with pure
+    translation + heading + a `|sin(walkPhase)|·0.05` body bob; a patrol reuses
+    that (bob derived from position × speed so it fades to nothing at the
+    turnarounds — no `dt` needed in the render hook), and a real gait is a
+    deferred, shared-rig upgrade, not a per-model retrofit. (b) **A single body
+    yaw can't face two ways** (torso is welded to the body group; only arms
+    pivot), so arbitrate it by state — face travel while `fireTimer===0`, snap
+    to the player while firing — and slew shortest-arc; the weapon *elevation*
+    (arm pitch via the aim ref) is independent of body yaw, so only azimuth
+    conflicts. (c) **Seat by feet-offset, not by surface**: seating a soldier
+    at `t.pos.y - torsoLift` plants the boots on a rooftop *or* the ground with
+    the same code — the only difference between a rooftop pacer and a ground
+    patrol is the seeded `base.y`, so one render path serves both. Free-roam
+    ground placement just validates the whole beat (centre + both endpoints)
+    clear of buildings at seed time, so the route never needs runtime collision.
