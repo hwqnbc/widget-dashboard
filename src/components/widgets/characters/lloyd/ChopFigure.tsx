@@ -2,51 +2,55 @@ import { Box, keyframes } from '@mui/material'
 import { LL } from './lloydPalette'
 
 /**
- * The golden scimitar in local coords: pistol-ish grip at (0,0) — the fist
- * closes over the handle there — pommel ring + hanging bell tassel BELOW
- * (+y), flared guard just above, and the curved blade sweeping UP and
- * slightly left to its tip near (−34, −108). Rotating the arm group aims it.
- * (The source art's oversized C-hand and sideways-horizontal blade were
- * normalised into this grip.)
+ * The golden scimitar in local coords: the fist closes over the handle at
+ * (0,0). Carried HORIZONTAL like the source art — the blade sweeps RIGHT
+ * (+x, rising slightly) with the handle extending left to the pommel ring
+ * at (−34,0) and the bell tassel hanging straight DOWN from the ring.
+ * Rotating the arm group swings it. (The source art's oversized C-hand was
+ * normalised into a regular fist.)
  */
 function GoldenSword() {
   return (
     <g strokeLinejoin="round">
-      {/* curved scimitar blade (up, tip left) — broad and long, like the
-          source art's blade */}
-      <path
-        d="M -9,-16 C -16,-64 -27,-106 -50,-150 C -31,-139 -8,-100 5,-48 C 9,-32 10,-22 9,-16 Z"
-        fill="url(#lloyd-gold-grad)"
-        stroke={LL.goldLine}
-        strokeWidth={2}
-      />
-      <path d="M -7,-20 C -13,-62 -23,-100 -44,-140 C -28,-129 -8,-94 2,-48 C 5,-36 6,-26 5,-20 Z" fill="url(#lloyd-gold-light)" opacity={0.8} />
-      <path d="M -3,-20 C -9,-58 -18,-94 -38,-132" fill="none" stroke="#fff" strokeWidth={2} opacity={0.7} />
-      {/* guard flare */}
-      <path d="M -14,-12 C -18,-26 18,-26 14,-12 C 6,-17 -6,-17 -14,-12 Z" fill="url(#lloyd-gold-grad)" stroke={LL.goldLine} strokeWidth={1.5} />
-      {/* handle shaft through the fist */}
-      <rect x={-6} y={-14} width={12} height={40} rx={6} fill="url(#lloyd-gold-grad)" stroke={LL.goldLine} strokeWidth={1.2} />
-      {/* pommel ring */}
-      <circle cx={0} cy={34} r={9} fill="none" stroke="url(#lloyd-gold-grad)" strokeWidth={4} />
-      <circle cx={0} cy={34} r={9} fill="none" stroke={LL.goldLine} strokeWidth={1.2} />
-      {/* hanging bell tassel */}
-      <path d="M 0,43 L 0,49" fill="none" stroke="url(#lloyd-gold-grad)" strokeWidth={3} />
-      <path d="M -6,49 C -6,45 6,45 6,49 Z" fill="url(#lloyd-gold-grad)" stroke={LL.goldLine} strokeWidth={1} />
-      <path d="M -6,49 C -9,62 -14,70 -18,74 C -8,76 8,76 18,74 C 14,70 9,62 6,49 Z" fill="url(#lloyd-gold-grad)" stroke={LL.goldLine} strokeWidth={1.4} />
-      <path d="M -3,49 C -4,60 -8,69 -12,73 M 0,49 C 0,60 0,69 0,74 M 3,49 C 4,60 8,69 12,73" fill="none" stroke={LL.goldLine} strokeWidth={1} />
-      <ellipse cx={0} cy={74} rx={16} ry={2.5} fill="url(#lloyd-gold-light)" stroke={LL.goldLine} strokeWidth={1} />
+      {/* blade + guard + handle, authored blade-up then turned 90° clockwise
+          so the carry reads horizontal (tip right, slight rise) */}
+      <g transform="rotate(90)">
+        <path
+          d="M -9,-16 C -16,-64 -27,-106 -50,-150 C -31,-139 -8,-100 5,-48 C 9,-32 10,-22 9,-16 Z"
+          fill="url(#lloyd-gold-grad)"
+          stroke={LL.goldLine}
+          strokeWidth={2}
+        />
+        <path d="M -7,-20 C -13,-62 -23,-100 -44,-140 C -28,-129 -8,-94 2,-48 C 5,-36 6,-26 5,-20 Z" fill="url(#lloyd-gold-light)" opacity={0.8} />
+        <path d="M -3,-20 C -9,-58 -18,-94 -38,-132" fill="none" stroke="#fff" strokeWidth={2} opacity={0.7} />
+        {/* guard flare */}
+        <path d="M -14,-12 C -18,-26 18,-26 14,-12 C 6,-17 -6,-17 -14,-12 Z" fill="url(#lloyd-gold-grad)" stroke={LL.goldLine} strokeWidth={1.5} />
+        {/* handle shaft through the fist */}
+        <rect x={-6} y={-14} width={12} height={40} rx={6} fill="url(#lloyd-gold-grad)" stroke={LL.goldLine} strokeWidth={1.2} />
+      </g>
+      {/* pommel ring at the left handle end + bell tassel hanging DOWN */}
+      <g transform="translate(-34 -34)">
+        <circle cx={0} cy={34} r={9} fill="none" stroke="url(#lloyd-gold-grad)" strokeWidth={4} />
+        <circle cx={0} cy={34} r={9} fill="none" stroke={LL.goldLine} strokeWidth={1.2} />
+        <path d="M 0,43 L 0,49" fill="none" stroke="url(#lloyd-gold-grad)" strokeWidth={3} />
+        <path d="M -6,49 C -6,45 6,45 6,49 Z" fill="url(#lloyd-gold-grad)" stroke={LL.goldLine} strokeWidth={1} />
+        <path d="M -6,49 C -9,62 -14,70 -18,74 C -8,76 8,76 18,74 C 14,70 9,62 6,49 Z" fill="url(#lloyd-gold-grad)" stroke={LL.goldLine} strokeWidth={1.4} />
+        <path d="M -3,49 C -4,60 -8,69 -12,73 M 0,49 C 0,60 0,69 0,74 M 3,49 C 4,60 8,69 12,73" fill="none" stroke={LL.goldLine} strokeWidth={1} />
+        <ellipse cx={0} cy={74} rx={16} ry={2.5} fill="url(#lloyd-gold-light)" stroke={LL.goldLine} strokeWidth={1} />
+      </g>
     </g>
   )
 }
 
-// The whole sword arm pivots at the SHOULDER for a full-body chop: wind the
-// blade up-and-over to face height (the imperium arc lesson — go as high as
-// the face), hold a beat, then whip it down through a wide left-side slash
-// before easing back to the carry. A gold slash-arc flash marks the impact
-// zone; it lives at base opacity 0 so the resting figure never shows it
-// (lesson #74).
-const RAISE = 100
-const CHOP = -35
+// The whole sword arm pivots at the SHOULDER for a full-body chop. With the
+// horizontal carry, the wind-up swings COUNTER-clockwise — the fist crosses
+// to the right chest and the blade cocks up over the shoulder, tip overhead
+// (the imperium arc lesson — go as high as the face) — holds a beat, then
+// whips clockwise through a wide down-right slash past the legs before
+// easing back to the carry. A gold slash-arc flash marks the impact zone;
+// it lives at base opacity 0 so the resting figure never shows it (#74).
+const RAISE = -100
+const CHOP = 35
 const chop = keyframes`
   0%   { transform: rotate(0deg); }
   30%  { transform: rotate(${RAISE}deg); }
@@ -215,10 +219,10 @@ export default function ChopFigure({ chopping = false }: { chopping?: boolean })
       <path d="M 290,65 L 270,95 L 295,125 Z" fill="#8CE019" stroke={LL.line} strokeWidth={1.5} />
       <path d="M 235,100 L 250,85 L 265,100 L 250,115 Z" fill="url(#lloyd-gold-grad)" stroke={LL.goldLine} strokeWidth={1.5} />
 
-      {/* ---- impact slash-arc flash (left side, base opacity 0 — #74) ---- */}
+      {/* ---- impact slash-arc flash (down-right sweep, base opacity 0 — #74) ---- */}
       <Box
         component="path"
-        d="M 48,185 C 12,255 12,330 60,392 C 32,325 35,252 70,196 Z"
+        d="M 340,140 C 415,225 440,315 395,410 C 415,310 385,225 315,158 Z"
         fill="url(#lloyd-gold-light)"
         stroke={LL.goldHi}
         strokeWidth={2}
