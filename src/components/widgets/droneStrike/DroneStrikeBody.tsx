@@ -83,6 +83,8 @@ import EnemyRockets from './EnemyRockets'
 import SparkField from './SparkField'
 import { createSparkPool } from './sparkModel'
 import LaserBeams from './LaserBeams'
+import TrajectoryArc from './TrajectoryArc'
+import type { AimRay } from './TrajectoryArc'
 import Reticle from './Reticle'
 import FireButton from './FireButton'
 import type { HitMarker } from './HitMarkers'
@@ -221,6 +223,12 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
   const sparks = useRef(createSparkPool()).current
   // Laser beam slots — the rig spawns one per hitscan shot, LaserBeams draws.
   const beams = useRef(createLaserBeams()).current
+  // Live aim ray (muzzle + fire dir) the rig publishes every frame — read by
+  // the ballistic TrajectoryArc hint.
+  const aimRay = useRef<AimRay>({
+    origin: { x: 0, y: 2, z: 0 },
+    dir: { x: 0, y: 0, z: -1 },
+  }).current
   const targets = useRef(createTargetStates()).current
   const enemyAI = useRef(createEnemyAIStates()).current
   const aimRef = useRef(createAimOffset())
@@ -796,6 +804,7 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
           <EnemyRockets combat={combat} />
           <SparkField sparks={sparks} />
           <LaserBeams beams={beams} />
+          {weaponId === 'lob' && <TrajectoryArc aimRay={aimRay} weapon={weaponSpec} />}
           <StrikeRig
             controls={controls}
             flight={flight}
@@ -824,6 +833,7 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
             combat={combat}
             sparks={sparks}
             beams={beams}
+            aimRay={aimRay}
             onHeatEvent={onHeatEvent}
             heatBarRef={heatBarRef}
             aimRef={aimRef}

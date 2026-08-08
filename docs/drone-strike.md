@@ -452,6 +452,8 @@ world) plus enemy world impacts, with **deterministic per-index jitter**
 as one `<points>` call with the EnemyRockets `alpha`-attribute shader recipe
 plus a custom `tint` colour attribute; enemy hits on the *player* deliberately
 spark nothing — the damage vignette is that feedback),
+`LaserBeams` (hitscan beams, instanced boxes fading by thickness),
+`TrajectoryArc` (the lob's live aim hint — see "Player weapons"),
 `Reticle`/`FireButton`/`HitMarkers`/`StrikeMinimap`/`StrikeSettingsPanel`.
 The rig's player-fire consequences (sparks for every impact, damage/score/sfx
 for targets) are one `applyPlayerHitEvent` closure — the seam any future
@@ -482,15 +484,24 @@ persisted `weapon` field, root `data-weapon`) selects among `WEAPON_SPECS`:
   muzzle→hit, fading by THICKNESS — instancing can't fade opacity per
   instance), and each shot plays a dedicated `playZap` voice (`data-sfx-zap`).
 
+- **`lob` (ballistic)** — `LOB` sets `gravity > 0` and the existing integrator
+  does the rest (`stepProjectiles` already applies `vy −= gravity·dt`): a
+  slow (28 u/s), heavy-cadenced (0.5 s) shell that **arcs** — aim above the
+  target. Because pure gravity drop frustrates on touch, it ships with the
+  **`TrajectoryArc` hint**: a translucent polyline sampled by the pure
+  `sampleTrajectory` (the SAME integration a live shell flies, so the drawn
+  arc IS the flight path), fed by an **`aimRay`** the rig publishes every
+  frame (muzzle + fire direction — reusing the real gimbal/aim-mode solution
+  instead of duplicating it). Unlike `GhostLine` (memo-rebuilt), the arc's
+  buffer is fixed-length and mutated + `setDrawRange`d per frame. Two known
+  limitations, accepted: the arc shows the *unassisted* ray (assist bend/lead
+  only apply at fire time on a locked target), and `leadPoint`'s
+  straight-line flight-time assumption undershoots moving targets with the
+  lob.
+
 **Switching weapons despawns in-flight player bolts** and starts the new gun
 cold — `stepProjectiles` sweeps the pool with the *current* spec, so a live
 bolt must not retro-inherit another weapon's gravity/maxAge.
-
-Still recorded, not built:
-
-- **`ballistic`**: set `gravity > 0`; the integrator already applies it
-  (`vel.y -= gravity·dt`). Pair with a trajectory hint if it ever ships —
-  pure gravity drop frustrates on touch.
 
 ## Test contract (data-*)
 
@@ -511,7 +522,8 @@ aim closed-loop without window globals. Chips: `strike-score` (`data-score/-wave
 equipped), joysticks/buttons/settings testids mirror the sim's.
 
 E2E: suites `100-strike-core` … `109-strike-ground` plus `117-strike-audio`,
-`119-strike-soldiers`, `123-strike-sparks` and `124-strike-laser`
+`119-strike-soldiers`, `123-strike-sparks`, `124-strike-laser` and
+`125-strike-lob`
 (see `e2e/README.md`); pure modules are esbuild-bundled for the suites in a
 second flat pass in `run.mjs`.
 
@@ -542,9 +554,9 @@ kind of list).
   resolution + heat meter with an overheat latch + `LaserBeams` + the
   settings **weapon picker** (persisted `weapon`, root `data-weapon`) — see
   "Player weapons").
-- **Ballistic lob** — `gravity > 0` in the existing integrator; ship it
-  with a trajectory-hint arc (a `GhostLine`-style polyline sampled from the
-  same integration) or it will frustrate on touch.
+- ~~Ballistic lob~~ — **shipped** (the `LOB` spec + the `TrajectoryArc`
+  hint sampled from the same integration via `sampleTrajectory` and the
+  rig-published live `aimRay` — see "Player weapons").
 - **Weapon switching / pickups** — per-wave weapon crates on rooftops
   (LandingPads-style discs); the rig already takes `weapon` as a prop, so
   switching is a state change in the body.

@@ -274,9 +274,11 @@ four aim modes
 Easy/Normal/Hard difficulty, ADS zoom with three gyro fine-aim modes,
 synthesized Web Audio sound effects (no assets),
 muzzle-flash + impact sparks (pure `sparkModel` pool, one Points draw),
-and a settings **weapon picker** — the default bolt or the **hitscan laser**
+and a settings **weapon picker** — the default bolt, the **hitscan laser**
 (`fireHitscan` spawn-frame resolution, balanced by a heat meter with an
-overheat latch, beams via `LaserBeams`)).
+overheat latch, beams via `LaserBeams`), or the **ballistic lob** (`gravity >
+0` in the same integrator + the `TrajectoryArc` hint sampled from the same
+integration off the rig-published live `aimRay`)).
 See `docs/tank-battle.md` for the Tank Battle widget (the third WebGL
 widget — seeded analytic heightfield terrain with four-corner tank
 grounding and grade limits, WoT-style controls: left stick drives the hull,

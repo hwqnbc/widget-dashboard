@@ -39,6 +39,7 @@ import type {
 } from './combatModel'
 import type { SparkPool } from './sparkModel'
 import { spawnBurst } from './sparkModel'
+import type { AimRay } from './TrajectoryArc'
 import {
   AIM_BEND,
   AIM_CONE_RAD,
@@ -182,6 +183,7 @@ export default function StrikeRig({
   combat,
   sparks,
   beams,
+  aimRay,
   onHeatEvent,
   heatBarRef,
   aimRef,
@@ -251,6 +253,9 @@ export default function StrikeRig({
   /** Laser beam slots — the rig spawns one per hitscan shot, LaserBeams ages
    * and draws them. */
   beams: LaserBeam[]
+  /** Live aim ray (muzzle + fire direction), published every frame for the
+   * ballistic TrajectoryArc hint. */
+  aimRay: AimRay
   /** Heat latch tripped / cleared (the body banners it, battery-style). */
   onHeatEvent: (event: HeatEvent) => void
   /** Laser heat bar fill — width/colour/data-level written on the tick. */
@@ -478,6 +483,16 @@ export default function StrikeRig({
     // Recoil stays camera-only.
     aimAngles(flight.yaw, basePitch, gimbal, aim.yaw, aim.pitch, angles)
     dirFromAngles(angles.yaw, angles.pitch, fireDir)
+    // Publish the live aim ray (muzzle + UNASSISTED fire direction) for the
+    // trajectory-arc hint — every frame, not just when firing. Assist bend /
+    // lead only apply at fire time on a locked target, so a locked assisted
+    // shot can land off-arc (documented).
+    aimRay.origin.x = flight.pos.x + fireDir.x * MUZZLE_OFFSET
+    aimRay.origin.y = flight.pos.y + fireDir.y * MUZZLE_OFFSET
+    aimRay.origin.z = flight.pos.z + fireDir.z * MUZZLE_OFFSET
+    aimRay.dir.x = fireDir.x
+    aimRay.dir.y = fireDir.y
+    aimRay.dir.z = fireDir.z
 
     // Gallery targets drift deterministically off the canvas clock; enemies
     // orbit/evade (and possibly return fire) while the wave is live. The AI

@@ -97,16 +97,30 @@ export const LASER: WeaponSpec = {
   tracerLen: 0,
 }
 
+/** The ballistic lob: `gravity > 0` in the same integrator (`stepProjectiles`
+ * already applies it), so the shell arcs — aim above the target. Slower and
+ * heavier-cadenced than the bolt; paired with the `TrajectoryArc` hint
+ * because pure gravity drop frustrates on touch. */
+export const LOB: WeaponSpec = {
+  kind: 'ballistic',
+  speed: 28,
+  cooldown: 0.5,
+  gravity: 14,
+  maxRange: 100,
+  tracerLen: 0.9,
+}
+
 /** The persisted weapon-picker ids (crate pickups reuse the same ids). */
-export type WeaponId = 'bolt' | 'laser'
+export type WeaponId = 'bolt' | 'laser' | 'lob'
 
 export const WEAPON_SPECS: Record<WeaponId, WeaponSpec> = {
   bolt: BOLT,
   laser: LASER,
+  lob: LOB,
 }
 
 export const coerceWeapon = (v: unknown): WeaponId | undefined =>
-  v === 'bolt' || v === 'laser' ? v : undefined
+  v === 'bolt' || v === 'laser' || v === 'lob' ? v : undefined
 
 export const MAX_PLAYER_PROJECTILES = 24
 export const MAX_ENEMY_PROJECTILES = 16
@@ -488,6 +502,57 @@ export function fireHitscan(
   out.y = SCAN_FROM.y + (SCAN_TO.y - SCAN_FROM.y) * t
   out.z = SCAN_FROM.z + (SCAN_TO.z - SCAN_FROM.z) * t
   return out
+}
+
+/* ---------------------------- trajectory arc ---------------------------- */
+
+/**
+ * Sample a weapon's flight path from `origin` along unit `dir` into `out`
+ * (xyz triplets), using the SAME integration `stepProjectiles` applies to a
+ * live shell (`vy −= gravity·dt` then Euler position) — so the drawn hint IS
+ * the real trajectory, not an approximation. Stops at the ground (final point
+ * clamped to y = 0) or at the weapon's maxAge. Returns the point count (for
+ * `setDrawRange`). Pure + allocation-free: the arc renderer owns `out`.
+ */
+export function sampleTrajectory(
+  origin: Vec3,
+  dir: Vec3,
+  weapon: WeaponSpec,
+  out: Float32Array,
+  maxPts: number,
+  dtStep: number,
+): number {
+  let px = origin.x
+  let py = origin.y
+  let pz = origin.z
+  const vx = dir.x * weapon.speed
+  let vy = dir.y * weapon.speed
+  const vz = dir.z * weapon.speed
+  const maxAge = weapon.maxRange / weapon.speed
+  out[0] = px
+  out[1] = py
+  out[2] = pz
+  let n = 1
+  let age = 0
+  while (n < maxPts && age < maxAge) {
+    vy -= weapon.gravity * dtStep
+    px += vx * dtStep
+    py += vy * dtStep
+    pz += vz * dtStep
+    age += dtStep
+    if (py <= 0) {
+      out[n * 3] = px
+      out[n * 3 + 1] = 0
+      out[n * 3 + 2] = pz
+      n++
+      break
+    }
+    out[n * 3] = px
+    out[n * 3 + 1] = py
+    out[n * 3 + 2] = pz
+    n++
+  }
+  return n
 }
 
 /* ----------------------------- laser beams ------------------------------ */
