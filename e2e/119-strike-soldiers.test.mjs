@@ -35,6 +35,7 @@ import {
   createCombatState,
   spawnProjectile,
 } from './.bundle/combatModel.js'
+import { KNEEL_HOLD, KNEEL_WALK_SPEED, stepKneel } from './.bundle/kneelStance.js'
 
 const { check, finish } = reporter('strike-soldiers')
 const { browser, page } = await launch()
@@ -237,6 +238,33 @@ spawnProjectile(combatState.enemy, { x: 0, y: 5, z: 0 }, dir, SOLDIER_ROCKET)
 check('spawned rocket projectile is tagged visual=rocket', combatState.enemy[0].visual === 'rocket')
 spawnProjectile(combatState.enemy, { x: 0, y: 5, z: 0 }, dir, SOLDIER_SMG)
 check('spawned SMG projectile is tagged visual=bolt', combatState.enemy[1].visual === 'bolt')
+
+// --- kneel-to-fire stance (pure driver `stepKneel`, Bazooka Joe in-game) ---
+// The Bazooka soldier drops onto the launcher knee to loose a rocket from a
+// stationary plant, holds it briefly, then stands — and stays upright if it is
+// caught firing on the move. This is the pure driver the model reads each frame.
+const runKneel = (s, fire, speed, frames, dt = 1 / 60) => {
+  for (let i = 0; i < frames; i++) stepKneel(s, fire, speed, dt)
+  return s.k
+}
+const plant = { k: 0, hold: 0 }
+const kFiring = runKneel(plant, 0.8, 0, 60) // ~1s firing while stationary
+check('kneels when firing from a stationary plant', kFiring > 0.6, `k=${kFiring.toFixed(2)}`)
+
+const held = { k: 0, hold: 0 }
+runKneel(held, 0.8, 0, 12) // a brief burst → kneeling + hold armed
+const kMidHold = runKneel(held, 0, 0, Math.round((KNEEL_HOLD - 0.3) * 60)) // still within the hold
+check('holds the kneel briefly after the shot', kMidHold > 0.5, `k=${kMidHold.toFixed(2)}`)
+const kAfterHold = runKneel(held, 0, 0, 120) // well past the hold window
+check('stands back up after the hold lapses', kAfterHold < 0.1, `k=${kAfterHold.toFixed(2)}`)
+
+const onMove = { k: 0, hold: 0 }
+const kWalking = runKneel(onMove, 0.8, KNEEL_WALK_SPEED, 60) // firing at walking pace
+check('does not kneel while walking (fires upright)', kWalking < 0.05, `k=${kWalking.toFixed(2)}`)
+
+const clampCheck = { k: 0, hold: 0 }
+runKneel(clampCheck, 1, 0, 600)
+check('kneel factor stays within [0,1]', clampCheck.k >= 0 && clampCheck.k <= 1, `k=${clampCheck.k.toFixed(3)}`)
 
 // --- DOM: the app fields the seeded wave-1 targets (soldiers included) ---
 const c1 = await combat()

@@ -232,9 +232,10 @@ group (`[±0.14, 0.5, 0]`, meshes offset −0.5 in y); the model advances a
 `walkPhase` by the live ground speed (`AimPose.speed`, written by
 `SoldierTargets`) and swings the two hips in opposite phase, amplitude scaled by
 speed so the stride eases to neutral at the turnarounds. It composes with
-Bazooka Joe's kneel (kneel lives in the `action` path, gait in the in-game
-`aimRef` path — never both at once). Any avatar can adopt the rig via the
-documented hip-pivot convention (see `docs/avatars.md`).
+Bazooka Joe's kneel: the gait fades out as the soldier slows to a firing plant
+while the kneel fades in (they simply sum on the hips through the brief
+overlap). Any avatar can adopt the rig via the documented hip-pivot convention
+(see `docs/avatars.md`).
 
 *Aim & fire* — you see the soldier **aim its weapon and shoot**, not a beam from
 the torso. `StrikeRig` dispatches `soldier` through the shared `stepTurret`
@@ -252,6 +253,19 @@ real projectile: `SOLDIER_ROCKET` tags its `Projectile.visual = 'rocket'`, so
 flying at you, trailing a **persistent world-space smoke contrail** (puffs left
 hanging along the flight path, fading a beat after the rocket passes — the
 incoming-missile read); SMG bolts stay the tracer box.
+
+*Kneel to fire* (Bazooka Joe) — a rocketeer firing from a stationary plant
+**drops onto the launcher knee**, reusing the same leg-fold / body-drop /
+brace-hand stance as the widget's "Take Aim" action but **not** its
+weapon-shouldering choreography (the live tube keeps tracking the drone, so
+`shoulderK = aimRef ? 0 : kneelK` gates that part off in-game). The stance is a
+tiny pure driver, `characters/shared/kneelStance` `stepKneel(state, fire, speed,
+dt)`: it holds the kneel `KNEEL_HOLD` (1 s) past each shot so it reads as a
+firing pose rather than a per-shot twitch, and scales it out with ground speed
+(`KNEEL_WALK_SPEED` 0.8 u/s) — **a soldier caught firing on the move stays
+upright**, which is why it composes cleanly with the leg gait. Extracting the
+driver (like `legGait` / `stepDrift`) is what lets the soldier suite assert the
+kneel off-canvas.
 
 *Rendering* is via **`SoldierTargets`** — the shared `ModelTargets` pool with
 its `onFrame` hook overriding the deck Y so the boots plant on the surface
@@ -543,6 +557,12 @@ kind of list).
   - ~~operator gait~~ — **shipped** (the Drone Sim RC operator strides its legs
     via the shared rig — `OperatorFigure` passes `action="walk"` while Player
     1's avatar is moving; see `docs/drone-sim.md`);
+  - ~~kneel to fire~~ — **shipped** (a Bazooka Joe soldier drops onto the
+    launcher knee to loose a rocket from a stationary plant, holds it briefly,
+    then stands; fired on the move it stays upright — the pure
+    `characters/shared/kneelStance` `stepKneel` driver, asserted by the soldier
+    suite; see *Kneel to fire*). The same treatment could extend to a Scar
+    crouch;
   - **turning gait / waypoint loops** — legs swing but feet still slide on the
     turns; foot-planting (IK) and multi-segment waypoint routes are the next
     fidelity step.

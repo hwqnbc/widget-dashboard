@@ -1258,3 +1258,33 @@ carried over; these are the new ones.
     when the amplitude must track live speed. Same rig, two drivers, no
     registry-type change (models already take `action`), and avatars that
     predate the rig ignore the unknown action gracefully — a no-op, not a crash.
+
+91. **A live-ref pose and a canned choreography can share pose constants —
+    gate the parts that differ on which driver is present.** The Bazooka Joe
+    model already had a full one-knee "Take Aim" kneel behind `action === 'aim'`
+    (legs fold, body drops, left hand braces, AND the launcher is shouldered +
+    levelled). Reusing it as an *in-game* kneel-to-fire (the `aimRef` soldier
+    path) wanted the *stance* (legs/body/brace) but NOT the *shouldering* — the
+    live tube must keep tracking the drone. The clean split was one line:
+    `const shoulderK = aim ? 0 : kneelK`, driving only the weapon lift/rotation
+    off `shoulderK` while the stance keeps driving off `kneelK`. So the same
+    pose constants serve both callers, and the choreography-specific bit is
+    switched off exactly when a live ref owns the arm. (2) **Extract the
+    stateful driver so it's testable, even for an in-canvas animation.** The
+    kneel has no DOM contract (it's mesh rotation in the R3F canvas), so like
+    `legGait` / `stepDrift` its logic went into a pure `stepKneel(state, fire,
+    speed, dt)` (`characters/shared/kneelStance`) that mutates a caller-owned
+    scratch object — the model just reads `.k`. The soldier suite then asserts
+    the behaviour off-canvas (kneels from a plant, holds `KNEEL_HOLD` past the
+    shot, stands after, stays upright while walking, stays in [0,1]). A hold
+    timer past the fire event is what turns a 0.5 s per-shot twitch into a
+    readable firing stance; scaling the target by `1 − min(1, speed/WALK_SPEED)`
+    is what makes "blend out while walking" fall straight out of the same
+    formula. (3) **esbuild `--outdir` nests by common ancestor.** Adding a
+    `characters/shared/*.ts` entry to the droneStrike bundling pass silently
+    re-rooted the whole pass: the common ancestor jumped to
+    `src/components/widgets/`, so every output nested under `.bundle/droneStrike/`
+    and `.bundle/characters/…`, and the flat `.bundle/*.js` the suites import
+    became stale leftovers. A cross-folder pure module needs its OWN single-entry
+    esbuild pass (its own directory is then the ancestor → flat output), the same
+    reason droneStrike / tankBattle / map are already separate passes.

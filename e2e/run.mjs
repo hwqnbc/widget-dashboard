@@ -56,6 +56,24 @@ const strikeBundle = spawnSync(
 )
 if (strikeBundle.status !== 0) process.exit(strikeBundle.status ?? 1)
 
+// Shared character helper the soldier suite exercises (the Bazooka kneel-to-fire
+// driver). It lives under characters/shared/, so bundle it in its OWN single-
+// entry pass — folding it into the strike pass above would give esbuild a
+// wider common ancestor and nest every strike output per-folder (breaking the
+// flat `.bundle/*.js` the suites import).
+const sharedBundle = spawnSync(
+  'npx',
+  [
+    'esbuild',
+    'src/components/widgets/characters/shared/kneelStance.ts',
+    '--bundle',
+    '--format=esm',
+    `--outdir=${join(here, '.bundle')}`,
+  ],
+  { cwd: root, stdio: 'inherit' },
+)
+if (sharedBundle.status !== 0) process.exit(sharedBundle.status ?? 1)
+
 // Tank Battle's pure modules — third flat pass, same reasoning.
 const tankBundle = spawnSync(
   'npx',

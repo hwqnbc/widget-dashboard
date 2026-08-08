@@ -39,6 +39,8 @@ import type { Group } from 'three'
 import { BJ } from './bazookaJoePalette'
 import type { AimPose } from '../shared/aimPose'
 import { GAIT_RATE, WALK_ACTION_SPEED, legGait } from '../shared/legGait'
+import { stepKneel } from '../shared/kneelStance'
+import type { KneelState } from '../shared/kneelStance'
 import type { LegSwing } from '../shared/legGait'
 
 /** How far pitch can raise/lower the launcher (radians). */
@@ -126,7 +128,9 @@ export default function BazookaJoeModel3D({
 }: {
   action?: string
   /** When set (in-game soldier mode), overrides `action`: live launcher
-   * elevation + a one-shot launch pose driven by the ref, no re-renders. */
+   * elevation, a one-shot launch pose, the leg-gait walk cycle, and a
+   * kneel-to-fire stance when stationary — all driven by the ref, no
+   * re-renders. */
   aimRef?: RefObject<AimPose | null>
 }) {
   const armLRef = useRef<Group>(null)
@@ -145,6 +149,7 @@ export default function BazookaJoeModel3D({
   const walkPhaseRef = useRef(0)
   const lastTRef = useRef(0)
   const gaitRef = useRef<LegSwing>({ left: 0, right: 0 }).current
+  const kneelStateRef = useRef<KneelState>({ k: 0, hold: 0 }).current // in-game kneel-to-fire
 
   useFrame((state) => {
     const t = state.clock.elapsedTime
@@ -196,6 +201,10 @@ export default function BazookaJoeModel3D({
       const g = legGait(walkPhaseRef.current, aim.speed, gaitRef)
       gaitL = g.left
       gaitR = g.right
+      // Kneel to fire: drop onto the launcher knee when firing from a plant,
+      // held briefly past each shot and faded out with ground speed — a soldier
+      // caught walking fires upright, leaving the leg gait alone (pure driver).
+      kneelK = stepKneel(kneelStateRef, f, aim.speed, dt).k
     } else if (action === 'launch') {
       // the 2D celebration: a quick fire-and-boom from the shoulder carry
       const tau = (t - t0Ref.current) % LAUNCH_T
@@ -246,6 +255,11 @@ export default function BazookaJoeModel3D({
       sway = Math.sin(t * 1.7) * 0.04 // idle: both arms breathe together
     }
 
+    // The 'aim' action shoulders the tube (raises + levels it over the up-swung
+    // forearm); the in-game kneel (aimRef) does NOT — its launcher keeps
+    // tracking the drone — so the shoulder choreography follows kneelK only when
+    // there's no live aim ref driving the arm.
+    const shoulderK = aim ? 0 : kneelK
     armR.rotation.z = R_SHZ + sway
     armR.rotation.y = armRYaw
     armR.rotation.x = armRPitch
@@ -255,10 +269,11 @@ export default function BazookaJoeModel3D({
     elbowR.rotation.x = elbR
     elbowL.rotation.x = L_ELBOW + (BRACE_ELB - L_ELBOW) * kneelK
     body.position.y = -KNEEL_DROP * kneelK
-    weapon.position.y = -0.26 + WEAPON_LIFT * kneelK // tube up onto the shoulder cap
-    weapon.rotation.x = AIM_WEAPON_ROT * kneelK // …and level despite the up-swung forearm
-    // Kneel (action 'aim') and gait (in-game aimRef) never coincide — kneelK is
-    // 0 whenever a gait is driven — so the two just sum.
+    weapon.position.y = -0.26 + WEAPON_LIFT * shoulderK // tube up onto the shoulder cap
+    weapon.rotation.x = AIM_WEAPON_ROT * shoulderK // …and level despite the up-swung forearm
+    // Kneel and gait can briefly overlap (as a soldier decelerates into a firing
+    // kneel): kneelK fades out with speed while the gait amplitude fades in, so
+    // through the transition the two simply sum on the hips.
     legR.rotation.x = KNEEL_REAR * kneelK + gaitR // launcher-side shin folds under
     legL.rotation.x = -KNEEL_FRONT * kneelK + gaitL // front leg extends ahead
     warhead.visible = warheadOn

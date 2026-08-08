@@ -263,7 +263,9 @@ walking / the player while firing; weapon-matched: a Bazooka Joe launches a
 rocket — a `visual:'rocket'` projectile drawn by `EnemyRockets` with a
 world-space smoke contrail — or a Scar fires SMG bursts, both aiming the weapon
 + playing a firing pose via the model's `aimRef` and firing from a muzzle offset
-via the AA turret's `stepTurret`), four aim modes
+via the AA turret's `stepTurret`; Bazooka Joe also **kneels to fire** when
+planted, upright on the move — the pure `characters/shared/kneelStance`
+`stepKneel` driver), four aim modes
 (Classic/Reticle/Gunner/Hover gimbal),
 Easy/Normal/Hard difficulty, ADS zoom with three gyro fine-aim modes,
 synthesized Web Audio sound effects (no assets),
