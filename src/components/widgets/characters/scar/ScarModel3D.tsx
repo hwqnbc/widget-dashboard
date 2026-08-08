@@ -28,6 +28,8 @@ import { useFrame } from '@react-three/fiber'
 import type { Group } from 'three'
 import { SC } from './scarPalette'
 import type { AimPose } from '../shared/aimPose'
+import { GAIT_RATE, legGait } from '../shared/legGait'
+import type { LegSwing } from '../shared/legGait'
 
 const CLOTH = { roughness: 0.7, metalness: 0 }
 const STEEL = { roughness: 0.35, metalness: 0.4 }
@@ -202,9 +204,13 @@ export default function ScarModel3D({
   const burstRef = useRef<Group>(null)
   const muzzleRef = useRef<Group>(null)
   const smgRef = useRef<Group>(null)
+  const legLRef = useRef<Group>(null)
+  const legRRef = useRef<Group>(null)
   const t0Ref = useRef(0)
   const prevActionRef = useRef<string | undefined>(undefined)
   const aimBlendRef = useRef(0)
+  const walkPhaseRef = useRef(0)
+  const gaitRef = useRef<LegSwing>({ left: 0, right: 0 }).current
 
   useFrame((state, delta) => {
     const t = state.clock.elapsedTime
@@ -220,7 +226,9 @@ export default function ScarModel3D({
     const burstG = burstRef.current
     const muzzle = muzzleRef.current
     const smg = smgRef.current
-    if (!armL || !armR || !elbowL || !elbowR || !canister || !burstG || !muzzle || !smg) return
+    const legL = legLRef.current
+    const legR = legRRef.current
+    if (!armL || !armR || !elbowL || !elbowR || !canister || !burstG || !muzzle || !smg || !legL || !legR) return
 
     // Per-action pose; every mutable written every frame (self-correcting).
     const aim = aimRef?.current
@@ -237,16 +245,23 @@ export default function ScarModel3D({
     let canisterOn = true
     let burstOn = false
     let muzzleOn = false
+    let gaitL = 0
+    let gaitR = 0
 
     if (aim) {
       // In-game soldier: live SMG elevation toward the drone + a one-shot fire
       // pose (recoil + muzzle flash) from `fire`. No flashbang throw here.
+      // Plus the shared leg gait — the walk cycle advanced by ground speed.
       armRPitch = -Math.max(AIM_PITCH_MIN, Math.min(AIM_PITCH_MAX, aim.pitch))
       const f = aim.fire
       if (f > 0) {
         elbR = elbBase + KICK_AMP * f // recoil kick, strongest at the shot
         muzzleOn = f > 0.5 // muzzle flash right after the trigger
       }
+      walkPhaseRef.current += aim.speed * delta * GAIT_RATE
+      const g = legGait(walkPhaseRef.current, aim.speed, gaitRef)
+      gaitL = g.left
+      gaitR = g.right
     } else if (action === 'breach') {
       const tau = (t - t0Ref.current) % BREACH_T
       // toss: wind back, hurl overhead-forward, settle home
@@ -283,6 +298,8 @@ export default function ScarModel3D({
     elbowR.rotation.x = elbR
     elbowL.rotation.x = L_ELBOW
     smg.rotation.x = SMG_PARALLEL * blend // aiming = gun parallel to the forearm
+    legL.rotation.x = gaitL // walk gait (0 when not patrolling)
+    legR.rotation.x = gaitR
     canister.visible = canisterOn
     burstG.visible = burstOn
     muzzle.visible = muzzleOn
@@ -290,31 +307,37 @@ export default function ScarModel3D({
 
   return (
     <group>
-      {/* dark tactical legs with knee-pad slabs, darkest boots */}
-      <mesh position={[-0.14, 0.27, 0]}>
-        <boxGeometry args={[0.24, 0.46, 0.26]} />
-        <meshStandardMaterial color={SC.legs} {...CLOTH} />
-      </mesh>
-      <mesh position={[0.14, 0.27, 0]}>
-        <boxGeometry args={[0.24, 0.46, 0.26]} />
-        <meshStandardMaterial color={SC.legs} {...CLOTH} />
-      </mesh>
-      <mesh position={[-0.14, 0.24, 0.14]}>
-        <boxGeometry args={[0.16, 0.14, 0.03]} />
-        <meshStandardMaterial color={SC.pad} {...CLOTH} />
-      </mesh>
-      <mesh position={[0.14, 0.24, 0.14]}>
-        <boxGeometry args={[0.16, 0.14, 0.03]} />
-        <meshStandardMaterial color={SC.pad} {...CLOTH} />
-      </mesh>
-      <mesh position={[-0.14, 0.05, 0.03]}>
-        <boxGeometry args={[0.26, 0.1, 0.32]} />
-        <meshStandardMaterial color={SC.strap} {...CLOTH} />
-      </mesh>
-      <mesh position={[0.14, 0.05, 0.03]}>
-        <boxGeometry args={[0.26, 0.1, 0.32]} />
-        <meshStandardMaterial color={SC.strap} {...CLOTH} />
-      </mesh>
+      {/* dark tactical legs with knee-pad slabs, darkest boots — each on a hip
+       * pivot at [±0.14, 0.5, 0] (shared leg-gait convention) so the walk gait
+       * can swing the whole leg from the hip; meshes offset −0.5 in y. */}
+      <group ref={legLRef} position={[-0.14, 0.5, 0]}>
+        <mesh position={[0, -0.23, 0]}>
+          <boxGeometry args={[0.24, 0.46, 0.26]} />
+          <meshStandardMaterial color={SC.legs} {...CLOTH} />
+        </mesh>
+        <mesh position={[0, -0.26, 0.14]}>
+          <boxGeometry args={[0.16, 0.14, 0.03]} />
+          <meshStandardMaterial color={SC.pad} {...CLOTH} />
+        </mesh>
+        <mesh position={[0, -0.45, 0.03]}>
+          <boxGeometry args={[0.26, 0.1, 0.32]} />
+          <meshStandardMaterial color={SC.strap} {...CLOTH} />
+        </mesh>
+      </group>
+      <group ref={legRRef} position={[0.14, 0.5, 0]}>
+        <mesh position={[0, -0.23, 0]}>
+          <boxGeometry args={[0.24, 0.46, 0.26]} />
+          <meshStandardMaterial color={SC.legs} {...CLOTH} />
+        </mesh>
+        <mesh position={[0, -0.26, 0.14]}>
+          <boxGeometry args={[0.16, 0.14, 0.03]} />
+          <meshStandardMaterial color={SC.pad} {...CLOTH} />
+        </mesh>
+        <mesh position={[0, -0.45, 0.03]}>
+          <boxGeometry args={[0.26, 0.1, 0.32]} />
+          <meshStandardMaterial color={SC.strap} {...CLOTH} />
+        </mesh>
+      </group>
       {/* belt with the steel buckle */}
       <mesh position={[0, 0.57, 0]}>
         <boxGeometry args={[0.54, 0.14, 0.32]} />

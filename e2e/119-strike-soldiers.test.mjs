@@ -79,64 +79,112 @@ const roofBuilding = (s) =>
   )
 const insideBuilding = (x, z, reach) =>
   layout.buildings.some((b) => Math.abs(x - b.x) < b.w / 2 + reach && Math.abs(z - b.z) < b.d / 2 + reach)
-// Collect soldiers across a spread of waves.
-const allSoldiers = [1, 3, 6, 9].flatMap((w) =>
+// Collect soldiers across a spread of waves (wide enough to see both route kinds).
+const waveSpread = Array.from({ length: 14 }, (_, k) => k + 1)
+const allSoldiers = waveSpread.flatMap((w) =>
   buildWave(DEFAULT_SEED, w, layout, 'normal').targets.filter((t) => t.kind === 'soldier'),
 )
-// Rooftop pacers stay ON their roof: half-beat ≤ the roof's chosen (longer) half-extent.
+// Rooftop pacers stay ON their roof: half-beat ≤ the roof's chosen (longer)
+// half-extent, and the route is an axis-aligned line (routeAngle 0 or π/2).
+const roofSoldiers = allSoldiers.filter(roofBuilding)
 check(
   'rooftop soldiers pace within their own roof',
-  allSoldiers.filter(roofBuilding).every((s) => {
+  roofSoldiers.every((s) => {
     const b = roofBuilding(s)
     return s.driftAmp <= Math.max(b.w, b.d) / 2 + 1e-6
   }),
 )
+check(
+  'rooftop routes are axis-aligned lines',
+  roofSoldiers.every(
+    (s) => s.routeKind === 0 && (Math.abs(s.routeAngle) < 1e-6 || Math.abs(s.routeAngle - Math.PI / 2) < 1e-6),
+  ),
+)
 // Some soldiers actually patrol (walk), not all standing sentries.
 check('some soldiers patrol (driftAmp > 0)', allSoldiers.some((s) => s.driftAmp > 0))
-// Ground patrollers: y ≈ 0.9, off any building, walking, whole beat clear of the city.
+
+// Ground patrollers: y ≈ 0.9, off any building, walking a route whose WHOLE
+// span (a line's two endpoints, or a loop's ring) is clear of the city.
+const routeClear = (s) => {
+  if (insideBuilding(s.x, s.z, 1)) return false
+  if (s.routeKind === 1) {
+    for (let k = 0; k < 8; k++) {
+      const a = (k / 8) * Math.PI * 2
+      if (insideBuilding(s.x + Math.cos(a) * s.driftAmp, s.z + Math.sin(a) * s.driftAmp, 1)) return false
+    }
+    return true
+  }
+  const dx = Math.cos(s.routeAngle)
+  const dz = Math.sin(s.routeAngle)
+  return !insideBuilding(s.x + dx * s.driftAmp, s.z + dz * s.driftAmp, 1) && !insideBuilding(s.x - dx * s.driftAmp, s.z - dz * s.driftAmp, 1)
+}
 const groundSoldiers = allSoldiers.filter((s) => Math.abs(s.y - 0.9) < 1e-6)
 check('ground patrol soldiers appear', groundSoldiers.length > 0, `n=${groundSoldiers.length}`)
 check(
-  'ground soldiers walk a free-roam beat clear of buildings',
-  groundSoldiers.every((s) => {
-    if (s.driftAmp <= 0) return false
-    if (insideBuilding(s.x, s.z, 1)) return false
-    const e1x = s.driftAxis === 0 ? s.x - s.driftAmp : s.x
-    const e1z = s.driftAxis === 0 ? s.z : s.z - s.driftAmp
-    const e2x = s.driftAxis === 0 ? s.x + s.driftAmp : s.x
-    const e2z = s.driftAxis === 0 ? s.z : s.z + s.driftAmp
-    return !insideBuilding(e1x, e1z, 1) && !insideBuilding(e2x, e2z, 1)
-  }),
+  'ground soldiers walk a free-roam route clear of buildings',
+  groundSoldiers.every((s) => s.driftAmp > 0 && routeClear(s)),
 )
+// Both route shapes occur among ground patrols: a diagonal line + a loop.
+const diagLine = groundSoldiers.find(
+  (s) => s.routeKind === 0 && Math.abs(Math.sin(s.routeAngle)) > 0.1 && Math.abs(Math.cos(s.routeAngle)) > 0.1,
+)
+const loopSoldier = groundSoldiers.find((s) => s.routeKind === 1)
+check('a ground soldier walks a diagonal line route', diagLine !== undefined)
+check('a ground soldier walks a loop route', loopSoldier !== undefined)
+
 // A single wave fields BOTH a rooftop and a ground soldier (the user's ask).
 let mixed = null
-for (let w = 1; w <= 12 && !mixed; w++) {
+for (let w = 1; w <= 14 && !mixed; w++) {
   const ss = buildWave(DEFAULT_SEED, w, layout, 'normal').targets.filter((t) => t.kind === 'soldier')
   if (ss.some(roofBuilding) && ss.some((s) => Math.abs(s.y - 0.9) < 1e-6)) mixed = w
 }
 check('a wave fields both a rooftop and a ground soldier', mixed !== null, `wave=${mixed}`)
 
-// Movement: a patrolling soldier is paced by stepDrift along its axis (with a
-// real velocity for leading); a standing sentry (driftAmp 0) does not move.
-const w6 = buildWave(DEFAULT_SEED, 6, layout, 'normal')
-const states = createTargetStates()
-loadWave(states, w6)
-const patrol = states.find((s) => s.alive && s.kind === 'soldier' && s.driftAmp > 0)
-check('wave 6 has a patrolling soldier to step', patrol !== undefined)
-if (patrol) {
-  const axis = patrol.driftAxis
-  const read = (s) => (axis === 0 ? s.pos.x : s.pos.z)
-  stepDrift(patrol, 0)
-  const p0 = read(patrol)
-  stepDrift(patrol, 0.6)
-  const p1 = read(patrol)
-  const vel = axis === 0 ? patrol.vel.x : patrol.vel.z
-  check('patrol soldier walks along its axis', Math.abs(p1 - p0) > 0.1, `${p0.toFixed(2)}→${p1.toFixed(2)}`)
-  check('patrol soldier has a non-zero travel velocity', Math.abs(vel) > 0.1, `vel=${vel.toFixed(2)}`)
-  // The cross axis stays put (paces a straight line).
-  const cross = axis === 0 ? patrol.pos.z : patrol.pos.x
-  const crossBase = axis === 0 ? patrol.base.z : patrol.base.x
-  check('patrol soldier holds its cross axis', Math.abs(cross - crossBase) < 1e-6)
+// Movement (via stepDrift): a DIAGONAL line soldier walks on BOTH x and z (not
+// axis-aligned); a LOOP soldier holds a constant radius from its anchor while
+// circling; both carry a real velocity for shot-leading.
+const findGround = (pred) => {
+  for (const w of waveSpread) {
+    const st = createTargetStates()
+    loadWave(st, buildWave(DEFAULT_SEED, w, layout, 'normal'))
+    const s = st.find((t) => t.alive && t.kind === 'soldier' && Math.abs(t.pos.y - 0.9) < 1e-6 && pred(t))
+    if (s) return s
+  }
+  return undefined
+}
+const line = findGround((s) => s.routeKind === 0 && Math.abs(Math.sin(s.routeAngle)) > 0.1 && Math.abs(Math.cos(s.routeAngle)) > 0.1)
+check('found a diagonal-line ground soldier to step', line !== undefined)
+if (line) {
+  stepDrift(line, 0)
+  const a = { x: line.pos.x, z: line.pos.z }
+  stepDrift(line, 0.5)
+  const movedX = Math.abs(line.pos.x - a.x) > 1e-3
+  const movedZ = Math.abs(line.pos.z - a.z) > 1e-3
+  check('diagonal soldier walks on both x and z', movedX && movedZ)
+  check('diagonal soldier has a travel velocity', Math.hypot(line.vel.x, line.vel.z) > 0.1)
+}
+const loop = findGround((s) => s.routeKind === 1)
+check('found a loop ground soldier to step', loop !== undefined)
+if (loop) {
+  const rad = (s) => Math.hypot(s.pos.x - s.base.x, s.pos.z - s.base.z)
+  stepDrift(loop, 0)
+  const r0 = rad(loop)
+  const a = { x: loop.pos.x, z: loop.pos.z }
+  stepDrift(loop, 0.5)
+  const r1 = rad(loop)
+  check('loop soldier holds a constant radius (circles)', Math.abs(r1 - r0) < 1e-3 && r0 > 1, `r=${r0.toFixed(2)}→${r1.toFixed(2)}`)
+  check('loop soldier moves around the circle', Math.abs(loop.pos.x - a.x) > 1e-3 || Math.abs(loop.pos.z - a.z) > 1e-3)
+}
+
+// A standing sentry (a too-small roof → driftAmp 0) does not move.
+const sentryStates = createTargetStates()
+loadWave(sentryStates, buildWave(DEFAULT_SEED, 3, layout, 'normal'))
+const sentry = sentryStates.find((s) => s.alive && s.kind === 'soldier' && s.driftAmp === 0)
+if (sentry) {
+  const sx = sentry.pos.x
+  const sz = sentry.pos.z
+  stepDrift(sentry, 1.2)
+  check('a standing sentry does not move', Math.abs(sentry.pos.x - sx) < 1e-9 && Math.abs(sentry.pos.z - sz) < 1e-9)
 }
 
 // hp follows difficulty (easy 1 / normal 2), like the drones and turrets.

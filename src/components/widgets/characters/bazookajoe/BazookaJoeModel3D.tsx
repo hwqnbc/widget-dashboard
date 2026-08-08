@@ -38,6 +38,8 @@ import { useFrame } from '@react-three/fiber'
 import type { Group } from 'three'
 import { BJ } from './bazookaJoePalette'
 import type { AimPose } from '../shared/aimPose'
+import { GAIT_RATE, legGait } from '../shared/legGait'
+import type { LegSwing } from '../shared/legGait'
 
 /** How far pitch can raise/lower the launcher (radians). */
 const AIM_PITCH_MIN = -0.3
@@ -140,9 +142,14 @@ export default function BazookaJoeModel3D({
   const boomRef = useRef<Group>(null)
   const t0Ref = useRef(0)
   const prevActionRef = useRef<string | undefined>(undefined)
+  const walkPhaseRef = useRef(0)
+  const lastTRef = useRef(0)
+  const gaitRef = useRef<LegSwing>({ left: 0, right: 0 }).current
 
   useFrame((state) => {
     const t = state.clock.elapsedTime
+    const dt = Math.min(t - lastTRef.current, 0.05)
+    lastTRef.current = t
     if (action !== prevActionRef.current) {
       prevActionRef.current = action
       t0Ref.current = t // the loop always opens loaded, shot at FIRE
@@ -170,11 +177,14 @@ export default function BazookaJoeModel3D({
     let warheadOn = true
     let blastOn = false
     let boomOn = false
+    let gaitL = 0
+    let gaitR = 0
 
     if (aim) {
       // In-game soldier: live launcher elevation toward the drone + a one-shot
       // launch pose from `fire` (no far detonation — the rocket is a real
-      // projectile the pool renders and flies at the player).
+      // projectile the pool renders and flies at the player). Plus the leg
+      // gait — the shared walk cycle advanced by the live ground speed.
       armRPitch = -Math.max(AIM_PITCH_MIN, Math.min(AIM_PITCH_MAX, aim.pitch))
       const f = aim.fire
       if (f > 0) {
@@ -182,6 +192,10 @@ export default function BazookaJoeModel3D({
         warheadOn = f < 0.6 // warhead gone as the rocket leaves the tube
         blastOn = f > 0.5 // backblast flares at the muzzle
       }
+      walkPhaseRef.current += aim.speed * dt * GAIT_RATE
+      const g = legGait(walkPhaseRef.current, aim.speed, gaitRef)
+      gaitL = g.left
+      gaitR = g.right
     } else if (action === 'launch') {
       // the 2D celebration: a quick fire-and-boom from the shoulder carry
       const tau = (t - t0Ref.current) % LAUNCH_T
@@ -236,8 +250,10 @@ export default function BazookaJoeModel3D({
     body.position.y = -KNEEL_DROP * kneelK
     weapon.position.y = -0.26 + WEAPON_LIFT * kneelK // tube up onto the shoulder cap
     weapon.rotation.x = AIM_WEAPON_ROT * kneelK // …and level despite the up-swung forearm
-    legR.rotation.x = KNEEL_REAR * kneelK // launcher-side shin folds under
-    legL.rotation.x = -KNEEL_FRONT * kneelK // front leg extends ahead
+    // Kneel (action 'aim') and gait (in-game aimRef) never coincide — kneelK is
+    // 0 whenever a gait is driven — so the two just sum.
+    legR.rotation.x = KNEEL_REAR * kneelK + gaitR // launcher-side shin folds under
+    legL.rotation.x = -KNEEL_FRONT * kneelK + gaitL // front leg extends ahead
     warhead.visible = warheadOn
     blast.visible = blastOn
     boomG.visible = boomOn

@@ -46,6 +46,13 @@ export interface TargetSpec {
    * weapon fired (StrikeRig) and the rendered model (SoldierTargets), so the
    * two always agree. Undefined / 0 for every other kind. */
   variant?: 0 | 1
+  /** Soldier patrol shape: 0 = line (paces back & forth along `routeAngle`),
+   * 1 = loop (circles the anchor at radius `driftAmp`). Undefined / 0 for
+   * every other kind. */
+  routeKind?: 0 | 1
+  /** Soldier line route heading, radians (dir = (cos, sin)); 0 = +x, π/2 = +z.
+   * Ignored for loops. */
+  routeAngle?: number
 }
 
 export interface WaveSpec {
@@ -146,10 +153,11 @@ const MIN_FROM_SPAWN = 14
 const ALT_MIN = 3
 const ALT_MAX = 22
 
-/* Soldier patrol tuning. A patrol reuses `stepDrift`'s sinusoid branch: the
- * soldier paces around its `base` along `driftAxis` (0/2) with amplitude
- * `driftAmp` at angular rate `driftSpeed` (peak linear speed ≈ amp·rate). */
-const SOLDIER_PACE_RATE = 0.7
+/* Soldier patrol tuning. A patrol walks a route (line or loop) via stepDrift's
+ * soldier branch. `driftSpeed` is the angular rate; peak/tangential LINEAR
+ * speed ≈ amp·rate, so we derive `driftSpeed = SOLDIER_WALK_SPEED / amp` to
+ * hold a believable ~walking pace regardless of beat/loop size. */
+const SOLDIER_WALK_SPEED = 1.3
 /** Keep a pacing rooftop soldier's feet on the roof (margin from the edge). */
 const SOLDIER_ROOF_MARGIN = 0.8
 /** Cap a rooftop beat so big roofs don't give a marathon pace. */
@@ -397,48 +405,52 @@ export function buildWave(
       z: pick.b.z,
       radius: 1,
       driftAmp: amp,
-      driftSpeed: amp > 0 ? SOLDIER_PACE_RATE : 0,
+      driftSpeed: amp > 0 ? SOLDIER_WALK_SPEED / amp : 0,
       driftPhase: rand() * Math.PI * 2,
       driftAxis: alongX ? 0 : 2,
       hp: diff.enemyHp,
       points: POINTS.soldier,
       // Alternate rocketeer (Bazooka Joe) / gunner (Scar) by order.
       variant: (i % 2) as 0 | 1,
+      // Rooftop = an axis-aligned line pace (kept on the roof); heading along
+      // the longer footprint axis.
+      routeKind: 0,
+      routeAngle: alongX ? 0 : Math.PI / 2,
     })
   }
 
-  // Ground patrols — walk a free-roam beat ANYWHERE on open ground (not tied to
-  // road lanes). Sample a centre clear of the spawn/buildings, pick an axis and
-  // a beat, and validate the WHOLE beat (centre + both endpoints) clears the
-  // city so the soldier never paces into a wall. Seat the torso at ground level
+  // Ground patrols — walk a free-roam route ANYWHERE on open ground (not tied
+  // to road lanes). Each is either a **diagonal line** (paces back & forth
+  // along a random heading) or a **loop** (circles its anchor). Sample a centre
+  // clear of the spawn/buildings, then validate the WHOLE route clears the city
+  // — a line's two endpoints, or several points sampled around the loop — so
+  // the soldier never walks into a wall. Seat the torso at ground level
   // (`SOLDIER_TORSO`); SoldierTargets plants the feet at y = 0.
+  const inBounds = (px: number, pz: number) =>
+    Math.abs(px) <= WORLD_HALF - 4 && Math.abs(pz) <= WORLD_HALF - 4
+  const y = SOLDIER_TORSO
+  const reach = 1 + 0.6
   for (let i = rooftopSoldiers; i < soldiers; i++) {
     if (targets.length >= MAX_TARGETS) break
     for (let attempt = 0; attempt < 60; attempt++) {
       const x = (rand() * 2 - 1) * (WORLD_HALF - 8)
       const z = (rand() * 2 - 1) * (WORLD_HALF - 8)
       if (Math.hypot(x - SPAWN.x, z - SPAWN.z) < MIN_FROM_SPAWN) continue
-      const alongX = rand() < 0.5
       const amp = SOLDIER_GROUND_BEAT_MIN + rand() * SOLDIER_GROUND_BEAT_VAR
-      const y = SOLDIER_TORSO
-      const reach = 1 + 0.6
-      const e1x = alongX ? x - amp : x
-      const e1z = alongX ? z : z - amp
-      const e2x = alongX ? x + amp : x
-      const e2z = alongX ? z : z + amp
-      if (
-        Math.abs(e1x) > WORLD_HALF - 4 ||
-        Math.abs(e2x) > WORLD_HALF - 4 ||
-        Math.abs(e1z) > WORLD_HALF - 4 ||
-        Math.abs(e2z) > WORLD_HALF - 4
-      ) {
-        continue
-      }
-      if (
-        !clearOfBuildings(layout, x, y, z, reach) ||
-        !clearOfBuildings(layout, e1x, y, e1z, reach) ||
-        !clearOfBuildings(layout, e2x, y, e2z, reach)
-      ) {
+      const loop = rand() < 0.5
+      const routeAngle = rand() * Math.PI * 2
+      // Sample the route: a loop's ring (8 points) or a line's two endpoints.
+      const pts: Array<[number, number]> = loop
+        ? Array.from({ length: 8 }, (_, k) => {
+            const a = (k / 8) * Math.PI * 2
+            return [x + Math.cos(a) * amp, z + Math.sin(a) * amp] as [number, number]
+          })
+        : [
+            [x + Math.cos(routeAngle) * amp, z + Math.sin(routeAngle) * amp],
+            [x - Math.cos(routeAngle) * amp, z - Math.sin(routeAngle) * amp],
+          ]
+      if (!clearOfBuildings(layout, x, y, z, reach)) continue
+      if (pts.some(([px, pz]) => !inBounds(px, pz) || !clearOfBuildings(layout, px, y, pz, reach))) {
         continue
       }
       targets.push({
@@ -448,12 +460,14 @@ export function buildWave(
         z,
         radius: 1,
         driftAmp: amp,
-        driftSpeed: SOLDIER_PACE_RATE,
+        driftSpeed: SOLDIER_WALK_SPEED / amp,
         driftPhase: rand() * Math.PI * 2,
-        driftAxis: alongX ? 0 : 2,
+        driftAxis: 0,
         hp: diff.enemyHp,
         points: POINTS.soldier,
         variant: (i % 2) as 0 | 1,
+        routeKind: loop ? 1 : 0,
+        routeAngle,
       })
       break
     }
@@ -487,6 +501,10 @@ export interface TargetState {
    * shot (stepTurret), decayed each frame; SoldierTargets feeds it to the
    * model's aim ref so the figure plays its recoil/muzzle/launch pose. */
   fireTimer: number
+  /** Soldier patrol shape: 0 = line (paces along `routeAngle`), 1 = loop. */
+  routeKind: 0 | 1
+  /** Soldier line route heading (radians); ignored for loops. */
+  routeAngle: number
 }
 
 export function createTargetStates(): TargetState[] {
@@ -506,6 +524,8 @@ export function createTargetStates(): TargetState[] {
     hitFlash: 0,
     variant: 0 as 0 | 1,
     fireTimer: 0,
+    routeKind: 0 as 0 | 1,
+    routeAngle: 0,
   }))
 }
 
@@ -539,6 +559,8 @@ export function loadWave(states: TargetState[], wave: WaveSpec): void {
     s.hitFlash = 0
     s.variant = spec.variant ?? 0
     s.fireTimer = 0
+    s.routeKind = spec.routeKind ?? 0
+    s.routeAngle = spec.routeAngle ?? 0
   }
 }
 
@@ -569,6 +591,33 @@ export function stepDrift(t: TargetState, timeS: number): void {
       t.vel.x = 0
       t.vel.y = 0
       t.vel.z = t.driftSpeed
+    }
+    return
+  }
+  // Patrolling soldiers walk a bounded route around their anchor — a
+  // back-and-forth LINE along `routeAngle` (rooftop pace or a diagonal ground
+  // beat) or a circular LOOP — writing the true velocity derivative for shot
+  // leading. Generalises the old axis-aligned pace (routeAngle 0/π-2 = x/z).
+  if (t.kind === 'soldier' && t.driftAmp > 0) {
+    const ph = timeS * t.driftSpeed + t.driftPhase
+    t.pos.y = t.base.y
+    t.vel.y = 0
+    if (t.routeKind === 1) {
+      const c = Math.cos(ph)
+      const s = Math.sin(ph)
+      t.pos.x = t.base.x + c * t.driftAmp
+      t.pos.z = t.base.z + s * t.driftAmp
+      t.vel.x = -s * t.driftAmp * t.driftSpeed
+      t.vel.z = c * t.driftAmp * t.driftSpeed
+    } else {
+      const dx = Math.cos(t.routeAngle)
+      const dz = Math.sin(t.routeAngle)
+      const off = Math.sin(ph) * t.driftAmp
+      const deriv = Math.cos(ph) * t.driftAmp * t.driftSpeed
+      t.pos.x = t.base.x + dx * off
+      t.pos.z = t.base.z + dz * off
+      t.vel.x = dx * deriv
+      t.vel.z = dz * deriv
     }
     return
   }

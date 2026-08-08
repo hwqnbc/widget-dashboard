@@ -37,6 +37,8 @@ the split. Only *rendering* consults the map.
 ```
 shared/Hand.tsx                       cross-character primitive
 shared/FigureStage3D.tsx              R3F turntable stage for the 3D figures (lazy-only)
+shared/aimPose.ts                     live aim/fire/speed ref a Model3D reads as an in-game enemy
+shared/legGait.ts                     shared leg-gait rig (hip-pivot swing + walk-phase helper)
 toy/       ToyHead, ToyFigure, SixSevenFigure, ToyCelebration, ToyFigure3D, toyParts, toyPalette, index
 ninja/     NinjaHead, SwordNinjaFigure, NinjaFigure, NinjaCelebration, ninjaPalette, index
 fireninja/ FireNinjaHead, FireBladeFigure, FireNinjaFigure, FireNinjaCelebration, fireNinjaPalette, index

@@ -205,19 +205,36 @@ where it patrols — a building **rooftop** or the open **ground**.
 figure fits on, away from spawn), seat the torso at `b.h + 0.9`, and pace along
 the roof's longer axis with the half-beat clamped so the boots never leave the
 roof (a roof too small to pace becomes a standing sentry). Ground patrols walk a
-**free-roam beat anywhere on open ground** — a sampled centre + axis + beat
-length whose *whole* span (centre + both endpoints) is validated clear of
-buildings (so the route never enters a wall — it is deliberately **not** bound
-to the road lanes the vehicles use), seated at torso height `0.9`. hp follows
-the difficulty preset; count clamped small (≤3).
+**free-roam route anywhere on open ground** — a sampled centre + a diagonal
+line or a loop (see *Movement*) whose *whole* span (a line's two endpoints, or a
+loop's ring) is validated clear of buildings (so the route never enters a wall —
+it is deliberately **not** bound to the road lanes the vehicles use), seated at
+torso height `0.9`. hp follows the difficulty preset; count clamped small (≤3).
 
-*Movement needs no bespoke step* — a patrol is just the seeded **sinusoidal
-`stepDrift`** (the same branch the drifting ring-drones use) applied to a
-soldier: `driftAmp > 0` + a horizontal `driftAxis` paces it around its `base`,
-easing to a stop and turning at each end, and writes the true velocity
-derivative so shot-leading sees the motion. `stepDrift` already runs for every
-target before the fire dispatch, so a moving soldier fires from its current
-position with no extra wiring.
+*Movement* is a seeded route in `stepDrift`'s soldier branch (no bespoke step
+function; runs for every target before the fire dispatch, so a moving soldier
+fires from its current position with no extra wiring). Two route shapes,
+`routeKind` + `routeAngle` on the target:
+- **line** — paces back & forth around `base` along a heading `dir = (cos,
+  sin)(routeAngle)`; `pos = base + dir·sin(phase)·amp`. Rooftop pacers are an
+  axis-aligned line (heading along the roof's longer axis, half-beat clamped to
+  the roof); ground patrols are a **diagonal** line (any heading).
+- **loop** — circles the anchor: `pos = base + (cos, sin)(phase)·amp`; ground
+  patrols pick this or a diagonal line at random.
+Both write the true velocity derivative (leading stays correct). The angular
+rate is `SOLDIER_WALK_SPEED / amp`, so the *linear* pace is a constant
+believable walk (~1.3 u/s) regardless of beat or loop size. A too-small roof
+falls back to `driftAmp = 0` — a standing sentry.
+
+*Legs actually walk* — the shared **leg-gait rig** (`characters/shared/legGait`)
+gives the patrol a real stride, not just a body-bob. Each leg is a hip-pivot
+group (`[±0.14, 0.5, 0]`, meshes offset −0.5 in y); the model advances a
+`walkPhase` by the live ground speed (`AimPose.speed`, written by
+`SoldierTargets`) and swings the two hips in opposite phase, amplitude scaled by
+speed so the stride eases to neutral at the turnarounds. It composes with
+Bazooka Joe's kneel (kneel lives in the `action` path, gait in the in-game
+`aimRef` path — never both at once). Any avatar can adopt the rig via the
+documented hip-pivot convention (see `docs/avatars.md`).
 
 *Aim & fire* — you see the soldier **aim its weapon and shoot**, not a beam from
 the torso. `StrikeRig` dispatches `soldier` through the shared `stepTurret`
@@ -516,13 +533,18 @@ kind of list).
   - **more avatars / a mix** — widen the pool beyond Scar/Bazooka Joe (any
     registered `Model3D` works, e.g. Gold Gunner) and let a wave seed which
     avatar patrols where, with a matching projectile per weapon;
-  - **real leg gait** — the patrol is sold by translation + facing + a body
-    bob (no leg animation, as nothing in the repo animates legs); a shared
-    `characters/shared` hip-pivot leg rig swung from a walk phase would upgrade
-    every patrolling avatar at once;
-  - **diagonal / multi-leg routes** — routes are axis-aligned back-and-forth
-    today (reusing the sinusoid drift's single axis); a stored direction vector
-    or waypoint list would allow diagonal beats and patrol loops.
+  - ~~real leg gait~~ — **shipped** (`characters/shared/legGait` — a hip-pivot
+    leg-swing rig driven by ground speed via `AimPose.speed`; Scar + Bazooka Joe
+    adopt it and any avatar can via the documented convention; see *Movement*);
+  - ~~diagonal / looping routes~~ — **shipped** (`routeKind`/`routeAngle`:
+    ground patrols walk a diagonal line or a circular loop, rooftop pacers an
+    axis-aligned line; all in `stepDrift`'s soldier branch);
+  - **operator gait** — the Drone Sim's RC operator (an avatar `Model3D` via
+    `OperatorFigure`) walks with only a body-bob; drive its legs from the shared
+    `legGait` off `operatorWalk`'s distance for a matching stride;
+  - **turning gait / waypoint loops** — legs swing but feet still slide on the
+    turns; foot-planting (IK) and multi-segment waypoint routes are the next
+    fidelity step.
 - **Enemy variety** — a *chaser* that pursues the player (waypoint =
   player position, capped speed, `resolveCollisions` for safety), a
   *kamikaze* that dives once locked, a *shielded* drone only hurt from

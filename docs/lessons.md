@@ -1211,3 +1211,29 @@ carried over; these are the new ones.
     patrol is the seeded `base.y`, so one render path serves both. Free-roam
     ground placement just validates the whole beat (centre + both endpoints)
     clear of buildings at seed time, so the route never needs runtime collision.
+
+89. **A shared leg-gait rig is a hip-pivot convention + a pure swing helper +
+    a speed-driven phase — added as a new branch, not a fork of existing leg
+    poses; and generalising an axis-aligned mover to any-heading / loop routes
+    is a direction vector + a route-kind switch, velocity kept correct.** Two
+    patrol upgrades: (1) **legs that actually walk** — nothing in the repo
+    animated legs, so the shared rig (`characters/shared/legGait`) is just (a) a
+    convention — wrap each leg's meshes in a hip-pivot `<group>` at `[±0.14,
+    0.5, 0]` (Bazooka already had this for its kneel; Scar's static boxes got
+    wrapped to match), and (b) a pure `legGait(phase, speed)` returning opposite
+    hip angles, amplitude scaled by speed so the stride fades at turnarounds.
+    The phase is advanced in the model's own `useFrame` from a live `speed`
+    threaded through the aim ref (`AimPose.speed`), not React state. Crucially it
+    **composes** with the per-model leg poses instead of replacing them: gait
+    runs only in the in-game `aimRef` branch, the Bazooka kneel only in the
+    `action` branch, and the final leg rotation just sums the two (one is always
+    zero) — so a shared rig drops into a model another session is actively
+    editing without fighting its existing animation. (2) **diagonal + loop
+    routes** — the axis-aligned pace was `pos = base + axisUnit·sin(phase)·amp`;
+    generalising to a `routeAngle` direction (`dir = (cos, sin)`) makes any
+    diagonal, and a `routeKind` switch to `base + (cos, sin)(phase)·amp` makes a
+    circle — one small branch, velocity still the analytic derivative so leading
+    stays correct. Hold the *linear* pace constant across beat/loop sizes by
+    deriving the angular rate `= WALK_SPEED / amp` (a big loop radius otherwise
+    sprints). Validate a loop by sampling points around the ring at seed time,
+    same "never needs runtime collision" trick as the line's endpoints.

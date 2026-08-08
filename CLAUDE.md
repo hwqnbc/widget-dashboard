@@ -252,7 +252,9 @@ moving military trucks + SWAT cars from wave 1 + static AA turrets, all
 rendered from Model Viewer models via the shared `ModelTargets` pool) plus
 patrolling avatar soldiers (the Scar / Bazooka Joe avatar `Model3D`s reused as
 multi-instance enemies via `SoldierTargets` — rooftop pacers + free-roam ground
-patrols, moving via the seeded `stepDrift` sinusoid, facing travel while
+patrols that walk diagonal-line or circular-loop routes (`routeKind`/`routeAngle`
+in `stepDrift`'s soldier branch) with a real shared leg-gait rig
+(`characters/shared/legGait`, driven by `AimPose.speed`), facing travel while
 walking / the player while firing; weapon-matched: a Bazooka Joe launches a
 rocket — a `visual:'rocket'` projectile drawn by `EnemyRockets` with a
 world-space smoke contrail — or a Scar fires SMG bursts, both aiming the weapon

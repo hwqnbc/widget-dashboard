@@ -12,4 +12,7 @@ export interface AimPose {
    * after a shot, decaying to 0 (idle). The model plays its recoil / muzzle
    * flash / launch pose strongest near 1. */
   fire: number
+  /** Horizontal ground speed (world-units/s) — drives the leg-gait walk cycle
+   * (`characters/shared/legGait`). 0 = standing (legs ease to neutral). */
+  speed: number
 }

@@ -65,7 +65,7 @@ export default function SoldierTargets({
   const aimRefs = useRef(
     Array.from(
       { length: MAX_SOLDIER_RENDER },
-      () => ({ current: { pitch: 0, fire: 0 } as AimPose | null }),
+      () => ({ current: { pitch: 0, fire: 0, speed: 0 } as AimPose | null }),
     ),
   ).current
   // Per-slot wrapper groups for the two models, so `onFrame` can show the one
@@ -109,6 +109,7 @@ export default function SoldierTargets({
         if (aim) {
           aim.pitch = Math.atan2(dy, Math.hypot(dx, dz))
           aim.fire = t.fireTimer > 0 ? t.fireTimer / SOLDIER_FIRE_CLIP : 0
+          aim.speed = speed // drives the model's leg-gait walk cycle
         }
         // Variant 0 = rocket (Bazooka Joe), 1 = SMG (Scar).
         const isRocket = t.variant === 0
