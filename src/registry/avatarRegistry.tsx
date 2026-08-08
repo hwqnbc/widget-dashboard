@@ -10,6 +10,7 @@ import { ImperiumHead, ImperiumFigure, ImperiumCelebration } from '../components
 import { GoldGunnerHead, GoldGunnerFigure, GoldGunnerCelebration } from '../components/widgets/characters/goldgunner'
 import { ScarHead, ScarFigure, ScarCelebration } from '../components/widgets/characters/scar'
 import { BazookaJoeHead, BazookaJoeFigure, BazookaJoeCelebration } from '../components/widgets/characters/bazookajoe'
+import { LloydHead, LloydFigure, LloydCelebration } from '../components/widgets/characters/lloyd'
 
 /**
  * The visual pieces of an avatar, grouped: the head (used as the game chip/mark),
@@ -176,5 +177,12 @@ export const avatarVisualById: Record<AvatarId, AvatarVisual> = {
       { id: 'launch', name: 'Rocket Launch' },
       { id: 'aim', name: 'Take Aim' },
     ],
+  },
+  // 2D-only for now — no Figure3D/Model3D yet (the 3D round comes later),
+  // so the Avatar Actions 3D view shows the "no 3D figure yet" placeholder.
+  lloyd: {
+    Head: LloydHead,
+    Figure: LloydFigure,
+    Celebration: LloydCelebration,
   },
 }

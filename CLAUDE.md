@@ -172,6 +172,8 @@ character folders under `components/widgets/characters/` — `toy/` (`ToyHead`,
 `bazookajoe/` (`BazookaJoeHead`, `BazookaFigure`, `BazookaJoeFigure`,
 `BazookaJoeCelebration`, `BazookaJoeFigure3D`, `BazookaJoeModel3D`,
 `bazookaJoePalette`),
+`lloyd/` (`LloydHead`, `ChopFigure`, `LloydFigure`, `LloydCelebration`,
+`lloydPalette` — 2D-only for now),
 `shared/Hand`, `shared/FigureStage3D` (R3F turntable stage
 for the lazy 3D figures), `boy/Boy`.
 

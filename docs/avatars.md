@@ -48,6 +48,7 @@ imperium/  ImperiumHead, ClawFigure, ImperiumFigure, ImperiumCelebration, Imperi
 goldgunner/ GoldGunnerHead, GunnerFigure, GoldGunnerFigure, GoldGunnerCelebration, GoldGunnerFigure3D, GoldGunnerModel3D, goldGunnerPalette, index
 scar/      ScarHead, SoldierFigure, ScarFigure, ScarCelebration, ScarFigure3D, ScarModel3D, scarPalette, index
 bazookajoe/ BazookaJoeHead, BazookaFigure, BazookaJoeFigure, BazookaJoeCelebration, BazookaJoeFigure3D, BazookaJoeModel3D, bazookaJoePalette, index
+lloyd/     LloydHead, ChopFigure, LloydFigure, LloydCelebration, lloydPalette, index (2D-only for now)
 boy/       Boy.tsx                    (an ImageToggle figure, not a game avatar)
 ```
 - **Head** = the standalone `<svg>` chip/mark (`size` prop; default `'100%'`).
@@ -201,9 +202,9 @@ avatar without a `Figure3D` shows a placeholder
 (`data-testid="figure3d-unavailable"`, head + "<Name> has no 3D figure yet")
 instead, with the celebration toggle **disabled** (nothing would visibly
 play) — so avatars gain 3D one at a time without gating the view toggle.
-No current avatar exercises the placeholder (the roster is fully 3D since
-Gold Gunner's figure landed); it stays as scaffolding for future avatars,
-probed only by suite 121's negative check on the toy block.
+The placeholder has a live avatar again: **lloyd** shipped 2D-only (its 3D
+model is a later round), so suite 121 asserts the real placeholder contract
+on its block alongside the toy block's negative check.
 
 **Adding a 3D figure to an avatar:** build the mesh-level
 `characters/<id>/<Name>Model3D.tsx` (default-export `{ action?: string }`,

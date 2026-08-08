@@ -22,6 +22,7 @@ const AVATARS = [
   { id: 'goldgunner', name: 'Gold Gunner' },
   { id: 'scar', name: 'Scar' },
   { id: 'bazookajoe', name: 'Bazooka Joe' },
+  { id: 'lloyd', name: 'Lloyd' },
 ]
 
 const { check, finish } = reporter('avatars')

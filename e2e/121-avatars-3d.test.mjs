@@ -4,7 +4,7 @@
  * ('available'/'unavailable' for the selected avatar).
  *
  * Covers: 2D default, toggling to 3D lazy-loads the three.js chunk and
- * renders a WebGL canvas for every avatar (ALL nine carry a Figure3D now),
+ * renders a WebGL canvas for every 3D-carrying avatar (nine of the ten),
  * the action toggle lists the 3D model's named-move library (registry
  * `actions3d`; **the shared Walk (leg-gait) action is pinned FIRST** so the
  * universal moves lead — Idle, Walk, then the avatar's specials): toy
@@ -19,12 +19,11 @@
  * switching back restores each view, and the chosen view + spin preference
  * survive a reload.
  * The "no 3D figure" placeholder path (`figure3d-unavailable`, action
- * toggle disabled) is retained in the widget as scaffolding for future
- * avatars but no current avatar exercises it — per lesson #65 the roster is
- * fully 3D and no retarget candidate remains, so only the toy block's
- * negative check still probes it. The 3D art itself is reviewed from
- * screenshots — the suite asserts presence + the data contract, like the
- * 2D suite (120).
+ * toggle disabled) has a live avatar again: lloyd shipped 2D-only (its 3D
+ * model is a later round), so its block asserts the real placeholder
+ * contract — plus the toy block's negative check. The 3D art itself is
+ * reviewed from screenshots — the suite asserts presence + the data
+ * contract, like the 2D suite (120).
  */
 import { addAvatarWidget, launch, reporter } from './helpers.mjs'
 
@@ -222,6 +221,14 @@ check('Take Aim sets playing', (await attr('data-playing')) === 'yes')
 await celebration.nth(0).click()
 await page.waitForTimeout(150)
 check('Idle resets the bazookajoe action', (await attr('data-action')) === 'idle')
+
+// lloyd shipped 2D-only — the REAL "no 3D figure yet" placeholder path
+await picker.nth(9).click()
+await page.waitForTimeout(300)
+check('lloyd advertises no 3D figure', (await attr('data-figure3d')) === 'unavailable')
+check('lloyd 3d view shows the placeholder', (await unavailable.count()) === 1)
+check('no canvas for lloyd', (await stageCanvas.count()) === 0)
+check('lloyd action toggle is disabled', await celebration.nth(1).isDisabled())
 
 // back to toy: the 3D figure returns and the toggle re-enables
 await picker.nth(0).click()
