@@ -17,10 +17,12 @@
 //   the shot (back ON when the loop wraps) and a big emissive fireball
 //   pops at a far up-forward offset where it detonates.
 // - 'aim' (Take Aim): a longer ~4.2 s deliberate arc, visually distinct
-//   from 'launch' — the arm raises the launcher from the carry into a
-//   LEVEL sighting hold, tracks with elevation + yaw sweeps that settle
-//   before the trigger, fires ONCE (same shot beats at the later times),
-//   then lowers back to the carry as the loop wraps.
+//   from 'launch' — the figure KNEELS onto the launcher-side knee (body
+//   drops, rear leg folds under, front leg extends, left fist braced on
+//   the knee) while the arm swings the tube up OVER the shoulder (level,
+//   riding at cheek height beside the head), tracks with elevation + yaw
+//   sweeps that settle before the trigger, fires ONCE, then stands back
+//   into the carry as the loop wraps.
 // Grip note: the launcher is a PISTOL grip like the imperium claw — the
 // tube rides PERPENDICULAR to the forearm (local +z of the elbow group),
 // so the elbow's x-rotation aims it; the deep elbow bend shoulders the
@@ -61,10 +63,10 @@ const BLAST_OFF = 0.5 // backblast window: [FIRE, BLAST_OFF]
 const BOOM_ON = 0.85 // fireball window
 const BOOM_OFF = 1.15
 /** 'aim' (Take Aim) — a longer, deliberate arc, distinct from the quick
- * 'launch': raise into a LEVEL sighting hold (elbow up, tube near level —
- * shoulder x + elbow x sum to ~-0.15 so the perpendicular tube points
- * forward, barely up), track with elevation + yaw sweeps, settle, ONE shot,
- * lower back to the carry as the loop wraps. */
+ * 'launch': kneel while raising the tube OVER the shoulder (shoulder x +
+ * elbow x sum to ~-0.15 so the perpendicular tube stays level, riding at
+ * cheek height), track with elevation + yaw sweeps, settle, ONE shot,
+ * stand back into the carry as the loop wraps. */
 const AIM_T = 4.2
 const AIM_RAISE = 0.6 // carry → sighting blend done
 const AIM_SETTLE = 2.9 // tracking sweeps faded out
@@ -72,10 +74,20 @@ const AIM_FIRE = 3.05 // the shot
 const AIM_LOWER = 3.6 // sighting → carry blend starts
 const AIM_BOOM_ON = 3.45
 const AIM_BOOM_OFF = 3.75
-const SH_AIM = -1.6 // shoulder swung up-forward, upper arm near horizontal…
-const ELB_AIM = 1.45 // …forearm dropped vertical: total ≈ -0.15 → tube level at chest
+const SH_AIM = -2.6 // shoulder swung high behind the head…
+const ELB_AIM = 2.45 // …forearm vertical: total ≈ -0.15 → tube level, brushing the shoulder top
 const AIM_SWEEP_EL = 0.18 // tracking elevation sweep
 const AIM_SWEEP_YAW = 0.14 // tracking yaw sweep
+const AIM_YAW = 0.08 // arm tucked in while sighting — tube hugs the neck/shoulder
+/** Kneel (one-knee firing stance) — follows the same raise/lower blend:
+ * the body drops while the launcher-side leg folds back under it (shin on
+ * the ground) and the other leg extends forward; the left arm braces on
+ * the raised front knee. */
+const KNEEL_DROP = 0.32
+const KNEEL_REAR = 1.45 // rear (launcher-side) leg folded back
+const KNEEL_FRONT = 1.15 // front leg extended forward
+const BRACE_SHX = -0.5 // left arm leans onto the front knee
+const BRACE_ELB = -0.4
 
 /** Emissive fireball burst (orange core + crossed spikes + forward cone so
  * it reads even pointing at the camera); parent toggles `visible`. */
@@ -115,6 +127,9 @@ export default function BazookaJoeModel3D({
   const armRRef = useRef<Group>(null)
   const elbowLRef = useRef<Group>(null)
   const elbowRRef = useRef<Group>(null)
+  const legLRef = useRef<Group>(null)
+  const legRRef = useRef<Group>(null)
+  const bodyRef = useRef<Group>(null)
   const warheadRef = useRef<Group>(null)
   const blastRef = useRef<Group>(null)
   const boomRef = useRef<Group>(null)
@@ -131,10 +146,13 @@ export default function BazookaJoeModel3D({
     const armR = armRRef.current
     const elbowL = elbowLRef.current
     const elbowR = elbowRRef.current
+    const legL = legLRef.current
+    const legR = legRRef.current
+    const body = bodyRef.current
     const warhead = warheadRef.current
     const blast = blastRef.current
     const boomG = boomRef.current
-    if (!armL || !armR || !elbowL || !elbowR || !warhead || !blast || !boomG) return
+    if (!armL || !armR || !elbowL || !elbowR || !legL || !legR || !body || !warhead || !blast || !boomG) return
 
     // Per-action pose; every mutable written every frame (self-correcting).
     const aim = aimRef?.current
@@ -142,6 +160,7 @@ export default function BazookaJoeModel3D({
     let sway = 0
     let armRPitch = 0
     let armRYaw = R_SHY
+    let kneelK = 0
     let warheadOn = true
     let blastOn = false
     let boomOn = false
@@ -166,26 +185,31 @@ export default function BazookaJoeModel3D({
       blastOn = tau >= FIRE && tau < BLAST_OFF
       boomOn = tau >= BOOM_ON && tau < BOOM_OFF
     } else if (action === 'aim') {
-      // Take Aim: raise into the level sighting hold, track (elevation + yaw
-      // sweeps that settle before the trigger), ONE shot, lower to the carry.
+      // Take Aim: kneel onto one knee while raising the launcher OVER the
+      // shoulder, track (elevation + yaw sweeps that settle before the
+      // trigger), ONE shot, then stand back into the carry.
       const tau = (t - t0Ref.current) % AIM_T
       let elbBase = R_ELBOW
       if (tau < AIM_RAISE) {
-        const k = smooth(tau / AIM_RAISE)
-        armRPitch = lerp(0, SH_AIM, k)
-        elbBase = lerp(R_ELBOW, ELB_AIM, k)
+        kneelK = smooth(tau / AIM_RAISE)
+        armRPitch = lerp(0, SH_AIM, kneelK)
+        elbBase = lerp(R_ELBOW, ELB_AIM, kneelK)
       } else if (tau < AIM_LOWER) {
+        kneelK = 1
         armRPitch = SH_AIM
         elbBase = ELB_AIM
         const amp =
           smooth(Math.min((tau - AIM_RAISE) / 0.3, 1)) * smooth(Math.min((AIM_SETTLE - tau) / 0.4, 1))
         armRPitch += AIM_SWEEP_EL * Math.sin((tau - AIM_RAISE) * 2.2) * amp
-        armRYaw = R_SHY + AIM_SWEEP_YAW * Math.sin((tau - AIM_RAISE) * 1.5) * amp
+        armRYaw = AIM_YAW + AIM_SWEEP_YAW * Math.sin((tau - AIM_RAISE) * 1.5) * amp
       } else {
         const k = smooth((tau - AIM_LOWER) / (AIM_T - AIM_LOWER))
+        kneelK = 1 - k
         armRPitch = lerp(SH_AIM, 0, k)
         elbBase = lerp(ELB_AIM, R_ELBOW, k)
+        armRYaw = lerp(AIM_YAW, R_SHY, k)
       }
+      if (tau < AIM_RAISE) armRYaw = lerp(R_SHY, AIM_YAW, kneelK)
       const dt = tau - AIM_FIRE
       elbR = elbBase + (dt >= 0 && dt < KICK_T ? KICK_AMP * Math.sin((Math.PI * dt) / KICK_T) : 0)
       warheadOn = tau < AIM_FIRE
@@ -200,9 +224,12 @@ export default function BazookaJoeModel3D({
     armR.rotation.x = armRPitch
     armL.rotation.z = -(L_SHZ + sway)
     armL.rotation.y = -L_SHY
-    armL.rotation.x = 0
+    armL.rotation.x = BRACE_SHX * kneelK // brace on the front knee while kneeling
     elbowR.rotation.x = elbR
-    elbowL.rotation.x = L_ELBOW
+    elbowL.rotation.x = L_ELBOW + (BRACE_ELB - L_ELBOW) * kneelK
+    body.position.y = -KNEEL_DROP * kneelK
+    legR.rotation.x = KNEEL_REAR * kneelK // launcher-side shin folds under
+    legL.rotation.x = -KNEEL_FRONT * kneelK // front leg extends ahead
     warhead.visible = warheadOn
     blast.visible = blastOn
     boomG.visible = boomOn
@@ -210,31 +237,38 @@ export default function BazookaJoeModel3D({
 
   return (
     <group>
-      {/* cargo legs with pocket slabs, dark boots */}
-      <mesh position={[-0.14, 0.27, 0]}>
-        <boxGeometry args={[0.24, 0.46, 0.26]} />
-        <meshStandardMaterial color={BJ.legs} {...CLOTH} />
-      </mesh>
-      <mesh position={[0.14, 0.27, 0]}>
-        <boxGeometry args={[0.24, 0.46, 0.26]} />
-        <meshStandardMaterial color={BJ.legs} {...CLOTH} />
-      </mesh>
-      <mesh position={[-0.14, 0.38, 0.14]}>
-        <boxGeometry args={[0.15, 0.1, 0.02]} />
-        <meshStandardMaterial color={BJ.hip} {...CLOTH} />
-      </mesh>
-      <mesh position={[0.14, 0.38, 0.14]}>
-        <boxGeometry args={[0.15, 0.1, 0.02]} />
-        <meshStandardMaterial color={BJ.hip} {...CLOTH} />
-      </mesh>
-      <mesh position={[-0.14, 0.05, 0.03]}>
-        <boxGeometry args={[0.26, 0.1, 0.32]} />
-        <meshStandardMaterial color={BJ.boot} {...CLOTH} />
-      </mesh>
-      <mesh position={[0.14, 0.05, 0.03]}>
-        <boxGeometry args={[0.26, 0.1, 0.32]} />
-        <meshStandardMaterial color={BJ.boot} {...CLOTH} />
-      </mesh>
+      {/* cargo legs with pocket slabs, dark boots — each on a hip pivot so
+       * the Take Aim kneel can fold the rear leg under and extend the front */}
+      <group ref={legLRef} position={[-0.14, 0.5, 0]}>
+        <mesh position={[0, -0.23, 0]}>
+          <boxGeometry args={[0.24, 0.46, 0.26]} />
+          <meshStandardMaterial color={BJ.legs} {...CLOTH} />
+        </mesh>
+        <mesh position={[0, -0.12, 0.14]}>
+          <boxGeometry args={[0.15, 0.1, 0.02]} />
+          <meshStandardMaterial color={BJ.hip} {...CLOTH} />
+        </mesh>
+        <mesh position={[0, -0.45, 0.03]}>
+          <boxGeometry args={[0.26, 0.1, 0.32]} />
+          <meshStandardMaterial color={BJ.boot} {...CLOTH} />
+        </mesh>
+      </group>
+      <group ref={legRRef} position={[0.14, 0.5, 0]}>
+        <mesh position={[0, -0.23, 0]}>
+          <boxGeometry args={[0.24, 0.46, 0.26]} />
+          <meshStandardMaterial color={BJ.legs} {...CLOTH} />
+        </mesh>
+        <mesh position={[0, -0.12, 0.14]}>
+          <boxGeometry args={[0.15, 0.1, 0.02]} />
+          <meshStandardMaterial color={BJ.hip} {...CLOTH} />
+        </mesh>
+        <mesh position={[0, -0.45, 0.03]}>
+          <boxGeometry args={[0.26, 0.1, 0.32]} />
+          <meshStandardMaterial color={BJ.boot} {...CLOTH} />
+        </mesh>
+      </group>
+      {/* everything above the legs drops together during the kneel */}
+      <group ref={bodyRef}>
       {/* waist with the silver buckle */}
       <mesh position={[0, 0.57, 0]}>
         <boxGeometry args={[0.54, 0.14, 0.32]} />
@@ -388,10 +422,6 @@ export default function BazookaJoeModel3D({
           </group>
         </group>
       </group>
-      {/* the rocket's detonation, far up-forward of the figure */}
-      <group ref={boomRef} position={[0.4, 1.65, 1.0]} visible={false}>
-        <FireBurst scale={2.2} />
-      </group>
       {/* neck + minifig head with the smirk */}
       <mesh position={[0, 1.27, 0]}>
         <cylinderGeometry args={[0.1, 0.1, 0.1, 12]} />
@@ -452,6 +482,12 @@ export default function BazookaJoeModel3D({
         <boxGeometry args={[0.34, 0.03, 0.18]} />
         <meshStandardMaterial color={BJ.visor} {...CLOTH} />
       </mesh>
+      </group>
+      {/* the rocket's detonation, far up-forward of the figure —
+       * world-fixed, so it stays put while the body kneels */}
+      <group ref={boomRef} position={[0.4, 1.65, 1.0]} visible={false}>
+        <FireBurst scale={2.2} />
+      </group>
     </group>
   )
 }
