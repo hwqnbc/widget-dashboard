@@ -73,6 +73,8 @@ const ScarFigure3D = lazy(() => import('../components/widgets/characters/scar/Sc
 const ScarModel3D = lazy(() => import('../components/widgets/characters/scar/ScarModel3D'))
 const BazookaJoeFigure3D = lazy(() => import('../components/widgets/characters/bazookajoe/BazookaJoeFigure3D'))
 const BazookaJoeModel3D = lazy(() => import('../components/widgets/characters/bazookajoe/BazookaJoeModel3D'))
+const LloydFigure3D = lazy(() => import('../components/widgets/characters/lloyd/LloydFigure3D'))
+const LloydModel3D = lazy(() => import('../components/widgets/characters/lloyd/LloydModel3D'))
 
 export const avatarVisualById: Record<AvatarId, AvatarVisual> = {
   toy: {
@@ -178,11 +180,15 @@ export const avatarVisualById: Record<AvatarId, AvatarVisual> = {
       { id: 'aim', name: 'Take Aim' },
     ],
   },
-  // 2D-only for now — no Figure3D/Model3D yet (the 3D round comes later),
-  // so the Avatar Actions 3D view shows the "no 3D figure yet" placeholder.
   lloyd: {
     Head: LloydHead,
     Figure: LloydFigure,
     Celebration: LloydCelebration,
+    Figure3D: LloydFigure3D,
+    Model3D: LloydModel3D,
+    actions3d: [
+      { id: 'walk', name: 'Walk' },
+      { id: 'chop', name: 'Sword Chop' },
+    ],
   },
 }

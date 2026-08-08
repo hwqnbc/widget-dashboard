@@ -48,7 +48,7 @@ imperium/  ImperiumHead, ClawFigure, ImperiumFigure, ImperiumCelebration, Imperi
 goldgunner/ GoldGunnerHead, GunnerFigure, GoldGunnerFigure, GoldGunnerCelebration, GoldGunnerFigure3D, GoldGunnerModel3D, goldGunnerPalette, index
 scar/      ScarHead, SoldierFigure, ScarFigure, ScarCelebration, ScarFigure3D, ScarModel3D, scarPalette, index
 bazookajoe/ BazookaJoeHead, BazookaFigure, BazookaJoeFigure, BazookaJoeCelebration, BazookaJoeFigure3D, BazookaJoeModel3D, bazookaJoePalette, index
-lloyd/     LloydHead, ChopFigure, LloydFigure, LloydCelebration, lloydPalette, index (2D-only for now)
+lloyd/     LloydHead, ChopFigure, LloydFigure, LloydCelebration, LloydFigure3D, LloydModel3D, lloydPalette, index
 boy/       Boy.tsx                    (an ImageToggle figure, not a game avatar)
 ```
 - **Head** = the standalone `<svg>` chip/mark (`size` prop; default `'100%'`).
@@ -202,9 +202,10 @@ avatar without a `Figure3D` shows a placeholder
 (`data-testid="figure3d-unavailable"`, head + "<Name> has no 3D figure yet")
 instead, with the celebration toggle **disabled** (nothing would visibly
 play) — so avatars gain 3D one at a time without gating the view toggle.
-The placeholder has a live avatar again: **lloyd** shipped 2D-only (its 3D
-model is a later round), so suite 121 asserts the real placeholder contract
-on its block alongside the toy block's negative check.
+No current avatar exercises the placeholder (lloyd's 3D model landed a round
+after his 2D debut, returning the roster to fully-3D); it stays as
+scaffolding for future avatars, probed only by suite 121's negative check on
+the toy block.
 
 **Adding a 3D figure to an avatar:** build the mesh-level
 `characters/<id>/<Name>Model3D.tsx` (default-export `{ action?: string }`,
@@ -277,7 +278,22 @@ that settle before the trigger, fires ONCE, and stands back into the
 carry as the loop wraps. It originally
 shared the launch timeline with only a subtle elevation bob — the two
 actions read as identical, user-reported — so the pose arc and pacing
-now differ, not just a modifier on the same beats). Scar's Sight & Fire
+now differ, not just a modifier on the same beats),
+and lloyd (`LloydModel3D` — the dragon-form green ninja: lime crowned head
+(spike cones + gold diamond gem) over the black visor band with yellow
+serpent eyes and the green mouth-guard, deep-green torso with the gold
+shield emblem + lime scale wedges, gold pauldron slabs, claw-toe boots —
+plus the dragon anatomy from the user's back-view reference: `wingRef`
+groups of flat-shaded lime membrane panels + leading-edge spike cones
+rooted at the upper back, and a `tailRef` chain of shrinking green spheres
+curling down-and-out from the lower back; the golden scimitar (torus
+pommel ring + bell-cone tassel, curved flat blade) rides in the right
+fist as the forearm's obtuse extension with the ninja wrist up-tilt;
+action `[chop "Sword Chop"]` — the 2D celebration's 1.7 s beats: wind
+OVERHEAD at the shoulder, hold, whip down, ease back, wings sweeping UP
+through the wind-up and snapping DOWN on the slash while the tail
+counter-sways — and the wings stir / tail wags in idle and walk).
+Scar's Sight & Fire
 and Bazooka Joe's Take Aim are the **canned
 counterparts of the in-game aim** these models gained for Drone Strike's
 rooftop soldiers: the enemy path drives a live `aimRef` (`{ pitch, fire }`)
