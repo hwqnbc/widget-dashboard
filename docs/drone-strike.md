@@ -443,7 +443,19 @@ contrail** — one `<points>` cloud, single draw call, puffs dropped at the
 positions the rocket flew through and left hanging in the air, fading + growing
 by age via a tiny inline `alpha`-attribute shader; keyed by the stable
 enemy-pool index so a reused slot resets its own trail),
+`SparkField`
+(muzzle flashes + impact showers: the pure `sparkModel.ts` pool — a fixed ring
+of `SPARK_BURSTS` bursts × `SPARK_PER` particles in flat arrays, spawned by
+the rig at the fire site and at every player-fire hit point (targets AND
+world) plus enemy world impacts, with **deterministic per-index jitter**
+(golden-angle azimuth, no `Math.random` — e2e can assert exact state); drawn
+as one `<points>` call with the EnemyRockets `alpha`-attribute shader recipe
+plus a custom `tint` colour attribute; enemy hits on the *player* deliberately
+spark nothing — the damage vignette is that feedback),
 `Reticle`/`FireButton`/`HitMarkers`/`StrikeMinimap`/`StrikeSettingsPanel`.
+The rig's player-fire consequences (sparks for every impact, damage/score/sfx
+for targets) are one `applyPlayerHitEvent` closure — the seam any future
+hitscan weapon feeds its hits through.
 
 ### Weapon variants (recorded, not built)
 
@@ -466,13 +478,15 @@ Root `drone-strike-root`: `data-world-seed/-view/-auto-fire/-aim-assist/
 `data-x/-z/-alt/-yaw/-speed/-wave/-wave-state(intro|active|cleared|failed)/
 -score/-shots/-hits/-targets-left/-lock/-proj/-enemy-proj/-hp/
 -input-source`, the **sound-effect counters**
-`data-sfx-fire/-pop/-hit/-alert/-clear/-crash`, plus the
+`data-sfx-fire/-pop/-hit/-alert/-clear/-crash`, the monotonic spark-burst
+count `data-sparks`, plus the
 **nearest-alive-target beacon** `data-tgt-x/-y/-z/-kind` that lets suites
 aim closed-loop without window globals. Chips: `strike-score` (`data-score/-wave/-best-score/-best-wave`),
 `strike-hp`, `strike-reticle` (`data-lock`), `strike-fire`
 (`data-pressed`), joysticks/buttons/settings testids mirror the sim's.
 
-E2E: suites `100-strike-core` … `109-strike-ground` plus `117-strike-audio`
+E2E: suites `100-strike-core` … `109-strike-ground` plus `117-strike-audio`,
+`119-strike-soldiers` and `123-strike-sparks`
 (see `e2e/README.md`); pure modules are esbuild-bundled for the suites in a
 second flat pass in `run.mjs`.
 
@@ -509,8 +523,11 @@ kind of list).
 - **Weapon switching / pickups** — per-wave weapon crates on rooftops
   (LandingPads-style discs); the rig already takes `weapon` as a prop, so
   switching is a state change in the body.
-- **Muzzle flash + impact sparks** — a pooled one-shot particle burst at
-  `HitEvent` coordinates (RainField's single-draw-call Points pattern).
+- ~~Muzzle flash + impact sparks~~ — **shipped** (the pure `sparkModel.ts`
+  burst pool + `SparkField` single-draw-call Points renderer: a muzzle flash
+  on every shot, impact showers at `HitEvent` coordinates — targets, world,
+  and enemy world impacts; deterministic per-index jitter so the suite
+  asserts exact state; see the architecture section).
 
 ### Enemies & waves
 - ~~Ground-target waves~~ — **shipped** (deck-level supply trucks (rendered

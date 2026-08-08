@@ -77,6 +77,8 @@ import SoldierTargets from './SoldierTargets'
 import EnemyDrones from './EnemyDrones'
 import Tracers from './Tracers'
 import EnemyRockets from './EnemyRockets'
+import SparkField from './SparkField'
+import { createSparkPool } from './sparkModel'
 import Reticle from './Reticle'
 import FireButton from './FireButton'
 import type { HitMarker } from './HitMarkers'
@@ -207,6 +209,9 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
   const controls = useRef(createControlInput()).current
   const flight = useRef(createFlightState()).current
   const combat = useRef(createCombatState()).current
+  // Spark-burst pool (muzzle flashes + impact showers) — the rig spawns
+  // bursts, SparkField ages + draws them (one Points draw call).
+  const sparks = useRef(createSparkPool()).current
   const targets = useRef(createTargetStates()).current
   const enemyAI = useRef(createEnemyAIStates()).current
   const aimRef = useRef(createAimOffset())
@@ -753,6 +758,7 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
           <EnemyDrones targets={targets} />
           <Tracers combat={combat} tracerLen={BOLT.tracerLen} />
           <EnemyRockets combat={combat} />
+          <SparkField sparks={sparks} />
           <StrikeRig
             controls={controls}
             flight={flight}
@@ -779,6 +785,7 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
             enemyAI={enemyAI}
             enemiesShoot={wave >= ENEMY_FIRE_WAVE}
             combat={combat}
+            sparks={sparks}
             aimRef={aimRef}
             weapon={BOLT}
             assist={aimAssist}
@@ -842,6 +849,7 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
         data-safe="off"
         data-tgt-kind="none"
         data-input-source="touch"
+        data-sparks="0"
         sx={{
           position: 'absolute',
           top: 8,

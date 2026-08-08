@@ -29,7 +29,9 @@ import { pollGamepad } from '../droneSim/externalInput'
 import { CRASH_PULSE, vibrate } from '../droneSim/haptics'
 import { playAlert, playClear, playCrash, playFire, playHit, playPop } from './strikeSounds'
 import DroneModel from '../droneSim/DroneModel'
-import type { AimAssistLevel, CombatState, WeaponSpec } from './combatModel'
+import type { AimAssistLevel, CombatState, HitEvent, WeaponSpec } from './combatModel'
+import type { SparkPool } from './sparkModel'
+import { spawnBurst } from './sparkModel'
 import {
   AIM_BEND,
   AIM_CONE_RAD,
@@ -166,6 +168,7 @@ export default function StrikeRig({
   enemyAI,
   enemiesShoot,
   combat,
+  sparks,
   aimRef,
   weapon,
   assist,
@@ -227,6 +230,9 @@ export default function StrikeRig({
   /** True from ENEMY_FIRE_WAVE — enemies return fire. */
   enemiesShoot: boolean
   combat: CombatState
+  /** Shared spark pool — the rig spawns bursts (muzzle + impacts), SparkField
+   * ages and draws them. */
+  sparks: SparkPool
   /** Shared aim offset (gyro fine-aim + recoil) — also read by the camera. */
   aimRef: { current: AimOffset }
   weapon: WeaponSpec
@@ -599,6 +605,7 @@ export default function StrikeRig({
         combat.cooldown = weapon.cooldown
         combat.shots++
         aim.recoil += RECOIL_KICK
+        spawnBurst(sparks, muzzle.x, muzzle.y, muzzle.z, 'muzzle')
         if (audioOn) {
           sfx.fire++
           playFire(weapon.cooldown)
@@ -606,14 +613,15 @@ export default function StrikeRig({
       }
     }
 
-    // Sweep the player pool against world + targets.
-    events.count = 0
-    stepProjectiles(combat.player, weapon, dt, colliders, targets, null, 0, events)
-    for (let i = 0; i < events.count; i++) {
-      const e = events.items[i]
-      if (e.kind !== 'target') continue
+    // One consequence path for anything the player's fire connects with —
+    // sparks for every impact (targets AND world/ground), damage/score/sfx for
+    // targets only. Shared by the projectile sweep below (and, by design, any
+    // future hitscan weapon that resolves outside the events ring).
+    const applyPlayerHitEvent = (e: HitEvent) => {
+      spawnBurst(sparks, e.x, e.y, e.z, 'impact')
+      if (e.kind !== 'target') return
       const t = targets[e.targetIdx]
-      if (!t.alive) continue
+      if (!t.alive) return
       combat.hits++
       t.hp--
       t.hitFlash = 0.25
@@ -635,6 +643,11 @@ export default function StrikeRig({
       }
     }
 
+    // Sweep the player pool against world + targets.
+    events.count = 0
+    stepProjectiles(combat.player, weapon, dt, colliders, targets, null, 0, events)
+    for (let i = 0; i < events.count; i++) applyPlayerHitEvent(events.items[i])
+
     // Sweep the enemy pool against the world + the player drone. A drone
     // already tumbling from a crash is not hit again (no double punishment).
     events.count = 0
@@ -649,7 +662,15 @@ export default function StrikeRig({
       events,
     )
     for (let i = 0; i < events.count; i++) {
-      if (events.items[i].kind !== 'player') continue
+      const e = events.items[i]
+      if (e.kind === 'world') {
+        // Enemy fire spending itself on a wall/ground still sparks — the
+        // player-hit case keeps the damage vignette as its feedback instead
+        // (a burst at the camera would just be noise in FPV).
+        spawnBurst(sparks, e.x, e.y, e.z, 'impact')
+        continue
+      }
+      if (e.kind !== 'player') continue
       vibrate(CRASH_PULSE)
       if (audioOn) {
         sfx.crash++
@@ -733,6 +754,9 @@ export default function StrikeRig({
         hud.dataset.sfxAlert = String(sfx.alert)
         hud.dataset.sfxClear = String(sfx.clear)
         hud.dataset.sfxCrash = String(sfx.crash)
+        // Monotonic spark-burst count (muzzle flashes + impact showers) — the
+        // e2e signal that the particle system fired without needing pixels.
+        hud.dataset.sparks = String(sparks.spawned)
         // Nearest alive target — the closed-loop aim beacon for the e2e
         // suites (no window globals; lesson #31).
         let nearest: TargetState | null = null

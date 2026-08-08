@@ -48,6 +48,7 @@ const strikeBundle = spawnSync(
     'src/components/widgets/droneStrike/waveLayout.ts',
     'src/components/widgets/droneStrike/gimbalModel.ts',
     'src/components/widgets/droneStrike/aimModel.ts',
+    'src/components/widgets/droneStrike/sparkModel.ts',
     '--bundle',
     '--format=esm',
     `--outdir=${join(here, '.bundle')}`,
