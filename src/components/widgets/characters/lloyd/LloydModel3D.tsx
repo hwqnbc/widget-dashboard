@@ -1,6 +1,6 @@
 // Lloyd's mesh-level 3D model: the 2D ChopFigure's dragon-form green ninja —
-// lime crowned head (spike cones + gold diamond gem) over the black visor
-// band with yellow serpent eyes and the green mouth-guard mask, deep-green
+// lime crowned head (spike cones + gold diamond gem) with the front-only
+// black eye mask (yellow serpent eyes) and the green mouth-guard, deep-green
 // scale torso with the gold shield emblem + lime scale wedges, gold pauldron
 // slabs, lime arms with black fists, gold-trimmed legs with claw-toe boots —
 // plus the dragon anatomy from the back-view reference: big lime WINGS
@@ -20,8 +20,10 @@
 //   DOWN on the slash (mirrored) and the tail counter-sways.
 // - 'walk': the shared leg-gait rig (hip-pivot swing) with a quicker tail wag.
 // Grip note: the scimitar is authored along +y and mounted as the forearm's
-// obtuse extension (wrist z = π + slight up-tilt), blade ROLLED y = π/2 so
-// the cutting edge leads the sagittal swing (lesson #64).
+// obtuse extension (wrist z = π + slight up-tilt). The blade is authored
+// thin-x / wide-z with the curve bowing +z, so the cutting edge ALREADY
+// leads the sagittal swing — no #64 roll (adding one would re-introduce
+// the flat slap the frak lesson fixed).
 // All animation mutates refs in useFrame — zero React renders.
 //
 // Loaded only via lazy() (the avatar registry's Model3D/Figure3D fields) —
@@ -62,10 +64,11 @@ const WING_DOWN = -0.35
 /** The golden scimitar in fist-local coords, authored along +y: pommel ring
  * + bell tassel below the grip, guard above, the curved blade climbing +y
  * and bowing into +z. Mounted flipped (wrist z = π) as the forearm's obtuse
- * extension; the blade is flat in x so the edge leads the swing. */
+ * extension; the blade is flat in x so the edge leads the swing — already
+ * edge-leading as authored, so NO #64 roll on this group. */
 function GoldenSword() {
   return (
-    <group rotation-y={Math.PI / 2}>
+    <group>
       {/* handle through the fist */}
       <mesh position={[0, 0.02, 0]}>
         <cylinderGeometry args={[0.026, 0.026, 0.16, 8]} />
@@ -453,8 +456,11 @@ export default function LloydModel3D({ action }: { action?: string }) {
         <cylinderGeometry args={[0.19, 0.19, 0.34, 14]} />
         <meshStandardMaterial color={LL.lime} {...CLOTH} />
       </mesh>
-      <mesh position={[0, 1.52, 0]}>
-        <cylinderGeometry args={[0.195, 0.195, 0.1, 14]} />
+      {/* black EYE MASK — a front-only patch around the eyes (the head and
+          headgear stay lime from the sides and back, like the 2D art); the
+          yellow serpent-eye slits ride on it */}
+      <mesh position={[0, 1.52, 0.13]}>
+        <boxGeometry args={[0.3, 0.11, 0.1]} />
         <meshStandardMaterial color={LL.black} {...CLOTH} />
       </mesh>
       <mesh position={[-0.075, 1.52, 0.185]} rotation-z={-0.15}>

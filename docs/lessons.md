@@ -1306,3 +1306,16 @@ carried over; these are the new ones.
     soldier suite asserts off-canvas — same extract-for-testability discipline as
     `legGait` / `stepKneel`. General pattern: analytic (time-parameterized)
     animation + a paused-time accumulator = pausable without going incremental.
+
+93. **Lesson #64's edge roll is CONDITIONAL — check the blade's authored
+    cross-section before applying it.** #64's fix ("roll the held group
+    `rotation-y = π/2`") corrects blades authored WIDE-IN-X (frak's sabers,
+    the ninja katana). Lloyd's scimitar was authored thin-x / wide-z with
+    the curve bowing +z — already edge-leading for a sagittal chop — and
+    reflexively adding the roll anyway re-introduced the exact flat-slap
+    #64 exists to prevent, plus hooked the curve sideways out of the swing
+    plane (user-reported, again). The roll is not part of the mount recipe;
+    the *invariant* is what matters: thickness sideways (±x), width + curve
+    in the swing plane. Apply #64's two-angle check to whatever you
+    authored: face-on the blade must thin to an edge line, side-on it must
+    show the broad face.
