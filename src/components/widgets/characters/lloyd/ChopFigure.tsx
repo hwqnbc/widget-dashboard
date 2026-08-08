@@ -65,8 +65,29 @@ const slashFlash = keyframes`
   72%     { opacity: 0; }
   100%    { opacity: 0; }
 `
+// Dragon wings flap on the same clock, beats synced to the sword: sweep UP
+// through the wind-up hold, snap DOWN on the slash, settle back. Each wing
+// pivots at its root; the right wing mirrors the left's angles.
+const flapL = keyframes`
+  0%   { transform: rotate(0deg); }
+  30%  { transform: rotate(18deg); }
+  42%  { transform: rotate(18deg); }
+  56%  { transform: rotate(-12deg); }
+  72%  { transform: rotate(-12deg); }
+  100% { transform: rotate(0deg); }
+`
+const flapR = keyframes`
+  0%   { transform: rotate(0deg); }
+  30%  { transform: rotate(-18deg); }
+  42%  { transform: rotate(-18deg); }
+  56%  { transform: rotate(12deg); }
+  72%  { transform: rotate(12deg); }
+  100% { transform: rotate(0deg); }
+`
 const DUR = '1.7s'
 const SHOULDER = '165px 252px' // sword-arm shoulder pivot
+const WING_L = '140px 220px' // wing root pivots
+const WING_R = '360px 220px'
 
 /**
  * "Lloyd": a dragon-form green ninja — lime scale-row torso with a gold
@@ -107,7 +128,11 @@ export default function ChopFigure({ chopping = false }: { chopping?: boolean })
         </g>
       </defs>
 
-      {/* ---- dragon wings ---- */}
+      {/* ---- dragon wings (flap while chopping, pivoting at the roots) ---- */}
+      <Box
+        component="g"
+        sx={{ transformBox: 'view-box', transformOrigin: WING_L, ...(chopping ? { animation: `${flapL} ${DUR} ease-in-out infinite` } : { transform: 'rotate(0deg)' }) }}
+      >
       <g transform="translate(140 220) rotate(-10) scale(0.9 0.9)">
         <path d="M 0,0 C -40,-60 -100,-80 -150,-40 C -140,-10 -110,0 -120,30 C -100,20 -70,30 -80,70 C -60,60 -30,70 -40,110 C -20,80 0,60 0,0 Z" fill="url(#lloyd-green-lime)" stroke={LL.line} strokeWidth={3} />
         <path d="M 0,0 C -50,-30 -120,-30 -150,-40" fill="none" stroke={LL.green} strokeWidth={4} />
@@ -115,6 +140,11 @@ export default function ChopFigure({ chopping = false }: { chopping?: boolean })
         <path d="M 0,0 C -50,20 -70,30 -80,70" fill="none" stroke={LL.green} strokeWidth={3} />
         <path d="M 0,0 C -30,40 -35,70 -40,110" fill="none" stroke={LL.green} strokeWidth={3} />
       </g>
+      </Box>
+      <Box
+        component="g"
+        sx={{ transformBox: 'view-box', transformOrigin: WING_R, ...(chopping ? { animation: `${flapR} ${DUR} ease-in-out infinite` } : { transform: 'rotate(0deg)' }) }}
+      >
       <g transform="translate(360 220) scale(-0.9 0.9) rotate(-10)">
         <path d="M 0,0 C -40,-60 -100,-80 -150,-40 C -140,-10 -110,0 -120,30 C -100,20 -70,30 -80,70 C -60,60 -30,70 -40,110 C -20,80 0,60 0,0 Z" fill="url(#lloyd-green-lime)" stroke={LL.line} strokeWidth={3} />
         <path d="M 0,0 C -50,-30 -120,-30 -150,-40" fill="none" stroke={LL.green} strokeWidth={4} />
@@ -122,6 +152,7 @@ export default function ChopFigure({ chopping = false }: { chopping?: boolean })
         <path d="M 0,0 C -50,20 -70,30 -80,70" fill="none" stroke={LL.green} strokeWidth={3} />
         <path d="M 0,0 C -30,40 -35,70 -40,110" fill="none" stroke={LL.green} strokeWidth={3} />
       </g>
+      </Box>
 
       {/* ---- dragon tail ---- */}
       <path d="M 170,500 C 100,520 60,460 80,420 C 100,380 40,360 20,400 C 0,440 60,560 160,550 Z" fill="url(#lloyd-green-mid)" stroke={LL.line} strokeWidth={3} />
