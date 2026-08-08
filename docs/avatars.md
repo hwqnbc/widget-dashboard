@@ -126,8 +126,10 @@ forearm (local +z of the elbow group), so the elbow's hinge IS the
 swing — with a slight outward shoulder yaw so the sagittal arc stays
 readable face-on.
 
-**Every avatar also has a shared `walk` action** ("Walk", appended last to each
-`actions3d`) — the first move that animates *legs*. It's the shared leg-gait
+**Every avatar also has a shared `walk` action** ("Walk", pinned FIRST in each
+`actions3d` so the widget's toggle reads Idle | Walk | *specials* — the
+universal moves lead, avatar-specific specials append after) — the first move
+that animates *legs*. It's the shared leg-gait
 rig (`characters/shared/legGait.ts`): each model wraps its legs in hip-pivot
 `<group>`s at `[±0.14, 0.5, 0]` (children −0.5 in y; toy's single 0.5-tall leg
 box uses −0.25) and, in a `action === 'walk'` branch, advances a `walkPhase` off

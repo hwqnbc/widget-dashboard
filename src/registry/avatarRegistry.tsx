@@ -46,7 +46,10 @@ export interface AvatarVisual {
   /** The 3D model's named-move library. Metadata lives HERE — not in the
    * lazy model chunk — so pickers render without loading three.js. Grows
    * one entry per added action; ids are stable, moves are refined in
-   * place. */
+   * place. Ordering is the button order in the Avatar Actions widget:
+   * the shared universal move (`walk`) stays PINNED FIRST — right after
+   * the widget's built-in Idle — and avatar-specific specials append
+   * after it. */
   actions3d?: Action3D[]
 }
 
@@ -78,9 +81,9 @@ export const avatarVisualById: Record<AvatarId, AvatarVisual> = {
     Figure3D: ToyFigure3D,
     Model3D: ToyModel3D,
     actions3d: [
+      { id: 'walk', name: 'Walk' },
       { id: 'dance', name: 'Dance' },
       { id: 'sixsevenshow', name: '6 7 Show' },
-      { id: 'walk', name: 'Walk' },
     ],
   },
   ninja: {
@@ -90,9 +93,9 @@ export const avatarVisualById: Record<AvatarId, AvatarVisual> = {
     Figure3D: NinjaFigure3D,
     Model3D: NinjaModel3D,
     actions3d: [
+      { id: 'walk', name: 'Walk' },
       { id: 'pump', name: 'Pump' },
       { id: 'draw', name: 'Draw' },
-      { id: 'walk', name: 'Walk' },
     ],
   },
   fireninja: {
@@ -102,8 +105,8 @@ export const avatarVisualById: Record<AvatarId, AvatarVisual> = {
     Figure3D: FireNinjaFigure3D,
     Model3D: FireNinjaModel3D,
     actions3d: [
-      { id: 'blaze', name: 'Fire Blade' },
       { id: 'walk', name: 'Walk' },
+      { id: 'blaze', name: 'Fire Blade' },
     ],
   },
   darkarin: {
@@ -113,8 +116,8 @@ export const avatarVisualById: Record<AvatarId, AvatarVisual> = {
     Figure3D: DarkArinFigure3D,
     Model3D: DarkArinModel3D,
     actions3d: [
-      { id: 'cross', name: 'Twin Cross' },
       { id: 'walk', name: 'Walk' },
+      { id: 'cross', name: 'Twin Cross' },
     ],
   },
   frak: {
@@ -124,8 +127,8 @@ export const avatarVisualById: Record<AvatarId, AvatarVisual> = {
     Figure3D: FrakFigure3D,
     Model3D: FrakModel3D,
     actions3d: [
-      { id: 'flurry', name: 'Blade Flurry' },
       { id: 'walk', name: 'Walk' },
+      { id: 'flurry', name: 'Blade Flurry' },
     ],
   },
   imperium: {
@@ -135,8 +138,8 @@ export const avatarVisualById: Record<AvatarId, AvatarVisual> = {
     Figure3D: ImperiumFigure3D,
     Model3D: ImperiumModel3D,
     actions3d: [
-      { id: 'slash', name: 'Claw Slash' },
       { id: 'walk', name: 'Walk' },
+      { id: 'slash', name: 'Claw Slash' },
     ],
   },
   goldgunner: {
@@ -146,8 +149,8 @@ export const avatarVisualById: Record<AvatarId, AvatarVisual> = {
     Figure3D: GoldGunnerFigure3D,
     Model3D: GoldGunnerModel3D,
     actions3d: [
-      { id: 'blaze', name: 'Guns Blazing' },
       { id: 'walk', name: 'Walk' },
+      { id: 'blaze', name: 'Guns Blazing' },
     ],
   },
   scar: {
@@ -157,9 +160,9 @@ export const avatarVisualById: Record<AvatarId, AvatarVisual> = {
     Figure3D: ScarFigure3D,
     Model3D: ScarModel3D,
     actions3d: [
+      { id: 'walk', name: 'Walk' },
       { id: 'breach', name: 'Breach & Clear' },
       { id: 'sight', name: 'Sight & Fire' },
-      { id: 'walk', name: 'Walk' },
     ],
   },
   bazookajoe: {
@@ -169,9 +172,9 @@ export const avatarVisualById: Record<AvatarId, AvatarVisual> = {
     Figure3D: BazookaJoeFigure3D,
     Model3D: BazookaJoeModel3D,
     actions3d: [
+      { id: 'walk', name: 'Walk' },
       { id: 'launch', name: 'Rocket Launch' },
       { id: 'aim', name: 'Take Aim' },
-      { id: 'walk', name: 'Walk' },
     ],
   },
 }
