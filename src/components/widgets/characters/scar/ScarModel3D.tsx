@@ -35,6 +35,13 @@ const STEEL = { roughness: 0.35, metalness: 0.4 }
 /** How far pitch can raise/lower the SMG (radians). */
 const AIM_PITCH_MIN = -0.3
 const AIM_PITCH_MAX = 0.9
+/** Aiming hold: the SMG rotates parallel to the forearm (its obtuse
+ * extension — a real shouldered hold, stock braced along the arm) and the
+ * elbow straightens so the forearm+barrel line points where the pitch says.
+ * At rest/breach the gun stays in the perpendicular low-ready carry. */
+const SMG_PARALLEL = Math.PI / 2
+const AIM_ELBOW = -Math.PI / 2 // forearm (and the parallel barrel) level ahead
+const AIM_BLEND_RATE = 10 // 1/s — short shoulder-up tween, no pop
 
 const lerp = (a: number, b: number, k: number) => a + (b - a) * k
 const smooth = (k: number) => (k <= 0 ? 0 : k >= 1 ? 1 : k * k * (3 - 2 * k))
@@ -194,10 +201,12 @@ export default function ScarModel3D({
   const canisterRef = useRef<Group>(null)
   const burstRef = useRef<Group>(null)
   const muzzleRef = useRef<Group>(null)
+  const smgRef = useRef<Group>(null)
   const t0Ref = useRef(0)
   const prevActionRef = useRef<string | undefined>(undefined)
+  const aimBlendRef = useRef(0)
 
-  useFrame((state) => {
+  useFrame((state, delta) => {
     const t = state.clock.elapsedTime
     if (action !== prevActionRef.current) {
       prevActionRef.current = action
@@ -210,12 +219,19 @@ export default function ScarModel3D({
     const canister = canisterRef.current
     const burstG = burstRef.current
     const muzzle = muzzleRef.current
-    if (!armL || !armR || !elbowL || !elbowR || !canister || !burstG || !muzzle) return
+    const smg = smgRef.current
+    if (!armL || !armR || !elbowL || !elbowR || !canister || !burstG || !muzzle || !smg) return
 
     // Per-action pose; every mutable written every frame (self-correcting).
     const aim = aimRef?.current
+    // Blend into/out of the shouldered hold (parallel gun + straightened
+    // elbow) so raising the SMG tweens instead of popping.
+    const aiming = !!aim || action === 'sight'
+    const blend = aimBlendRef.current + ((aiming ? 1 : 0) - aimBlendRef.current) * Math.min(1, delta * AIM_BLEND_RATE)
+    aimBlendRef.current = blend
+    const elbBase = lerp(R_ELBOW, AIM_ELBOW, blend)
     let shXL = 0
-    let elbR = R_ELBOW
+    let elbR = elbBase
     let sway = 0
     let armRPitch = 0
     let canisterOn = true
@@ -228,7 +244,7 @@ export default function ScarModel3D({
       armRPitch = -Math.max(AIM_PITCH_MIN, Math.min(AIM_PITCH_MAX, aim.pitch))
       const f = aim.fire
       if (f > 0) {
-        elbR = R_ELBOW + KICK_AMP * f // recoil kick, strongest at the shot
+        elbR = elbBase + KICK_AMP * f // recoil kick, strongest at the shot
         muzzleOn = f > 0.5 // muzzle flash right after the trigger
       }
     } else if (action === 'breach') {
@@ -242,7 +258,7 @@ export default function ScarModel3D({
       // covering fire: three recoil pulses with muzzle-flash windows
       for (const s of SHOTS) {
         const dt = tau - s
-        if (dt >= 0 && dt < KICK_T) elbR = R_ELBOW + KICK_AMP * Math.sin((Math.PI * dt) / KICK_T)
+        if (dt >= 0 && dt < KICK_T) elbR = elbBase + KICK_AMP * Math.sin((Math.PI * dt) / KICK_T)
         if (dt >= 0 && dt < FLASH_T) muzzleOn = true
       }
     } else if (action === 'sight') {
@@ -251,7 +267,7 @@ export default function ScarModel3D({
       armRPitch = -0.3 - 0.18 * Math.sin(tau * 1.4)
       for (const s of SIGHT_SHOTS) {
         const dt = tau - s
-        if (dt >= 0 && dt < KICK_T) elbR = R_ELBOW + KICK_AMP * Math.sin((Math.PI * dt) / KICK_T)
+        if (dt >= 0 && dt < KICK_T) elbR = elbBase + KICK_AMP * Math.sin((Math.PI * dt) / KICK_T)
         if (dt >= 0 && dt < FLASH_T) muzzleOn = true
       }
     } else {
@@ -266,6 +282,7 @@ export default function ScarModel3D({
     armL.rotation.x = shXL
     elbowR.rotation.x = elbR
     elbowL.rotation.x = L_ELBOW
+    smg.rotation.x = SMG_PARALLEL * blend // aiming = gun parallel to the forearm
     canister.visible = canisterOn
     burstG.visible = burstOn
     muzzle.visible = muzzleOn
@@ -391,8 +408,9 @@ export default function ScarModel3D({
             <sphereGeometry args={[0.085, 12, 10]} />
             <meshStandardMaterial color="#1c2026" {...CLOTH} />
           </mesh>
-          {/* the SMG in the fist; barrel ⊥ forearm (pistol grip) */}
-          <group position={[0, -0.26, 0]}>
+          {/* the SMG in the fist; barrel ⊥ forearm at the low-ready carry,
+           * rotated parallel to the forearm while aiming (smg.rotation.x) */}
+          <group ref={smgRef} position={[0, -0.26, 0]}>
             <SuppressedSMG />
             <group ref={muzzleRef} position={[0, 0.05, 0.68]} visible={false}>
               <FlashBurst scale={0.9} />
