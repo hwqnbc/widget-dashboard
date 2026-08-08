@@ -19,10 +19,11 @@
 // - 'aim' (Take Aim): a longer ~4.2 s deliberate arc, visually distinct
 //   from 'launch' — the figure KNEELS onto the launcher-side knee (body
 //   drops, rear leg folds under, front leg extends, left fist braced on
-//   the knee) while the arm swings the tube up OVER the shoulder (level,
-//   riding at cheek height beside the head), tracks with elevation + yaw
-//   sweeps that settle before the trigger, fires ONCE, then stands back
-//   into the carry as the loop wraps.
+//   the knee) while the arm hoists the tube onto the shoulder with a
+//   NATURAL grip — forearm up so the elbow sits BELOW the raised fist,
+//   the tube counter-rotated level in the hand — tracks with elevation +
+//   yaw sweeps that settle before the trigger, fires ONCE, then stands
+//   back into the carry as the loop wraps.
 // Grip note: the launcher is a PISTOL grip like the imperium claw — the
 // tube rides PERPENDICULAR to the forearm (local +z of the elbow group),
 // so the elbow's x-rotation aims it; the deep elbow bend shoulders the
@@ -63,10 +64,11 @@ const BLAST_OFF = 0.5 // backblast window: [FIRE, BLAST_OFF]
 const BOOM_ON = 0.85 // fireball window
 const BOOM_OFF = 1.15
 /** 'aim' (Take Aim) — a longer, deliberate arc, distinct from the quick
- * 'launch': kneel while raising the tube OVER the shoulder (shoulder x +
- * elbow x sum to ~-0.15 so the perpendicular tube stays level, riding at
- * cheek height), track with elevation + yaw sweeps, settle, ONE shot,
- * stand back into the carry as the loop wraps. */
+ * 'launch': kneel while hoisting the tube onto the shoulder with the
+ * natural RPG grip (forearm points UP so the elbow ends BELOW the fist;
+ * AIM_WEAPON_ROT counter-rotates the tube in the hand back to level),
+ * track with elevation + yaw sweeps, settle, ONE shot, stand back into
+ * the carry as the loop wraps. */
 const AIM_T = 4.2
 const AIM_RAISE = 0.6 // carry → sighting blend done
 const AIM_SETTLE = 2.9 // tracking sweeps faded out
@@ -74,8 +76,8 @@ const AIM_FIRE = 3.05 // the shot
 const AIM_LOWER = 3.6 // sighting → carry blend starts
 const AIM_BOOM_ON = 3.45
 const AIM_BOOM_OFF = 3.75
-const SH_AIM = -2.6 // shoulder swung high behind the head…
-const ELB_AIM = 2.45 // …forearm vertical: total ≈ -0.15 → tube level, brushing the shoulder top
+const SH_AIM = -0.6 // upper arm forward-down — elbow stays LOW…
+const ELB_AIM = -1.6 // …forearm swings UP: fist at shoulder height, elbow below the hand
 const AIM_SWEEP_EL = 0.18 // tracking elevation sweep
 const AIM_SWEEP_YAW = 0.14 // tracking yaw sweep
 const AIM_YAW = 0.08 // arm tucked in while sighting — tube hugs the neck/shoulder
@@ -89,6 +91,7 @@ const KNEEL_FRONT = 1.15 // front leg extended forward
 const BRACE_SHX = -0.5 // left arm leans onto the front knee
 const BRACE_ELB = -0.4
 const WEAPON_LIFT = 0.12 // raises the tube from through-the-cap to resting ON it
+const AIM_WEAPON_ROT = 2.05 // counter-rotates the tube in the fist: level despite the raised forearm
 
 /** Emissive fireball burst (orange core + crossed spikes + forward cone so
  * it reads even pointing at the camera); parent toggles `visible`. */
@@ -232,6 +235,7 @@ export default function BazookaJoeModel3D({
     elbowL.rotation.x = L_ELBOW + (BRACE_ELB - L_ELBOW) * kneelK
     body.position.y = -KNEEL_DROP * kneelK
     weapon.position.y = -0.26 + WEAPON_LIFT * kneelK // tube up onto the shoulder cap
+    weapon.rotation.x = AIM_WEAPON_ROT * kneelK // …and level despite the up-swung forearm
     legR.rotation.x = KNEEL_REAR * kneelK // launcher-side shin folds under
     legL.rotation.x = -KNEEL_FRONT * kneelK // front leg extends ahead
     warhead.visible = warheadOn

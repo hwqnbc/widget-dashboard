@@ -251,8 +251,10 @@ emissive fireball popping at a far up-forward offset — and
 `[aim "Take Aim"]`, its own longer ~4.2 s deliberate arc — the figure
 KNEELS onto the launcher-side knee (the legs are hip-pivot groups and the
 whole upper body rides a `bodyRef` drop; rear leg folds under, front leg
-extends, left fist braced on the knee) while the arm swings the tube up
-OVER the shoulder to cheek height, tracks with elevation + yaw sweeps
+extends, left fist braced on the knee) while the arm hoists the tube onto
+the shoulder with the natural RPG grip — forearm up so the elbow sits
+BELOW the raised fist, the tube counter-rotated level in the hand
+(`AIM_WEAPON_ROT`) — tracks with elevation + yaw sweeps
 that settle before the trigger, fires ONCE, and stands back into the
 carry as the loop wraps. It originally
 shared the launch timeline with only a subtle elevation bob — the two
