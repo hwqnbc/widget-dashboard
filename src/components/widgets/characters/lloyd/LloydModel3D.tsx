@@ -92,21 +92,24 @@ function GoldenSword() {
         <boxGeometry args={[0.05, 0.035, 0.13]} />
         <meshStandardMaterial color={LL.gold} {...GOLD} />
       </mesh>
-      {/* curved blade: two flat segments bowing forward + a swept tip cone */}
-      <mesh position={[0, 0.3, 0.012]} rotation-x={-0.1}>
+      {/* curved blade: a joint-chain of flat segments bowing forward (+z),
+          each segment's base buried in the previous one so the blade reads
+          continuous — ends meet at (0,0.478,0.036) and (0,0.766,0.129) with
+          ~0.02 overlap, the tip cone's base sunk into the last segment */}
+      <mesh position={[0, 0.299, 0.018]} rotation-x={0.1}>
         <boxGeometry args={[0.02, 0.36, 0.1]} />
         <meshStandardMaterial color={LL.gold} {...GOLD} />
       </mesh>
-      <mesh position={[0, 0.62, 0.06]} rotation-x={-0.28}>
-        <boxGeometry args={[0.018, 0.32, 0.085]} />
+      <mesh position={[0, 0.613, 0.081]} rotation-x={0.3}>
+        <boxGeometry args={[0.018, 0.34, 0.09]} />
         <meshStandardMaterial color={LL.gold} {...GOLD} />
       </mesh>
-      <mesh position={[0, 0.6, 0.075]} rotation-x={-0.28}>
-        <boxGeometry args={[0.008, 0.26, 0.05]} />
+      <mesh position={[0, 0.61, 0.104]} rotation-x={0.3}>
+        <boxGeometry args={[0.008, 0.26, 0.045]} />
         <meshStandardMaterial color={LL.goldHi} {...GOLD} roughness={0.25} />
       </mesh>
-      <mesh position={[0, 0.82, 0.13]} rotation-x={-0.5} scale={[0.22, 1, 1]}>
-        <coneGeometry args={[0.09, 0.16, 4]} />
+      <mesh position={[0, 0.818, 0.167]} rotation-x={0.55} scale={[0.3, 1, 1]}>
+        <coneGeometry args={[0.055, 0.18, 4]} />
         <meshStandardMaterial color={LL.gold} {...GOLD} flatShading />
       </mesh>
     </group>
