@@ -226,6 +226,13 @@ rate is `SOLDIER_WALK_SPEED / amp`, so the *linear* pace is a constant
 believable walk (~1.3 u/s) regardless of beat or loop size. A too-small roof
 falls back to `driftAmp = 0` — a standing sentry.
 
+A **rocket soldier halts to fire** (see *Kneel to fire*): while its
+`plantTimer > 0` (set by `stepTurret` around each rocket shot), `StrikeRig`
+skips `stepDrift`, zeroes the velocity, and accumulates the paused seconds into
+`driftHold` — which `stepDrift` subtracts from its clock, so the patrol
+*resumes from where it froze* instead of jumping ahead. The halt is thus a pure
+offset on the deterministic route, not a separate motion path.
+
 *Legs actually walk* — the shared **leg-gait rig** (`characters/shared/legGait`)
 gives the patrol a real stride, not just a body-bob. Each leg is a hip-pivot
 group (`[±0.14, 0.5, 0]`, meshes offset −0.5 in y); the model advances a
@@ -254,18 +261,21 @@ flying at you, trailing a **persistent world-space smoke contrail** (puffs left
 hanging along the flight path, fading a beat after the rocket passes — the
 incoming-missile read); SMG bolts stay the tracer box.
 
-*Kneel to fire* (Bazooka Joe) — a rocketeer firing from a stationary plant
-**drops onto the launcher knee**, reusing the same leg-fold / body-drop /
-brace-hand stance as the widget's "Take Aim" action but **not** its
-weapon-shouldering choreography (the live tube keeps tracking the drone, so
-`shoulderK = aimRef ? 0 : kneelK` gates that part off in-game). The stance is a
-tiny pure driver, `characters/shared/kneelStance` `stepKneel(state, fire, speed,
-dt)`: it holds the kneel `KNEEL_HOLD` (1 s) past each shot so it reads as a
-firing pose rather than a per-shot twitch, and scales it out with ground speed
-(`KNEEL_WALK_SPEED` 0.8 u/s) — **a soldier caught firing on the move stays
-upright**, which is why it composes cleanly with the leg gait. Extracting the
-driver (like `legGait` / `stepDrift`) is what lets the soldier suite assert the
-kneel off-canvas.
+*Kneel to fire* (Bazooka Joe) — a rocketeer **halts and drops onto the launcher
+knee** to loose its rocket. `stepTurret` plants it (`soldierPlantHold`, rocket
+variant only) a beat before the shot — a windup so the kneel *precedes* the
+launch — and holds it through; `StrikeRig` freezes the patrol while planted (see
+*Movement*), so the soldier reliably stops, kneels, fires, then stands and walks
+on. The kneel pose reuses the same leg-fold / body-drop / brace-hand stance as
+the widget's "Take Aim" action but **not** its weapon-shouldering choreography
+(the live tube keeps tracking the drone, so `shoulderK = aimRef ? 0 : kneelK`
+gates that part off in-game). The stance is a tiny pure driver,
+`characters/shared/kneelStance` `stepKneel(state, fire, speed, dt)`: it holds the
+kneel `KNEEL_HOLD` (1 s) past each shot so it reads as a firing pose rather than
+a per-shot twitch, and scales it out with ground speed (`KNEEL_WALK_SPEED`
+0.8 u/s) — so a soldier caught firing on the move (an SMG Scar, which never
+plants) stays upright. Extracting both drivers (like `legGait` / `stepDrift`) is
+what lets the soldier suite assert the plant + kneel off-canvas.
 
 *Rendering* is via **`SoldierTargets`** — the shared `ModelTargets` pool with
 its `onFrame` hook overriding the deck Y so the boots plant on the surface
@@ -557,12 +567,13 @@ kind of list).
   - ~~operator gait~~ — **shipped** (the Drone Sim RC operator strides its legs
     via the shared rig — `OperatorFigure` passes `action="walk"` while Player
     1's avatar is moving; see `docs/drone-sim.md`);
-  - ~~kneel to fire~~ — **shipped** (a Bazooka Joe soldier drops onto the
-    launcher knee to loose a rocket from a stationary plant, holds it briefly,
-    then stands; fired on the move it stays upright — the pure
-    `characters/shared/kneelStance` `stepKneel` driver, asserted by the soldier
-    suite; see *Kneel to fire*). The same treatment could extend to a Scar
-    crouch;
+  - ~~kneel to fire~~ — **shipped** (a Bazooka Joe soldier **halts** to fire —
+    `stepTurret` plants it a beat before each rocket (`soldierPlantHold`) and
+    `StrikeRig` freezes the patrol via `plantTimer`/`driftHold` — then drops onto
+    the launcher knee, holds it briefly, and stands + walks on; the pure
+    `characters/shared/kneelStance` `stepKneel` + `soldierPlantHold` drivers,
+    asserted by the soldier suite; see *Kneel to fire* / *Movement*). The same
+    treatment could extend to a Scar crouch;
   - **turning gait / waypoint loops** — legs swing but feet still slide on the
     turns; foot-planting (IK) and multi-segment waypoint routes are the next
     fidelity step.

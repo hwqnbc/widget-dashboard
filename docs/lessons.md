@@ -1288,3 +1288,21 @@ carried over; these are the new ones.
     became stale leftovers. A cross-folder pure module needs its OWN single-entry
     esbuild pass (its own directory is then the ancestor → flat output), the same
     reason droneStrike / tankBattle / map are already separate passes.
+
+92. **To pause a time-parameterized motion, offset its clock — don't rewrite it
+    to be incremental.** Making the Bazooka soldier *halt* to fire looked like it
+    needed a stateful "stop/resume" in the movement path, but `stepDrift` is a
+    pure function of wall-clock time (`pos = f(timeS)`), not an integrator.
+    Rewriting it to accumulate position would have broken determinism and every
+    e2e that steps it. The cheap fix: keep one accumulator per target,
+    `driftHold` (paused seconds), and evaluate the route at `timeS − driftHold`.
+    Freezing = while planted, `StrikeRig` skips the `stepDrift` call and adds
+    `dt` to `driftHold` (and zeroes velocity so facing/kneel read stationary);
+    resuming = the offset now exactly cancels the elapsed pause, so the patrol
+    continues from where it froze instead of teleporting forward. The *decision*
+    to plant stays a tiny pure helper (`soldierPlantHold`: rocket-variant-only,
+    needs a clear shot, plants within a fire *lead* so the kneel precedes the
+    launch, never shortens an existing plant) that `stepTurret` calls and the
+    soldier suite asserts off-canvas — same extract-for-testability discipline as
+    `legGait` / `stepKneel`. General pattern: analytic (time-parameterized)
+    animation + a paused-time accumulator = pausable without going incremental.

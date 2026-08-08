@@ -164,6 +164,36 @@ const SOLDIER_ROOF_MARGIN = 0.8
 const SOLDIER_ROOF_PACE_CAP = 2.4
 /** Below this half-beat a roof is too small to pace → a standing sentry. */
 const SOLDIER_MIN_PACE = 1
+
+/** Firing-plant tuning (rocket soldiers). A rocket soldier HALTS to loose its
+ * rocket — it plants when a clear shot is within this lead of the next volley,
+ * a brief windup so the kneel precedes the launch… */
+export const SOLDIER_PLANT_LEAD = 0.35
+/** …and stays planted this long after the shot, covering the kneel-read before
+ * it stands and resumes the patrol. */
+export const SOLDIER_PLANT_TAIL = 0.9
+
+/**
+ * Pure firing-plant driver for a soldier. Given its `variant`, whether it has a
+ * clear shot right now (`hasShot`), the seconds until its next volley
+ * (`cooldown`) and the plant timer it already holds (`current`), return the
+ * plant timer to hold. Only **rocket** soldiers (variant 0) plant — through the
+ * windup and the shot; SMG soldiers (variant 1) run-and-gun and never plant.
+ * Never shortens an existing plant. Kept pure so the soldier suite asserts it
+ * off-canvas (the halt/freeze itself lives in `StrikeRig` + `stepDrift`).
+ */
+export function soldierPlantHold(
+  variant: 0 | 1,
+  hasShot: boolean,
+  cooldown: number,
+  current: number,
+): number {
+  if (variant !== 0 || !hasShot) return current
+  if (cooldown <= SOLDIER_PLANT_LEAD) {
+    return Math.max(current, Math.max(cooldown, 0) + SOLDIER_PLANT_TAIL)
+  }
+  return current
+}
 /** Ground patrol half-beat length (world units). */
 const SOLDIER_GROUND_BEAT_MIN = 4
 const SOLDIER_GROUND_BEAT_VAR = 3
@@ -505,6 +535,15 @@ export interface TargetState {
   routeKind: 0 | 1
   /** Soldier line route heading (radians); ignored for loops. */
   routeAngle: number
+  /** Soldier only: seconds the soldier stays PLANTED — halted mid-patrol to
+   * kneel + loose a rocket. While > 0, `StrikeRig` freezes the patrol and zeroes
+   * the velocity; set by `stepTurret` around each rocket shot (rocket variant
+   * only, via `soldierPlantHold`). */
+  plantTimer: number
+  /** Soldier only: accumulated paused seconds, subtracted from the drift clock
+   * so the patrol resumes smoothly from where a plant froze it (not jumped
+   * forward as if wall-clock time had elapsed while it stood still). */
+  driftHold: number
 }
 
 export function createTargetStates(): TargetState[] {
@@ -526,6 +565,8 @@ export function createTargetStates(): TargetState[] {
     fireTimer: 0,
     routeKind: 0 as 0 | 1,
     routeAngle: 0,
+    plantTimer: 0,
+    driftHold: 0,
   }))
 }
 
@@ -561,6 +602,8 @@ export function loadWave(states: TargetState[], wave: WaveSpec): void {
     s.fireTimer = 0
     s.routeKind = spec.routeKind ?? 0
     s.routeAngle = spec.routeAngle ?? 0
+    s.plantTimer = 0
+    s.driftHold = 0
   }
 }
 
@@ -599,7 +642,9 @@ export function stepDrift(t: TargetState, timeS: number): void {
   // beat) or a circular LOOP — writing the true velocity derivative for shot
   // leading. Generalises the old axis-aligned pace (routeAngle 0/π-2 = x/z).
   if (t.kind === 'soldier' && t.driftAmp > 0) {
-    const ph = timeS * t.driftSpeed + t.driftPhase
+    // Subtract time paused in firing plants so the patrol resumes from where it
+    // froze (the halt in StrikeRig accumulates `driftHold`), not jumped ahead.
+    const ph = (timeS - t.driftHold) * t.driftSpeed + t.driftPhase
     t.pos.y = t.base.y
     t.vel.y = 0
     if (t.routeKind === 1) {

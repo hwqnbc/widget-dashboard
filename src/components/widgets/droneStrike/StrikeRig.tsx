@@ -456,7 +456,17 @@ export default function StrikeRig({
     for (const p of combat.enemy) if (p.active) enemyBoltsBefore++
     for (let i = 0; i < targets.length; i++) {
       const t = targets[i]
-      stepDrift(t, clock.elapsedTime)
+      if (t.kind === 'soldier' && t.plantTimer > 0) {
+        // Planted (halted to kneel + fire a rocket): freeze the patrol clock so
+        // it resumes smoothly afterwards, and zero the velocity so the facing
+        // and kneel read as a stationary firing stance.
+        t.driftHold += dt
+        t.vel.x = 0
+        t.vel.y = 0
+        t.vel.z = 0
+      } else {
+        stepDrift(t, clock.elapsedTime)
+      }
       if (waveActive && t.kind === 'enemy') {
         stepEnemy(
           t,
@@ -495,6 +505,7 @@ export default function StrikeRig({
       }
       if (t.hitFlash > 0) t.hitFlash = Math.max(0, t.hitFlash - dt)
       if (t.fireTimer > 0) t.fireTimer = Math.max(0, t.fireTimer - dt)
+      if (t.plantTimer > 0) t.plantTimer = Math.max(0, t.plantTimer - dt)
     }
     if (audioOn) {
       let enemyBoltsAfter = 0

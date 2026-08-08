@@ -16,7 +16,7 @@ import { boomClipT } from '../droneSim/flightModel'
 import type { Projectile, WeaponSpec } from './combatModel'
 import { spawnProjectile } from './combatModel'
 import type { TargetState } from './waveLayout'
-import { MAX_TARGETS } from './waveLayout'
+import { MAX_TARGETS, SOLDIER_PLANT_TAIL, soldierPlantHold } from './waveLayout'
 
 /** Aiming within this half-angle of an enemy (while close) triggers evasion. */
 export const EVADE_CONE = 0.12
@@ -167,8 +167,15 @@ export function stepTurret(
   const dist = Math.hypot(dx, dy, dz)
 
   ai.fireCooldown -= dt
-  if (ai.fireCooldown > 0 || dist === 0 || dist > ENEMY_FIRE_RANGE) return
-  if (boomClipT(t.pos, playerPos, colliders) < 1) return
+  // A clear shot = in range with an unobstructed line (the LOS raycast only runs
+  // once in range). Rocket soldiers use it to PLANT a beat before the shot (halt
+  // + kneel windup) and hold through it, so the launch reads as a deliberate
+  // planted rocket; StrikeRig freezes the patrol while `plantTimer > 0`.
+  const hasShot = dist > 0 && dist <= ENEMY_FIRE_RANGE && boomClipT(t.pos, playerPos, colliders) >= 1
+  if (t.kind === 'soldier') {
+    t.plantTimer = soldierPlantHold(t.variant, hasShot, ai.fireCooldown, t.plantTimer)
+  }
+  if (ai.fireCooldown > 0 || !hasShot) return
   const inv = 1 / dist
   FIRE_DIR.x = -dx * inv
   FIRE_DIR.y = -dy * inv
@@ -182,6 +189,8 @@ export function stepTurret(
     MUZZLE.z = t.pos.z + FIRE_DIR.z * SOLDIER_MUZZLE_FWD
     spawnProjectile(enemyPool, MUZZLE, FIRE_DIR, weapon)
     t.fireTimer = SOLDIER_FIRE_CLIP
+    // Keep the rocketeer planted through the shot's kneel-read before it stands.
+    if (t.variant === 0) t.plantTimer = Math.max(t.plantTimer, SOLDIER_PLANT_TAIL)
   } else {
     spawnProjectile(enemyPool, t.pos, FIRE_DIR, weapon)
   }

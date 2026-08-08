@@ -23,10 +23,13 @@ import {
 } from './helpers.mjs'
 import { buildWorldLayout, DEFAULT_SEED } from './.bundle/worldLayout.js'
 import {
+  SOLDIER_PLANT_LEAD,
+  SOLDIER_PLANT_TAIL,
   SOLDIER_WAVE,
   buildWave,
   createTargetStates,
   loadWave,
+  soldierPlantHold,
   stepDrift,
 } from './.bundle/waveLayout.js'
 import {
@@ -265,6 +268,30 @@ check('does not kneel while walking (fires upright)', kWalking < 0.05, `k=${kWal
 const clampCheck = { k: 0, hold: 0 }
 runKneel(clampCheck, 1, 0, 600)
 check('kneel factor stays within [0,1]', clampCheck.k >= 0 && clampCheck.k <= 1, `k=${clampCheck.k.toFixed(3)}`)
+
+// --- firing plant (pure `soldierPlantHold`, rocket soldier halts to fire) ---
+// A rocket soldier (variant 0) with a clear shot plants once the next volley is
+// within the lead window (windup), and never sooner.
+const leadIn = SOLDIER_PLANT_LEAD - 0.1
+check('rocket soldier plants within the fire lead', soldierPlantHold(0, true, leadIn, 0) >= SOLDIER_PLANT_TAIL, `p=${soldierPlantHold(0, true, leadIn, 0).toFixed(2)}`)
+check('rocket soldier does not plant early (outside the lead)', soldierPlantHold(0, true, SOLDIER_PLANT_LEAD + 0.5, 0) === 0)
+// No clear shot → no plant (keeps patrolling); SMG soldiers (variant 1) never plant.
+check('no plant without a clear shot', soldierPlantHold(0, false, 0.1, 0) === 0)
+check('SMG soldier never plants (run-and-gun)', soldierPlantHold(1, true, 0.1, 0) === 0)
+// Never shortens an existing plant (e.g. the post-shot tail already running).
+check('an existing plant is never shortened', soldierPlantHold(0, false, 0.1, 0.7) === 0.7)
+
+// The halt freezes the patrol clock via `driftHold`, so movement RESUMES from
+// where it paused rather than jumping ahead: stepping at time T with a driftHold
+// of h lands exactly where stepping at (T − h) with no hold would.
+const planted = findGround(() => true)
+if (planted) {
+  stepDrift(planted, 0)
+  const frozen = { x: planted.pos.x, z: planted.pos.z }
+  planted.driftHold = 0.4
+  stepDrift(planted, 0.4) // effective time 0.4 − 0.4 = 0 → back at the frozen spot
+  check('a firing plant freezes the patrol (driftHold offsets the clock)', Math.abs(planted.pos.x - frozen.x) < 1e-9 && Math.abs(planted.pos.z - frozen.z) < 1e-9)
+}
 
 // --- DOM: the app fields the seeded wave-1 targets (soldiers included) ---
 const c1 = await combat()
