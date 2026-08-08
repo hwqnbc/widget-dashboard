@@ -27,9 +27,16 @@ import { PAD_CENTER, PAD_START_RADIUS } from '../droneSim/lapTimer'
 import type { ExternalState } from '../droneSim/externalInput'
 import { pollGamepad } from '../droneSim/externalInput'
 import { CRASH_PULSE, vibrate } from '../droneSim/haptics'
-import { playAlert, playClear, playCrash, playFire, playHit, playPop } from './strikeSounds'
+import { playAlert, playClear, playCrash, playFire, playHit, playOverheat, playPop, playZap } from './strikeSounds'
 import DroneModel from '../droneSim/DroneModel'
-import type { AimAssistLevel, CombatState, HitEvent, WeaponSpec } from './combatModel'
+import type {
+  AimAssistLevel,
+  CombatState,
+  HeatEvent,
+  HitEvent,
+  LaserBeam,
+  WeaponSpec,
+} from './combatModel'
 import type { SparkPool } from './sparkModel'
 import { spawnBurst } from './sparkModel'
 import {
@@ -40,11 +47,16 @@ import {
   ENEMY_BOLT,
   SOLDIER_ROCKET,
   SOLDIER_SMG,
+  addHeat,
   bendAim,
   createHitEvents,
+  createHitscanResult,
   findLockTarget,
+  fireHitscan,
   leadPoint,
+  spawnLaserBeam,
   spawnProjectile,
+  stepHeat,
   stepProjectiles,
 } from './combatModel'
 import type { TargetKind, TargetState } from './waveLayout'
@@ -169,6 +181,9 @@ export default function StrikeRig({
   enemiesShoot,
   combat,
   sparks,
+  beams,
+  onHeatEvent,
+  heatBarRef,
   aimRef,
   weapon,
   assist,
@@ -233,6 +248,13 @@ export default function StrikeRig({
   /** Shared spark pool — the rig spawns bursts (muzzle + impacts), SparkField
    * ages and draws them. */
   sparks: SparkPool
+  /** Laser beam slots — the rig spawns one per hitscan shot, LaserBeams ages
+   * and draws them. */
+  beams: LaserBeam[]
+  /** Heat latch tripped / cleared (the body banners it, battery-style). */
+  onHeatEvent: (event: HeatEvent) => void
+  /** Laser heat bar fill — width/colour/data-level written on the tick. */
+  heatBarRef: RefObject<HTMLDivElement | null>
   /** Shared aim offset (gyro fine-aim + recoil) — also read by the camera. */
   aimRef: { current: AimOffset }
   weapon: WeaponSpec
@@ -290,8 +312,12 @@ export default function StrikeRig({
   // Monotonic sound-effect counters — one per SfxKind, published on the HUD
   // tick as data-sfx-* (the e2e audio contract; the actual voices are fired
   // imperatively at each event via strikeSounds, gated on `audioOn`).
-  const sfx = useRef({ fire: 0, pop: 0, hit: 0, alert: 0, clear: 0, crash: 0 }).current
+  const sfx = useRef({ fire: 0, pop: 0, hit: 0, alert: 0, clear: 0, crash: 0, zap: 0 }).current
   const events = useRef(createHitEvents()).current
+  const scan = useRef(createHitscanResult()).current
+  // Scratch HitEvent for feeding a hitscan outcome through the shared
+  // player-hit consequence path (mutated per shot, never allocated).
+  const scanEvent = useRef<HitEvent>({ kind: 'world', targetIdx: -1, x: 0, y: 0, z: 0 }).current
   const fireDir = useRef<Vec3>({ x: 0, y: 0, z: -1 }).current
   const muzzle = useRef<Vec3>({ x: 0, y: 0, z: 0 }).current
   const aimPoint = useRef<Vec3>({ x: 0, y: 0, z: 0 }).current
@@ -579,44 +605,11 @@ export default function StrikeRig({
       }
     }
 
-    // Fire intent: held trigger (button/Space/mouse/gamepad) or auto-fire
-    // after the lock has held steady. One cooldown for both — auto-fire is a
-    // convenience, not a rate buff. A dead battery can't power the gun.
-    combat.cooldown = Math.max(0, combat.cooldown - dt)
-    const wantsFire =
-      waveActive &&
-      !crash.active &&
-      !playerSafe &&
-      !(batteryMode && battery.dead) &&
-      (fireHeldRef.current ||
-        gamepadFireHeld() ||
-        (autoFire && lockIdx >= 0 && lockHold.current >= AUTO_FIRE_HOLD_S))
-    if (wantsFire && combat.cooldown === 0) {
-      if (lockIdx >= 0) {
-        const t = targets[lockIdx]
-        // Lead the moving target, then bend the bolt by the assist level.
-        leadPoint(flight.pos, t.pos, t.vel, weapon.speed, aimPoint)
-        bendAim(fireDir, flight.pos, aimPoint, AIM_BEND[assist])
-      }
-      muzzle.x = flight.pos.x + fireDir.x * MUZZLE_OFFSET
-      muzzle.y = flight.pos.y + fireDir.y * MUZZLE_OFFSET
-      muzzle.z = flight.pos.z + fireDir.z * MUZZLE_OFFSET
-      if (spawnProjectile(combat.player, muzzle, fireDir, weapon)) {
-        combat.cooldown = weapon.cooldown
-        combat.shots++
-        aim.recoil += RECOIL_KICK
-        spawnBurst(sparks, muzzle.x, muzzle.y, muzzle.z, 'muzzle')
-        if (audioOn) {
-          sfx.fire++
-          playFire(weapon.cooldown)
-        }
-      }
-    }
-
     // One consequence path for anything the player's fire connects with —
     // sparks for every impact (targets AND world/ground), damage/score/sfx for
-    // targets only. Shared by the projectile sweep below (and, by design, any
-    // future hitscan weapon that resolves outside the events ring).
+    // targets only. Shared by the projectile sweep below and the laser's
+    // hitscan outcome (which resolves outside the events ring — one hit per
+    // shot needs no ring).
     const applyPlayerHitEvent = (e: HitEvent) => {
       spawnBurst(sparks, e.x, e.y, e.z, 'impact')
       if (e.kind !== 'target') return
@@ -639,6 +632,70 @@ export default function StrikeRig({
         if (audioOn) {
           sfx.hit++
           playHit()
+        }
+      }
+    }
+
+    // Fire intent: held trigger (button/Space/mouse/gamepad) or auto-fire
+    // after the lock has held steady. One cooldown for both — auto-fire is a
+    // convenience, not a rate buff. A dead battery can't power the gun, and
+    // an overheated laser is offline until the latch clears.
+    combat.cooldown = Math.max(0, combat.cooldown - dt)
+    const heatEvent = stepHeat(combat, dt)
+    if (heatEvent) onHeatEvent(heatEvent)
+    const wantsFire =
+      waveActive &&
+      !crash.active &&
+      !playerSafe &&
+      !(batteryMode && battery.dead) &&
+      !(weapon.kind === 'laser' && combat.overheated) &&
+      (fireHeldRef.current ||
+        gamepadFireHeld() ||
+        (autoFire && lockIdx >= 0 && lockHold.current >= AUTO_FIRE_HOLD_S))
+    if (wantsFire && combat.cooldown === 0) {
+      if (lockIdx >= 0) {
+        const t = targets[lockIdx]
+        // Lead the moving target, then bend the bolt by the assist level.
+        leadPoint(flight.pos, t.pos, t.vel, weapon.speed, aimPoint)
+        bendAim(fireDir, flight.pos, aimPoint, AIM_BEND[assist])
+      }
+      muzzle.x = flight.pos.x + fireDir.x * MUZZLE_OFFSET
+      muzzle.y = flight.pos.y + fireDir.y * MUZZLE_OFFSET
+      muzzle.z = flight.pos.z + fireDir.z * MUZZLE_OFFSET
+      if (weapon.kind === 'laser') {
+        // Hitscan: the whole segment resolves NOW — no projectile. Heat is
+        // the balancing cost; the cooldown is just the fire tick.
+        fireHitscan(muzzle, fireDir, weapon, colliders, targets, scan)
+        combat.cooldown = weapon.cooldown
+        combat.shots++
+        aim.recoil += RECOIL_KICK * 0.5 // lighter kick at the laser's cadence
+        spawnBurst(sparks, muzzle.x, muzzle.y, muzzle.z, 'muzzle')
+        spawnLaserBeam(beams, muzzle.x, muzzle.y, muzzle.z, scan.x, scan.y, scan.z)
+        const overheatEvent = addHeat(combat)
+        if (overheatEvent) {
+          if (audioOn) playOverheat()
+          onHeatEvent(overheatEvent)
+        }
+        if (audioOn) {
+          sfx.zap++
+          playZap()
+        }
+        if (scan.hit) {
+          scanEvent.kind = scan.hit
+          scanEvent.targetIdx = scan.targetIdx
+          scanEvent.x = scan.x
+          scanEvent.y = scan.y
+          scanEvent.z = scan.z
+          applyPlayerHitEvent(scanEvent)
+        }
+      } else if (spawnProjectile(combat.player, muzzle, fireDir, weapon)) {
+        combat.cooldown = weapon.cooldown
+        combat.shots++
+        aim.recoil += RECOIL_KICK
+        spawnBurst(sparks, muzzle.x, muzzle.y, muzzle.z, 'muzzle')
+        if (audioOn) {
+          sfx.fire++
+          playFire(weapon.cooldown)
         }
       }
     }
@@ -754,6 +811,7 @@ export default function StrikeRig({
         hud.dataset.sfxAlert = String(sfx.alert)
         hud.dataset.sfxClear = String(sfx.clear)
         hud.dataset.sfxCrash = String(sfx.crash)
+        hud.dataset.sfxZap = String(sfx.zap)
         // Monotonic spark-burst count (muzzle flashes + impact showers) — the
         // e2e signal that the particle system fired without needing pixels.
         hud.dataset.sparks = String(sparks.spawned)
@@ -812,6 +870,20 @@ export default function StrikeRig({
         bar.style.backgroundColor =
           level > 40 ? '#66bb6a' : level > 15 ? '#ffb300' : '#ef5350'
         bar.dataset.level = level.toFixed(0)
+      }
+      // Laser heat bar (mounted only while the laser is equipped): fill =
+      // heat 0→100, red while the overheat latch is on.
+      const heatBar = heatBarRef.current
+      if (heatBar) {
+        const level = combat.heat
+        heatBar.style.width = `${level}%`
+        heatBar.style.backgroundColor = combat.overheated
+          ? '#ef5350'
+          : level > 60
+            ? '#ffb300'
+            : '#4fc3f7'
+        heatBar.dataset.level = level.toFixed(0)
+        heatBar.dataset.overheated = combat.overheated ? 'yes' : 'no'
       }
       const marker = minimapDroneRef.current
       if (marker) {

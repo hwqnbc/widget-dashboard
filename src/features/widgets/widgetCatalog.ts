@@ -209,6 +209,7 @@ export function defaultWidgetData(type: WidgetType): Record<string, unknown> {
         crashes: true,
         audio: true,
         zoomPower: 2,
+        weapon: 'bolt',
       }
     case 'tankBattle':
       return {

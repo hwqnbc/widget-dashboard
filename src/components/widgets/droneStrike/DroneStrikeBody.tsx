@@ -38,12 +38,15 @@ import RichWorld from '../droneSim/RichWorld'
 import RainField from '../droneSim/RainField'
 import VirtualJoystick from '../droneSim/VirtualJoystick'
 import ConfirmDialog from '../ConfirmDialog'
-import type { AimAssistLevel } from './combatModel'
+import type { AimAssistLevel, HeatEvent, WeaponId } from './combatModel'
 import {
   BOLT,
+  WEAPON_SPECS,
   clearProjectiles,
   coerceAimAssist,
+  coerceWeapon,
   createCombatState,
+  createLaserBeams,
   resetCombatState,
 } from './combatModel'
 import type { Difficulty } from './waveLayout'
@@ -79,6 +82,7 @@ import Tracers from './Tracers'
 import EnemyRockets from './EnemyRockets'
 import SparkField from './SparkField'
 import { createSparkPool } from './sparkModel'
+import LaserBeams from './LaserBeams'
 import Reticle from './Reticle'
 import FireButton from './FireButton'
 import type { HitMarker } from './HitMarkers'
@@ -137,6 +141,7 @@ const SETTING_KEYS = [
   'turbo',
   'audio',
   'zoomPower',
+  'weapon',
 ] as const
 const SETTING_DEFAULTS: Record<string, unknown> = Object.fromEntries(
   SETTING_KEYS.map((k) => [k, defaultWidgetData('droneStrike')[k]]),
@@ -199,6 +204,8 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
   const crashes = useWidgetField(id, 'crashes', true)
   const audio = useWidgetField(id, 'audio', true)
   const zoomPower = useWidgetField<ZoomPower>(id, 'zoomPower', 2, coerceZoomPower)
+  const weaponId = useWidgetField<WeaponId>(id, 'weapon', 'bolt', coerceWeapon)
+  const weaponSpec = WEAPON_SPECS[weaponId]
   const zoomFov = zoomFovFor(zoomPower)
   const zoomSens = zoomSensFor(zoomPower)
 
@@ -212,6 +219,8 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
   // Spark-burst pool (muzzle flashes + impact showers) — the rig spawns
   // bursts, SparkField ages + draws them (one Points draw call).
   const sparks = useRef(createSparkPool()).current
+  // Laser beam slots — the rig spawns one per hitscan shot, LaserBeams draws.
+  const beams = useRef(createLaserBeams()).current
   const targets = useRef(createTargetStates()).current
   const enemyAI = useRef(createEnemyAIStates()).current
   const aimRef = useRef(createAimOffset())
@@ -225,6 +234,7 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
   const vignetteRef = useRef<HTMLDivElement>(null)
   const batteryRef = useRef<BatteryState>(createBatteryState())
   const batteryBarRef = useRef<HTMLDivElement>(null)
+  const heatBarRef = useRef<HTMLDivElement>(null)
   const crashRef = useRef<CrashState>({ active: false, until: 0, spinX: 0, spinZ: 0 })
   const padStateRef = useRef<'idle' | 'active'>('idle')
   const padChipRef = useRef<HTMLDivElement>(null)
@@ -411,6 +421,28 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
   useEffect(() => {
     resetBatteryState(batteryRef.current)
   }, [battery])
+
+  const onHeatEvent = useCallback(
+    (event: HeatEvent) => {
+      if (event === 'overheated') {
+        vibrate(CRASH_PULSE)
+        showBanner('OVERHEATED!')
+      } else {
+        showBanner('LASER READY', 1500)
+      }
+    },
+    [showBanner],
+  )
+
+  // Switching weapons: despawn in-flight player bolts (they must not
+  // retro-inherit the new spec's gravity/maxAge — stepProjectiles sweeps the
+  // pool with the CURRENT weapon) and start the new gun cold.
+  useEffect(() => {
+    for (const p of combat.player) p.active = false
+    combat.heat = 0
+    combat.overheated = false
+    combat.cooldown = 0
+  }, [weaponId, combat])
 
   // Crash: the tumble costs a heart (same feedback as taking a bolt);
   // the end of the tumble respawns the drone on the pad.
@@ -641,6 +673,7 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
       data-minimap={minimap ? 'on' : 'off'}
       data-zoom={zoom ? 'on' : 'off'}
       data-zoom-power={zoomPower}
+      data-weapon={weaponId}
       data-weather={weather}
       data-rich={richWorld ? 'on' : 'off'}
       data-mode={flightMode}
@@ -756,9 +789,13 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
           <TurretTargets targets={targets} playerPos={flight.pos} />
           <SoldierTargets targets={targets} playerPos={flight.pos} />
           <EnemyDrones targets={targets} />
-          <Tracers combat={combat} tracerLen={BOLT.tracerLen} />
+          {/* Player tracers follow the equipped weapon; the enemy pool shares
+           * this prop (scaled), so a tracer-less weapon (laser, len 0) falls
+           * back to BOLT's length to keep enemy fire visible. */}
+          <Tracers combat={combat} tracerLen={weaponSpec.tracerLen > 0 ? weaponSpec.tracerLen : BOLT.tracerLen} />
           <EnemyRockets combat={combat} />
           <SparkField sparks={sparks} />
+          <LaserBeams beams={beams} />
           <StrikeRig
             controls={controls}
             flight={flight}
@@ -786,8 +823,11 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
             enemiesShoot={wave >= ENEMY_FIRE_WAVE}
             combat={combat}
             sparks={sparks}
+            beams={beams}
+            onHeatEvent={onHeatEvent}
+            heatBarRef={heatBarRef}
             aimRef={aimRef}
-            weapon={BOLT}
+            weapon={weaponSpec}
             assist={aimAssist}
             autoFire={autoFire}
             audioOn={audio}
@@ -933,6 +973,37 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
             data-testid="strike-battery-fill"
             data-level="100"
             sx={{ height: '100%', width: '100%', bgcolor: '#66bb6a' }}
+          />
+        </Box>
+      )}
+
+      {/* Laser heat — same bar recipe as the battery, stacked below it when
+       * both are on (the offset arithmetic mirrors the battery's, +14 when
+       * the battery bar occupies the slot). Fill = heat 0→100, rig-written. */}
+      {weaponId === 'laser' && (
+        <Box
+          data-testid="strike-heat"
+          sx={{
+            position: 'absolute',
+            top:
+              (bestScore > 0 ? (hpVisible ? 120 : 92) : hpVisible ? 92 : 64) +
+              (battery ? 14 : 0),
+            left: 8,
+            width: 92,
+            height: 8,
+            borderRadius: 1,
+            bgcolor: alpha('#000', 0.45),
+            border: `1px solid ${alpha('#fff', 0.3)}`,
+            overflow: 'hidden',
+            pointerEvents: 'none',
+          }}
+        >
+          <Box
+            ref={heatBarRef}
+            data-testid="strike-heat-fill"
+            data-level="0"
+            data-overheated="no"
+            sx={{ height: '100%', width: '0%', bgcolor: '#4fc3f7' }}
           />
         </Box>
       )}
@@ -1086,6 +1157,7 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
         turbo={turbo}
         audio={audio}
         zoomPower={zoomPower}
+        weapon={weaponId}
         onNewWorld={requestNewWorld}
         onResetDefaults={resetDefaults}
       />

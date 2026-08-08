@@ -273,7 +273,10 @@ four aim modes
 (Classic/Reticle/Gunner/Hover gimbal),
 Easy/Normal/Hard difficulty, ADS zoom with three gyro fine-aim modes,
 synthesized Web Audio sound effects (no assets),
-and the recorded hitscan/ballistic weapon variants).
+muzzle-flash + impact sparks (pure `sparkModel` pool, one Points draw),
+and a settings **weapon picker** — the default bolt or the **hitscan laser**
+(`fireHitscan` spawn-frame resolution, balanced by a heat meter with an
+overheat latch, beams via `LaserBeams`)).
 See `docs/tank-battle.md` for the Tank Battle widget (the third WebGL
 widget — seeded analytic heightfield terrain with four-corner tank
 grounding and grade limits, WoT-style controls: left stick drives the hull,

@@ -457,15 +457,37 @@ The rig's player-fire consequences (sparks for every impact, damage/score/sfx
 for targets) are one `applyPlayerHitEvent` closure — the seam any future
 hitscan weapon feeds its hits through.
 
-### Weapon variants (recorded, not built)
+### Player weapons
 
 `WeaponSpec` is pure config `{kind, speed, cooldown, gravity, maxRange,
-tracerLen}` — the shipped `BOLT` is one instance. Two variants are already
-representable with **no rewrite**:
+tracerLen}`; the **settings weapon picker** (Combat list, `strike-weapon`,
+persisted `weapon` field, root `data-weapon`) selects among `WEAPON_SPECS`:
 
-- **`laser` (hitscan)**: resolve the entire `origin → origin + dir·maxRange`
-  segment on the spawn frame through the same `boomClipT`/`segmentSphereT`
-  path — instant hit, render as a brief beam instead of a moving tracer.
+- **`bolt`** (default) — the classic fast tracer (`BOLT`): leading matters,
+  drawn by `Tracers` (whose `tracerLen` now follows the equipped spec, falling
+  back to BOLT's for the shared enemy pool when the spec has none).
+- **`laser` (hitscan)** — `fireHitscan` resolves the ENTIRE
+  `origin → origin + dir·maxRange` segment on the spawn frame through the
+  same `boomClipT`/ground/`segmentSphereT` tests the projectile sweep uses
+  (earliest hit wins; at most one hit per shot, so the outcome is a scratch
+  `HitscanResult`, not the events ring — the rig feeds it through the shared
+  `applyPlayerHitEvent` path). Balanced by **heat, not fire rate**: heat lives
+  on `CombatState` (`addHeat` +7/shot, `stepHeat` −26/s, latch at 100 that
+  only clears at `HEAT_RESET` 30 — battery-style hysteresis + events, the
+  body banners OVERHEATED / LASER READY). The cooldown (0.09 s) is a real
+  fire *tick*, never 0 — per-frame fire would make DPS and heat gain
+  frame-rate-dependent. A cyan **heat bar** (`strike-heat`, same recipe as
+  the battery bar, stacked below it) fills 0→100 and turns red while
+  overheated; beams are drawn by `LaserBeams` (instanced boxes stretched
+  muzzle→hit, fading by THICKNESS — instancing can't fade opacity per
+  instance), and each shot plays a dedicated `playZap` voice (`data-sfx-zap`).
+
+**Switching weapons despawns in-flight player bolts** and starts the new gun
+cold — `stepProjectiles` sweeps the pool with the *current* spec, so a live
+bolt must not retro-inherit another weapon's gravity/maxAge.
+
+Still recorded, not built:
+
 - **`ballistic`**: set `gravity > 0`; the integrator already applies it
   (`vel.y -= gravity·dt`). Pair with a trajectory hint if it ever ships —
   pure gravity drop frustrates on touch.
@@ -473,20 +495,23 @@ representable with **no rewrite**:
 ## Test contract (data-*)
 
 Root `drone-strike-root`: `data-world-seed/-view/-auto-fire/-aim-assist/
--gyro/-minimap/-weather/-rich/-aim-mode/-difficulty/-audio/-zoom-power`. HUD
+-gyro/-minimap/-weather/-rich/-aim-mode/-difficulty/-audio/-zoom-power/
+-weapon`. HUD
 `strike-hud` (150 ms tick):
 `data-x/-z/-alt/-yaw/-speed/-wave/-wave-state(intro|active|cleared|failed)/
 -score/-shots/-hits/-targets-left/-lock/-proj/-enemy-proj/-hp/
 -input-source`, the **sound-effect counters**
-`data-sfx-fire/-pop/-hit/-alert/-clear/-crash`, the monotonic spark-burst
+`data-sfx-fire/-pop/-hit/-alert/-clear/-crash/-zap`, the monotonic spark-burst
 count `data-sparks`, plus the
 **nearest-alive-target beacon** `data-tgt-x/-y/-z/-kind` that lets suites
 aim closed-loop without window globals. Chips: `strike-score` (`data-score/-wave/-best-score/-best-wave`),
 `strike-hp`, `strike-reticle` (`data-lock`), `strike-fire`
-(`data-pressed`), joysticks/buttons/settings testids mirror the sim's.
+(`data-pressed`), the laser heat bar `strike-heat`/`strike-heat-fill`
+(`data-level` 0–100 + `data-overheated`, mounted only while the laser is
+equipped), joysticks/buttons/settings testids mirror the sim's.
 
 E2E: suites `100-strike-core` … `109-strike-ground` plus `117-strike-audio`,
-`119-strike-soldiers` and `123-strike-sparks`
+`119-strike-soldiers`, `123-strike-sparks` and `124-strike-laser`
 (see `e2e/README.md`); pure modules are esbuild-bundled for the suites in a
 second flat pass in `run.mjs`.
 
@@ -513,10 +538,10 @@ kind of list).
   finer control is wanted.
 
 ### Weapons
-- **Hitscan laser** — already representable as a `WeaponSpec` (resolve the
-  full `origin→maxRange` segment on the spawn frame); render as a brief
-  beam (`Tracers` instance stretched to the hit point) and balance with a
-  heat meter instead of a cooldown.
+- ~~Hitscan laser~~ — **shipped** (`fireHitscan` spawn-frame segment
+  resolution + heat meter with an overheat latch + `LaserBeams` + the
+  settings **weapon picker** (persisted `weapon`, root `data-weapon`) — see
+  "Player weapons").
 - **Ballistic lob** — `gravity > 0` in the existing integrator; ship it
   with a trajectory-hint arc (a `GhostLine`-style polyline sampled from the
   same integration) or it will frustrate on touch.

@@ -83,6 +83,31 @@ export const SOLDIER_SMG: WeaponSpec = {
   projectile: 'bolt',
 }
 
+/** The player's hitscan laser: the whole origin→maxRange segment resolves on
+ * the spawn frame (`fireHitscan`), so `speed` is nominal (it only sets the SFX
+ * character). Balanced by HEAT, not fire rate — but the cooldown is a real
+ * fire *tick* (never 0: a per-frame trigger would make DPS and heat gain
+ * frame-rate-dependent and the e2e nondeterministic). */
+export const LASER: WeaponSpec = {
+  kind: 'laser',
+  speed: 300,
+  cooldown: 0.09,
+  gravity: 0,
+  maxRange: 80,
+  tracerLen: 0,
+}
+
+/** The persisted weapon-picker ids (crate pickups reuse the same ids). */
+export type WeaponId = 'bolt' | 'laser'
+
+export const WEAPON_SPECS: Record<WeaponId, WeaponSpec> = {
+  bolt: BOLT,
+  laser: LASER,
+}
+
+export const coerceWeapon = (v: unknown): WeaponId | undefined =>
+  v === 'bolt' || v === 'laser' ? v : undefined
+
 export const MAX_PLAYER_PROJECTILES = 24
 export const MAX_ENEMY_PROJECTILES = 16
 
@@ -107,6 +132,10 @@ export interface CombatState {
   cooldown: number
   shots: number
   hits: number
+  /** Laser heat, 0–100. Each shot adds HEAT_PER_SHOT; cools when not firing. */
+  heat: number
+  /** Latched at 100 heat — the gun is offline until heat falls to HEAT_RESET. */
+  overheated: boolean
 }
 
 function createProjectile(): Projectile {
@@ -128,6 +157,8 @@ export function createCombatState(): CombatState {
     cooldown: 0,
     shots: 0,
     hits: 0,
+    heat: 0,
+    overheated: false,
   }
 }
 
@@ -136,12 +167,49 @@ export function resetCombatState(c: CombatState): void {
   c.cooldown = 0
   c.shots = 0
   c.hits = 0
+  c.heat = 0
+  c.overheated = false
 }
 
 /** Despawn every bolt in flight (wave transitions) — stats stay. */
 export function clearProjectiles(c: CombatState): void {
   for (const p of c.player) p.active = false
   for (const p of c.enemy) p.active = false
+}
+
+/* -------------------------------- heat ---------------------------------- */
+
+/** Heat added per laser shot. */
+export const HEAT_PER_SHOT = 7
+/** Cooling rate, heat units/s (always cooling — firing just outpaces it). */
+export const HEAT_COOL = 26
+export const HEAT_MAX = 100
+/** The overheat latch clears once heat falls back to this (hysteresis, the
+ * battery-revive pattern — no flickering at the threshold). */
+export const HEAT_RESET = 30
+
+export type HeatEvent = 'overheated' | 'ready'
+
+/** One laser shot's heat. Returns 'overheated' the instant the latch trips. */
+export function addHeat(c: CombatState): HeatEvent | null {
+  c.heat = Math.min(HEAT_MAX, c.heat + HEAT_PER_SHOT)
+  if (c.heat >= HEAT_MAX && !c.overheated) {
+    c.overheated = true
+    return 'overheated'
+  }
+  return null
+}
+
+/** Cool the gun each frame; clears the overheat latch at HEAT_RESET and
+ * reports 'ready' once (the battery-event pattern — the caller banners it). */
+export function stepHeat(c: CombatState, dt: number): HeatEvent | null {
+  if (c.heat <= 0) return null
+  c.heat = Math.max(0, c.heat - HEAT_COOL * dt)
+  if (c.overheated && c.heat <= HEAT_RESET) {
+    c.overheated = false
+    return 'ready'
+  }
+  return null
 }
 
 /** Anything a bolt can hit: targets and (for enemy fire) the player drone. */
@@ -343,6 +411,147 @@ export function stepProjectiles(
     }
     if (p.age >= p.maxAge) p.active = false
   }
+}
+
+/* ------------------------------- hitscan -------------------------------- */
+
+/** A hitscan shot's outcome — a caller-owned scratch object (mutate in place,
+ * allocation-free). At most ONE hit per shot, so no event ring: the rig feeds
+ * this straight through its shared player-hit consequence path, and the beam
+ * renderer uses (x, y, z) as the beam end point. */
+export interface HitscanResult {
+  /** 'target' | 'world', or null when the beam flew out to maxRange. */
+  hit: 'target' | 'world' | null
+  /** Index into the targets array for a 'target' hit; -1 otherwise. */
+  targetIdx: number
+  /** Beam end: the impact point, or origin + dir·maxRange on a miss. */
+  x: number
+  y: number
+  z: number
+}
+
+export function createHitscanResult(): HitscanResult {
+  return { hit: null, targetIdx: -1, x: 0, y: 0, z: 0 }
+}
+
+/** Scratch segment endpoints reused by every hitscan (allocation-free). */
+const SCAN_FROM: Vec3 = { x: 0, y: 0, z: 0 }
+const SCAN_TO: Vec3 = { x: 0, y: 0, z: 0 }
+
+/**
+ * Fire a hitscan weapon: resolve the ENTIRE origin → origin + dir·maxRange
+ * segment on the spawn frame through the exact tests `stepProjectiles` sweeps
+ * a moving bolt with (building slabs, ground plane, alive target spheres) —
+ * earliest hit wins. Writes the outcome into `out` and returns it.
+ */
+export function fireHitscan(
+  origin: Vec3,
+  dir: Vec3,
+  weapon: WeaponSpec,
+  colliders: readonly Collider[],
+  targets: readonly Hittable[],
+  out: HitscanResult,
+): HitscanResult {
+  SCAN_FROM.x = origin.x
+  SCAN_FROM.y = origin.y
+  SCAN_FROM.z = origin.z
+  SCAN_TO.x = origin.x + dir.x * weapon.maxRange
+  SCAN_TO.y = origin.y + dir.y * weapon.maxRange
+  SCAN_TO.z = origin.z + dir.z * weapon.maxRange
+
+  let bestT = Infinity
+  let bestKind: 'target' | 'world' = 'world'
+  let bestIdx = -1
+
+  const tWorld = boomClipT(SCAN_FROM, SCAN_TO, colliders)
+  if (tWorld < 1) bestT = tWorld
+  if (SCAN_TO.y <= 0 && SCAN_FROM.y > 0) {
+    const tGround = SCAN_FROM.y / (SCAN_FROM.y - SCAN_TO.y)
+    if (tGround < bestT) bestT = tGround
+  }
+  for (let i = 0; i < targets.length; i++) {
+    const t = targets[i]
+    if (!t.alive) continue
+    const hitT = segmentSphereT(SCAN_FROM, SCAN_TO, t.pos.x, t.pos.y, t.pos.z, t.radius)
+    if (hitT < bestT) {
+      bestT = hitT
+      bestKind = 'target'
+      bestIdx = i
+    }
+  }
+
+  const hit = bestT <= 1
+  const t = hit ? bestT : 1
+  out.hit = hit ? bestKind : null
+  out.targetIdx = hit && bestKind === 'target' ? bestIdx : -1
+  out.x = SCAN_FROM.x + (SCAN_TO.x - SCAN_FROM.x) * t
+  out.y = SCAN_FROM.y + (SCAN_TO.y - SCAN_FROM.y) * t
+  out.z = SCAN_FROM.z + (SCAN_TO.z - SCAN_FROM.z) * t
+  return out
+}
+
+/* ----------------------------- laser beams ------------------------------ */
+
+/** Seconds a fired laser beam stays visible (fading by thickness). */
+export const BEAM_LIFE = 0.12
+/** Concurrent visible beams — at the laser's ~11 shots/s tick, 4 suffice;
+ * spares keep ring overwrites invisible. */
+export const MAX_BEAMS = 8
+
+/** One fired beam: a start→end segment + its age. Plain mutable slots the rig
+ * writes (`spawnLaserBeam`) and the LaserBeams renderer ages — the aimRefs
+ * pattern (zero React renders). */
+export interface LaserBeam {
+  active: boolean
+  sx: number
+  sy: number
+  sz: number
+  ex: number
+  ey: number
+  ez: number
+  age: number
+}
+
+export function createLaserBeams(): LaserBeam[] {
+  return Array.from({ length: MAX_BEAMS }, () => ({
+    active: false,
+    sx: 0,
+    sy: 0,
+    sz: 0,
+    ex: 0,
+    ey: 0,
+    ez: 0,
+    age: 0,
+  }))
+}
+
+/** Queue a beam from the muzzle to the hitscan end point (ring overwrite —
+ * the oldest slot is recycled when all are live). */
+export function spawnLaserBeam(
+  beams: LaserBeam[],
+  sx: number,
+  sy: number,
+  sz: number,
+  ex: number,
+  ey: number,
+  ez: number,
+): void {
+  let slot = beams[0]
+  for (const b of beams) {
+    if (!b.active) {
+      slot = b
+      break
+    }
+    if (b.age > slot.age) slot = b
+  }
+  slot.active = true
+  slot.sx = sx
+  slot.sy = sy
+  slot.sz = sz
+  slot.ex = ex
+  slot.ey = ey
+  slot.ez = ez
+  slot.age = 0
 }
 
 /* ------------------------------ aim assist ------------------------------ */

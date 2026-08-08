@@ -20,7 +20,7 @@ import SettingsBackupRestoreIcon from '@mui/icons-material/SettingsBackupRestore
 import { useAppDispatch } from '../../../app/hooks'
 import { updateWidgetData } from '../../../features/widgets/widgetsSlice'
 import type { FlightMode, Weather } from '../droneSim/flightModel'
-import type { AimAssistLevel } from './combatModel'
+import type { AimAssistLevel, WeaponId } from './combatModel'
 import type { GyroMode } from './gyroAim'
 import { gyroNeedsPermission, gyroSupported, requestGyroPermission } from './gyroAim'
 import type { AimMode } from './gimbalModel'
@@ -89,6 +89,7 @@ export default function StrikeSettingsPanel({
   turbo,
   audio,
   zoomPower,
+  weapon,
   onNewWorld,
   onResetDefaults,
 }: {
@@ -112,6 +113,7 @@ export default function StrikeSettingsPanel({
   turbo: boolean
   audio: boolean
   zoomPower: ZoomPower
+  weapon: WeaponId
   onNewWorld: () => void
   onResetDefaults: () => void
 }) {
@@ -166,6 +168,30 @@ export default function StrikeSettingsPanel({
               </ToggleButton>
               <ToggleButton value="hard" data-testid="strike-difficulty-hard">
                 Hard
+              </ToggleButton>
+            </ToggleButtonGroup>
+          </ListItem>
+          <ListItem disableGutters sx={{ py: 0.5 }}>
+            <ListItemText
+              primary="Weapon"
+              secondary="Bolt: the classic tracer gun. Laser: instant hitscan beam, no travel time — but it heats up; overheat and it goes offline until it cools."
+              slotProps={{ primary: { sx: { fontWeight: 600 } }, secondary: { sx: { fontSize: 12 } } }}
+            />
+            <ToggleButtonGroup
+              size="small"
+              exclusive
+              data-testid="strike-weapon"
+              value={weapon}
+              onChange={(_, v) => {
+                if (v) set({ weapon: v as WeaponId })
+              }}
+              sx={{ ml: 1.5, flexShrink: 0 }}
+            >
+              <ToggleButton value="bolt" data-testid="strike-weapon-bolt">
+                Bolt
+              </ToggleButton>
+              <ToggleButton value="laser" data-testid="strike-weapon-laser">
+                Laser
               </ToggleButton>
             </ToggleButtonGroup>
           </ListItem>

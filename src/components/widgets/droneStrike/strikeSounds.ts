@@ -8,7 +8,18 @@ import { noise, tone } from '../droneSim/webAudio'
 import type { TargetKind } from './waveLayout'
 
 /** The distinct effects, mirrored by the widget's `data-sfx-*` counters. */
-export type SfxKind = 'fire' | 'pop' | 'hit' | 'alert' | 'clear' | 'crash'
+export type SfxKind = 'fire' | 'pop' | 'hit' | 'alert' | 'clear' | 'crash' | 'zap'
+
+/** Hitscan laser shot — a bright upward zip, distinct from the bolt chirp
+ * (the cooldown-pitched `playFire` would sound wrong at the laser's tick). */
+export function playZap(): void {
+  tone({ freq: 1400, sweepTo: 2200, dur: 0.06, type: 'sawtooth', gain: 0.1 })
+}
+
+/** Overheat buzzer — the gun going offline (latch trip). */
+export function playOverheat(): void {
+  tone({ freq: 220, sweepTo: 110, dur: 0.35, type: 'square', gain: 0.16 })
+}
 
 /** Bolt zap — a fast downward chirp. Pitched by the weapon cooldown: a
  * snappier weapon (short cooldown) chirps higher, a heavy one lower. */
