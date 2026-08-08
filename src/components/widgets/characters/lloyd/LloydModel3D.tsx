@@ -456,18 +456,19 @@ export default function LloydModel3D({ action }: { action?: string }) {
         <cylinderGeometry args={[0.19, 0.19, 0.34, 14]} />
         <meshStandardMaterial color={LL.lime} {...CLOTH} />
       </mesh>
-      {/* black EYE MASK — a front-only patch around the eyes (the head and
-          headgear stay lime from the sides and back, like the 2D art); the
-          yellow serpent-eye slits ride on it */}
-      <mesh position={[0, 1.52, 0.13]}>
-        <boxGeometry args={[0.3, 0.11, 0.1]} />
+      {/* black EYE MASK — a front-only patch covering the eyes AND the nose
+          area down to the green mouth-guard, like the 2D art's black face
+          panel (the head and headgear stay lime from the sides and back);
+          the yellow serpent-eye slits ride on it */}
+      <mesh position={[0, 1.495, 0.15]}>
+        <boxGeometry args={[0.3, 0.17, 0.1]} />
         <meshStandardMaterial color={LL.black} {...CLOTH} />
       </mesh>
-      <mesh position={[-0.075, 1.52, 0.185]} rotation-z={-0.15}>
+      <mesh position={[-0.075, 1.52, 0.21]} rotation-z={-0.15}>
         <boxGeometry args={[0.08, 0.032, 0.02]} />
         <meshStandardMaterial color={LL.eyeYellow} roughness={0.3} />
       </mesh>
-      <mesh position={[0.075, 1.52, 0.185]} rotation-z={0.15}>
+      <mesh position={[0.075, 1.52, 0.21]} rotation-z={0.15}>
         <boxGeometry args={[0.08, 0.032, 0.02]} />
         <meshStandardMaterial color={LL.eyeYellow} roughness={0.3} />
       </mesh>
