@@ -261,7 +261,8 @@ is a **kamikaze chaser** — orange beacon, lurks on orbit then pursues at a
 capped `boomClipT`-clipped speed and detonates on contact for a heart;
 shooting it early pays bonus points; from wave 2 **jet-trooper flying
 gunners** — the Jet Trooper avatar `Model3D` airborne via the shared
-`ModelTargets`/`aimRef` seams, hover-strafing on the seeded drift and firing
+`ModelTargets`/`aimRef` seams, hover-strafing on the seeded drift — or,
+from wave 4, flying fast strafing runs above the skyline — and firing
 a beam through the turret AI) plus deck-level ground targets (road-bound
 moving military trucks + SWAT cars from wave 1 + static AA turrets, all
 rendered from Model Viewer models via the shared `ModelTargets` pool) plus

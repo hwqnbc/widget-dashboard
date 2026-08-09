@@ -79,8 +79,11 @@ export default function JetTargets({
         cur += d * 0.2
         yawState[slot] = cur
         g.rotation.y = cur
-        // Hang the figure on its air hit-sphere (the model bobs itself).
+        // Hang the figure on its air hit-sphere (the model bobs itself),
+        // leaning forward with speed — a hoverer stays near-level, a
+        // strafer mid-pass reads as a diving run (the chaser-tilt recipe).
         g.position.y = t.pos.y - TORSO_LIFT
+        g.rotation.x = Math.min(0.4, speed * 0.03)
         const aim = aimRefs[slot].current
         if (aim) {
           aim.pitch = Math.atan2(dy, Math.hypot(dx, dz))

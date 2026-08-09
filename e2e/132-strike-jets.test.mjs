@@ -11,10 +11,13 @@
  */
 import { addStrikeWidget, createStrikePilot, launch, reporter, setStrikeAssist, setStrikeSwitch, strikeReaders, waitForWaveState } from './helpers.mjs'
 import { buildWorldLayout, DEFAULT_SEED } from './.bundle/worldLayout.js'
+import { WORLD_HALF } from './.bundle/flightModel.js'
 import {
   DIFFICULTY,
+  JET_STRAFER_POINTS,
   JET_WAVE,
   POINTS,
+  STRAFER_FROM_WAVE,
   buildWave,
   createTargetStates,
   loadWave,
@@ -53,10 +56,35 @@ check('every jet is seeded airborne with a strafe envelope',
         (t.driftAxis === 0 || t.driftAxis === 2),
     ),
   `jets=${jetsAll.length}`)
+
+// --- pure: the strafing-run variant (from STRAFER_FROM_WAVE the LAST jet) ---
+check('waves before STRAFER_FROM_WAVE are all-hoverer',
+  [2, 3].every((w) => jetsOf(w).every((t) => (t.variant ?? 0) === 0)) && STRAFER_FROM_WAVE === 4)
+check('from STRAFER_FROM_WAVE the LAST jet of each wave is the one strafer',
+  [4, 5, 6, 8].every((w) => {
+    const jets = jetsOf(w)
+    return jets.filter((t) => t.variant === 1).length === 1 && jets[jets.length - 1].variant === 1
+  }))
+const strafers = [4, 5, 6, 7, 8].flatMap((w) => jetsOf(w)).filter((t) => t.variant === 1)
+const maxRoofH = layout.buildings.reduce((m, b) => Math.max(m, b.h), 0)
+check('a strafer runs a LONG lane above the skyline',
+  strafers.every((t) => t.driftAmp >= 16 && t.y > maxRoofH),
+  `roofs<=${maxRoofH.toFixed(1)} strafer y=${strafers[0]?.y.toFixed(1)} amp=${strafers[0]?.driftAmp.toFixed(1)}`)
+check('the whole run fits inside the world',
+  strafers.every((t) => {
+    const anchor = t.driftAxis === 0 ? t.x : t.z
+    return Math.abs(anchor) + t.driftAmp <= WORLD_HALF - 2 + 1e-6
+  }))
+check('a strafer pays more than a hoverer',
+  strafers.every((t) => t.points === JET_STRAFER_POINTS) && JET_STRAFER_POINTS > POINTS.jet)
+check('hoverers keep their short validated envelope',
+  jetsAll.filter((t) => (t.variant ?? 0) === 0).every((t) => t.driftAmp <= 5 + 1e-6))
 check('jet hp follows the difficulty preset',
   jetsOf(3, 'easy').every((t) => t.hp === DIFFICULTY.easy.enemyHp) &&
     jetsOf(3, 'normal').every((t) => t.hp === DIFFICULTY.normal.enemyHp))
-check('a jet pays its own points', jetsAll.every((t) => t.points === POINTS.jet) && POINTS.jet > POINTS.enemy)
+check('a hoverer pays its own points',
+  jetsAll.filter((t) => (t.variant ?? 0) === 0).every((t) => t.points === POINTS.jet) &&
+    POINTS.jet > POINTS.enemy)
 
 // --- pure: the gallery trim funds the jets ---
 const galleryOf = (w) =>
@@ -95,6 +123,46 @@ check('the jet block sits after the difficulty-independent draws',
   check('a jet strafes its horizontal axis inside the validated envelope',
     maxAlong > 0.5 && maxAlong <= jet.driftAmp + 1e-6, `along=${maxAlong.toFixed(2)}/${jet.driftAmp.toFixed(2)}`)
   check('…and never leaves its altitude or cross axis', crossDrift < 1e-9)
+}
+
+// --- pure: the pass profile through the real stepDrift ---
+{
+  const states = createTargetStates()
+  loadWave(states, wavesOf(5))
+  const strafer = states.find((t) => t.alive && t.kind === 'jet' && t.variant === 1)
+  const x0 = strafer.pos.x
+  const y0 = strafer.pos.y
+  const z0 = strafer.pos.z
+  let peak = 0
+  let trough = Infinity
+  let lo = Infinity
+  let hi = -Infinity
+  let offAxis = 0
+  let prev = null
+  const frames = Math.ceil(((2 * Math.PI) / strafer.driftSpeed) * 60) + 60 // one full cycle
+  for (let i = 0; i <= frames; i++) {
+    stepDrift(strafer, i / 60)
+    const along = strafer.driftAxis === 0 ? strafer.pos.x : strafer.pos.z
+    if (prev !== null) {
+      const v = Math.abs(along - prev) * 60
+      peak = Math.max(peak, v)
+      trough = Math.min(trough, v)
+    }
+    prev = along
+    lo = Math.min(lo, along)
+    hi = Math.max(hi, along)
+    offAxis = Math.max(
+      offAxis,
+      Math.abs(strafer.pos.y - y0),
+      Math.abs(strafer.driftAxis === 0 ? strafer.pos.z - z0 : strafer.pos.x - x0),
+    )
+  }
+  check('a strafer streaks mid-pass and stalls into the turnaround',
+    peak >= 8 && trough < 1,
+    `peak=${peak.toFixed(1)}u/s trough=${trough.toFixed(2)}`)
+  check('the pass spans the full run', hi - lo > 1.8 * strafer.driftAmp,
+    `span=${(hi - lo).toFixed(1)} amp=${strafer.driftAmp.toFixed(1)}`)
+  check('the run never leaves its lane (altitude + cross axis frozen)', offAxis < 1e-9)
 }
 
 // --- pure: beam fire through the real stepTurret ---

@@ -46,7 +46,8 @@ export interface TargetSpec {
   /** Per-kind sub-type. Soldier: 0 = rocket (Bazooka Joe), 1 = SMG (Scar) —
    * drives both the weapon fired (StrikeRig) and the rendered model
    * (SoldierTargets), so the two always agree. Enemy: 0 = orbiter, 1 =
-   * kamikaze CHASER (pursues + rams; see enemyAI). Undefined / 0 elsewhere. */
+   * kamikaze CHASER (pursues + rams; see enemyAI). Jet: 0 = hoverer, 1 =
+   * STRAFER (long fast passes above the skyline). Undefined / 0 elsewhere. */
   variant?: 0 | 1
   /** Soldier patrol shape: 0 = line (paces back & forth along `routeAngle`),
    * 1 = loop (circles the anchor at radius `driftAmp`). Undefined / 0 for
@@ -116,6 +117,13 @@ export const ENEMY_FIRE_WAVE = 5
  * appear from this wave — the opening wave stays jet-free so the sky reads
  * as drones-only while the basics are taught. */
 export const JET_WAVE = 2
+/** From this wave the LAST jet of each wave is a STRAFER (`variant: 1`) —
+ * instead of hovering near an anchor it flies long fast passes above the
+ * skyline (a stretched sinusoid line: quick through the middle, turning at
+ * the ends). Harder to hit, so it pays more. */
+export const STRAFER_FROM_WAVE = 4
+/** Points for the strafing-run jet (a hoverer pays POINTS.jet). */
+export const JET_STRAFER_POINTS = 40
 /** Military supply trucks (moving road vehicles) appear from this wave. */
 export const GROUND_WAVE_START = 1
 /** Moving cars (road-bound) appear from this wave — from the very first
@@ -426,28 +434,79 @@ export function buildWave(
   }
 
   // Jet-trooper flying gunners (JET_WAVE+): the Jet Trooper avatar airborne.
-  // Seeded through the same air path as the gallery (`place()` validates the
-  // whole drift envelope against the buildings); the drift fields carry a
-  // horizontal sinusoid strafe (stepDrift's generic branch — jets are NOT in
-  // its enemy exclusion, the sinusoid IS their flight), and the rig fires
-  // their beam via stepTurret like a flying turret. Difficulty-gated
-  // (enemyCap clamp + hp), so this block sits after the difficulty-
-  // independent trucks/cars (lesson #54).
+  // Two behaviours, both stepDrift's generic sinusoid (jets are NOT in its
+  // enemy exclusion — the sinusoid IS their flight), both firing the beam
+  // via stepTurret like a flying turret. Difficulty-gated (enemyCap clamp +
+  // hp), so this block sits after the difficulty-independent trucks/cars
+  // (lesson #54). From STRAFER_FROM_WAVE the LAST jet of the wave is a
+  // STRAFER (variant 1, index-derived — the chaser pattern): a stretched
+  // sinusoid (amp 16–22) is a strafing RUN — fast through the middle
+  // (peak amp·speed ≈ 9–15 u/s), decelerating into a turnaround at each
+  // end. place()'s square envelope can never clear a 20 u amp between
+  // buildings, so strafers fly ABOVE THE SKYLINE (maxRoofH + 2..4) on a
+  // bespoke seeded lane — bounds + spawn-distance checked, no building
+  // test needed up there. Hoverers keep the place() air path (validated
+  // 3–5 u envelope) byte-identically.
   const jets =
     waveIndex >= JET_WAVE
       ? Math.min(1 + Math.floor((waveIndex - JET_WAVE) / 3), 2, diff.enemyCap)
       : 0
+  const maxRoofH = layout.buildings.reduce((m, b) => Math.max(m, b.h), 0)
   for (let i = 0; i < jets; i++) {
-    place({
-      kind: 'jet',
-      radius: 0.9,
-      driftAmp: 3 + rand() * 2,
-      driftSpeed: 0.5 + rand() * 0.4,
-      driftPhase: rand() * Math.PI * 2,
-      driftAxis: (i % 2 === 0 ? 0 : 2) as 0 | 2,
-      hp: diff.enemyHp,
-      points: POINTS.jet,
-    })
+    const strafer = waveIndex >= STRAFER_FROM_WAVE && i === jets - 1
+    if (strafer) {
+      if (targets.length >= MAX_TARGETS) break
+      const amp = 16 + rand() * 6
+      const speed = 0.55 + rand() * 0.25
+      const phase = rand() * Math.PI * 2
+      const axis = (i % 2 === 0 ? 0 : 2) as 0 | 2
+      const y = maxRoofH + 2 + rand() * 2
+      // Seed the run's anchor: the whole line inside the world, the anchor
+      // itself clear of the spawn; deterministic centre-lane fallback.
+      let ax = 0
+      let az = 0
+      let placed = false
+      for (let a = 0; a < 20 && !placed; a++) {
+        const cand = (rand() * 2 - 1) * (WORLD_HALF - 2 - amp)
+        const cross = (rand() * 2 - 1) * (WORLD_HALF - 8)
+        const x = axis === 0 ? cand : cross
+        const z = axis === 0 ? cross : cand
+        if (Math.hypot(x - SPAWN.x, z - SPAWN.z) < MIN_FROM_SPAWN) continue
+        ax = x
+        az = z
+        placed = true
+      }
+      if (!placed) {
+        ax = axis === 0 ? 0 : WORLD_HALF / 2
+        az = axis === 0 ? WORLD_HALF / 2 : 0
+      }
+      targets.push({
+        kind: 'jet',
+        x: ax,
+        y,
+        z: az,
+        radius: 0.9,
+        driftAmp: amp,
+        driftSpeed: speed,
+        driftPhase: phase,
+        driftAxis: axis,
+        hp: diff.enemyHp,
+        points: JET_STRAFER_POINTS,
+        variant: 1,
+      })
+    } else {
+      place({
+        kind: 'jet',
+        radius: 0.9,
+        driftAmp: 3 + rand() * 2,
+        driftSpeed: 0.5 + rand() * 0.4,
+        driftPhase: rand() * Math.PI * 2,
+        driftAxis: (i % 2 === 0 ? 0 : 2) as 0 | 2,
+        hp: diff.enemyHp,
+        points: POINTS.jet,
+        variant: 0,
+      })
+    }
   }
 
   // AA turrets (TURRET_WAVE+): static ground enemies that fire back up.

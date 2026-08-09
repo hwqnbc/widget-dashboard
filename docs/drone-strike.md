@@ -140,7 +140,7 @@ Normal 5, Hard 4). So wave 1 is a gentle full-variety wave, not a bare gallery.
 | 1 | the full mix, gentle: static balloons + drifting ring-drones + a moving military truck + a moving SWAT car + **1 throttled, non-firing enemy drone** + **1 non-firing AA turret** + **1 non-firing rooftop-patrol soldier** |
 | 2–4 | same kinds, ramping — more/faster enemies (throttle climbs), more road vehicles, up to 2 turrets, up to 2 soldiers (rooftop pacers + a ground patrol from wave 3); **a flying jet-trooper gunner from wave 2**; **from wave 3 the last enemy of every wave is a kamikaze chaser** |
 | 5+ | enemies + turrets + soldiers return fire (Normal/Hard; Easy at 7); enemy throttle at full; player has 3 HP per wave attempt |
-| scaling | more/smaller balloons (gallery cap 6 — trimmed to fund the jets), up to 4 enemies, **up to 2 jet troopers**, 4 trucks + 3 cars + 2 turrets + 3 patrolling soldiers (rooftop + ground), `MAX_TARGETS` 28 |
+| scaling | more/smaller balloons (gallery cap 6 — trimmed to fund the jets), up to 4 enemies, **up to 2 jet troopers (the last a skyline strafer from wave 4)**, 4 trucks + 3 cars + 2 turrets + 3 patrolling soldiers (rooftop + ground), `MAX_TARGETS` 28 |
 
 **Ground targets** (unlocked by the gimbal's −70° look-down): deck-level
 kinds mixed into the gallery. **Military supply trucks** (`ground`, 20 pts,
@@ -346,8 +346,23 @@ strafing and snaps to the player while firing (the soldier arbitration);
 30 points, hp by difficulty. The gallery was trimmed (`min(2+wave, 6)`,
 was `3+wave/8`) to fund the airspace.
 
+From `STRAFER_FROM_WAVE` (4) the **last jet of each wave is a strafing-run
+variant** (`variant: 1`, **40 points** — harder to hit, pays more): instead
+of hovering it flies **long fast passes above the skyline**. No new
+movement code — a *stretched* sinusoid IS a strafing run (amp 16–22 u:
+peak `amp·driftSpeed` ≈ 9–15 u/s through the middle, decelerating into a
+natural turnaround at each end). `place()`'s square envelope could never
+clear a 20 u amp between buildings, so strafers get a bespoke seeded lane
+at `maxRoofH + 2..4` (~19–22 u — above every roof, no building test
+needed, still comfortably flyable), bounds- and spawn-distance-checked.
+The renderer leans the figure forward with speed (`min(0.4, speed·0.03)` —
+the chaser-tilt recipe), so a streaking strafer reads as a diving pass
+while a hoverer stays near-level; wave 4 fields a lone strafer, waves 5+
+one hoverer + one strafer.
+
 Scoring: balloon 10, drifter 15, ground truck 20, enemy 25 (2 HP),
-jet trooper 30, kamikaze chaser 35, AA turret 30. Session score and wave
+jet trooper 30 (strafer 40), kamikaze chaser 35, AA turret 30. Session
+score and wave
 are runtime-only; `bestScore`/`bestWave` persist (written at wave-clear).
 Losing all HP fails the wave — banner, then the same wave restarts with
 fresh targets and HP; the session score survives (arcade-friendly). Restart
@@ -761,9 +776,9 @@ kind of list).
   jet-trooper flying gunner (the Jet Trooper avatar airborne — see
   Gameplay). Remaining: a *shielded* drone only hurt from
   behind (dot product of hit direction vs heading — the `HitEvent` already
-  carries the impact point) — one more `stepEnemy` mode; a jet-trooper
-  *strafing run* variant (a straight fast pass instead of the hover-strafe —
-  a `routeKind`-style flag on the jet block + a faster drift line).
+  carries the impact point) — one more `stepEnemy` mode. ~~A jet-trooper
+  *strafing run* variant~~ — **shipped** (the wave-4+ `variant: 1` skyline
+  strafer — see the jet-trooper section).
 - **Boss wave every 5th** — one large multi-HP drone with weak-point
   spheres (extra `Hittable`s attached to its pose) and a health bar chip.
 - **Combo scoring** — consecutive hits without a miss multiply points;
