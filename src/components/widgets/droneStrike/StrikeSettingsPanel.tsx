@@ -174,7 +174,7 @@ export default function StrikeSettingsPanel({
           <ListItem disableGutters sx={{ py: 0.5 }}>
             <ListItemText
               primary="Weapon"
-              secondary="Bolt: the classic tracer gun. Laser: instant hitscan beam, no travel time — but it heats up; overheat and it goes offline until it cools. Lob: a slow ballistic shell that arcs under gravity — follow the trajectory line. Shotgun: a 7-pellet close-range fan on a slow pump."
+              secondary="Bolt: the classic tracer gun. Laser: instant hitscan beam, no travel time — but it heats up; overheat and it goes offline until it cools. Lob: a slow ballistic shell that arcs under gravity — follow the trajectory line. Shotgun: a 7-pellet close-range fan on a slow pump. Homing: slow missiles that steer toward the target locked when you fired."
               slotProps={{ primary: { sx: { fontWeight: 600 } }, secondary: { sx: { fontSize: 12 } } }}
             />
             <ToggleButtonGroup
@@ -199,6 +199,9 @@ export default function StrikeSettingsPanel({
               </ToggleButton>
               <ToggleButton value="shotgun" data-testid="strike-weapon-shotgun">
                 Shotgun
+              </ToggleButton>
+              <ToggleButton value="homing" data-testid="strike-weapon-homing">
+                Homing
               </ToggleButton>
             </ToggleButtonGroup>
           </ListItem>

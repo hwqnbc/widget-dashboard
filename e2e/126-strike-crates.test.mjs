@@ -28,6 +28,7 @@ import {
   CRATE_FROM_WAVE,
   CRATE_PICKUP_HEIGHT,
   CRATE_RADIUS,
+  CRATE_ROTATION,
   buildWave,
   crateReached,
 } from './.bundle/waveLayout.js'
@@ -64,9 +65,11 @@ const clearOfSoldiers = specs.every((s) => {
 })
 check('no crate shares a roof with a soldier', clearOfSoldiers)
 
-// The weapon alternates by wave parity (even = laser, odd = lob).
-check('crate weapon alternates by wave parity',
-  specs.every((s, i) => !s.crate || s.crate.weapon === (waves[i] % 2 === 0 ? 'laser' : 'lob')))
+// The weapon cycles the CRATE_ROTATION (every special rotates through a run).
+check('crate weapon follows the rotation',
+  specs.every((s, i) => !s.crate || s.crate.weapon === CRATE_ROTATION[waves[i] % 4]))
+check('the rotation covers all four specials',
+  ['laser', 'lob', 'shotgun', 'homing'].every((w) => CRATE_ROTATION.includes(w)))
 
 // Crates are NOT targets: the target list is unchanged in kind terms.
 check('a crate is not a shootable target',

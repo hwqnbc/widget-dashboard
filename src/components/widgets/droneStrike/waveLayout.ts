@@ -64,8 +64,13 @@ export interface CrateSpec {
   /** Roof height the crate sits on (the disc's y). */
   top: number
   /** The weapon the crate grants. */
-  weapon: 'laser' | 'lob'
+  weapon: 'laser' | 'lob' | 'shotgun' | 'homing'
 }
+
+/** Which special the wave's crate grants, by `waveIndex % 4` — every special
+ * rotates through a run (order keeps the original wave-2 laser / wave-3 lob
+ * grants stable). */
+export const CRATE_ROTATION = ['shotgun', 'homing', 'laser', 'lob'] as const
 
 export interface WaveSpec {
   index: number
@@ -520,8 +525,8 @@ export function buildWave(
   // Rooftop weapon crate — deliberately the LAST consumers of this wave's
   // seeded stream (appending draws never moves any placement above; lesson
   // #54). From CRATE_FROM_WAVE on, put a crate on a qualifying roof no
-  // soldier pacer owns this wave; the granted weapon alternates by wave
-  // parity so both special guns rotate through a run.
+  // soldier pacer owns this wave; the granted weapon cycles CRATE_ROTATION
+  // so every special gun rotates through a run.
   let crate: CrateSpec | undefined
   if (waveIndex >= CRATE_FROM_WAVE && perches.length > 0) {
     let pick = perches[Math.floor(rand() * perches.length)]
@@ -533,7 +538,7 @@ export function buildWave(
         x: pick.b.x,
         z: pick.b.z,
         top: pick.b.h,
-        weapon: waveIndex % 2 === 0 ? 'laser' : 'lob',
+        weapon: CRATE_ROTATION[waveIndex % 4],
       }
     }
   }

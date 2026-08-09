@@ -42,6 +42,7 @@ import DroneModel from '../droneSim/DroneModel'
 import type {
   AimAssistLevel,
   CombatState,
+  CrateWeaponId,
   HeatEvent,
   HitEvent,
   LaserBeam,
@@ -113,6 +114,13 @@ const BLIP_COLORS: Record<TargetKind, string> = {
   turret: '#ff6e40',
   car: '#42a5f5',
   soldier: '#ffca28',
+}
+/** Minimap crate-marker tint per granted weapon (mirrors WeaponCrates). */
+const CRATE_BLIP: Record<CrateWeaponId, string> = {
+  laser: '#4fc3f7',
+  lob: '#ffd54f',
+  shotgun: '#ff7043',
+  homing: '#69f0ae',
 }
 /** Enemy bolts never hit other targets (no friendly fire). */
 const NO_TARGETS: TargetState[] = []
@@ -275,7 +283,7 @@ export default function StrikeRig({
    * check per frame, the landing-pad pattern). */
   crate: CrateState
   /** The player reached the crate — the body swaps the equipped weapon. */
-  onCratePickup: (weapon: 'laser' | 'lob') => void
+  onCratePickup: (weapon: CrateWeaponId) => void
   /** Minimap crate marker — position/colour/visibility written on the tick. */
   minimapCrateRef: RefObject<SVGRectElement | null>
   /** Heat latch tripped / cleared (the body banners it, battery-style). */
@@ -747,7 +755,11 @@ export default function StrikeRig({
         let spawned = false
         for (let i = 0; i < pellets; i++) {
           const d = pellets > 1 ? pelletDir(fireDir, i, weapon.spread ?? 0, pellet) : fireDir
-          if (spawnProjectile(combat.player, muzzle, d, weapon)) spawned = true
+          // A homing weapon remembers the lock it was fired under (steered
+          // in stepProjectiles); everything else flies dumb.
+          if (spawnProjectile(combat.player, muzzle, d, weapon, weapon.homing ? lockIdx : -1)) {
+            spawned = true
+          }
         }
         if (spawned) {
           combat.cooldown = weapon.cooldown
@@ -968,7 +980,7 @@ export default function StrikeRig({
         if (crate.active) {
           crateMarker.setAttribute('x', (crate.x - 1.5).toFixed(1))
           crateMarker.setAttribute('y', (crate.z - 1.5).toFixed(1))
-          crateMarker.setAttribute('fill', crate.weapon === 'laser' ? '#4fc3f7' : '#ffd54f')
+          crateMarker.setAttribute('fill', CRATE_BLIP[crate.weapon])
           crateMarker.removeAttribute('display')
         } else {
           crateMarker.setAttribute('display', 'none')

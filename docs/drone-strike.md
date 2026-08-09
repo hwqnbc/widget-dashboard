@@ -436,13 +436,15 @@ so three.js stays out of the main chunk),
 `EnemyDrones`
 (≤4 `DroneModel`s with red beacons, slot-assigned per frame), `Tracers`
 (one InstancedMesh for all bolts, oriented along velocity — skips
-rocket-`visual` enemy shots), `EnemyRockets`
-(soldier rockets: a warhead + exhaust per active `visual: 'rocket'` enemy
-projectile oriented along velocity, plus a **persistent world-space smoke
-contrail** — one `<points>` cloud, single draw call, puffs dropped at the
-positions the rocket flew through and left hanging in the air, fading + growing
-by age via a tiny inline `alpha`-attribute shader; keyed by the stable
-enemy-pool index so a reused slot resets its own trail),
+rocket-`visual` shots in both pools), `EnemyRockets`
+(**pool-generic despite the name** — mounted once for the enemy pool
+(soldier RPGs) and once for the player pool (homing missiles): a warhead +
+exhaust per active `visual: 'rocket'` projectile oriented along velocity,
+plus a **persistent world-space smoke contrail** — one `<points>` cloud per
+mount, single draw call, puffs dropped at the positions the rocket flew
+through and left hanging in the air, fading + growing by age via a tiny
+inline `alpha`-attribute shader; keyed by the stable pool index so a reused
+slot resets its own trail),
 `SparkField`
 (muzzle flashes + impact showers: the pure `sparkModel.ts` pool — a fixed ring
 of `SPARK_BURSTS` bursts × `SPARK_PER` particles in flat arrays, spawned by
@@ -511,12 +513,26 @@ persisted `weapon` field, root `data-weapon`) selects among `WEAPON_SPECS`:
   meaningful. The fan is generic spec config (`pellets`/`spread` on
   `WeaponSpec`) — any future weapon can fan.
 
+- **`homing`** — slow (20 u/s) missiles wearing the full rocket visual
+  (warhead + smoke contrail) that **steer toward the target locked at fire
+  time**: `spawnProjectile` stores the lock as `Projectile.targetIdx` and
+  `stepProjectiles` turns the velocity toward it each frame, capped at the
+  spec's `homing` rate (1.8 rad/s, constant speed, an nlerp of the direction)
+  — so a hard-strafing enemy can still shake one. Fired without a lock (or
+  once the target dies, which releases the lock) it flies straight. Heavy
+  1.3 s cadence balances the tracking; the steering seam is generic spec
+  config (`homing` on `WeaponSpec`) and the targets array was already
+  threaded through the integrator.
+
 **Rooftop weapon crates** put the special guns *in the game*: from wave 2, a
 pulsing disc + crate + beacon column (`WeaponCrates`, the LandingPads recipe,
 cyan for laser / amber for lob) sits on a qualifying rooftop no soldier pacer
 owns, seeded as the **last** consumers of the wave's RNG stream (appending
 draws keeps every existing placement identical — the seed-stability lesson);
-the granted weapon alternates by wave parity. A crate is **not a target** — it
+the granted weapon cycles `CRATE_ROTATION` (`waveIndex % 4`:
+shotgun/homing/laser/lob, ordered to keep the original wave-2 laser / wave-3
+lob grants stable) so every special rotates through a run — disc/beacon and
+minimap-marker colours are per-weapon (cyan/amber/ember/green). A crate is **not a target** — it
 lives beside the target list as `WaveSpec.crate` (not a `TargetKind`, so it's
 unshootable and never counts toward the wave clear). Fly onto the disc
 (`crateReached`, one distance check per frame — the landing-pad pattern; the
@@ -528,6 +544,8 @@ losing all hearts (wave failed) or restarting clears it back to the settings
 pick; a failed-wave retry does NOT keep it (that's the price of the wipe). The
 HUD publishes a crate beacon (`data-crate-active/-x/-z/-weapon`) and the
 minimap draws a small weapon-coloured square so the crate can be found.
+Pickup banners: LASER ONLINE / LOB CANNON ONLINE / SHOTGUN ONLINE /
+MISSILES ONLINE.
 
 **Switching weapons despawns in-flight player bolts** and starts the new gun
 cold — `stepProjectiles` sweeps the pool with the *current* spec, so a live
@@ -556,7 +574,8 @@ equipped), joysticks/buttons/settings testids mirror the sim's.
 
 E2E: suites `100-strike-core` … `109-strike-ground` plus `117-strike-audio`,
 `119-strike-soldiers`, `123-strike-sparks`, `124-strike-laser`,
-`125-strike-lob`, `126-strike-crates` and `127-strike-shotgun`
+`125-strike-lob`, `126-strike-crates`, `127-strike-shotgun` and
+`128-strike-homing`
 (see `e2e/README.md`); pure modules are esbuild-bundled for the suites in a
 second flat pass in `run.mjs`.
 
@@ -594,9 +613,9 @@ kind of list).
   per-wave rooftop crates: `WaveSpec.crate` seeded last in the stream,
   `crateReached` pickup, `effectiveWeapon = crate ?? settings` kept until the
   run ends — see "Player weapons"). The whole Weapons backlog is now shipped;
-  room to extend: more specs (~~shotgun spread~~ — **shipped**, see "Player
-  weapons"; homing), crate variants (shield/battery pickups), or a timed
-  power-up flavour.
+  room to extend: ~~more specs (shotgun spread, homing)~~ — **both shipped**
+  (see "Player weapons"; the crate rotation now cycles all four specials);
+  crate variants (shield/battery pickups), or a timed power-up flavour.
 - ~~Muzzle flash + impact sparks~~ — **shipped** (the pure `sparkModel.ts`
   burst pool + `SparkField` single-draw-call Points renderer: a muzzle flash
   on every shot, impact showers at `HitEvent` coordinates — targets, world,

@@ -1340,3 +1340,20 @@ carried over; these are the new ones.
     runtime state costs one interface line. And seeding it as the LAST rand()
     consumers of the wave stream keeps every existing placement byte-identical
     (the append-only seed-stability rule, #54).
+
+94. **Thread the world through your integrator early — later weapons become
+    config.** `stepProjectiles` already took the full `targets` array (for the
+    swept-sphere hit tests), so homing missiles cost only a `targetIdx` field
+    on the projectile + a capped-turn steering block INSIDE the same
+    integrator: rotate the velocity toward `targets[p.targetIdx]` by at most
+    `homing·dt` per frame (an nlerp of the direction at constant speed — no
+    quaternions, monotone, cheap) and release the lock when the target dies.
+    Likewise the shotgun was only `pellets`/`spread` fields + a pure
+    `pelletDir` fan (golden-angle azimuths — deterministic, like the spark
+    jitter) looped at the one spawn site. The e2e payoff of steering living in
+    the real integrator: the suite proves a locked missile curves onto an
+    off-axis target that the IDENTICAL unlocked shot provably misses — a
+    behavioural assertion no mock could give. And a pool renderer keyed on a
+    fixed array (`EnemyRockets`) generalizes by taking the pool as a prop and
+    sizing its buffers from `pool.length` in `useMemo` — one component now
+    draws enemy RPGs and player missiles with zero duplication.

@@ -38,7 +38,7 @@ import RichWorld from '../droneSim/RichWorld'
 import RainField from '../droneSim/RainField'
 import VirtualJoystick from '../droneSim/VirtualJoystick'
 import ConfirmDialog from '../ConfirmDialog'
-import type { AimAssistLevel, HeatEvent, WeaponId } from './combatModel'
+import type { AimAssistLevel, CrateWeaponId, HeatEvent, WeaponId } from './combatModel'
 import {
   BOLT,
   WEAPON_SPECS,
@@ -115,6 +115,14 @@ const coerceRate = clampNum(0.5, 2)
 const coerceExpo = clampNum(0, 0.8)
 
 type WavePhase = 'intro' | 'active' | 'cleared' | 'failed'
+
+/** Pickup banner per crate weapon. */
+const CRATE_BANNERS: Record<CrateWeaponId, string> = {
+  laser: 'LASER ONLINE',
+  lob: 'LOB CANNON ONLINE',
+  shotgun: 'SHOTGUN ONLINE',
+  homing: 'MISSILES ONLINE',
+}
 
 /** WAVE N banner hold before the targets spawn. */
 const INTRO_MS = 1600
@@ -211,7 +219,7 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
   const weaponId = useWidgetField<WeaponId>(id, 'weapon', 'bolt', coerceWeapon)
   // A picked-up crate weapon OVERRIDES the settings pick until the run ends
   // (lose all hearts or restart) — runtime-only, deliberately not persisted.
-  const [crateWeapon, setCrateWeapon] = useState<'laser' | 'lob' | null>(null)
+  const [crateWeapon, setCrateWeapon] = useState<CrateWeaponId | null>(null)
   const effectiveWeapon: WeaponId = crateWeapon ?? weaponId
   const weaponSpec = WEAPON_SPECS[effectiveWeapon]
   const zoomFov = zoomFovFor(zoomPower)
@@ -485,10 +493,10 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
   // Crate pickup — the rig consumed the crate; swap the equipped weapon
   // until the run ends and banner the new gun.
   const onCratePickup = useCallback(
-    (weapon: 'laser' | 'lob') => {
+    (weapon: CrateWeaponId) => {
       setCrateWeapon(weapon)
       vibrate(GATE_PULSE)
-      showBanner(weapon === 'laser' ? 'LASER ONLINE' : 'LOB CANNON ONLINE')
+      showBanner(CRATE_BANNERS[weapon])
     },
     [showBanner],
   )
@@ -844,7 +852,10 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
            * this prop (scaled), so a tracer-less weapon (laser, len 0) falls
            * back to BOLT's length to keep enemy fire visible. */}
           <Tracers combat={combat} tracerLen={weaponSpec.tracerLen > 0 ? weaponSpec.tracerLen : BOLT.tracerLen} />
-          <EnemyRockets combat={combat} />
+          {/* rocket-visual projectiles (soldier RPGs / player homing missiles)
+           * — the pool-generic warhead + contrail renderer, mounted per pool */}
+          <EnemyRockets pool={combat.enemy} />
+          <EnemyRockets pool={combat.player} />
           <SparkField sparks={sparks} />
           <LaserBeams beams={beams} />
           {effectiveWeapon === 'lob' && <TrajectoryArc aimRay={aimRay} weapon={weaponSpec} />}

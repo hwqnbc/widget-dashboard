@@ -13,11 +13,17 @@ export interface CrateState {
   /** Roof height the disc sits on (matches CrateSpec.top). */
   top: number
   z: number
-  weapon: 'laser' | 'lob'
+  weapon: 'laser' | 'lob' | 'shotgun' | 'homing'
 }
 
-/** Disc/beacon tint per granted weapon (laser cyan / lob amber). */
-const CRATE_COLORS = { laser: '#4fc3f7', lob: '#ffd54f' } as const
+/** Disc/beacon tint per granted weapon (laser cyan / lob amber / shotgun
+ * ember / homing green — mirrored by the minimap crate marker). */
+const CRATE_COLORS = {
+  laser: '#4fc3f7',
+  lob: '#ffd54f',
+  shotgun: '#ff7043',
+  homing: '#69f0ae',
+} as const
 
 /**
  * The rooftop weapon crate — the LandingPads disc recipe (circle + pulsing
@@ -31,7 +37,7 @@ export default function WeaponCrates({ crate }: { crate: CrateState }) {
   const discMat = useRef<MeshStandardMaterial>(null)
   const boxMat = useRef<MeshStandardMaterial>(null)
   const beaconMat = useRef<MeshBasicMaterial>(null)
-  const lastWeapon = useRef<'laser' | 'lob' | null>(null)
+  const lastWeapon = useRef<CrateState['weapon'] | null>(null)
 
   useFrame(({ clock }) => {
     const g = groupRef.current

@@ -2,8 +2,7 @@ import { useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { Color, Quaternion, Vector3 } from 'three'
 import type { Group, Points } from 'three'
-import type { CombatState } from './combatModel'
-import { MAX_ENEMY_PROJECTILES } from './combatModel'
+import type { Projectile } from './combatModel'
 
 const FORWARD = new Vector3(0, 0, 1)
 
@@ -12,7 +11,6 @@ const FORWARD = new Vector3(0, 0, 1)
 // over LIFETIME. PUFFS is sized so a puff ages out before the ring overwrites
 // it (PUFFS * EMIT_DIST > LIFETIME * rocket speed ≈ 16).
 const PUFFS = 24
-const CAP = MAX_ENEMY_PROJECTILES * PUFFS
 const LIFETIME = 1.1
 const EMIT_DIST = 0.7
 const DEAD_AGE = 999
@@ -53,34 +51,38 @@ const smokeFragment = /* glsl */ `
  * the rocket moves on, so the shot reads as an incoming missile you can see
  * and dodge.
  *
- * Two render passes, both keyed off the enemy projectile pool:
+ * Two render passes, both keyed off ONE projectile pool. Despite the
+ * filename, the component is pool-generic — mounted once for the enemy pool
+ * (soldier RPGs) and once for the player pool (homing missiles):
  *  - **warheads** — a fixed pool of `<group>`s compacted to active rockets
  *    (render slot shifts as rockets despawn; fine, it's a live body).
  *  - **contrail** — one `<points>` cloud (single draw call). Puffs are keyed by
- *    the **stable enemy-pool index** (NOT the render slot), so a slot reused by
+ *    the **stable pool index** (NOT the render slot), so a slot reused by
  *    a new rocket resets its own block instead of inheriting a stale trail. A
  *    tiny inline shader fades + grows each puff by a per-vertex `alpha`
  *    (`PointsMaterial` can't fade per-vertex). All buffers are pre-allocated
  *    and mutated in place — no per-frame allocation. Low-spec throughout: matte
  *    `meshStandardMaterial` + one additive-free points draw, no transmission.
  */
-export default function EnemyRockets({ combat }: { combat: CombatState }) {
+export default function EnemyRockets({ pool }: { pool: Projectile[] }) {
   const groupRefs = useRef<(Group | null)[]>([])
   const pointsRef = useRef<Points>(null)
   const temps = useMemo(() => ({ quat: new Quaternion(), dir: new Vector3() }), [])
+  const slots = pool.length
 
-  // Contrail buffers (allocated once). positions/alpha ARE the geometry
-  // attribute arrays (passed by ref below); mutate + flag needsUpdate.
+  // Contrail buffers (allocated once — the pool array identity is stable).
+  // positions/alpha ARE the geometry attribute arrays (passed by ref below);
+  // mutate + flag needsUpdate.
   const smoke = useMemo(
     () => ({
-      positions: new Float32Array(CAP * 3),
-      alpha: new Float32Array(CAP),
-      ages: new Float32Array(CAP).fill(DEAD_AGE),
-      cursor: new Uint16Array(MAX_ENEMY_PROJECTILES),
-      lastEmit: new Float32Array(MAX_ENEMY_PROJECTILES * 3),
-      wasRocket: new Uint8Array(MAX_ENEMY_PROJECTILES),
+      positions: new Float32Array(slots * PUFFS * 3),
+      alpha: new Float32Array(slots * PUFFS),
+      ages: new Float32Array(slots * PUFFS).fill(DEAD_AGE),
+      cursor: new Uint16Array(slots),
+      lastEmit: new Float32Array(slots * 3),
+      wasRocket: new Uint8Array(slots),
     }),
-    [],
+    [slots],
   )
   const uniforms = useMemo(
     () => ({ uSize: { value: 1.2 }, uColor: { value: new Color('#b0b6bc') } }),
@@ -93,8 +95,8 @@ export default function EnemyRockets({ combat }: { combat: CombatState }) {
 
     // --- warhead bodies (compacted render slots) ---
     let slot = 0
-    for (const p of combat.enemy) {
-      if (!p.active || p.visual !== 'rocket' || slot >= MAX_ENEMY_PROJECTILES) continue
+    for (const p of pool) {
+      if (!p.active || p.visual !== 'rocket' || slot >= slots) continue
       const g = groupRefs.current[slot]
       if (g) {
         g.visible = true
@@ -109,7 +111,7 @@ export default function EnemyRockets({ combat }: { combat: CombatState }) {
       }
       slot++
     }
-    for (let s = slot; s < MAX_ENEMY_PROJECTILES; s++) {
+    for (let s = slot; s < slots; s++) {
       const g = groupRefs.current[s]
       if (g) g.visible = false
     }
@@ -126,8 +128,8 @@ export default function EnemyRockets({ combat }: { combat: CombatState }) {
       lastEmit[pi * 3 + 1] = y
       lastEmit[pi * 3 + 2] = z
     }
-    for (let pi = 0; pi < MAX_ENEMY_PROJECTILES; pi++) {
-      const p = combat.enemy[pi]
+    for (let pi = 0; pi < slots; pi++) {
+      const p = pool[pi]
       const isRocket = p.active && p.visual === 'rocket'
       if (isRocket && !wasRocket[pi]) {
         // New rocket in this slot: clear any stale trail, start at the muzzle.
@@ -146,7 +148,7 @@ export default function EnemyRockets({ combat }: { combat: CombatState }) {
     }
     // Age + fade every puff (dead rockets' puffs keep fading — lingers).
     const step = Math.min(dt, 0.05)
-    for (let j = 0; j < CAP; j++) {
+    for (let j = 0; j < slots * PUFFS; j++) {
       if (ages[j] >= DEAD_AGE) {
         alpha[j] = 0
         continue
@@ -164,7 +166,7 @@ export default function EnemyRockets({ combat }: { combat: CombatState }) {
 
   return (
     <>
-      {Array.from({ length: MAX_ENEMY_PROJECTILES }, (_, i) => (
+      {Array.from({ length: slots }, (_, i) => (
         <group
           key={i}
           ref={(el) => {

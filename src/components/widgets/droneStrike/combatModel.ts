@@ -40,6 +40,9 @@ export interface WeaponSpec {
   pellets?: number
   /** Fan half-angle (radians) for multi-pellet weapons. */
   spread?: number
+  /** Max turn rate (radians/s) toward the projectile's locked target — a
+   * homing missile. 0/absent = no steering. */
+  homing?: number
 }
 
 /** The player's gun: fast enough to feel snappy, slow enough that leading
@@ -130,18 +133,39 @@ export const SHOTGUN: WeaponSpec = {
   spread: 0.09,
 }
 
+/** Homing missiles: slow rockets (drawn with the warhead + smoke-contrail
+ * visual) that STEER toward the target locked at fire time — turn rate
+ * capped at `homing` rad/s, so a hard-strafing target can still shake one.
+ * Fired without a lock they fly straight. Heavy 1.3 s cadence balances the
+ * tracking. */
+export const HOMING: WeaponSpec = {
+  kind: 'bolt',
+  speed: 20,
+  cooldown: 1.3,
+  gravity: 0,
+  maxRange: 90,
+  tracerLen: 0,
+  projectile: 'rocket',
+  homing: 1.8,
+}
+
 /** The persisted weapon-picker ids (crate pickups reuse the same ids). */
-export type WeaponId = 'bolt' | 'laser' | 'lob' | 'shotgun'
+export type WeaponId = 'bolt' | 'laser' | 'lob' | 'shotgun' | 'homing'
+/** What a crate can grant — every special (everything but the default). */
+export type CrateWeaponId = Exclude<WeaponId, 'bolt'>
 
 export const WEAPON_SPECS: Record<WeaponId, WeaponSpec> = {
   bolt: BOLT,
   laser: LASER,
   lob: LOB,
   shotgun: SHOTGUN,
+  homing: HOMING,
 }
 
 export const coerceWeapon = (v: unknown): WeaponId | undefined =>
-  v === 'bolt' || v === 'laser' || v === 'lob' || v === 'shotgun' ? v : undefined
+  v === 'bolt' || v === 'laser' || v === 'lob' || v === 'shotgun' || v === 'homing'
+    ? v
+    : undefined
 
 /** Golden angle (radians) — even ring coverage without randomness. */
 const GOLDEN = 2.399963229728653
@@ -214,6 +238,9 @@ export interface Projectile {
   /** How to draw it — set from the firing weapon's `projectile` (default
    * `'bolt'`). Lets one enemy pool render as a mix of bolts and rockets. */
   visual: ProjectileVisual
+  /** Index into the targets array a homing weapon steers toward; -1 = none
+   * (flies straight). Cleared when the target dies mid-flight. */
+  targetIdx: number
 }
 
 export interface CombatState {
@@ -238,6 +265,7 @@ function createProjectile(): Projectile {
     age: 0,
     maxAge: 0,
     visual: 'bolt',
+    targetIdx: -1,
   }
 }
 
@@ -366,10 +394,12 @@ export function spawnProjectile(
   origin: Vec3,
   dir: Vec3,
   weapon: WeaponSpec,
+  targetIdx = -1,
 ): boolean {
   for (const p of pool) {
     if (p.active) continue
     p.active = true
+    p.targetIdx = targetIdx
     p.pos.x = origin.x
     p.pos.y = origin.y
     p.pos.z = origin.z
@@ -438,6 +468,47 @@ export function stepProjectiles(
     p.prev.x = p.pos.x
     p.prev.y = p.pos.y
     p.prev.z = p.pos.z
+    // Homing: steer toward the locked target at a capped turn rate (constant
+    // speed, nlerp of the direction — close enough to a true arc and cheap).
+    // A dead target releases the missile to fly straight on.
+    if (weapon.homing && p.targetIdx >= 0) {
+      const t = targets[p.targetIdx]
+      if (!t || !t.alive) {
+        p.targetIdx = -1
+      } else {
+        const speed = Math.hypot(p.vel.x, p.vel.y, p.vel.z)
+        let dx = t.pos.x - p.pos.x
+        let dy = t.pos.y - p.pos.y
+        let dz = t.pos.z - p.pos.z
+        const dist = Math.hypot(dx, dy, dz)
+        if (speed > 0 && dist > 1e-6) {
+          dx /= dist
+          dy /= dist
+          dz /= dist
+          const inv = 1 / speed
+          const cx = p.vel.x * inv
+          const cy = p.vel.y * inv
+          const cz = p.vel.z * inv
+          const dot = Math.max(-1, Math.min(1, cx * dx + cy * dy + cz * dz))
+          const angle = Math.acos(dot)
+          if (angle > 1e-5) {
+            const k = Math.min(1, (weapon.homing * dt) / angle)
+            let nx = cx + (dx - cx) * k
+            let ny = cy + (dy - cy) * k
+            let nz = cz + (dz - cz) * k
+            const nl = Math.hypot(nx, ny, nz)
+            if (nl > 1e-6) {
+              nx /= nl
+              ny /= nl
+              nz /= nl
+              p.vel.x = nx * speed
+              p.vel.y = ny * speed
+              p.vel.z = nz * speed
+            }
+          }
+        }
+      }
+    }
     p.vel.y -= weapon.gravity * dt
     p.pos.x += p.vel.x * dt
     p.pos.y += p.vel.y * dt

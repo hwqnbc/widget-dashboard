@@ -61,9 +61,10 @@ export default function Tracers({
       mesh.setColorAt(i, color)
       i++
     }
-    for (const p of combat.player) write(p, PLAYER_COLOR, tracerLen)
-    // Rocket-visual enemy bolts (soldier RPGs) are drawn by EnemyRockets, not
-    // as a tracer box — collapse their slot here so the pools stay aligned.
+    // Rocket-visual bolts (soldier RPGs, the player's homing missiles) are
+    // drawn by the EnemyRockets pool, not as a tracer box — collapse their
+    // slot here so the pools stay aligned.
+    for (const p of combat.player) write(p, PLAYER_COLOR, tracerLen, p.visual !== 'rocket')
     for (const p of combat.enemy) write(p, ENEMY_COLOR, tracerLen * 0.7, p.visual !== 'rocket')
     mesh.instanceMatrix.needsUpdate = true
     if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true
