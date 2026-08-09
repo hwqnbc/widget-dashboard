@@ -253,7 +253,10 @@ model, 1st/3rd-person camera rig, and the ref-based zero-render input path).
 See `docs/drone-strike.md` for the Drone Strike widget (FPV wave shooter on
 the Drone Sim's flight model and city — fly-to-aim reticle, fire button +
 auto-fire, aim assist with target leading, segment-swept tracer bolts,
-seeded waves with enemy AI drones plus deck-level ground targets (road-bound
+seeded waves with enemy AI drones (from wave 3 the last enemy of each wave
+is a **kamikaze chaser** — orange beacon, lurks on orbit then pursues at a
+capped `boomClipT`-clipped speed and detonates on contact for a heart;
+shooting it early pays bonus points) plus deck-level ground targets (road-bound
 moving military trucks + SWAT cars from wave 1 + static AA turrets, all
 rendered from Model Viewer models via the shared `ModelTargets` pool) plus
 patrolling avatar soldiers (the Scar / Bazooka Joe avatar `Model3D`s reused as

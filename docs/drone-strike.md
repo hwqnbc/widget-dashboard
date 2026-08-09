@@ -138,7 +138,7 @@ Normal 5, Hard 4). So wave 1 is a gentle full-variety wave, not a bare gallery.
 | Wave | Content |
 | --- | --- |
 | 1 | the full mix, gentle: static balloons + drifting ring-drones + a moving military truck + a moving SWAT car + **1 throttled, non-firing enemy drone** + **1 non-firing AA turret** + **1 non-firing rooftop-patrol soldier** |
-| 2–4 | same kinds, ramping — more/faster enemies (throttle climbs), more road vehicles, up to 2 turrets, up to 2 soldiers (rooftop pacers + a ground patrol from wave 3) |
+| 2–4 | same kinds, ramping — more/faster enemies (throttle climbs), more road vehicles, up to 2 turrets, up to 2 soldiers (rooftop pacers + a ground patrol from wave 3); **from wave 3 the last enemy of every wave is a kamikaze chaser** |
 | 5+ | enemies + turrets + soldiers return fire (Normal/Hard; Easy at 7); enemy throttle at full; player has 3 HP per wave attempt |
 | scaling | more/smaller balloons (cap 8), up to 4 enemies, 4 trucks + 3 cars + 2 turrets + 3 patrolling soldiers (rooftop + ground), `MAX_TARGETS` 28 |
 
@@ -296,14 +296,14 @@ pool does **not** import through the registry).
 **Enemy difficulty** (settings, persisted `difficulty`, **default Easy**)
 scales only the AI drones — the gallery targets are untouched. The presets
 (`DIFFICULTY` in `waveLayout.ts`) tune orbit speed, the evade burst
-(intensity + duration), enemy HP, enemy count cap and the return-fire
-wave:
+(intensity + duration), enemy HP, enemy count cap, the return-fire
+wave and the kamikaze chase speed:
 
-| | orbit | evade burst | evade time | HP | cap | return fire |
-| --- | --- | --- | --- | --- | --- | --- |
-| Easy (default) | 0.4× | 1.4× | 0.7 s | 1 | 2 | wave 7 |
-| Normal | 1× | 2.6× | 1.2 s | 2 | 4 | wave 5 |
-| Hard | 1.3× | 3× | 1.4 s | 2 | 4 | wave 4 |
+| | orbit | evade burst | evade time | HP | cap | return fire | chase |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Easy (default) | 0.4× | 1.4× | 0.7 s | 1 | 2 | wave 7 | 0.75× |
+| Normal | 1× | 2.6× | 1.2 s | 2 | 4 | wave 5 | 1× |
+| Hard | 1.3× | 3× | 1.4 s | 2 | 4 | wave 4 | 1.2× |
 
 The evade burst is the big lever: pointing your reticle at an enemy within
 ~45 u makes it reverse + speed up, which on Normal (2.6×) is what made
@@ -313,8 +313,25 @@ fire-wave while keeping placement seeded identically; the live orbit/evade
 scaling is applied in `stepEnemy` (so a mid-game difficulty change takes
 effect immediately on movement, and next wave for HP/count).
 
-Scoring: balloon 10, drifter 15, ground truck 20, enemy 25 (2 HP), AA
-turret 30. Session score and wave
+**Kamikaze chaser** (from wave 3): the **last-seeded enemy of every wave**
+is a chaser (`variant: 1` — index-derived, so the seeded rand stream is
+untouched), marked by an **orange beacon** (orbiters stay red) and a
+speed-proportional nose-down pursuit tilt. It **lurks** on a normal orbit
+until the player flies inside `CHASER_RANGE` (60 u), then **commits**
+(`ai.locked` — it never resumes its patrol): straight-line pursuit at
+`CHASER_SPEED` (7 u/s × the difficulty's `chaseMult` 0.75/1/1.2 × the wave
+aggression scale), climbing straight up when a building blocks the path
+(each step is clipped with `boomClipT`, so it can never clip through), and
+**detonating on contact** (< `CHASER_CONTACT_R` 1.2 u): one heart, an
+impact spark burst, crash SFX/vibration and a recoil kick — no score (the
+kill is denied, not banked). Shooting it down early pays **35 points** (vs
+25). Chasers never return fire — the ram *is* the weapon. The pad stays a
+sanctuary: while the player is pad-safe a locked chaser **hovers in place**
+(it must not fall back to the absolute orbit write, which would teleport it
+back onto its ring — see lessons.md).
+
+Scoring: balloon 10, drifter 15, ground truck 20, enemy 25 (2 HP),
+kamikaze chaser 35, AA turret 30. Session score and wave
 are runtime-only; `bestScore`/`bestWave` persist (written at wave-clear).
 Losing all HP fails the wave — banner, then the same wave restarts with
 fresh targets and HP; the session score survives (arcade-friendly). Restart
@@ -409,8 +426,15 @@ New pure modules:
 - `enemyAI.ts` — orbit patrol (the wave seeds radius/rate/phase into the
   drift fields, so placement already validated the envelope — orbits can
   never clip a building), evade (reverse + speed burst + vertical jink when
-  the reticle settles on them inside 45 m), and line-of-sight-checked,
-  unled (dodgeable) return fire with staggered cooldowns.
+  the reticle settles on them inside 45 m), line-of-sight-checked,
+  unled (dodgeable) return fire with staggered cooldowns, and the
+  **kamikaze chase mode** (`variant === 1`): lurk-on-orbit →
+  `ai.locked` pursuit integrated toward the player with per-step
+  `boomClipT` clipping (blocked → climb straight up) → hover while the
+  player is pad-safe (`canChase=false`). Note the seam: the orbit is an
+  **absolute parametric write** (base + cos/sin) while pursuit **integrates
+  pos** — a locked chaser must never fall back to the orbit branch or it
+  teleports back onto its ring. Contact detonation lives in the rig.
 - `gyroAim.ts` — sensor plumbing described above.
 - `aimModel.ts` — the shared `AimOffset` (gyro + recoil) and view types.
 
@@ -435,7 +459,8 @@ the visible model by the target's weapon `variant`; movement is the seeded
 `stepDrift` sinusoid, no bespoke step; the models are `lazy`-imported directly
 so three.js stays out of the main chunk),
 `EnemyDrones`
-(≤4 `DroneModel`s with red beacons, slot-assigned per frame), `Tracers`
+(≤4 `DroneModel`s slot-assigned per frame, beacon tinted by variant — red
+orbiter / orange kamikaze chaser, with a pursuit nose-tilt), `Tracers`
 (one InstancedMesh for all bolts, oriented along velocity — skips
 rocket-`visual` shots in both pools), `EnemyRockets`
 (**pool-generic despite the name** — mounted once for the enemy pool
@@ -587,7 +612,7 @@ equipped), joysticks/buttons/settings testids mirror the sim's.
 E2E: suites `100-strike-core` … `109-strike-ground` plus `117-strike-audio`,
 `119-strike-soldiers`, `123-strike-sparks`, `124-strike-laser`,
 `125-strike-lob`, `126-strike-crates`, `127-strike-shotgun`,
-`128-strike-homing` and `129-strike-weapon-chip`
+`128-strike-homing`, `129-strike-weapon-chip` and `131-strike-chaser`
 (see `e2e/README.md`); pure modules are esbuild-bundled for the suites in a
 second flat pass in `run.mjs`.
 
@@ -699,11 +724,12 @@ kind of list).
   - **turning gait / waypoint loops** — legs swing but feet still slide on the
     turns; foot-planting (IK) and multi-segment waypoint routes are the next
     fidelity step.
-- **Enemy variety** — a *chaser* that pursues the player (waypoint =
-  player position, capped speed, `resolveCollisions` for safety), a
-  *kamikaze* that dives once locked, a *shielded* drone only hurt from
+- **Enemy variety** — ~~a *chaser* that pursues the player / a *kamikaze*
+  that dives once locked~~ — **shipped** as one enemy: the wave-3+
+  kamikaze chaser (lurk → locked pursuit → contact detonation; see
+  Gameplay). Remaining: a *shielded* drone only hurt from
   behind (dot product of hit direction vs heading — the `HitEvent` already
-  carries the impact point). Each is one more `stepEnemy` mode.
+  carries the impact point) — one more `stepEnemy` mode.
 - **Boss wave every 5th** — one large multi-HP drone with weak-point
   spheres (extra `Hittable`s attached to its pose) and a health bar chip.
 - **Combo scoring** — consecutive hits without a miss multiply points;

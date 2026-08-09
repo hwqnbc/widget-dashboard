@@ -304,6 +304,9 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
       evadeMult: 1 + (preset.evadeMult - 1) * agg,
       evadeTime: preset.evadeTime,
       jinkScale: agg,
+      // Kamikaze pursuit speed ramps with the same wave throttle, floored so
+      // a wave-3 chaser is a threat, not a hover.
+      chaseMult: preset.chaseMult * Math.max(0.5, agg),
     }
   }, [difficulty, wave])
   const [phase, setPhase] = useState<WavePhase>('intro')

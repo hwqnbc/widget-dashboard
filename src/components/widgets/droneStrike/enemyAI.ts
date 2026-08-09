@@ -25,6 +25,19 @@ const EVADE_JINK = 1.5
 /** Enemies only shoot inside this range (and with clear line of sight). */
 export const ENEMY_FIRE_RANGE = 50
 const BOB_AMP = 1.2
+
+/* Kamikaze chaser tuning (`variant === 1` enemies). A chaser LURKS on its
+ * orbit until the player comes inside CHASER_RANGE, then commits: it flies
+ * straight at the player at a capped speed and detonates on contact (the rig
+ * owns the detonation). It never fires — the ram is the threat. */
+export const CHASER_RANGE = 60
+/** Base pursuit speed (u/s), scaled by `move.chaseMult` (difficulty × wave
+ * aggression) — tuned to pressure, not outrun, a piloted drone. */
+export const CHASER_SPEED = 7
+/** Centre-to-centre detonation distance (player sphere + chaser body). */
+export const CHASER_CONTACT_R = 1.2
+/** Chasers never dive below this altitude (no ground scraping). */
+const CHASER_MIN_Y = 1
 /** Seconds a soldier's firing pose (recoil / muzzle flash / launch) plays
  * after each shot; SoldierTargets normalises the countdown for the model. */
 export const SOLDIER_FIRE_CLIP = 0.5
@@ -38,6 +51,10 @@ export interface EnemyAIState {
   dir: 1 | -1
   evadeTimer: number
   fireCooldown: number
+  /** Kamikaze commitment: set the first time a chaser triggers, never
+   * cleared — once a chaser breaks off its orbit it stays committed (it
+   * HOVERS, not re-orbits, while the player is pad-safe; see stepEnemy). */
+  locked: boolean
 }
 
 /** One AI slot per target-pool slot (only 'enemy' slots are ever stepped). */
@@ -47,6 +64,7 @@ export function createEnemyAIStates(): EnemyAIState[] {
     dir: 1 as const,
     evadeTimer: 0,
     fireCooldown: 0,
+    locked: false,
   }))
 }
 
@@ -63,6 +81,7 @@ export function seedEnemyAIStates(
     ai.dir = 1
     ai.evadeTimer = 0
     ai.fireCooldown = 1.5 + (i % 3) * 0.8
+    ai.locked = false
   }
 }
 
@@ -83,10 +102,19 @@ export function stepEnemy(
   canShoot: boolean,
   enemyPool: Projectile[],
   weapon: WeaponSpec,
-  /** Difficulty + wave movement scaling: orbit rate, evade burst, and the
+  /** Difficulty + wave movement scaling: orbit rate, evade burst, the
    * vertical evade jink (`jinkScale`, 1 = full; low early waves make the
-   * drone a near-static hover). */
-  move: { orbitMult: number; evadeMult: number; evadeTime: number; jinkScale?: number },
+   * drone a near-static hover), and the chaser pursuit multiplier. */
+  move: {
+    orbitMult: number
+    evadeMult: number
+    evadeTime: number
+    jinkScale?: number
+    chaseMult?: number
+  },
+  /** Chasers pursue only while this is true (false while the player rests on
+   * the spawn pad — the sanctuary rule the return fire already follows). */
+  canChase = true,
 ): void {
   if (!t.alive || t.kind !== 'enemy') return
 
@@ -112,13 +140,46 @@ export function stepEnemy(
   const prevX = t.pos.x
   const prevY = t.pos.y
   const prevZ = t.pos.z
-  const orbitR = t.driftAmp
-  const bob =
-    Math.sin(ai.angle * 2.3) * BOB_AMP +
-    (evading ? Math.sin(ai.evadeTimer * 8) * EVADE_JINK * (move.jinkScale ?? 1) : 0)
-  t.pos.x = t.base.x + Math.cos(ai.angle) * orbitR
-  t.pos.y = t.base.y + bob
-  t.pos.z = t.base.z + Math.sin(ai.angle) * orbitR
+  // A chaser (`variant === 1`) LURKS on its orbit until the player first
+  // comes inside CHASER_RANGE, then commits (`ai.locked`) and pursues.
+  if (t.variant === 1 && !ai.locked && canChase && dist > 0 && dist < CHASER_RANGE) {
+    ai.locked = true
+  }
+  if (t.variant === 1 && ai.locked) {
+    if (canChase && dist > 0) {
+      // CHASE: integrate straight toward the player at a capped speed. Clip
+      // the step against the buildings (boomClipT) — a blocked chaser CLIMBS
+      // straight up instead (every building has a top), so it can never fly
+      // into geometry even though its path leaves the placement-validated
+      // orbit envelope.
+      const speed = CHASER_SPEED * (move.chaseMult ?? 1)
+      const step = Math.min(speed * dt, dist)
+      const inv = 1 / dist
+      DESIRED.x = t.pos.x - dx * inv * step
+      DESIRED.y = Math.max(CHASER_MIN_Y, t.pos.y - dy * inv * step)
+      DESIRED.z = t.pos.z - dz * inv * step
+      if (boomClipT(t.pos, DESIRED, colliders) < 1) {
+        t.pos.y += speed * dt
+      } else {
+        t.pos.x = DESIRED.x
+        t.pos.y = DESIRED.y
+        t.pos.z = DESIRED.z
+      }
+    } else {
+      // HOVER: the player is pad-safe. Hold position (small bob) — falling
+      // back to the absolute orbit write would TELEPORT the drone onto its
+      // ring, because the orbit is parametrized, not integrated.
+      t.pos.y = Math.max(CHASER_MIN_Y, prevY + Math.sin(ai.angle * 2.3) * BOB_AMP * dt)
+    }
+  } else {
+    const orbitR = t.driftAmp
+    const bob =
+      Math.sin(ai.angle * 2.3) * BOB_AMP +
+      (evading ? Math.sin(ai.evadeTimer * 8) * EVADE_JINK * (move.jinkScale ?? 1) : 0)
+    t.pos.x = t.base.x + Math.cos(ai.angle) * orbitR
+    t.pos.y = t.base.y + bob
+    t.pos.z = t.base.z + Math.sin(ai.angle) * orbitR
+  }
   if (dt > 0) {
     t.vel.x = (t.pos.x - prevX) / dt
     t.vel.y = (t.pos.y - prevY) / dt
@@ -126,7 +187,9 @@ export function stepEnemy(
   }
 
   // Return fire: slow, aimed at where the player IS (not led — dodgeable),
-  // only with a clear line of sight.
+  // only with a clear line of sight. Chasers never fire — the ram IS the
+  // threat (and it telegraphs their role).
+  if (t.variant === 1) return
   if (!canShoot) return
   ai.fireCooldown -= dt
   if (ai.fireCooldown > 0 || dist === 0 || dist > ENEMY_FIRE_RANGE) return
@@ -199,5 +262,7 @@ export function stepTurret(
 
 /** Scratch vector reused by every return-fire spawn (allocation-free loop). */
 const FIRE_DIR: Vec3 = { x: 0, y: 0, z: -1 }
+/** Scratch chaser step endpoint (allocation-free pursuit). */
+const DESIRED: Vec3 = { x: 0, y: 0, z: 0 }
 /** Scratch muzzle position for soldier fire (allocation-free). */
 const MUZZLE: Vec3 = { x: 0, y: 0, z: 0 }

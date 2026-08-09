@@ -42,9 +42,10 @@ export interface TargetSpec {
   driftAxis: 0 | 1 | 2
   hp: number
   points: number
-  /** Soldier only: 0 = rocket (Bazooka Joe), 1 = SMG (Scar). Drives both the
-   * weapon fired (StrikeRig) and the rendered model (SoldierTargets), so the
-   * two always agree. Undefined / 0 for every other kind. */
+  /** Per-kind sub-type. Soldier: 0 = rocket (Bazooka Joe), 1 = SMG (Scar) —
+   * drives both the weapon fired (StrikeRig) and the rendered model
+   * (SoldierTargets), so the two always agree. Enemy: 0 = orbiter, 1 =
+   * kamikaze CHASER (pursues + rams; see enemyAI). Undefined / 0 elsewhere. */
   variant?: 0 | 1
   /** Soldier patrol shape: 0 = line (paces back & forth along `routeAngle`),
    * 1 = loop (circles the anchor at radius `driftAmp`). Undefined / 0 for
@@ -83,6 +84,13 @@ export interface WaveSpec {
 /** Enemy drones appear from this wave — wave 1, but wave-throttled
  * (`enemyAggressionScale`) so early drones crawl; difficulty scales the rest. */
 export const ENEMY_WAVE_START = 1
+/** From this wave the LAST enemy of each wave is a kamikaze CHASER
+ * (`variant: 1` — lurks on its orbit, then pursues and rams). Waves 1–2 stay
+ * all-orbiter so the opening waves teach the basic enemy first. */
+export const CHASER_FROM_WAVE = 3
+/** A chaser is worth more than an orbiter — shooting it down before it
+ * connects is the payoff. */
+export const CHASER_POINTS = 35
 /** ...and shoot back from this one (normal; difficulty shifts it). Every
  * difficulty's fireWave is > 1, so wave-1 enemies + turrets hold fire. */
 export const ENEMY_FIRE_WAVE = 5
@@ -134,12 +142,14 @@ export interface DifficultyPreset {
   enemyCap: number
   /** Wave from which enemies return fire. */
   fireWave: number
+  /** Kamikaze-chaser pursuit-speed multiplier. */
+  chaseMult: number
 }
 
 export const DIFFICULTY: Record<Difficulty, DifficultyPreset> = {
-  easy: { orbitMult: 0.4, evadeMult: 1.4, evadeTime: 0.7, enemyHp: 1, enemyCap: 2, fireWave: 7 },
-  normal: { orbitMult: 1, evadeMult: 2.6, evadeTime: 1.2, enemyHp: 2, enemyCap: 4, fireWave: ENEMY_FIRE_WAVE },
-  hard: { orbitMult: 1.3, evadeMult: 3, evadeTime: 1.4, enemyHp: 2, enemyCap: 4, fireWave: 4 },
+  easy: { orbitMult: 0.4, evadeMult: 1.4, evadeTime: 0.7, enemyHp: 1, enemyCap: 2, fireWave: 7, chaseMult: 0.75 },
+  normal: { orbitMult: 1, evadeMult: 2.6, evadeTime: 1.2, enemyHp: 2, enemyCap: 4, fireWave: ENEMY_FIRE_WAVE, chaseMult: 1 },
+  hard: { orbitMult: 1.3, evadeMult: 3, evadeTime: 1.4, enemyHp: 2, enemyCap: 4, fireWave: 4, chaseMult: 1.2 },
 }
 
 export const coerceDifficulty = (v: unknown): Difficulty | undefined =>
@@ -371,6 +381,11 @@ export function buildWave(
       ? Math.min(waveIndex - ENEMY_WAVE_START + 1, diff.enemyCap)
       : 0
   for (let i = 0; i < enemies; i++) {
+    // From CHASER_FROM_WAVE the LAST enemy of the wave is the kamikaze
+    // chaser (variant 1, bonus points) — derived from the loop index, never
+    // from a rand() draw, so the crate/soldier picks downstream of this
+    // block stay byte-identical (the append-only stream rule, lesson #54).
+    const chaser = waveIndex >= CHASER_FROM_WAVE && i === enemies - 1
     place({
       kind: 'enemy',
       radius: 0.6,
@@ -379,7 +394,8 @@ export function buildWave(
       driftPhase: rand() * Math.PI * 2,
       driftAxis: 0,
       hp: diff.enemyHp,
-      points: POINTS.enemy,
+      points: chaser ? CHASER_POINTS : POINTS.enemy,
+      variant: chaser ? 1 : 0,
     })
   }
 
@@ -587,7 +603,7 @@ export interface TargetState {
   driftAxis: 0 | 1 | 2
   /** Seconds of hit-flash tint remaining. */
   hitFlash: number
-  /** Soldier weapon/model variant (0 = rocket/Bazooka, 1 = SMG/Scar). */
+  /** Per-kind sub-type (soldier: rocket/SMG; enemy: orbiter/chaser). */
   variant: 0 | 1
   /** Soldier only: seconds of firing-pose animation remaining. Set on each
    * shot (stepTurret), decayed each frame; SoldierTargets feeds it to the

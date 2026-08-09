@@ -1375,3 +1375,20 @@ carried over; these are the new ones.
     General rule: with capture-phase window fallbacks, the element's
     up-handler is effectively dead code — anything that must happen on
     release belongs in the fallback.
+
+96. **Absolute-parametrized motion and integrated motion don't mix — falling
+    back from integration to an absolute write teleports the object.** The
+    enemy orbit is written ABSOLUTELY every frame (`pos = base +
+    cos/sin(angle)·driftAmp`), which is what makes it placement-validatable
+    and drift-proof. The kamikaze chaser's pursuit instead INTEGRATES `pos`
+    toward the player, so once a chaser is locked its position no longer has
+    any relationship to its ring — if the "player is pad-safe, stop chasing"
+    case had simply fallen through to the shared orbit branch, the drone
+    would snap across the map back onto its ring in one frame. The rule:
+    once an entity leaves a parametrized path for integrated motion, every
+    later state (paused, blocked, waiting) must also be expressed as
+    integration (hover in place, climb, drift) — the parametric branch is
+    unreachable-by-design from then on (`ai.locked` latches). The same seam
+    exists anywhere a patrol/parametric mode gains a pursuit/physics mode;
+    the e2e pin is cheap: freeze the trigger condition and assert x/z stay
+    put instead of returning to the ring.

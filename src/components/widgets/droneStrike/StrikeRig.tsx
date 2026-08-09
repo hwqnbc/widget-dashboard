@@ -76,7 +76,7 @@ import type { TargetKind, TargetState } from './waveLayout'
 import { aliveCount, crateReached, stepDrift } from './waveLayout'
 import type { CrateState } from './WeaponCrates'
 import type { EnemyAIState } from './enemyAI'
-import { stepEnemy, stepTurret } from './enemyAI'
+import { CHASER_CONTACT_R, stepEnemy, stepTurret } from './enemyAI'
 import type { AimOffset } from './aimModel'
 import { RECOIL_KICK, fpvPitchGain } from './aimModel'
 import type { AimAngles, AimMode, GimbalState } from './gimbalModel'
@@ -316,7 +316,13 @@ export default function StrikeRig({
   aimInputRef: { current: number }
   /** Difficulty + wave movement scaling for the enemy AI (orbit + evade +
    * the vertical jink via `jinkScale`). */
-  enemyMove: { orbitMult: number; evadeMult: number; evadeTime: number; jinkScale?: number }
+  enemyMove: {
+    orbitMult: number
+    evadeMult: number
+    evadeTime: number
+    jinkScale?: number
+    chaseMult?: number
+  }
   /** Session score — runtime-only, rendered via the telemetry tick. */
   scoreRef: { current: number }
   onWaveCleared: () => void
@@ -571,7 +577,32 @@ export default function StrikeRig({
           combat.enemy,
           ENEMY_BOLT,
           enemyMove,
+          !playerSafe, // chasers break off while the player rests on the pad
         )
+        // Kamikaze contact: a chaser that reaches the player DETONATES —
+        // costs a heart (the bolt-hit path, no tumble), throws a spark
+        // burst, and dies unscored. Same sanctuary/crash gates as enemy fire.
+        if (
+          t.alive &&
+          t.variant === 1 &&
+          !crash.active &&
+          !playerSafe &&
+          Math.hypot(
+            t.pos.x - flight.pos.x,
+            t.pos.y - flight.pos.y,
+            t.pos.z - flight.pos.z,
+          ) < CHASER_CONTACT_R
+        ) {
+          t.alive = false
+          spawnBurst(sparks, t.pos.x, t.pos.y, t.pos.z, 'impact')
+          vibrate(CRASH_PULSE)
+          if (audioOn) {
+            sfx.crash++
+            playCrash()
+          }
+          aim.recoil += PLAYER_HIT_KICK * 2
+          onPlayerHit()
+        }
       } else if (waveActive && (t.kind === 'turret' || t.kind === 'soldier')) {
         // AA turrets and rooftop soldiers are both static stationed shooters —
         // same fire step, gated + LOS-checked identically. Soldiers fire their
