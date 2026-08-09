@@ -56,6 +56,13 @@ export type DroneView = 'tp' | 'fp' | 'los' | 'walk'
 export const coerceView = (v: unknown): DroneView | undefined =>
   v === 'tp' || v === 'fp' || v === 'los' || v === 'walk' ? v : undefined
 
+/** What flies: the quadcopter, or Lloyd the winged dragon-ninja. Purely
+ * visual — the flight model, collision sphere and records are identical. */
+export type DroneCraft = 'drone' | 'lloyd'
+
+export const coerceCraft = (v: unknown): DroneCraft | undefined =>
+  v === 'drone' || v === 'lloyd' ? v : undefined
+
 export type Weather = 'clear' | 'storm'
 
 export const coerceWeather = (v: unknown): Weather | undefined =>

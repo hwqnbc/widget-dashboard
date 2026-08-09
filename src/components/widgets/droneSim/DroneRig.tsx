@@ -1,10 +1,11 @@
-import { useRef } from 'react'
+import { Suspense, lazy, useRef } from 'react'
 import type { RefObject } from 'react'
 import { useFrame } from '@react-three/fiber'
 import type { Group, Mesh, MeshBasicMaterial } from 'three'
 import type {
   Collider,
   ControlInput,
+  DroneCraft,
   DroneView,
   FlightMode,
   FlightState,
@@ -42,6 +43,17 @@ import type { SoundEngine } from './sound'
 import DroneModel from './DroneModel'
 import type { GateFlash } from './GateRings'
 
+// The 'lloyd' craft — the winged avatar's mesh model, lazy like the avatar
+// registry so it stays in its own chunk until first flown.
+const LloydModel3D = lazy(() => import('../characters/lloyd/LloydModel3D'))
+
+/** Lloyd (1.85u tall, feet at y=0, faces +Z) posed as the craft: scaled to
+ * the drone's visual bulk, torso centred on the flight position, turned to
+ * face drone-forward (−Z). The collision sphere stays `DRONE_RADIUS` —
+ * wings overhang it exactly like the quadcopter's rotor arms do. */
+const LLOYD_SCALE = 0.5
+const LLOYD_Y_OFFSET = -0.45
+
 /** Seconds between HUD DOM writes (~7 Hz — cheap, and no React renders). */
 const HUD_INTERVAL = 0.15
 
@@ -69,6 +81,8 @@ export default function DroneRig({
   followDist,
   external,
   sound,
+  craft,
+  flyEffort,
   pilotChipRef,
   minimapOperatorRef,
   onWalkerEvent,
@@ -112,6 +126,10 @@ export default function DroneRig({
   external: { current: ExternalState }
   /** Synthesized audio — rotor pitch on the tick, thud on crash. */
   sound: { current: SoundEngine }
+  /** What flies: the quadcopter or Lloyd (visual only, same physics). */
+  craft: DroneCraft
+  /** Stick-effort ref feeding Lloyd's wing beat (written on the HUD tick). */
+  flyEffort: { current: number }
   /** Pilot chip (los/walk views) — text + data-pilot written on the tick,
    * because the rescue/manual state lives in refs and never re-renders. */
   pilotChipRef: RefObject<HTMLDivElement | null>
@@ -387,8 +405,9 @@ export default function DroneRig({
     hudClock.current += dt
     if (hudClock.current >= HUD_INTERVAL) {
       hudClock.current = 0
-      // Rotor hum on the same cadence as the HUD: pitched by stick effort or
-      // airspeed (whichever is higher), silent while tumbling or dead.
+      // Rotor hum + wing beat on the same cadence as the HUD: one effort
+      // signal (stick deflection or airspeed, whichever is higher) pitches
+      // the hum and drives Lloyd's flap; silent while tumbling or dead.
       {
         const activity = Math.max(
           Math.abs(controls.left.x),
@@ -397,8 +416,10 @@ export default function DroneRig({
           Math.abs(controls.right.y),
         )
         const airspeed = Math.hypot(flight.vel.x, flight.vel.y, flight.vel.z)
+        const effort = Math.min(1, Math.max(activity, airspeed / 12))
+        flyEffort.current = effort
         sound.current.updateRotor(
-          Math.min(1, Math.max(activity, airspeed / 12)),
+          effort,
           !crash.active && !(batteryMode && batteryRef.current.dead),
         )
       }
@@ -510,7 +531,21 @@ export default function DroneRig({
     <>
       <group ref={outerRef} position={[SPAWN.x, SPAWN.y, SPAWN.z]}>
         <group ref={tiltRef}>
-          <DroneModel controls={controls} />
+          {craft === 'lloyd' ? (
+            // The quadcopter doubles as the Suspense fallback so the craft
+            // never blinks out while the lazy Lloyd chunk loads.
+            <Suspense fallback={<DroneModel controls={controls} />}>
+              <group
+                rotation-y={Math.PI}
+                scale={LLOYD_SCALE}
+                position={[0, LLOYD_Y_OFFSET, 0]}
+              >
+                <LloydModel3D action="fly" flyEffort={flyEffort} />
+              </group>
+            </Suspense>
+          ) : (
+            <DroneModel controls={controls} />
+          )}
         </group>
       </group>
       <mesh

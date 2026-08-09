@@ -19,6 +19,13 @@
 //   back to the carry, while the wings sweep UP through the wind-up and snap
 //   DOWN on the slash (mirrored) and the tail counter-sways.
 // - 'walk': the shared leg-gait rig (hip-pivot swing) with a quicker tail wag.
+// - 'fly': airborne — wings beat in a continuous mirrored cycle, legs trail
+//   together behind, the tail counter-sways with the beat. The optional
+//   `flyEffort` ref (0..1, read every frame — zero renders) scales the flap
+//   rate AND depth: full effort is a fast deep beat, near zero settles into
+//   a wide slow glide-stir. Absent (e.g. the Avatar Actions widget) it flies
+//   at a constant mid effort. The Drone Sim mounts this as the 'lloyd'
+//   craft, feeding the same stick-effort signal that pitches the rotor hum.
 // Grip note: the scimitar is authored along +y and mounted as the forearm's
 // obtuse extension (wrist z = π + slight up-tilt). The blade is authored
 // thin-x / wide-z with the curve bowing +z, so the cutting edge ALREADY
@@ -63,6 +70,13 @@ const WING_UP = 0.5
 const WING_DOWN = -0.35
 /** Bell rest swing toward plumb (counters the wrist's fixed -0.5 up-tilt). */
 const BELL_BIAS = 0.35
+/** Fly: wing-beat phase rate (rad/s) and flap depth, both effort-scaled. */
+const FLY_RATE_MIN = 3.5
+const FLY_RATE_SPAN = 9
+const FLY_AMP_MIN = 0.14
+const FLY_AMP_SPAN = 0.42
+const FLY_WING_LIFT = 0.12 // beat centre sits spread-and-raised (glide pose)
+const FLY_LEG_TRAIL = -0.28 // both legs stream together behind
 
 /** The golden scimitar in fist-local coords, authored along +y: pommel ring
  * + bell tassel below the grip, guard above, the curved blade climbing +y
@@ -183,7 +197,16 @@ function Wing({ s }: { s: number }) {
   )
 }
 
-export default function LloydModel3D({ action }: { action?: string }) {
+export default function LloydModel3D({
+  action,
+  flyEffort,
+}: {
+  action?: string
+  /** 0..1 mutable ref driving the 'fly' wing beat (rate + depth). Optional —
+   * extra props keep the component assignable to the registry's generic
+   * `ComponentType<{action?: string}>`. */
+  flyEffort?: { current: number }
+}) {
   const armLRef = useRef<Group>(null)
   const armRRef = useRef<Group>(null)
   const elbowLRef = useRef<Group>(null)
@@ -198,6 +221,7 @@ export default function LloydModel3D({ action }: { action?: string }) {
   const t0Ref = useRef(0)
   const prevActionRef = useRef<string | undefined>(undefined)
   const walkPhaseRef = useRef(0)
+  const flyPhaseRef = useRef(0)
   const gaitRef = useRef<LegSwing>({ left: 0, right: 0 }).current
 
   useFrame((state, delta) => {
@@ -262,6 +286,17 @@ export default function LloydModel3D({ action }: { action?: string }) {
       gaitR = g.right
       tailSway = Math.sin(walkPhaseRef.current * 0.5) * 0.22 // quicker wag
       flap = Math.sin(walkPhaseRef.current * 0.5) * 0.08
+    } else if (action === 'fly') {
+      // Airborne wing beat: phase advances at an effort-scaled rate so the
+      // rhythm stays continuous while the effort signal changes.
+      const effort = Math.min(1, Math.max(0, flyEffort?.current ?? 0.5))
+      flyPhaseRef.current += delta * (FLY_RATE_MIN + FLY_RATE_SPAN * effort)
+      const ph = flyPhaseRef.current
+      flap = FLY_WING_LIFT + Math.sin(ph) * (FLY_AMP_MIN + FLY_AMP_SPAN * effort)
+      tailSway = -Math.sin(ph) * (0.06 + 0.12 * effort) // counter the beat
+      gaitL = FLY_LEG_TRAIL
+      gaitR = FLY_LEG_TRAIL
+      swayR = Math.sin(t * 1.7) * 0.04 // the sword arm still breathes
     } else {
       swayR = Math.sin(t * 1.7) * 0.04 // idle: the sword arm breathes…
       flap = Math.sin(t * 1.3) * 0.06 // …the wings stir
@@ -284,7 +319,14 @@ export default function LloydModel3D({ action }: { action?: string }) {
     // slash, settles after); gentle sway in idle and walk. BELL_BIAS swings
     // it toward plumb at the carry, countering the fixed wrist up-tilt.
     const bellTarget =
-      BELL_BIAS + (action === 'chop' ? -shR * 0.4 : action === 'walk' ? Math.sin(walkPhaseRef.current) * 0.18 : Math.sin(t * 2.2) * 0.12)
+      BELL_BIAS +
+      (action === 'chop'
+        ? -shR * 0.4
+        : action === 'walk'
+          ? Math.sin(walkPhaseRef.current) * 0.18
+          : action === 'fly'
+            ? Math.sin(flyPhaseRef.current) * 0.12
+            : Math.sin(t * 2.2) * 0.12)
     bellSwingRef.current += (bellTarget - bellSwingRef.current) * Math.min(1, delta * 6)
     bell.rotation.x = bellSwingRef.current
   })

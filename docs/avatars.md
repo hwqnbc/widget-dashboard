@@ -292,7 +292,12 @@ fist as the forearm's obtuse extension with the ninja wrist up-tilt;
 action `[chop "Sword Chop"]` — the 2D celebration's 1.7 s beats: wind
 OVERHEAD at the shoulder, hold, whip down, ease back, wings sweeping UP
 through the wind-up and snapping DOWN on the slash while the tail
-counter-sways — and the wings stir / tail wags in idle and walk).
+counter-sways — and the wings stir / tail wags in idle and walk; plus
+`[fly "Fly"]` — a continuous mirrored wing beat with legs trailing
+behind and the tail countering, whose rate AND depth scale with an
+optional `flyEffort` ref (0..1, read per frame; constant mid effort when
+absent). The Drone Sim mounts this action as its `craft: 'lloyd'`
+swap — see `docs/drone-sim.md` "Craft: Fly as Lloyd").
 Scar's Sight & Fire
 and Bazooka Joe's Take Aim are the **canned
 counterparts of the in-game aim** these models gained for Drone Strike's

@@ -49,8 +49,8 @@ A portaled MUI `Dialog` (the ConfirmDialog pattern — works at any widget
 size, scrolls when short). Each mode is a labelled switch row with a
 one-line description, grouped by concern:
 
-- **Gameplay**: Acro flight mode, Crash & respawn, Landing challenge,
-  Battery mode.
+- **Gameplay**: Fly as Lloyd (the craft swap — below), Acro flight mode,
+  Crash & respawn, Landing challenge, Battery mode.
 - **Environment**: Storm weather, Rich scenery, Minimap, Sound (synthesized
   audio, default off — below).
 - **Tuning**: the speed/yaw/expo sliders and the Turbo switch (formerly a
@@ -75,7 +75,7 @@ one-line description, grouped by concern:
 The panel reads current values as props from `DroneSimBody` and dispatches
 `updateWidgetData` itself. The original per-toggle `data-testid`s moved onto
 the switch rows unchanged, and the widget root mirrors every mode as
-`data-mode/-crashes/-landing/-battery/-weather/-rich/-minimap/-sound/-turbo`
+`data-mode/-crashes/-landing/-battery/-weather/-rich/-minimap/-sound/-craft/-turbo`
 attributes — the E2E contract reads state from the root and flips switches
 through the panel. History note: each feature originally added its own
 icon-toggle to the button row; at 11 buttons that stopped scaling (and a
@@ -570,6 +570,39 @@ body ref and threaded to `DroneRig` like the other zero-render refs.
   browser refused to start before a gesture — in practice the settings
   interaction that enables sound is itself that gesture.
 
+## Craft: Fly as Lloyd
+
+A persisted `craft: 'drone' | 'lloyd'` (default `drone`, Gameplay-group
+switch, mirrored as `data-craft` on the root) swaps what flies: the
+quadcopter, or **Lloyd** — the winged dragon-ninja avatar. The swap is
+**purely visual**: the flight model, the point-plus-inflated-AABB collision
+(`DRONE_RADIUS`), lap records and every mode behave identically, so drone
+laps and Lloyd laps share one leaderboard by design.
+
+- **Model reuse**: `DroneRig` lazy-loads the avatar system's
+  `LloydModel3D` (the same venue-neutral mesh model the Avatar Actions
+  widget and the RC operator use) — `lazy(() => import(...))` keeps it in
+  its own chunk, and the quadcopter doubles as the Suspense fallback so the
+  craft never blinks out. Inside the existing tilt group he's rotated π
+  (models face +Z, drone-forward is −Z), scaled `LLOYD_SCALE` 0.5 and
+  dropped `LLOYD_Y_OFFSET` −0.45 so his torso centres on the flight
+  position; wings overhang the collision sphere exactly like the rotor
+  arms do. The tilt group gives banking in turns and the crash tumble for
+  free.
+- **The `'fly'` action** (authored on `LloydModel3D`, registered in
+  `actions3d` so Avatar Actions gains a "Fly" button too): wings beat in a
+  continuous mirrored cycle, legs trail together behind, the tail
+  counter-sways. The optional `flyEffort` ref (0..1, read every frame —
+  zero renders) scales the beat's **rate and depth**; `DroneRig` writes it
+  on the 150 ms HUD tick from the same
+  `max(stick activity, speed/12)` effort signal that pitches the rotor
+  hum, so hard flying means fast deep flaps and hands-off hovering settles
+  into a slow glide-stir.
+- **FPV note**: `FPV_OFFSET` puts the camera 0.35 ahead of centre and all
+  of Lloyd's geometry sits at or behind it, so first person stays clean
+  without hiding the model (verified by screenshot; the same holds for the
+  quadcopter today).
+
 ## HUD telemetry (also the test contract)
 
 `DroneRig` writes `ALT x.x m · SPD x.x` (+ `WIND x.x` in storm) into the HUD
@@ -626,6 +659,10 @@ from the enhancement menu, with the integration point each would build on.
   racing you; `bestLapPath` already carries the positions, add per-sample
   timestamps (or rely on the fixed 150 ms cadence) and lerp along it in
   `useFrame`.
+- ~~**Fly as an avatar**~~ — shipped as the `craft` toggle (Lloyd, the
+  winged one — see "Craft: Fly as Lloyd"). Extension point: the
+  `DroneCraft` union + the craft mount in `DroneRig` — another avatar
+  that earns a `fly` action slots in as a third union member.
 
 ### Simulation depth
 *(empty — acro mode and ground effect shipped)*

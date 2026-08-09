@@ -189,6 +189,7 @@ export const avatarVisualById: Record<AvatarId, AvatarVisual> = {
     actions3d: [
       { id: 'walk', name: 'Walk' },
       { id: 'chop', name: 'Sword Chop' },
+      { id: 'fly', name: 'Fly' },
     ],
   },
 }

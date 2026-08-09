@@ -17,10 +17,11 @@ import { avatarVisualById } from '../../../registry/avatarRegistry'
 import { usePresentation } from '../../fullscreen/presentation'
 import type { WidgetProps } from '../../../registry/widgetRegistry'
 import { DAY_PALETTE, DUSK_PALETTE, NIGHT_PALETTE } from './palettes'
-import type { BatteryEvent, BatteryState, DroneView, FlightMode, Tuning, Weather } from './flightModel'
+import type { BatteryEvent, BatteryState, DroneCraft, DroneView, FlightMode, Tuning, Weather } from './flightModel'
 import {
   MAX_SPEED_MULT,
   TURBO_BOOST,
+  coerceCraft,
   coerceFlightMode,
   coerceView,
   coerceWeather,
@@ -96,6 +97,7 @@ const SETTING_KEYS = [
   'followDist',
   'fpvPolish',
   'sound',
+  'craft',
   'rateSpeed',
   'rateYaw',
   'stickExpo',
@@ -187,6 +189,10 @@ export default function DroneSimBody({ id }: WidgetProps) {
   const followDist = useWidgetField(id, 'followDist', 7, coerceFollowDist)
   const fpvPolish = useWidgetField(id, 'fpvPolish', false)
   const soundOn = useWidgetField(id, 'sound', false)
+  const craft = useWidgetField<DroneCraft>(id, 'craft', 'drone', coerceCraft)
+  /** Stick-effort ref for Lloyd's wing beat — written by DroneRig on the
+   * HUD tick, read by LloydModel3D every frame (zero renders). */
+  const flyEffortRef = useRef(0)
   const soundRef = useRef(createSoundEngine())
   useEffect(() => {
     soundRef.current.setEnabled(soundOn)
@@ -538,6 +544,7 @@ export default function DroneSimBody({ id }: WidgetProps) {
       data-follow-dist={followDist}
       data-fpv={fpvPolish ? 'on' : 'off'}
       data-sound={soundOn ? 'on' : 'off'}
+      data-craft={craft}
       data-course={courseMode}
       data-editing={editing ? 'on' : 'off'}
       onMouseDown={(e) => e.stopPropagation()}
@@ -583,6 +590,8 @@ export default function DroneSimBody({ id }: WidgetProps) {
             followDist={followDist}
             external={externalRef}
             sound={soundRef}
+            craft={craft}
+            flyEffort={flyEffortRef}
             pilotChipRef={pilotChipRef}
             minimapOperatorRef={minimapOperatorRef}
             onWalkerEvent={onWalkerEvent}
@@ -964,6 +973,7 @@ export default function DroneSimBody({ id }: WidgetProps) {
         followDist={followDist}
         fpvPolish={fpvPolish}
         soundOn={soundOn}
+        craft={craft}
         gateCount={gateSetting}
         courseMode={courseMode}
         hasCustom={customRings.length > 0}

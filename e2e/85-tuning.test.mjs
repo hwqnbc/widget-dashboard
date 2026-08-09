@@ -25,7 +25,12 @@ const pilot = await createPilot(page, context)
 const openPanel = () => openSettings(page)
 const closePanel = () => closeSettings(page)
 const setSlider = async (tid, fraction) => {
-  const box = await page.locator(`[data-testid="${tid}"]`).boundingBox()
+  const slider = page.locator(`[data-testid="${tid}"]`)
+  // The Tuning group can sit below the dialog's fold (each new settings row
+  // above pushes it down) — mouse events at out-of-viewport coordinates are
+  // silently dropped, so scroll first (the 45-gates lesson).
+  await slider.scrollIntoViewIfNeeded()
+  const box = await slider.boundingBox()
   await page.mouse.click(box.x + box.width * fraction, box.y + box.height / 2)
 }
 

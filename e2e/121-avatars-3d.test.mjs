@@ -12,7 +12,7 @@
  * [Walk, Fire Blade], darkarin [Walk, Twin Cross], frak [Walk, Blade
  * Flurry], imperium [Walk, Claw Slash], goldgunner [Walk, Guns Blazing],
  * scar [Walk, Breach & Clear, Sight & Fire],
- * bazookajoe [Walk, Rocket Launch, Take Aim], lloyd [Walk, Sword Chop])
+ * bazookajoe [Walk, Rocket Launch, Take Aim], lloyd [Walk, Sword Chop, Fly])
  * and each action drives
  * `data-action`/`data-playing`, tapping the 3D figure toggles the turntable
  * (`data-spin`, one uniform rule for every avatar, persisted per widget),
@@ -222,17 +222,20 @@ await celebration.nth(0).click()
 await page.waitForTimeout(150)
 check('Idle resets the bazookajoe action', (await attr('data-action')) === 'idle')
 
-// lloyd's 3D figure: dragon wings + tail, Walk + Sword Chop round-trip
+// lloyd's 3D figure: dragon wings + tail, Walk + Sword Chop + Fly round-trip
 await picker.nth(9).click()
 await page.waitForTimeout(150)
 check('lloyd advertises an available 3D figure', (await attr('data-figure3d')) === 'available')
 await page.waitForSelector('[data-testid="figure3d-stage"] canvas', { timeout: 20000 })
 check('lloyd 3d view renders a WebGL canvas', (await stageCanvas.count()) === 1)
-check('lloyd 3d actions: Idle + Walk + Sword Chop', (await celebration.count()) === 3)
+check('lloyd 3d actions: Idle + Walk + Sword Chop + Fly', (await celebration.count()) === 4)
 await celebration.nth(2).click() // Sword Chop
 await page.waitForTimeout(150)
 check('Sword Chop plays', (await attr('data-action')) === 'chop')
 check('Sword Chop sets playing', (await attr('data-playing')) === 'yes')
+await celebration.nth(3).click() // Fly (the wing beat — also the Drone Sim craft)
+await page.waitForTimeout(150)
+check('Fly plays on lloyd', (await attr('data-action')) === 'fly')
 await celebration.nth(1).click() // Walk (the shared leg-gait action)
 await page.waitForTimeout(150)
 check('Walk plays on lloyd', (await attr('data-action')) === 'walk')

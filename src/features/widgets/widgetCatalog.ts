@@ -185,6 +185,7 @@ export function defaultWidgetData(type: WidgetType): Record<string, unknown> {
         followDist: 7,
         fpvPolish: false,
         sound: false,
+        craft: 'drone',
       }
     case 'droneStrike':
       return {

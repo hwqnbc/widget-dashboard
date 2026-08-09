@@ -38,6 +38,7 @@ for (const tid of [
 // mode toggles + tuning + new-course live inside the settings panel
 await openSettings(page)
 for (const tid of [
+  'dronesim-craft-toggle',
   'dronesim-mode-toggle',
   'dronesim-crash-toggle',
   'dronesim-landing-toggle',

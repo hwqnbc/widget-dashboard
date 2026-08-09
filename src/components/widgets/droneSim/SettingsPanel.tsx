@@ -19,7 +19,7 @@ import SwapHorizIcon from '@mui/icons-material/SwapHoriz'
 import type { CourseMode } from './worldLayout'
 import { useAppDispatch } from '../../../app/hooks'
 import { updateWidgetData } from '../../../features/widgets/widgetsSlice'
-import type { FlightMode, Weather } from './flightModel'
+import type { DroneCraft, FlightMode, Weather } from './flightModel'
 import { MAX_FOLLOW, MIN_FOLLOW } from './operatorWalk'
 import { MAX_GATES, MIN_GATES } from './worldLayout'
 
@@ -83,6 +83,7 @@ export default function SettingsPanel({
   followDist,
   fpvPolish,
   soundOn,
+  craft,
   gateCount,
   courseMode,
   hasCustom,
@@ -109,6 +110,7 @@ export default function SettingsPanel({
   followDist: number
   fpvPolish: boolean
   soundOn: boolean
+  craft: DroneCraft
   gateCount: number
   courseMode: CourseMode
   /** Whether a hand-placed course is stored (enables switching back). */
@@ -128,6 +130,15 @@ export default function SettingsPanel({
       <DialogTitle sx={{ pb: 0 }}>Drone Sim settings</DialogTitle>
       <DialogContent data-testid="dronesim-settings-panel">
         <List dense subheader={<ListSubheader disableGutters>Gameplay</ListSubheader>}>
+          <ToggleRow
+            testId="dronesim-craft-toggle"
+            stateAttr="data-craft"
+            stateValue={craft}
+            label="Fly as Lloyd"
+            description="Swap the quadcopter for Lloyd the winged dragon-ninja — same flight physics, wings beat with throttle."
+            checked={craft === 'lloyd'}
+            onChange={(next) => set({ craft: next ? 'lloyd' : 'drone' })}
+          />
           <ToggleRow
             testId="dronesim-mode-toggle"
             stateAttr="data-mode"
