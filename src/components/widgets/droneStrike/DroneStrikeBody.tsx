@@ -41,6 +41,7 @@ import ConfirmDialog from '../ConfirmDialog'
 import type { AimAssistLevel, CrateWeaponId, HeatEvent, WeaponId } from './combatModel'
 import {
   BOLT,
+  WEAPON_IDS,
   WEAPON_SPECS,
   clearProjectiles,
   coerceAimAssist,
@@ -87,6 +88,7 @@ import TrajectoryArc from './TrajectoryArc'
 import type { AimRay } from './TrajectoryArc'
 import WeaponCrates from './WeaponCrates'
 import type { CrateState } from './WeaponCrates'
+import WeaponChip from './WeaponChip'
 import Reticle from './Reticle'
 import FireButton from './FireButton'
 import type { HitMarker } from './HitMarkers'
@@ -490,6 +492,17 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
     combat.cooldown = 0
   }, [effectiveWeapon, combat])
 
+  // Explicit in-game weapon pick (chip swipe/tap/wheel or a 1–5 hotkey):
+  // writes the SAME persisted field as the settings picker, and clears any
+  // crate override — a deliberate choice beats a pickup.
+  const onWeaponSelect = useCallback(
+    (w: WeaponId) => {
+      setCrateWeapon(null)
+      dispatch(updateWidgetData({ id, data: { weapon: w } }))
+    },
+    [dispatch, id],
+  )
+
   // Crate pickup — the rig consumed the crate; swap the equipped weapon
   // until the run ends and banner the new gun.
   const onCratePickup = useCallback(
@@ -629,6 +642,14 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
         setZoom(true) // hold-to-scope on desktop
         return
       }
+      // 1–5 direct-select a weapon (same order as the chip/settings picker).
+      if (e.code.startsWith('Digit')) {
+        const n = Number(e.code.slice(5))
+        if (n >= 1 && n <= WEAPON_IDS.length) {
+          onWeaponSelect(WEAPON_IDS[n - 1])
+          return
+        }
+      }
       if (!DRONE_KEYS.has(e.code)) return
       e.preventDefault()
       if (keys.has(e.code)) return
@@ -664,7 +685,7 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
       window.removeEventListener('blur', onBlur)
       onBlur()
     }
-  }, [controls])
+  }, [controls, onWeaponSelect])
 
   // Turbo stacks under the hard cap; scoped aim is slower (the zoom
   // magnifies apparent motion, so yaw scales by 1/power) — flight speed
@@ -712,8 +733,13 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
   const bottomBase = fullscreen ? `max(${stickInset}px, env(safe-area-inset-bottom))` : '0px'
   const fireRight = stickInset + stickSize + 40
   const fireBottom = Math.round(stickSize * 0.35)
+  // The weapon chip slots between fire and scope in the same column: its pill
+  // is fireSize + 8 wide inside a p:1 hit area, so chipRight = fireRight lines
+  // the two hit boxes up exactly; the scope moves up one row above it.
+  const chipWidth = fireSize + 8
+  const chipBottom = fireBottom + fireSize + 26
   const scopeRight = fireRight + Math.round((fireSize + 24 - scopeSize - 16) / 2)
-  const scopeBottom = fireBottom + fireSize + 30
+  const scopeBottom = chipBottom + 26 + 20
   // Hearts matter from the first wall once crashes cost one — show the row
   // whenever it can change (crash mode on, or enemies shooting).
   const hpVisible = crashes || wave >= ENEMY_FIRE_WAVE
@@ -1279,6 +1305,16 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
           position: 'absolute',
           right: fireRight,
           bottom: `calc(${bottomBase} + ${fireBottom}px)`,
+        }}
+      />
+      <WeaponChip
+        weapon={effectiveWeapon}
+        onSelect={onWeaponSelect}
+        width={chipWidth}
+        sx={{
+          position: 'absolute',
+          right: fireRight,
+          bottom: `calc(${bottomBase} + ${chipBottom}px)`,
         }}
       />
       {view === 'fp' && (

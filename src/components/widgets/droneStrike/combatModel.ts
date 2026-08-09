@@ -151,6 +151,8 @@ export const HOMING: WeaponSpec = {
 
 /** The persisted weapon-picker ids (crate pickups reuse the same ids). */
 export type WeaponId = 'bolt' | 'laser' | 'lob' | 'shotgun' | 'homing'
+/** Picker/scroll order — the weapon chip and the 1–5 hotkeys index this. */
+export const WEAPON_IDS: readonly WeaponId[] = ['bolt', 'laser', 'lob', 'shotgun', 'homing']
 /** What a crate can grant — every special (everything but the default). */
 export type CrateWeaponId = Exclude<WeaponId, 'bolt'>
 

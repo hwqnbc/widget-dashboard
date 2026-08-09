@@ -41,6 +41,7 @@ for (const tid of [
   'strike-joystick-left',
   'strike-joystick-right',
   'strike-fire',
+  'strike-weapon-chip',
   'strike-zoom',
 ]) {
   const r = await rect(tid)
@@ -65,10 +66,13 @@ check(
   scope.y > settings.bottom + 4,
   `scopeTop=${Math.round(scope.y)} toolbarBottom=${Math.round(settings.bottom)}`,
 )
-// Column layout: fire sits inward (left) of the right stick, scope above fire.
+// Column layout: fire sits inward (left) of the right stick, the weapon chip
+// above fire, and the scope above the chip.
 const rightStick = await rect('strike-joystick-right')
+const chip = await rect('strike-weapon-chip')
 check('fire inward of the right stick', fire.right <= rightStick.x + 4)
-check('scope above the fire button', scope.bottom <= fire.y + 4)
+check('weapon chip above the fire button', chip.bottom <= fire.y + 4)
+check('scope above the weapon chip', scope.bottom <= chip.y + 4)
 
 // Controls sized down for the short viewport (fullscreen desktop is 140).
 check('stick scaled to the height', rightStick.h < 200, `h=${Math.round(rightStick.h)}`)

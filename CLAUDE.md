@@ -274,7 +274,9 @@ four aim modes
 Easy/Normal/Hard difficulty, ADS zoom with three gyro fine-aim modes,
 synthesized Web Audio sound effects (no assets),
 muzzle-flash + impact sparks (pure `sparkModel` pool, one Points draw),
-and a settings **weapon picker** — the default bolt, the **hitscan laser**
+and a **weapon picker** (settings + the in-game swipe-to-scroll
+`WeaponChip` between the fire and scope buttons, with 1–5 hotkeys and
+wheel) — the default bolt, the **hitscan laser**
 (`fireHitscan` spawn-frame resolution, balanced by a heat meter with an
 overheat latch, beams via `LaserBeams`), the **ballistic lob** (`gravity >
 0` in the same integrator + the `TrajectoryArc` hint sampled from the same

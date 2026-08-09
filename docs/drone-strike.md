@@ -16,7 +16,8 @@ shooter layout — PUBG/CoD Mobile style), with full desktop support.
 | Move (pitch/strafe) | right stick (hover mode: aims the gimbal) | arrow keys |
 | Aim the gun | **drag the scene** to slew the weapon gimbal; double-tap recenters | left-mouse **drag** (a click still fires); double-click recenters |
 | Fire | **fire button** above the right stick (hold = continuous) | `Space`, left-mouse **click**, or gamepad RT/RB |
-| ADS / zoom | **scope button** above the fire button (tap = toggle) | hold `Shift` or right mouse; gamepad LT (hold) |
+| ADS / zoom | **scope button** at the top of the fire column (tap = toggle) | hold `Shift` or right mouse; gamepad LT (hold) |
+| Switch weapon | **weapon chip** between fire and scope: **swipe up/down to scroll** the 5 guns (wrapping), tap = next | `1–5` direct-select, or **mouse-wheel** over the chip |
 | Fine aim (optional) | **gyro**: tilt the device a few degrees — Off / Zoom only / Always | — |
 
 Key decisions:
@@ -467,7 +468,17 @@ hitscan weapon feeds its hits through.
 
 `WeaponSpec` is pure config `{kind, speed, cooldown, gravity, maxRange,
 tracerLen}`; the **settings weapon picker** (Combat list, `strike-weapon`,
-persisted `weapon` field, root `data-weapon`) selects among `WEAPON_SPECS`:
+persisted `weapon` field, root `data-weapon`) selects among `WEAPON_SPECS`,
+and the same pick is switchable **mid-game** via the **weapon chip**
+(`WeaponChip`, `strike-weapon-chip`) sitting between the fire and scope
+buttons: swipe up/down on it to scroll the `WEAPON_IDS` order one notch per
+`STEP_PX` (28 px, wrapping — a long swipe scrolls several), tap to cycle,
+mouse-wheel over it to step, or press `1–5`. Every path writes the SAME
+persisted `weapon` field **and clears any crate-weapon override** (a
+deliberate choice beats a pickup). The chip inherits the joystick/fire-button
+pointer-capture hardening; note the tap-to-cycle decision lives in the
+window **capture-phase** pointerup fallback (which fires before the
+element's own handler and clears the pointer id — lesson #95):
 
 - **`bolt`** (default) — the classic fast tracer (`BOLT`): leading matters,
   drawn by `Tracers` (whose `tracerLen` now follows the equipped spec, falling
@@ -568,14 +579,15 @@ spark-burst count `data-sparks`, the **weapon-crate beacon**
 **nearest-alive-target beacon** `data-tgt-x/-y/-z/-kind` that lets suites
 aim closed-loop without window globals. Chips: `strike-score` (`data-score/-wave/-best-score/-best-wave`),
 `strike-hp`, `strike-reticle` (`data-lock`), `strike-fire`
-(`data-pressed`), the laser heat bar `strike-heat`/`strike-heat-fill`
+(`data-pressed`), the weapon chip `strike-weapon-chip` (`data-weapon`,
+mirrors the root's), the laser heat bar `strike-heat`/`strike-heat-fill`
 (`data-level` 0–100 + `data-overheated`, mounted only while the laser is
 equipped), joysticks/buttons/settings testids mirror the sim's.
 
 E2E: suites `100-strike-core` … `109-strike-ground` plus `117-strike-audio`,
 `119-strike-soldiers`, `123-strike-sparks`, `124-strike-laser`,
-`125-strike-lob`, `126-strike-crates`, `127-strike-shotgun` and
-`128-strike-homing`
+`125-strike-lob`, `126-strike-crates`, `127-strike-shotgun`,
+`128-strike-homing` and `129-strike-weapon-chip`
 (see `e2e/README.md`); pure modules are esbuild-bundled for the suites in a
 second flat pass in `run.mjs`.
 

@@ -314,6 +314,27 @@ export async function dragAim(page, context, dx, dy, steps = 6) {
   await cdp.detach()
 }
 
+/** Vertical swipe on the weapon chip via CDP touch (negative dy = swipe up =
+ * next weapon; one selection notch per ~28 px — see WeaponChip's STEP_PX). */
+export async function swipeChip(page, context, dy, testId = 'strike-weapon-chip') {
+  const p = await stickCenter(page, testId)
+  const cdp = await context.newCDPSession(page)
+  await cdp.send('Input.dispatchTouchEvent', {
+    type: 'touchStart',
+    touchPoints: [{ x: p.x, y: p.y, id: 11 }],
+  })
+  const steps = 6
+  for (let i = 1; i <= steps; i++) {
+    await cdp.send('Input.dispatchTouchEvent', {
+      type: 'touchMove',
+      touchPoints: [{ x: p.x, y: p.y + (dy * i) / steps, id: 11 }],
+    })
+    await page.waitForTimeout(30)
+  }
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
+  await cdp.detach()
+}
+
 /** Quick tap on the free scene area (for double-tap recenter). */
 export async function tapScene(page, context) {
   const p = await freeScenePoint(page)

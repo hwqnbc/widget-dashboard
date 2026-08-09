@@ -1357,3 +1357,21 @@ carried over; these are the new ones.
     fixed array (`EnemyRockets`) generalizes by taking the pool as a prop and
     sizing its buffers from `pool.length` in `useMemo` — one component now
     draws enemy RPGs and player missiles with zero duplication.
+
+95. **A window CAPTURE-phase release fallback fires BEFORE the element's own
+    pointerup handler — put release-time decisions in the fallback, not the
+    element.** The weapon chip copied the fire button's release hardening
+    (window `pointerup`/`pointercancel` listeners registered with
+    `capture: true`, so a release that never reaches the element still clears
+    the gesture). But capture-phase listeners run on the way DOWN the tree —
+    before the chip's React `onPointerUp` — and the fallback cleared
+    `pointerIdRef`, so the element handler's id check rejected every genuine
+    release and the tap-to-cycle never fired. The fire button never noticed
+    this ordering because its release is idempotent (clearing `fireHeldRef`
+    twice is harmless); the chip's tap is an ACTION, and it silently died.
+    Fix: make the release-time decision IN the window fallback (`if (e.type
+    === 'pointerup' && !moved) step(1)` — never on `pointercancel`), and
+    demote the element's `onPointerUp` to a belt-and-suspenders release.
+    General rule: with capture-phase window fallbacks, the element's
+    up-handler is effectively dead code — anything that must happen on
+    release belongs in the fallback.
