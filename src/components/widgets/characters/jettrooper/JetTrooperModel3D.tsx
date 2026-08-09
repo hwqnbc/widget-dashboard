@@ -19,9 +19,11 @@
 //   FlashBurst windows at the lens (forward cone so the burst reads
 //   face-on — the Gold Gunner lesson) with elbow recoil kicks.
 // - 'walk': the shared leg-gait rig (hip-pivot swing), jetpack quiet.
-// Grip note: the beam weapon is a PISTOL grip like the imperium claw —
-// the receiver rides PERPENDICULAR to the forearm (local +z of the elbow
-// group), so the elbow's x-rotation aims the dish.
+// Grip note: the beam weapon's receiver/barrel/dish axis lies PARALLEL to
+// the forearm (the mount rotates weapon-local +z onto the forearm's own
+// axis, grip vertical in the fist) — with the elbow at -π/2 the forearm is
+// level with the ground and the dish aims straight ahead; the elbow's
+// x-rotation still aims it.
 // All animation mutates refs in useFrame — zero React renders.
 //
 // Loaded only via lazy() (the avatar registry's Model3D/Figure3D fields) —
@@ -42,7 +44,7 @@ const smooth = (k: number) => (k <= 0 ? 0 : k >= 1 ? 1 : k * k * (3 - 2 * k))
 /** Rest pose + Jet & Blast timeline (loop matches the 2D's 2.6 s). */
 const R_SHZ = 0.15
 const R_SHY = 0.35 // outward yaw (#61) so the big dish clears the body
-const R_ELBOW = -0.55 // carry: dish level ahead (pistol grip ⊥ forearm)
+const R_ELBOW = -Math.PI / 2 // carry: forearm LEVEL with the ground, aiming ahead
 const L_SHZ = 0.15
 const L_SHY = 0.2
 const L_ELBOW = -0.25
@@ -50,7 +52,7 @@ const JET_T = 2.6
 const RISE_DONE = 0.55 // airborne
 const SETTLE_AT = 2.1 // descent starts
 const LIFT_Y = 0.38 // hover height
-const AIM_ELBOW = -0.9 // arm levels the dish up a touch to fire
+const AIM_ELBOW = -1.75 // hover shot lifts the muzzle a touch above level
 const FIRE_1 = 0.95 // the two shots
 const FIRE_2 = 1.55
 const FIRE_LEN = 0.16
@@ -397,8 +399,9 @@ export default function JetTrooperModel3D({ action }: { action?: string }) {
             <sphereGeometry args={[0.085, 12, 10]} />
             <meshStandardMaterial color={JT.hand} {...CLOTH} />
           </mesh>
-          {/* the beam weapon in the fist; dish ⊥ forearm (pistol grip) */}
-          <group position={[0, -0.26, 0]}>
+          {/* the beam weapon in the fist; the +π/2 roll lays the receiver
+              PARALLEL to the forearm (dish beyond the fist, scope on top) */}
+          <group position={[0, -0.26, 0]} rotation-x={Math.PI / 2}>
             <BeamWeapon flashRef={flashRef} />
           </group>
         </group>
