@@ -42,7 +42,6 @@ import DroneModel from '../droneSim/DroneModel'
 import type {
   AimAssistLevel,
   CombatState,
-  CrateWeaponId,
   HeatEvent,
   HitEvent,
   LaserBeam,
@@ -72,7 +71,7 @@ import {
   stepHeat,
   stepProjectiles,
 } from './combatModel'
-import type { TargetKind, TargetState } from './waveLayout'
+import type { CrateLoot, TargetKind, TargetState } from './waveLayout'
 import { aliveCount, crateReached, stepDrift } from './waveLayout'
 import type { CrateState } from './WeaponCrates'
 import type { EnemyAIState } from './enemyAI'
@@ -115,12 +114,14 @@ const BLIP_COLORS: Record<TargetKind, string> = {
   car: '#42a5f5',
   soldier: '#ffca28',
 }
-/** Minimap crate-marker tint per granted weapon (mirrors WeaponCrates). */
-const CRATE_BLIP: Record<CrateWeaponId, string> = {
+/** Minimap crate-marker tint per loot (mirrors WeaponCrates). */
+const CRATE_BLIP: Record<CrateLoot, string> = {
   laser: '#4fc3f7',
   lob: '#ffd54f',
   shotgun: '#ff7043',
   homing: '#69f0ae',
+  heart: '#ff5252',
+  score: '#e040fb',
 }
 /** Enemy bolts never hit other targets (no friendly fire). */
 const NO_TARGETS: TargetState[] = []
@@ -282,8 +283,9 @@ export default function StrikeRig({
   /** The wave's rooftop weapon crate — consumed here on touch (one distance
    * check per frame, the landing-pad pattern). */
   crate: CrateState
-  /** The player reached the crate — the body swaps the equipped weapon. */
-  onCratePickup: (weapon: CrateWeaponId) => void
+  /** The player reached the crate — the body applies its loot (weapon swap,
+   * heart, or score cache). */
+  onCratePickup: (loot: CrateLoot) => void
   /** Minimap crate marker — position/colour/visibility written on the tick. */
   minimapCrateRef: RefObject<SVGRectElement | null>
   /** Heat latch tripped / cleared (the body banners it, battery-style). */
@@ -473,7 +475,7 @@ export default function StrikeRig({
         sfx.pickup++
         playPickup()
       }
-      onCratePickup(crate.weapon)
+      onCratePickup(crate.loot)
     }
 
     const aim = aimRef.current
@@ -922,7 +924,7 @@ export default function StrikeRig({
         hud.dataset.crateActive = crate.active ? 'yes' : 'no'
         hud.dataset.crateX = crate.x.toFixed(1)
         hud.dataset.crateZ = crate.z.toFixed(1)
-        hud.dataset.crateWeapon = crate.weapon
+        hud.dataset.crateLoot = crate.loot
         // Monotonic spark-burst count (muzzle flashes + impact showers) — the
         // e2e signal that the particle system fired without needing pixels.
         hud.dataset.sparks = String(sparks.spawned)
@@ -1011,7 +1013,7 @@ export default function StrikeRig({
         if (crate.active) {
           crateMarker.setAttribute('x', (crate.x - 1.5).toFixed(1))
           crateMarker.setAttribute('y', (crate.z - 1.5).toFixed(1))
-          crateMarker.setAttribute('fill', CRATE_BLIP[crate.weapon])
+          crateMarker.setAttribute('fill', CRATE_BLIP[crate.loot])
           crateMarker.removeAttribute('display')
         } else {
           crateMarker.setAttribute('display', 'none')

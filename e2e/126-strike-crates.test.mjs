@@ -1,17 +1,19 @@
 /**
- * Drone Strike weapon-crate suite. Crates are seeded per wave as the LAST
+ * Drone Strike supply-crate suite. Crates are seeded per wave as the LAST
  * consumers of the wave's RNG stream (appending draws keeps every existing
  * placement identical — the seed-stability lesson): from CRATE_FROM_WAVE (2)
- * a crate sits on a qualifying rooftop no soldier pacer owns, granting laser
- * or lob alternating by wave parity. They are NOT targets — not shootable,
+ * a crate sits on a qualifying rooftop no soldier pacer owns, its loot
+ * cycling CRATE_ROTATION — the four special weapons plus the two non-weapon
+ * drops (bonus heart, score cache). They are NOT targets — not shootable,
  * not counted toward the wave clear (WaveSpec.crate sits beside the target
  * list). Pickup is the pure `crateReached` (one distance check per frame in
- * the rig — the landing-pad pattern); the granted weapon overrides the
- * settings pick until the run ends (wave failed / restart). Live: wave 1
- * publishes no crate (`data-crate-active="no"`); clearing wave 1 with the
- * pilot recipe brings wave 2's crate online with the exact seeded coords +
- * weapon on the HUD beacon, while the equipped weapon stays the un-picked-up
- * default bolt.
+ * the rig — the landing-pad pattern); what a pickup grants is the pure
+ * `resolveCrateGrant` (weapon override until the run ends / +1 heart with a
+ * full-hearts fallback to the score cache / +CRATE_SCORE points). Live:
+ * wave 1 publishes no crate (`data-crate-active="no"`); clearing wave 1
+ * with the pilot recipe brings wave 2's crate online with the exact seeded
+ * coords + loot on the HUD beacon, while the equipped weapon stays the
+ * un-picked-up default bolt.
  */
 import {
   addStrikeWidget,
@@ -29,8 +31,10 @@ import {
   CRATE_PICKUP_HEIGHT,
   CRATE_RADIUS,
   CRATE_ROTATION,
+  CRATE_SCORE,
   buildWave,
   crateReached,
+  resolveCrateGrant,
 } from './.bundle/waveLayout.js'
 
 const { check, finish } = reporter('strike-crates')
@@ -65,11 +69,24 @@ const clearOfSoldiers = specs.every((s) => {
 })
 check('no crate shares a roof with a soldier', clearOfSoldiers)
 
-// The weapon cycles the CRATE_ROTATION (every special rotates through a run).
-check('crate weapon follows the rotation',
-  specs.every((s, i) => !s.crate || s.crate.weapon === CRATE_ROTATION[waves[i] % 4]))
-check('the rotation covers all four specials',
-  ['laser', 'lob', 'shotgun', 'homing'].every((w) => CRATE_ROTATION.includes(w)))
+// The loot cycles the CRATE_ROTATION (every special weapon AND both
+// non-weapon drops rotate through a run).
+check('crate loot follows the rotation',
+  specs.every((s, i) => !s.crate || s.crate.loot === CRATE_ROTATION[waves[i] % CRATE_ROTATION.length]))
+check('the rotation covers all four specials and both loot drops',
+  ['laser', 'lob', 'shotgun', 'homing', 'heart', 'score'].every((w) => CRATE_ROTATION.includes(w)))
+
+// --- pure: what a pickup grants (resolveCrateGrant) ---
+const gWeapon = resolveCrateGrant('shotgun', 2, 3)
+check('a weapon crate grants the gun and nothing else',
+  gWeapon.weapon === 'shotgun' && gWeapon.hearts === 0 && gWeapon.score === 0)
+const gHeart = resolveCrateGrant('heart', 2, 3)
+check('a heart crate heals one when hurt', gHeart.weapon === null && gHeart.hearts === 1 && gHeart.score === 0)
+const gFull = resolveCrateGrant('heart', 3, 3)
+check('a heart at full hearts falls back to the score cache (never wasted)',
+  gFull.weapon === null && gFull.hearts === 0 && gFull.score === CRATE_SCORE)
+const gScore = resolveCrateGrant('score', 3, 3)
+check('a score cache pays CRATE_SCORE', gScore.weapon === null && gScore.score === CRATE_SCORE && CRATE_SCORE > 0)
 
 // Crates are NOT targets: the target list is unchanged in kind terms.
 check('a crate is not a shootable target',
@@ -119,12 +136,12 @@ if (cleared) {
   check('wave 2 goes active', await waitForWaveState(page, 'active', 12000))
   check('wave 2 brings the crate online', (await hud.getAttribute('data-crate-active')) === 'yes')
   const w2 = buildWave(DEFAULT_SEED, 2, layout, 'easy')
-  check('the live crate is the seeded one (coords + weapon)',
+  check('the live crate is the seeded one (coords + loot)',
     w2.crate &&
       Math.abs(Number(await hud.getAttribute('data-crate-x')) - w2.crate.x) < 0.2 &&
       Math.abs(Number(await hud.getAttribute('data-crate-z')) - w2.crate.z) < 0.2 &&
-      (await hud.getAttribute('data-crate-weapon')) === w2.crate.weapon,
-    `hud=(${await hud.getAttribute('data-crate-x')},${await hud.getAttribute('data-crate-z')},${await hud.getAttribute('data-crate-weapon')})`)
+      (await hud.getAttribute('data-crate-loot')) === w2.crate.loot,
+    `hud=(${await hud.getAttribute('data-crate-x')},${await hud.getAttribute('data-crate-z')},${await hud.getAttribute('data-crate-loot')})`)
   check('weapon still the settings pick until touched',
     (await root.getAttribute('data-weapon')) === 'bolt')
 }

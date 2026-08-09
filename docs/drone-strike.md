@@ -560,28 +560,33 @@ element's own handler and clears the pointer id — lesson #95):
   config (`homing` on `WeaponSpec`) and the targets array was already
   threaded through the integrator.
 
-**Rooftop weapon crates** put the special guns *in the game*: from wave 2, a
-pulsing disc + crate + beacon column (`WeaponCrates`, the LandingPads recipe,
-cyan for laser / amber for lob) sits on a qualifying rooftop no soldier pacer
-owns, seeded as the **last** consumers of the wave's RNG stream (appending
-draws keeps every existing placement identical — the seed-stability lesson);
-the granted weapon cycles `CRATE_ROTATION` (`waveIndex % 4`:
-shotgun/homing/laser/lob, ordered to keep the original wave-2 laser / wave-3
-lob grants stable) so every special rotates through a run — disc/beacon and
-minimap-marker colours are per-weapon (cyan/amber/ember/green). A crate is **not a target** — it
-lives beside the target list as `WaveSpec.crate` (not a `TargetKind`, so it's
-unshootable and never counts toward the wave clear). Fly onto the disc
-(`crateReached`, one distance check per frame — the landing-pad pattern; the
-rig consumes it single-use) and the **crate weapon overrides the settings
-pick**: `effectiveWeapon = crateWeapon ?? settings weapon` (runtime-only React
-state, deliberately not persisted), bannered LASER ONLINE / LOB CANNON ONLINE
-with a pickup chime (`data-sfx-pickup`). You keep it until the **run ends** —
-losing all hearts (wave failed) or restarting clears it back to the settings
-pick; a failed-wave retry does NOT keep it (that's the price of the wipe). The
-HUD publishes a crate beacon (`data-crate-active/-x/-z/-weapon`) and the
-minimap draws a small weapon-coloured square so the crate can be found.
-Pickup banners: LASER ONLINE / LOB CANNON ONLINE / SHOTGUN ONLINE /
-MISSILES ONLINE.
+**Rooftop supply crates**: from wave 2, a pulsing disc + crate + beacon
+column (`WeaponCrates`, the LandingPads recipe) sits on a qualifying rooftop
+no soldier pacer owns, seeded as the **last** consumers of the wave's RNG
+stream (appending draws keeps every existing placement identical — the
+seed-stability lesson). The crate's **loot** cycles `CRATE_ROTATION`
+(`waveIndex % 6`: shotgun/homing/laser/**heart**/lob/**score**, ordered to
+keep the original wave-2 laser grant stable) — since the in-game weapon chip
+made "equip a special" a free swipe, crates carry **non-weapon loot** too so
+the rooftop detour stays worth flying: a **bonus heart** (+1 HP; at full
+hearts it falls back to the score cache — never wasted) and a **score
+cache** (+`CRATE_SCORE` 50). What a pickup grants is the pure
+`resolveCrateGrant(loot, hp, maxHp)` (e2e-testable fallback rule); disc/
+beacon and minimap-marker colours are per-loot (cyan/amber/ember/green +
+heart red `#ff5252` / cache magenta `#e040fb`). A crate is **not a
+target** — it lives beside the target list as `WaveSpec.crate` (not a
+`TargetKind`, so it's unshootable and never counts toward the wave clear).
+Fly onto the disc (`crateReached`, one distance check per frame — the
+landing-pad pattern; the rig consumes it single-use) and the grant applies:
+a **crate weapon overrides the settings pick** — `effectiveWeapon =
+crateWeapon ?? settings weapon` (runtime-only React state, deliberately not
+persisted), kept until the **run ends** (losing all hearts or restarting
+clears it back to the settings pick; a failed-wave retry does NOT keep it) —
+while hearts/score apply instantly. Pickup banners (with the chime,
+`data-sfx-pickup`): LASER ONLINE / LOB CANNON ONLINE / SHOTGUN ONLINE /
+MISSILES ONLINE / ♥ BONUS HEART / SUPPLY CACHE +50. The HUD publishes a
+crate beacon (`data-crate-active/-x/-z/-loot`) and the minimap draws a
+small loot-coloured square so the crate can be found.
 
 **Switching weapons despawns in-flight player bolts** and starts the new gun
 cold — `stepProjectiles` sweeps the pool with the *current* spec, so a live
@@ -599,8 +604,8 @@ Root `drone-strike-root`: `data-world-seed/-view/-auto-fire/-aim-assist/
 -score/-shots/-hits/-targets-left/-lock/-proj/-enemy-proj/-hp/
 -input-source`, the **sound-effect counters**
 `data-sfx-fire/-pop/-hit/-alert/-clear/-crash/-zap/-pickup`, the monotonic
-spark-burst count `data-sparks`, the **weapon-crate beacon**
-`data-crate-active/-x/-z/-weapon`, plus the
+spark-burst count `data-sparks`, the **supply-crate beacon**
+`data-crate-active/-x/-z/-loot`, plus the
 **nearest-alive-target beacon** `data-tgt-x/-y/-z/-kind` that lets suites
 aim closed-loop without window globals. Chips: `strike-score` (`data-score/-wave/-best-score/-best-wave`),
 `strike-hp`, `strike-reticle` (`data-lock`), `strike-fire`
@@ -651,8 +656,16 @@ kind of list).
   `crateReached` pickup, `effectiveWeapon = crate ?? settings` kept until the
   run ends — see "Player weapons"). The whole Weapons backlog is now shipped;
   room to extend: ~~more specs (shotgun spread, homing)~~ — **both shipped**
-  (see "Player weapons"; the crate rotation now cycles all four specials);
-  crate variants (shield/battery pickups), or a timed power-up flavour.
+  (see "Player weapons"); ~~crate variants (non-weapon pickups)~~ —
+  **shipped** (the loot rotation: bonus heart + score cache beside the four
+  specials, `resolveCrateGrant` — see the supply-crate section); a timed
+  power-up flavour (shield/overdrive) remains open.
+- **Crate-exclusive super weapon** — a sixth gun that never appears on the
+  weapon chip (e.g. a railgun or cluster lob), only found in crates and
+  limited-ammo (gone when spent, back to the previous gun). Builds on the
+  same seams: one more `WeaponSpec`, the `effectiveWeapon` override with an
+  ammo counter instead of the run-end lifetime, and a chip that skips
+  unowned exclusives.
 - ~~Muzzle flash + impact sparks~~ — **shipped** (the pure `sparkModel.ts`
   burst pool + `SparkField` single-draw-call Points renderer: a muzzle flash
   on every shot, impact showers at `HitEvent` coordinates — targets, world,

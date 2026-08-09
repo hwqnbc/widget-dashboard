@@ -2,6 +2,7 @@ import { useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { DoubleSide } from 'three'
 import type { Group, MeshBasicMaterial, MeshStandardMaterial } from 'three'
+import type { CrateLoot } from './waveLayout'
 
 /** Runtime crate slot — body-owned shared mutable state (the combat-pool
  * pattern): loaded from the wave spec on each intro, consumed by the rig on
@@ -13,23 +14,26 @@ export interface CrateState {
   /** Roof height the disc sits on (matches CrateSpec.top). */
   top: number
   z: number
-  weapon: 'laser' | 'lob' | 'shotgun' | 'homing'
+  loot: CrateLoot
 }
 
-/** Disc/beacon tint per granted weapon (laser cyan / lob amber / shotgun
- * ember / homing green — mirrored by the minimap crate marker). */
-const CRATE_COLORS = {
+/** Disc/beacon tint per loot (laser cyan / lob amber / shotgun ember /
+ * homing green / heart red / score cache magenta — mirrored by the minimap
+ * crate marker). */
+const CRATE_COLORS: Record<CrateLoot, string> = {
   laser: '#4fc3f7',
   lob: '#ffd54f',
   shotgun: '#ff7043',
   homing: '#69f0ae',
-} as const
+  heart: '#ff5252',
+  score: '#e040fb',
+}
 
 /**
- * The rooftop weapon crate — the LandingPads disc recipe (circle + pulsing
+ * The rooftop supply crate — the LandingPads disc recipe (circle + pulsing
  * emissive + a tall faint beacon column so it can be spotted across the
  * city), plus a small crate box. Everything is driven from the shared
- * `CrateState` in useFrame (visibility, position, per-weapon colour) — zero
+ * `CrateState` in useFrame (visibility, position, per-loot colour) — zero
  * React renders, the SafePadRing pattern.
  */
 export default function WeaponCrates({ crate }: { crate: CrateState }) {
@@ -37,7 +41,7 @@ export default function WeaponCrates({ crate }: { crate: CrateState }) {
   const discMat = useRef<MeshStandardMaterial>(null)
   const boxMat = useRef<MeshStandardMaterial>(null)
   const beaconMat = useRef<MeshBasicMaterial>(null)
-  const lastWeapon = useRef<CrateState['weapon'] | null>(null)
+  const lastLoot = useRef<CrateLoot | null>(null)
 
   useFrame(({ clock }) => {
     const g = groupRef.current
@@ -45,9 +49,9 @@ export default function WeaponCrates({ crate }: { crate: CrateState }) {
     g.visible = crate.active
     if (!crate.active) return
     g.position.set(crate.x, crate.top + 0.02, crate.z)
-    if (lastWeapon.current !== crate.weapon) {
-      lastWeapon.current = crate.weapon
-      const tint = CRATE_COLORS[crate.weapon]
+    if (lastLoot.current !== crate.loot) {
+      lastLoot.current = crate.loot
+      const tint = CRATE_COLORS[crate.loot]
       discMat.current?.color.set(tint)
       discMat.current?.emissive.set(tint)
       boxMat.current?.emissive.set(tint)

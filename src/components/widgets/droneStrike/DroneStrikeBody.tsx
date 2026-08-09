@@ -50,8 +50,9 @@ import {
   createLaserBeams,
   resetCombatState,
 } from './combatModel'
-import type { Difficulty } from './waveLayout'
+import type { CrateLoot, Difficulty } from './waveLayout'
 import {
+  CRATE_SCORE,
   DIFFICULTY,
   ENEMY_FIRE_WAVE,
   buildWave,
@@ -59,6 +60,7 @@ import {
   createTargetStates,
   enemyAggressionScale,
   loadWave,
+  resolveCrateGrant,
 } from './waveLayout'
 import { createEnemyAIStates, seedEnemyAIStates } from './enemyAI'
 import type { StrikeView } from './aimModel'
@@ -118,12 +120,15 @@ const coerceExpo = clampNum(0, 0.8)
 
 type WavePhase = 'intro' | 'active' | 'cleared' | 'failed'
 
-/** Pickup banner per crate weapon. */
-const CRATE_BANNERS: Record<CrateWeaponId, string> = {
+/** Pickup banner per crate loot (the heart banner covers the full-hearts
+ * score fallback via the resolved grant, not the loot id). */
+const CRATE_BANNERS: Record<CrateLoot, string> = {
   laser: 'LASER ONLINE',
   lob: 'LOB CANNON ONLINE',
   shotgun: 'SHOTGUN ONLINE',
   homing: 'MISSILES ONLINE',
+  heart: '\u2665 BONUS HEART',
+  score: `SUPPLY CACHE +${CRATE_SCORE}`,
 }
 
 /** WAVE N banner hold before the targets spawn. */
@@ -245,14 +250,14 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
     origin: { x: 0, y: 2, z: 0 },
     dir: { x: 0, y: 0, z: -1 },
   }).current
-  // The wave's rooftop weapon crate — loaded from the wave spec on each
+  // The wave's rooftop supply crate — loaded from the wave spec on each
   // intro, consumed by the rig on touch, drawn by WeaponCrates.
   const crateState = useRef<CrateState>({
     active: false,
     x: 0,
     top: 0,
     z: 0,
-    weapon: 'laser',
+    loot: 'laser',
   }).current
   const targets = useRef(createTargetStates()).current
   const enemyAI = useRef(createEnemyAIStates()).current
@@ -384,7 +389,7 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
           crateState.x = spec.crate.x
           crateState.top = spec.crate.top
           crateState.z = spec.crate.z
-          crateState.weapon = spec.crate.weapon
+          crateState.loot = spec.crate.loot
         } else {
           crateState.active = false
         }
@@ -506,15 +511,20 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
     [dispatch, id],
   )
 
-  // Crate pickup — the rig consumed the crate; swap the equipped weapon
-  // until the run ends and banner the new gun.
+  // Crate pickup — the rig consumed the crate; apply the resolved grant:
+  // a weapon swaps the gun until the run ends, a heart heals one (falling
+  // back to the score cache at full hearts — never wasted), a cache pays
+  // straight into the score (the HUD chip shows it on the next tick).
   const onCratePickup = useCallback(
-    (weapon: CrateWeaponId) => {
-      setCrateWeapon(weapon)
+    (loot: CrateLoot) => {
+      const grant = resolveCrateGrant(loot, hp, PLAYER_HP)
+      if (grant.weapon) setCrateWeapon(grant.weapon)
+      if (grant.hearts > 0) setHp((h) => Math.min(PLAYER_HP, h + grant.hearts))
+      if (grant.score > 0) scoreRef.current += grant.score
       vibrate(GATE_PULSE)
-      showBanner(CRATE_BANNERS[weapon])
+      showBanner(grant.hearts === 0 && grant.score > 0 ? CRATE_BANNERS.score : CRATE_BANNERS[loot])
     },
-    [showBanner],
+    [showBanner, hp],
   )
 
   // Crash: the tumble costs a heart (same feedback as taking a bolt);
