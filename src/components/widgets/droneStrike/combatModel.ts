@@ -269,6 +269,10 @@ export interface CombatState {
   heat: number
   /** Latched at 100 heat — the gun is offline until heat falls to HEAT_RESET. */
   overheated: boolean
+  /** Combo kill chain — kills inside COMBO_WINDOW of each other. */
+  chain: number
+  /** Seconds left in the current chain window (0 = no chain). */
+  comboT: number
 }
 
 function createProjectile(): Projectile {
@@ -293,6 +297,8 @@ export function createCombatState(): CombatState {
     hits: 0,
     heat: 0,
     overheated: false,
+    chain: 0,
+    comboT: 0,
   }
 }
 
@@ -303,12 +309,47 @@ export function resetCombatState(c: CombatState): void {
   c.hits = 0
   c.heat = 0
   c.overheated = false
+  c.chain = 0
+  c.comboT = 0
 }
 
 /** Despawn every bolt in flight (wave transitions) — stats stay. */
 export function clearProjectiles(c: CombatState): void {
   for (const p of c.player) p.active = false
   for (const p of c.enemy) p.active = false
+}
+
+/* -------------------------------- combo --------------------------------- */
+
+/** A kill within this many seconds of the last keeps the chain alive. */
+export const COMBO_WINDOW = 5
+/** Multiplier cap — the chain keeps counting, the pay stops climbing. */
+export const COMBO_MAX = 4
+
+/** A target died: bump the chain, refresh the window, and return the
+ * multiplier to pay THIS kill with (first kill ×1, second inside the
+ * window ×2, … capped at COMBO_MAX). Pure — the rig pays
+ * `t.points * comboKill(combat)`. */
+export function comboKill(c: CombatState): number {
+  c.chain++
+  c.comboT = COMBO_WINDOW
+  return Math.min(c.chain, COMBO_MAX)
+}
+
+/** Per-frame chain-window decay: no kill for COMBO_WINDOW → chain dies. */
+export function stepCombo(c: CombatState, dt: number): void {
+  if (c.comboT <= 0) return
+  c.comboT -= dt
+  if (c.comboT <= 0) {
+    c.comboT = 0
+    c.chain = 0
+  }
+}
+
+/** Taking damage (bolt, kamikaze contact, crash) breaks the chain. */
+export function resetCombo(c: CombatState): void {
+  c.chain = 0
+  c.comboT = 0
 }
 
 /* -------------------------------- heat ---------------------------------- */

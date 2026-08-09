@@ -297,7 +297,10 @@ rocket visual) — plus per-wave **rooftop supply crates** (`WaveSpec.crate` +
 `crateReached` + `WeaponCrates`, non-weapon loot only: an alternating
 **bonus heart** (+1, uncapped — overheal stacks past 3) and **score cache**
 via the pure `resolveCrateGrant`, with **score milestones paying a bonus
-heart every 500 points** (`milestoneHearts`); the chip made weapon drops
+heart every 500 points** (`milestoneHearts`) and **combo scoring** (kills
+inside a 5 s chain window multiply points ×1→×4, broken by damage or
+silence — pure `comboKill`/`stepCombo` on `CombatState`); the chip made
+weapon drops
 redundant, so
 they were retired — the backlog's crate-exclusive super weapon brings a
 gun back later).

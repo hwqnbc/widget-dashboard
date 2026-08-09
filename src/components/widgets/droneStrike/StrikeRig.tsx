@@ -55,11 +55,15 @@ import {
   AIM_CONE_RAD,
   AIM_CONE_RAD_ZOOM,
   AUTO_FIRE_HOLD_S,
+  COMBO_MAX,
   ENEMY_BOLT,
   JET_BEAM,
   SOLDIER_ROCKET,
   SOLDIER_SMG,
   addHeat,
+  comboKill,
+  resetCombo,
+  stepCombo,
   bendAim,
   createHitEvents,
   createHitscanResult,
@@ -450,6 +454,7 @@ export default function StrikeRig({
           sfx.crash++
           playCrash()
         }
+        resetCombo(combat)
         onCrash()
       }
 
@@ -608,6 +613,7 @@ export default function StrikeRig({
             playCrash()
           }
           aim.recoil += PLAYER_HIT_KICK * 2
+          resetCombo(combat)
           onPlayerHit()
         }
       } else if (waveActive && (t.kind === 'turret' || t.kind === 'soldier' || t.kind === 'jet')) {
@@ -721,7 +727,10 @@ export default function StrikeRig({
       t.hitFlash = 0.25
       if (t.hp <= 0) {
         t.alive = false
-        scoreRef.current += t.points
+        // Combo pay: chained kills multiply (×1 first kill, up to ×COMBO_MAX)
+        // — the multiplied points feed the same score the milestone hearts
+        // watch, so fast chains also heal faster.
+        scoreRef.current += t.points * comboKill(combat)
         vibrate(KILL_PULSE)
         if (audioOn) {
           sfx.pop++
@@ -818,6 +827,7 @@ export default function StrikeRig({
 
     // Sweep the player pool against world + targets.
     events.count = 0
+    stepCombo(combat, dt)
     stepProjectiles(combat.player, weapon, dt, colliders, targets, null, 0, events)
     for (let i = 0; i < events.count; i++) applyPlayerHitEvent(events.items[i])
 
@@ -850,6 +860,7 @@ export default function StrikeRig({
         playCrash()
       }
       aim.recoil += PLAYER_HIT_KICK
+      resetCombo(combat)
       onPlayerHit()
     }
 
@@ -915,6 +926,7 @@ export default function StrikeRig({
         }
         milestonePaidRef.current = ms.paid
         hud.dataset.milestones = String(ms.paid)
+        hud.dataset.combo = String(combat.chain)
         hud.dataset.shots = String(combat.shots)
         hud.dataset.hits = String(combat.hits)
         hud.dataset.targetsLeft = String(left)
@@ -982,7 +994,12 @@ export default function StrikeRig({
       }
       const chip = scoreChipRef.current
       if (chip) {
-        chip.textContent = `WAVE ${wave} · SCORE ${scoreRef.current}`
+        // A live chain ≥ ×2 shows on the chip (×1 is just normal scoring).
+        const mult = Math.min(combat.chain, COMBO_MAX)
+        chip.textContent =
+          mult >= 2
+            ? `WAVE ${wave} · SCORE ${scoreRef.current} · \u00d7${mult}`
+            : `WAVE ${wave} · SCORE ${scoreRef.current}`
         chip.dataset.score = String(scoreRef.current)
         chip.dataset.wave = String(wave)
       }

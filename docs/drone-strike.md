@@ -361,7 +361,17 @@ while a hoverer stays near-level; wave 4 fields a lone strafer, waves 5+
 one hoverer + one strafer.
 
 Scoring: balloon 10, drifter 15, ground truck 20, enemy 25 (2 HP),
-jet trooper 30 (strafer 40), kamikaze chaser 35, AA turret 30. **Every
+jet trooper 30 (strafer 40), kamikaze chaser 35, AA turret 30. **Combo
+scoring**: each kill bumps a chain and refreshes a `COMBO_WINDOW` (5 s)
+timer — the multiplier paid on a kill is `min(chain, COMBO_MAX)` (first
+kill ×1, a second inside the window ×2, capped ×4); the chain dies when
+the window expires or the player takes ANY damage (enemy bolt, kamikaze
+contact, crash — `resetCombo` at all three rig sites). Kill-chain-plus-
+timer (not miss-breaks-chain) keeps it weapon-neutral: shotgun pellets
+and laser ticks can't break a chain, only time and damage do. The pure
+model lives on `CombatState` (`comboKill`/`stepCombo`/`resetCombo` —
+restart resets via `resetCombatState` for free); the score chip shows
+`· ×N` while a chain is ≥ ×2 and the HUD publishes `data-combo`. **Every
 `MILESTONE_SCORE` (500) session points pays a bonus heart** (uncapped, the
 crate-heart stacking rule) — the mechanical use of scoring: kills and
 score-cache crates alike are deferred healing. The rig's 150 ms tick runs
@@ -658,8 +668,8 @@ equipped), joysticks/buttons/settings testids mirror the sim's.
 E2E: suites `100-strike-core` … `109-strike-ground` plus `117-strike-audio`,
 `119-strike-soldiers`, `123-strike-sparks`, `124-strike-laser`,
 `125-strike-lob`, `126-strike-crates`, `127-strike-shotgun`,
-`128-strike-homing`, `129-strike-weapon-chip`, `131-strike-chaser` and
-`132-strike-jets`
+`128-strike-homing`, `129-strike-weapon-chip`, `131-strike-chaser`,
+`132-strike-jets` and `133-strike-combo`
 (see `e2e/README.md`); pure modules are esbuild-bundled for the suites in a
 second flat pass in `run.mjs`.
 
@@ -790,9 +800,12 @@ kind of list).
   strafer — see the jet-trooper section).
 - **Boss wave every 5th** — one large multi-HP drone with weak-point
   spheres (extra `Hittable`s attached to its pose) and a health bar chip.
-- **Combo scoring** — consecutive hits without a miss multiply points;
-  `combat.shots/hits` already tracks the stream, add a decaying multiplier
-  in the rig and show it on the score chip.
+- ~~Combo scoring~~ — **shipped**, as a kill chain rather than the
+  original hits-without-a-miss sketch (which the shotgun's 7-pellet fan
+  and the laser's tick stream would have broken by design): kills inside
+  a 5 s window multiply ×1→×4, damage or silence breaks the chain — see
+  the Scoring section. The multiplied points feed the milestone hearts,
+  so chains also heal faster.
 - ~~Difficulty setting~~ — **shipped** (Easy default / Normal / Hard
   scaling enemy orbit speed, evade burst, HP, count and return-fire wave;
   `DIFFICULTY` presets in `waveLayout.ts` — see the gameplay section).
