@@ -1392,3 +1392,24 @@ carried over; these are the new ones.
     exists anywhere a patrol/parametric mode gains a pursuit/physics mode;
     the e2e pin is cheap: freeze the trigger condition and assert x/z stay
     put instead of returning to the ring.
+
+97. **A closed-loop e2e pilot needs a no-progress watchdog — and a seeded-
+    stream re-roll is what surfaces the latent trap.** The strike pilot's
+    `engage()` zeroes forward input inside gun range and corrects altitude
+    toward the target; for a deck-level target (turret, y = 1) with a
+    building on the straight line, that combination is a permanent stall —
+    the drone descends to deck height (zero vertical error), wall-pins (or
+    hovers blind behind the building), and with `fwd = 0` inside 30 u it can
+    never round the obstacle: every engage times out until the suite dies.
+    The recipe had cleared dozens of runs — the trap existed all along, but
+    no seeded placement had ever put a turret behind a wall at deck height
+    until the jet round's gallery trim re-rolled the whole downstream
+    stream. Two lessons: (a) any P-controller-style pilot needs a stall
+    watchdog — if the craft hasn't MOVED for a few seconds and holds no
+    lock, run an unstick maneuver (full climb + forward hop) and resume;
+    (b) when a seeding change re-rolls placements, expect it to probe pilot
+    weaknesses, not just assertion pins — a both-runs failure in a
+    previously-solid closed-loop suite is likely a latent recipe trap, not
+    the feature. Diagnose with a probe script that samples position/lock/
+    shots alongside the beacon: "position frozen + shots frozen + lock -1"
+    reads immediately as a blind stall.

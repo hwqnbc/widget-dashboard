@@ -463,6 +463,13 @@ export async function createStrikePilot(page, context) {
     if (start === 0) return true
     const deadline = Date.now() + timeout
     let firing = false
+    // Unstick watchdog: a deck-level target with a building on the straight
+    // line can wall-pin the drone (safe mode) or leave it hovering with no
+    // line of sight — inside gun range the loop commands zero forward, so it
+    // would sit there for the whole timeout. If the drone hasn't MOVED for a
+    // while and has no lock, hop: full climb + forward, over the obstacle.
+    let lastPose = null
+    let stuckSince = Date.now()
     try {
       while (Date.now() < deadline) {
         const c = await combat()
@@ -470,6 +477,18 @@ export async function createStrikePilot(page, context) {
         const tgt = await target()
         if (!tgt) return (await combat()).targetsLeft < start
         const t = await telemetry()
+        if (!lastPose || Math.hypot(t.x - lastPose.x, t.alt - lastPose.alt, t.z - lastPose.z) > 0.8) {
+          lastPose = { x: t.x, alt: t.alt, z: t.z }
+          stuckSince = Date.now()
+        } else if (Date.now() - stuckSince > 5000 && c.lock < 0) {
+          if (firing) {
+            await page.keyboard.up('Space')
+            firing = false
+          }
+          for (let i = 0; i < 10; i++) await touch(0, 1, 0, 0.7).then(() => page.waitForTimeout(140))
+          stuckSince = Date.now()
+          continue
+        }
         // Lead a moving beacon: aim where it will be, so the nose keeps up
         // with fast movers (road cars can be the nearest target). Static
         // targets have zero velocity → no change. Strong assist's bolt-bend

@@ -138,9 +138,9 @@ Normal 5, Hard 4). So wave 1 is a gentle full-variety wave, not a bare gallery.
 | Wave | Content |
 | --- | --- |
 | 1 | the full mix, gentle: static balloons + drifting ring-drones + a moving military truck + a moving SWAT car + **1 throttled, non-firing enemy drone** + **1 non-firing AA turret** + **1 non-firing rooftop-patrol soldier** |
-| 2–4 | same kinds, ramping — more/faster enemies (throttle climbs), more road vehicles, up to 2 turrets, up to 2 soldiers (rooftop pacers + a ground patrol from wave 3); **from wave 3 the last enemy of every wave is a kamikaze chaser** |
+| 2–4 | same kinds, ramping — more/faster enemies (throttle climbs), more road vehicles, up to 2 turrets, up to 2 soldiers (rooftop pacers + a ground patrol from wave 3); **a flying jet-trooper gunner from wave 2**; **from wave 3 the last enemy of every wave is a kamikaze chaser** |
 | 5+ | enemies + turrets + soldiers return fire (Normal/Hard; Easy at 7); enemy throttle at full; player has 3 HP per wave attempt |
-| scaling | more/smaller balloons (cap 8), up to 4 enemies, 4 trucks + 3 cars + 2 turrets + 3 patrolling soldiers (rooftop + ground), `MAX_TARGETS` 28 |
+| scaling | more/smaller balloons (gallery cap 6 — trimmed to fund the jets), up to 4 enemies, **up to 2 jet troopers**, 4 trucks + 3 cars + 2 turrets + 3 patrolling soldiers (rooftop + ground), `MAX_TARGETS` 28 |
 
 **Ground targets** (unlocked by the gimbal's −70° look-down): deck-level
 kinds mixed into the gallery. **Military supply trucks** (`ground`, 20 pts,
@@ -330,8 +330,24 @@ sanctuary: while the player is pad-safe a locked chaser **hovers in place**
 (it must not fall back to the absolute orbit write, which would teleport it
 back onto its ring — see lessons.md).
 
+**Jet troopers** (from `JET_WAVE` 2): the **Jet Trooper avatar airborne** as
+a second flying enemy beside the AI drones — a **flying gunner**. Up to two
+per wave (`min(1 + ⌊(wave−2)/3⌋, 2, enemyCap)`, difficulty-gated) hover-
+strafe on a seeded horizontal sinusoid (the generic `stepDrift` branch —
+placement validates the whole strafe envelope against the buildings, so a
+jet can never clip), jets burning and legs trailed via the model's `aimRef`
+flying-gunner stance. To the fire AI a jet is a **turret that drifts**: the
+same `stepTurret` step (LOS + range gated, staggered cooldowns, hold-fire
+until the difficulty's return-fire wave, pad sanctuary respected) firing the
+**`JET_BEAM`** — a hot red bolt, faster than the drone/turret bolt (24 vs
+14 u/s, harder to dodge at range) on a slow deliberate cadence — from a
+raised muzzle at the beam gun's dish. The body yaws into travel while
+strafing and snaps to the player while firing (the soldier arbitration);
+30 points, hp by difficulty. The gallery was trimmed (`min(2+wave, 6)`,
+was `3+wave/8`) to fund the airspace.
+
 Scoring: balloon 10, drifter 15, ground truck 20, enemy 25 (2 HP),
-kamikaze chaser 35, AA turret 30. Session score and wave
+jet trooper 30, kamikaze chaser 35, AA turret 30. Session score and wave
 are runtime-only; `bestScore`/`bestWave` persist (written at wave-clear).
 Losing all HP fails the wave — banner, then the same wave restarts with
 fresh targets and HP; the session score survives (arcade-friendly). Restart
@@ -457,7 +473,13 @@ surface (roof or ground) + walk bob, arbitrating body yaw between travel and
 the player, aiming the weapon + firing pose via a per-slot aim ref, and toggling
 the visible model by the target's weapon `variant`; movement is the seeded
 `stepDrift` sinusoid, no bespoke step; the models are `lazy`-imported directly
-so three.js stays out of the main chunk),
+so three.js stays out of the main chunk), `JetTargets`
+(≤2 flying jet troopers rendered from the **Jet Trooper avatar `Model3D`**
+via `ModelTargets` — the SoldierTargets recipe airborne: y overridden onto
+the air hit-sphere, travel-vs-player yaw arbitration, a per-slot `AimPose`
+whose mere presence puts the model in its flying-gunner stance — jets
+burning, legs trailed, beam elevated by `pitch`, flash by `fire`; ~130
+meshes, so the pool cap matches the wave's own jet cap),
 `EnemyDrones`
 (≤4 `DroneModel`s slot-assigned per frame, beacon tinted by variant — red
 orbiter / orange kamikaze chaser, with a pursuit nose-tilt), `Tracers`
@@ -612,7 +634,8 @@ equipped), joysticks/buttons/settings testids mirror the sim's.
 E2E: suites `100-strike-core` … `109-strike-ground` plus `117-strike-audio`,
 `119-strike-soldiers`, `123-strike-sparks`, `124-strike-laser`,
 `125-strike-lob`, `126-strike-crates`, `127-strike-shotgun`,
-`128-strike-homing`, `129-strike-weapon-chip` and `131-strike-chaser`
+`128-strike-homing`, `129-strike-weapon-chip`, `131-strike-chaser` and
+`132-strike-jets`
 (see `e2e/README.md`); pure modules are esbuild-bundled for the suites in a
 second flat pass in `run.mjs`.
 
@@ -734,9 +757,13 @@ kind of list).
 - **Enemy variety** — ~~a *chaser* that pursues the player / a *kamikaze*
   that dives once locked~~ — **shipped** as one enemy: the wave-3+
   kamikaze chaser (lurk → locked pursuit → contact detonation; see
+  Gameplay). ~~A second flying enemy~~ — **shipped**: the wave-2+
+  jet-trooper flying gunner (the Jet Trooper avatar airborne — see
   Gameplay). Remaining: a *shielded* drone only hurt from
   behind (dot product of hit direction vs heading — the `HitEvent` already
-  carries the impact point) — one more `stepEnemy` mode.
+  carries the impact point) — one more `stepEnemy` mode; a jet-trooper
+  *strafing run* variant (a straight fast pass instead of the hover-strafe —
+  a `routeKind`-style flag on the jet block + a faster drift line).
 - **Boss wave every 5th** — one large multi-HP drone with weak-point
   spheres (extra `Hittable`s attached to its pose) and a health bar chip.
 - **Combo scoring** — consecutive hits without a miss multiply points;

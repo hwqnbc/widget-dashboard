@@ -91,6 +91,19 @@ export const SOLDIER_SMG: WeaponSpec = {
   projectile: 'bolt',
 }
 
+/** Jet-trooper flying gunner: a hot beam bolt from the red-lens dish —
+ * quicker than the drone/turret bolt (harder to dodge at range) but a slow
+ * deliberate cadence, so a single jet applies pressure without spraying. */
+export const JET_BEAM: WeaponSpec = {
+  kind: 'bolt',
+  speed: 24,
+  cooldown: 2.2,
+  gravity: 0,
+  maxRange: 75,
+  tracerLen: 1.3,
+  projectile: 'bolt',
+}
+
 /** The player's hitscan laser: the whole origin→maxRange segment resolves on
  * the spawn frame (`fireHitscan`), so `speed` is nominal (it only sets the SFX
  * character). Balanced by HEAT, not fire rate — but the cooldown is a real

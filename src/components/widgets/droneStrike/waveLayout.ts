@@ -28,6 +28,7 @@ export type TargetKind =
   | 'turret'
   | 'car'
   | 'soldier'
+  | 'jet'
 
 export interface TargetSpec {
   kind: TargetKind
@@ -111,6 +112,10 @@ export const CHASER_POINTS = 35
 /** ...and shoot back from this one (normal; difficulty shifts it). Every
  * difficulty's fireWave is > 1, so wave-1 enemies + turrets hold fire. */
 export const ENEMY_FIRE_WAVE = 5
+/** Jet-trooper flying gunners (the Jet Trooper avatar as an airborne enemy)
+ * appear from this wave — the opening wave stays jet-free so the sky reads
+ * as drones-only while the basics are taught. */
+export const JET_WAVE = 2
 /** Military supply trucks (moving road vehicles) appear from this wave. */
 export const GROUND_WAVE_START = 1
 /** Moving cars (road-bound) appear from this wave — from the very first
@@ -125,8 +130,10 @@ export const TURRET_WAVE = 1
 export const SOLDIER_WAVE = 1
 /** Hard cap on simultaneous targets (perf budget: one InstancedMesh).
  * Sized for the worst case: gallery balloons + drifters + enemy drones +
- * ground trucks + moving cars + AA turrets + patrolling soldiers (rooftop +
- * ground). Pool + instanced capacity are pre-allocated so headroom is free. */
+ * jet troopers + ground trucks + moving cars + AA turrets + patrolling
+ * soldiers (rooftop + ground) — the gallery trim funded the jets, so the
+ * cap holds. Pool + instanced capacity are pre-allocated so headroom is
+ * free. */
 export const MAX_TARGETS = 28
 
 /**
@@ -180,6 +187,7 @@ export const POINTS: Record<TargetKind, number> = {
   turret: 30,
   car: 25,
   soldier: 40,
+  jet: 30,
 }
 
 /** Same PRNG as the world builder — copied, not exported from worldLayout,
@@ -315,8 +323,9 @@ export function buildWave(
   }
 
   // Gallery targets: count and drift scale with the wave, size shrinks.
-  // Kept lean so the deck now shares the wave with road vehicles (below).
-  const balloons = Math.min(3 + waveIndex, 8)
+  // Kept lean so the wave has room for the road vehicles and the flying
+  // jet troopers (the gallery was trimmed 3+w/8 → 2+w/6 to fund the jets).
+  const balloons = Math.min(2 + waveIndex, 6)
   const radius = Math.max(0.8, 1.4 - waveIndex * 0.06)
   // Drifting ring-drones from wave 1 (no appearance gate) — half the gallery.
   const drifters = Math.ceil(balloons / 2)
@@ -413,6 +422,31 @@ export function buildWave(
       hp: diff.enemyHp,
       points: chaser ? CHASER_POINTS : POINTS.enemy,
       variant: chaser ? 1 : 0,
+    })
+  }
+
+  // Jet-trooper flying gunners (JET_WAVE+): the Jet Trooper avatar airborne.
+  // Seeded through the same air path as the gallery (`place()` validates the
+  // whole drift envelope against the buildings); the drift fields carry a
+  // horizontal sinusoid strafe (stepDrift's generic branch — jets are NOT in
+  // its enemy exclusion, the sinusoid IS their flight), and the rig fires
+  // their beam via stepTurret like a flying turret. Difficulty-gated
+  // (enemyCap clamp + hp), so this block sits after the difficulty-
+  // independent trucks/cars (lesson #54).
+  const jets =
+    waveIndex >= JET_WAVE
+      ? Math.min(1 + Math.floor((waveIndex - JET_WAVE) / 3), 2, diff.enemyCap)
+      : 0
+  for (let i = 0; i < jets; i++) {
+    place({
+      kind: 'jet',
+      radius: 0.9,
+      driftAmp: 3 + rand() * 2,
+      driftSpeed: 0.5 + rand() * 0.4,
+      driftPhase: rand() * Math.PI * 2,
+      driftAxis: (i % 2 === 0 ? 0 : 2) as 0 | 2,
+      hp: diff.enemyHp,
+      points: POINTS.jet,
     })
   }
 

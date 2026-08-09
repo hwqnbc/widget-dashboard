@@ -36,7 +36,7 @@ export function playFire(cooldownS: number): void {
 
 /** Target destroyed — balloons burst airy, metal targets clank. */
 export function playPop(kind: TargetKind): void {
-  const metallic = kind === 'enemy' || kind === 'turret' || kind === 'ground'
+  const metallic = kind === 'enemy' || kind === 'turret' || kind === 'ground' || kind === 'jet'
   noise({ dur: 0.14, gain: 0.28, cutoff: metallic ? 2600 : 1400 })
   if (metallic) tone({ freq: 320, sweepTo: 140, dur: 0.14, type: 'triangle', gain: 0.14 })
 }

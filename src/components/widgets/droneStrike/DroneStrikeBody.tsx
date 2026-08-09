@@ -80,6 +80,7 @@ import GroundTargets from './GroundTargets'
 import CarTargets from './CarTargets'
 import TurretTargets from './TurretTargets'
 import SoldierTargets from './SoldierTargets'
+import JetTargets from './JetTargets'
 import EnemyDrones from './EnemyDrones'
 import Tracers from './Tracers'
 import EnemyRockets from './EnemyRockets'
@@ -870,6 +871,7 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
           <CarTargets targets={targets} />
           <TurretTargets targets={targets} playerPos={flight.pos} />
           <SoldierTargets targets={targets} playerPos={flight.pos} />
+          <JetTargets targets={targets} playerPos={flight.pos} />
           <EnemyDrones targets={targets} />
           {/* Player tracers follow the equipped weapon; the enemy pool shares
            * this prop (scaled), so a tracer-less weapon (laser, len 0) falls

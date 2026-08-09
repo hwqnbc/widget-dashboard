@@ -56,6 +56,7 @@ import {
   AIM_CONE_RAD_ZOOM,
   AUTO_FIRE_HOLD_S,
   ENEMY_BOLT,
+  JET_BEAM,
   SOLDIER_ROCKET,
   SOLDIER_SMG,
   addHeat,
@@ -113,6 +114,7 @@ const BLIP_COLORS: Record<TargetKind, string> = {
   turret: '#ff6e40',
   car: '#42a5f5',
   soldier: '#ffca28',
+  jet: '#40c4ff',
 }
 /** Minimap crate-marker tint per loot (mirrors WeaponCrates). */
 const CRATE_BLIP: Record<CrateLoot, string> = {
@@ -601,16 +603,20 @@ export default function StrikeRig({
           aim.recoil += PLAYER_HIT_KICK * 2
           onPlayerHit()
         }
-      } else if (waveActive && (t.kind === 'turret' || t.kind === 'soldier')) {
-        // AA turrets and rooftop soldiers are both static stationed shooters —
-        // same fire step, gated + LOS-checked identically. Soldiers fire their
-        // variant's weapon (rocket / SMG); turrets keep the plain enemy bolt.
+      } else if (waveActive && (t.kind === 'turret' || t.kind === 'soldier' || t.kind === 'jet')) {
+        // AA turrets, rooftop soldiers and flying jet troopers all share the
+        // stationed-shooter fire step (gated + LOS-checked identically) —
+        // the jets' movement is stepDrift's sinusoid, so to the fire AI a
+        // jet is just a turret that happens to drift. Soldiers fire their
+        // variant's weapon (rocket / SMG), jets the beam, turrets the bolt.
         const weapon =
           t.kind === 'soldier'
             ? t.variant === 1
               ? SOLDIER_SMG
               : SOLDIER_ROCKET
-            : ENEMY_BOLT
+            : t.kind === 'jet'
+              ? JET_BEAM
+              : ENEMY_BOLT
         stepTurret(
           t,
           enemyAI[i],

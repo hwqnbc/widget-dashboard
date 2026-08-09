@@ -221,7 +221,7 @@ export function stepTurret(
   enemyPool: Projectile[],
   weapon: WeaponSpec,
 ): void {
-  if (!t.alive || (t.kind !== 'turret' && t.kind !== 'soldier')) return
+  if (!t.alive || (t.kind !== 'turret' && t.kind !== 'soldier' && t.kind !== 'jet')) return
   if (!canShoot) return
 
   const dx = t.pos.x - playerPos.x
@@ -243,17 +243,18 @@ export function stepTurret(
   FIRE_DIR.x = -dx * inv
   FIRE_DIR.y = -dy * inv
   FIRE_DIR.z = -dz * inv
-  // Soldiers fire from the raised weapon's muzzle (forward + up of the torso),
-  // not the chest, and play their firing pose; the static AA turret keeps its
-  // own origin (`t.pos`).
-  if (t.kind === 'soldier') {
+  // Soldiers and jet troopers fire from the raised weapon's muzzle (forward +
+  // up of the torso), not the chest, and play their firing pose (fireTimer
+  // drives the model's flash/recoil via the pool's AimPose); the static AA
+  // turret keeps its own origin (`t.pos`).
+  if (t.kind === 'soldier' || t.kind === 'jet') {
     MUZZLE.x = t.pos.x + FIRE_DIR.x * SOLDIER_MUZZLE_FWD
     MUZZLE.y = t.pos.y + FIRE_DIR.y * SOLDIER_MUZZLE_FWD + SOLDIER_MUZZLE_UP
     MUZZLE.z = t.pos.z + FIRE_DIR.z * SOLDIER_MUZZLE_FWD
     spawnProjectile(enemyPool, MUZZLE, FIRE_DIR, weapon)
     t.fireTimer = SOLDIER_FIRE_CLIP
     // Keep the rocketeer planted through the shot's kneel-read before it stands.
-    if (t.variant === 0) t.plantTimer = Math.max(t.plantTimer, SOLDIER_PLANT_TAIL)
+    if (t.kind === 'soldier' && t.variant === 0) t.plantTimer = Math.max(t.plantTimer, SOLDIER_PLANT_TAIL)
   } else {
     spawnProjectile(enemyPool, t.pos, FIRE_DIR, weapon)
   }

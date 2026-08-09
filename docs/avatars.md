@@ -312,13 +312,15 @@ celebration's 2.6 s loop: a `liftRef` group raises the WHOLE figure
 (rise → hover bob → settle) while the exhaust cones flicker `visible`,
 the legs trail, and the weapon arm levels to fire TWO red BeamBurst
 windows with elbow recoil kicks).
-Scar's Sight & Fire
-and Bazooka Joe's Take Aim are the **canned
-counterparts of the in-game aim** these models gained for Drone Strike's
-rooftop soldiers: the enemy path drives a live `aimRef` (`{ pitch, fire }`)
-the model reads each frame (weapon elevation + one-shot fire pose), while
-the widget actions play the same pose on a self-contained clock (see
-`docs/drone-strike.md`). **Every avatar
+Scar's Sight & Fire,
+Bazooka Joe's Take Aim and Jet Trooper's Jet & Blast are the **canned
+counterparts of the in-game aim** these three models gained for Drone
+Strike (rooftop soldiers / the flying jet-trooper gunner): the enemy path
+drives a live `aimRef` (`{ pitch, fire, speed }`) the model reads each
+frame — weapon elevation + one-shot fire pose, and for the jet trooper the
+ref's mere presence holds the airborne stance (jets burning, hover bob,
+legs trailed) — while the widget actions play the same poses on a
+self-contained clock (see `docs/drone-strike.md`). **Every avatar
 now ships a 3D figure** — the Avatar Actions "no 3D figure yet"
 placeholder and the Drone Sim's `data-op-figure="basic"` value are no
 longer reachable from any current avatar; both code paths stay as

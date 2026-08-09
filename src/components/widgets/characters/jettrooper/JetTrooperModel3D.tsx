@@ -29,8 +29,10 @@
 // Loaded only via lazy() (the avatar registry's Model3D/Figure3D fields) —
 // never re-export from jettrooper/index.ts, or three.js lands in the main chunk.
 import { useRef } from 'react'
+import type { RefObject } from 'react'
 import { useFrame } from '@react-three/fiber'
 import type { Group } from 'three'
+import type { AimPose } from '../shared/aimPose'
 import { JT } from './jetTrooperPalette'
 import { GAIT_RATE, WALK_ACTION_SPEED, legGait } from '../shared/legGait'
 import type { LegSwing } from '../shared/legGait'
@@ -58,6 +60,10 @@ const FIRE_2 = 1.55
 const FIRE_LEN = 0.16
 const KICK_AMP = 0.18
 const LEG_TRAIL = 0.16 // legs stream slightly back while airborne
+/** aimRef elevation clamp: elbow-x aims the parallel-mounted weapon (level at
+ * R_ELBOW = -π/2; MORE negative = muzzle up). */
+const AIM_UP_MAX = -2.3
+const AIM_DOWN_MAX = -0.7
 
 /** Emissive red beam burst at the lens: core + crossed spikes + forward
  * cone so it reads even pointing at the camera; parent toggles `visible`. */
@@ -134,7 +140,17 @@ function BeamWeapon({ flashRef }: { flashRef: React.RefObject<Group | null> }) {
   )
 }
 
-export default function JetTrooperModel3D({ action }: { action?: string }) {
+export default function JetTrooperModel3D({
+  action,
+  aimRef,
+}: {
+  action?: string
+  /** When set (in-game flying-gunner mode), overrides `action`: a permanent
+   * airborne stance (jets burning, legs trailing, hover bob) with live beam
+   * elevation + a one-shot fire flash driven by the ref — the same contract
+   * the Scar/Bazooka soldier models use. */
+  aimRef?: RefObject<AimPose | null>
+}) {
   const liftRef = useRef<Group>(null)
   const armLRef = useRef<Group>(null)
   const armRRef = useRef<Group>(null)
@@ -177,8 +193,22 @@ export default function JetTrooperModel3D({ action }: { action?: string }) {
     let firing = false
     let gaitL = 0
     let gaitR = 0
+    const aim = aimRef?.current
 
-    if (action === 'jet') {
+    if (aim) {
+      // In-game flying gunner: always airborne — jets burning, hover bob,
+      // legs trailing — with the beam aimed by the live pitch (the weapon
+      // axis is PARALLEL to the forearm, so the elbow IS the elevation;
+      // positive pitch = up = more negative elbow) and the flash window +
+      // recoil kick driven by the one-shot `fire` decay.
+      liftY = LIFT_Y + Math.sin(t * 6) * 0.02
+      jetOn = true
+      legTrail = LEG_TRAIL
+      elbR = Math.min(AIM_DOWN_MAX, Math.max(AIM_UP_MAX, R_ELBOW - aim.pitch))
+      const f = aim.fire
+      firing = f > 0.5
+      if (f > 0) elbR += KICK_AMP * f * 0.7
+    } else if (action === 'jet') {
       const tau = (t - t0Ref.current) % JET_T
       let airK: number
       if (tau < RISE_DONE) airK = smooth(tau / RISE_DONE)
