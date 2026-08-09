@@ -17,14 +17,9 @@ export interface CrateState {
   loot: CrateLoot
 }
 
-/** Disc/beacon tint per loot (laser cyan / lob amber / shotgun ember /
- * homing green / heart red / score cache magenta — mirrored by the minimap
- * crate marker). */
+/** Disc/beacon tint per loot (heart red / score cache magenta — mirrored by
+ * the minimap crate marker). */
 const CRATE_COLORS: Record<CrateLoot, string> = {
-  laser: '#4fc3f7',
-  lob: '#ffd54f',
-  shotgun: '#ff7043',
-  homing: '#69f0ae',
   heart: '#ff5252',
   score: '#e040fb',
 }

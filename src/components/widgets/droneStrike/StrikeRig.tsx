@@ -116,10 +116,6 @@ const BLIP_COLORS: Record<TargetKind, string> = {
 }
 /** Minimap crate-marker tint per loot (mirrors WeaponCrates). */
 const CRATE_BLIP: Record<CrateLoot, string> = {
-  laser: '#4fc3f7',
-  lob: '#ffd54f',
-  shotgun: '#ff7043',
-  homing: '#69f0ae',
   heart: '#ff5252',
   score: '#e040fb',
 }
@@ -283,8 +279,8 @@ export default function StrikeRig({
   /** The wave's rooftop weapon crate — consumed here on touch (one distance
    * check per frame, the landing-pad pattern). */
   crate: CrateState
-  /** The player reached the crate — the body applies its loot (weapon swap,
-   * heart, or score cache). */
+  /** The player reached the crate — the body applies its loot (bonus heart
+   * or score cache). */
   onCratePickup: (loot: CrateLoot) => void
   /** Minimap crate marker — position/colour/visibility written on the tick. */
   minimapCrateRef: RefObject<SVGRectElement | null>

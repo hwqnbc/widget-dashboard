@@ -287,10 +287,11 @@ integration off the rig-published live `aimRay`), the **shotgun** (a
 deterministic 7-pellet `pelletDir` fan on a slow pump), or **homing
 missiles** (`Projectile.targetIdx` + capped-turn steering in the integrator,
 rocket visual) — plus per-wave **rooftop supply crates** (`WaveSpec.crate` +
-`crateReached` + `WeaponCrates`, loot rotating all four specials **plus a
-bonus heart and a score cache** via the pure `resolveCrateGrant` — a heart
-at full HP falls back to the cache): a picked-up gun overrides the setting
-until the run ends, hearts/score apply instantly).
+`crateReached` + `WeaponCrates`, non-weapon loot only: an alternating
+**bonus heart** (+1, uncapped — overheal stacks past 3) and **score cache**
+via the pure `resolveCrateGrant`; the chip made weapon drops redundant, so
+they were retired — the backlog's crate-exclusive super weapon brings a
+gun back later).
 See `docs/tank-battle.md` for the Tank Battle widget (the third WebGL
 widget — seeded analytic heightfield terrain with four-corner tank
 grounding and grade limits, WoT-style controls: left stick drives the hull,

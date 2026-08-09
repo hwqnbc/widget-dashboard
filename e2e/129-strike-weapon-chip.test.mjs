@@ -5,8 +5,8 @@
  * here use generous margins around multiples of it), wrapping at both ends;
  * a clean tap cycles to the next gun; the mouse wheel steps it; keyboard
  * 1–5 direct-selects. Every path writes the SAME persisted `weapon` field
- * as the settings picker (so picks survive reload) and clears any
- * crate-weapon override. The chip and the root both publish `data-weapon`.
+ * as the settings picker (so picks survive reload). The chip and the root
+ * both publish `data-weapon`.
  */
 import {
   addStrikeWidget,

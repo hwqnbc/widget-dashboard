@@ -56,14 +56,17 @@ export interface TargetSpec {
   routeAngle?: number
 }
 
-/** What a crate can hold: one of the four special weapons, or non-weapon
- * loot — a bonus heart or a score cache. */
-export type CrateLoot = 'laser' | 'lob' | 'shotgun' | 'homing' | 'heart' | 'score'
+/** What a crate can hold — non-weapon loot only: a bonus heart or a score
+ * cache. Weapon drops died with the in-game weapon chip (any gun is a free
+ * swipe away, so "equip a special" stopped being a reward); the planned
+ * crate-exclusive super weapon (see the backlog) will bring a gun back. */
+export type CrateLoot = 'heart' | 'score'
 
 /** A rooftop supply crate — NOT a target: it isn't shootable, doesn't count
  * toward the wave clear, and lives beside the target list on the WaveSpec.
- * Flying onto it grants its loot: a weapon swaps the player's gun (kept
- * until the run ends), a heart heals one, a cache pays CRATE_SCORE. */
+ * Flying onto it grants its loot: a heart adds one (stacking PAST the
+ * nominal max — 4+ hearts is the reward for the detour), a cache pays
+ * CRATE_SCORE. */
 export interface CrateSpec {
   x: number
   z: number
@@ -73,31 +76,18 @@ export interface CrateSpec {
   loot: CrateLoot
 }
 
-/** Which loot the wave's crate holds, by `waveIndex % length` — the four
- * specials and both non-weapon drops rotate through a run (order keeps the
- * original wave-2 laser grant stable; the first non-weapon drop lands on
- * wave 3). */
-export const CRATE_ROTATION = ['shotgun', 'homing', 'laser', 'heart', 'lob', 'score'] as const
+/** Which loot the wave's crate holds, by `waveIndex % length` — hearts on
+ * even waves, caches on odd. */
+export const CRATE_ROTATION = ['heart', 'score'] as const
 
-/** Points a score-cache crate pays (also the fallback when a heart crate is
- * picked up at full hearts — the loot is never wasted). */
+/** Points a score-cache crate pays. */
 export const CRATE_SCORE = 50
 
-/** What picking a crate up actually grants, resolved against the player's
- * current hearts — pure, so the fallback rule is e2e-testable: a heart at
- * full HP converts to the score cache instead of evaporating. */
-export function resolveCrateGrant(
-  loot: CrateLoot,
-  hp: number,
-  maxHp: number,
-): { weapon: Exclude<CrateLoot, 'heart' | 'score'> | null; hearts: number; score: number } {
-  if (loot === 'heart') {
-    return hp < maxHp
-      ? { weapon: null, hearts: 1, score: 0 }
-      : { weapon: null, hearts: 0, score: CRATE_SCORE }
-  }
-  if (loot === 'score') return { weapon: null, hearts: 0, score: CRATE_SCORE }
-  return { weapon: loot, hearts: 0, score: 0 }
+/** What picking a crate up grants — pure so the rule is e2e-pinned: a heart
+ * is ALWAYS +1 (uncapped — at full hearts it stacks on as an overheal, never
+ * converts or evaporates), a cache is always the points. */
+export function resolveCrateGrant(loot: CrateLoot): { hearts: number; score: number } {
+  return loot === 'heart' ? { hearts: 1, score: 0 } : { hearts: 0, score: CRATE_SCORE }
 }
 
 export interface WaveSpec {
@@ -568,9 +558,8 @@ export function buildWave(
   // Rooftop supply crate — deliberately the LAST consumers of this wave's
   // seeded stream (appending draws never moves any placement above; lesson
   // #54). From CRATE_FROM_WAVE on, put a crate on a qualifying roof no
-  // soldier pacer owns this wave; the loot cycles CRATE_ROTATION (index-
-  // derived, no extra draws) so every special gun and both non-weapon drops
-  // rotate through a run.
+  // soldier pacer owns this wave; the loot alternates CRATE_ROTATION
+  // (index-derived, no extra draws).
   let crate: CrateSpec | undefined
   if (waveIndex >= CRATE_FROM_WAVE && perches.length > 0) {
     let pick = perches[Math.floor(rand() * perches.length)]

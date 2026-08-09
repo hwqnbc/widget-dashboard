@@ -38,7 +38,7 @@ import RichWorld from '../droneSim/RichWorld'
 import RainField from '../droneSim/RainField'
 import VirtualJoystick from '../droneSim/VirtualJoystick'
 import ConfirmDialog from '../ConfirmDialog'
-import type { AimAssistLevel, CrateWeaponId, HeatEvent, WeaponId } from './combatModel'
+import type { AimAssistLevel, HeatEvent, WeaponId } from './combatModel'
 import {
   BOLT,
   WEAPON_IDS,
@@ -120,13 +120,8 @@ const coerceExpo = clampNum(0, 0.8)
 
 type WavePhase = 'intro' | 'active' | 'cleared' | 'failed'
 
-/** Pickup banner per crate loot (the heart banner covers the full-hearts
- * score fallback via the resolved grant, not the loot id). */
+/** Pickup banner per crate loot. */
 const CRATE_BANNERS: Record<CrateLoot, string> = {
-  laser: 'LASER ONLINE',
-  lob: 'LOB CANNON ONLINE',
-  shotgun: 'SHOTGUN ONLINE',
-  homing: 'MISSILES ONLINE',
   heart: '\u2665 BONUS HEART',
   score: `SUPPLY CACHE +${CRATE_SCORE}`,
 }
@@ -224,11 +219,7 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
   const audio = useWidgetField(id, 'audio', true)
   const zoomPower = useWidgetField<ZoomPower>(id, 'zoomPower', 2, coerceZoomPower)
   const weaponId = useWidgetField<WeaponId>(id, 'weapon', 'bolt', coerceWeapon)
-  // A picked-up crate weapon OVERRIDES the settings pick until the run ends
-  // (lose all hearts or restart) — runtime-only, deliberately not persisted.
-  const [crateWeapon, setCrateWeapon] = useState<CrateWeaponId | null>(null)
-  const effectiveWeapon: WeaponId = crateWeapon ?? weaponId
-  const weaponSpec = WEAPON_SPECS[effectiveWeapon]
+  const weaponSpec = WEAPON_SPECS[weaponId]
   const zoomFov = zoomFovFor(zoomPower)
   const zoomSens = zoomSensFor(zoomPower)
 
@@ -257,7 +248,7 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
     x: 0,
     top: 0,
     z: 0,
-    loot: 'laser',
+    loot: 'heart',
   }).current
   const targets = useRef(createTargetStates()).current
   const enemyAI = useRef(createEnemyAIStates()).current
@@ -408,8 +399,6 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
     }
     if (phase === 'failed') {
       setBanner('WAVE FAILED — TRY AGAIN')
-      // Losing all hearts forfeits a crate weapon (back to the settings pick).
-      setCrateWeapon(null)
       const t = setTimeout(() => setPhase('intro'), FAILED_MS)
       return () => clearTimeout(t)
     }
@@ -489,42 +478,38 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
     [showBanner],
   )
 
-  // Switching weapons (settings pick OR crate pickup): despawn in-flight
-  // player bolts (they must not retro-inherit the new spec's gravity/maxAge —
-  // stepProjectiles sweeps the pool with the CURRENT weapon) and start the
-  // new gun cold.
+  // Switching weapons: despawn in-flight player bolts (they must not
+  // retro-inherit the new spec's gravity/maxAge — stepProjectiles sweeps the
+  // pool with the CURRENT weapon) and start the new gun cold.
   useEffect(() => {
     for (const p of combat.player) p.active = false
     combat.heat = 0
     combat.overheated = false
     combat.cooldown = 0
-  }, [effectiveWeapon, combat])
+  }, [weaponId, combat])
 
   // Explicit in-game weapon pick (chip swipe/tap/wheel or a 1–5 hotkey):
-  // writes the SAME persisted field as the settings picker, and clears any
-  // crate override — a deliberate choice beats a pickup.
+  // writes the SAME persisted field as the settings picker.
   const onWeaponSelect = useCallback(
     (w: WeaponId) => {
-      setCrateWeapon(null)
       dispatch(updateWidgetData({ id, data: { weapon: w } }))
     },
     [dispatch, id],
   )
 
-  // Crate pickup — the rig consumed the crate; apply the resolved grant:
-  // a weapon swaps the gun until the run ends, a heart heals one (falling
-  // back to the score cache at full hearts — never wasted), a cache pays
-  // straight into the score (the HUD chip shows it on the next tick).
+  // Crate pickup — the rig consumed the crate; apply the resolved grant: a
+  // heart ALWAYS adds one (deliberately uncapped — stacking a 4th+ heart is
+  // the reward for the rooftop detour; only the pad recharge is capped), a
+  // cache pays straight into the score (the HUD chip shows it next tick).
   const onCratePickup = useCallback(
     (loot: CrateLoot) => {
-      const grant = resolveCrateGrant(loot, hp, PLAYER_HP)
-      if (grant.weapon) setCrateWeapon(grant.weapon)
-      if (grant.hearts > 0) setHp((h) => Math.min(PLAYER_HP, h + grant.hearts))
+      const grant = resolveCrateGrant(loot)
+      if (grant.hearts > 0) setHp((h) => h + grant.hearts)
       if (grant.score > 0) scoreRef.current += grant.score
       vibrate(GATE_PULSE)
-      showBanner(grant.hearts === 0 && grant.score > 0 ? CRATE_BANNERS.score : CRATE_BANNERS[loot])
+      showBanner(CRATE_BANNERS[loot])
     },
-    [showBanner, hp],
+    [showBanner],
   )
 
   // Crash: the tumble costs a heart (same feedback as taking a bolt);
@@ -589,7 +574,6 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
     setConfirm(null)
     resetFlightState(flight)
     resetCombatState(combat)
-    setCrateWeapon(null)
     crateState.active = false
     resetBatteryState(batteryRef.current)
     crashRef.current.active = false
@@ -771,7 +755,7 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
       data-minimap={minimap ? 'on' : 'off'}
       data-zoom={zoom ? 'on' : 'off'}
       data-zoom-power={zoomPower}
-      data-weapon={effectiveWeapon}
+      data-weapon={weaponId}
       data-weather={weather}
       data-rich={richWorld ? 'on' : 'off'}
       data-mode={flightMode}
@@ -897,7 +881,7 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
           <EnemyRockets pool={combat.player} />
           <SparkField sparks={sparks} />
           <LaserBeams beams={beams} />
-          {effectiveWeapon === 'lob' && <TrajectoryArc aimRay={aimRay} weapon={weaponSpec} />}
+          {weaponId === 'lob' && <TrajectoryArc aimRay={aimRay} weapon={weaponSpec} />}
           <WeaponCrates crate={crateState} />
           <StrikeRig
             controls={controls}
@@ -1088,7 +1072,7 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
       {/* Laser heat — same bar recipe as the battery, stacked below it when
        * both are on (the offset arithmetic mirrors the battery's, +14 when
        * the battery bar occupies the slot). Fill = heat 0→100, rig-written. */}
-      {effectiveWeapon === 'laser' && (
+      {weaponId === 'laser' && (
         <Box
           data-testid="strike-heat"
           sx={{
@@ -1321,7 +1305,7 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
         }}
       />
       <WeaponChip
-        weapon={effectiveWeapon}
+        weapon={weaponId}
         onSelect={onWeaponSelect}
         width={chipWidth}
         sx={{

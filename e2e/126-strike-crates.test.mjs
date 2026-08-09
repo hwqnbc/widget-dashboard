@@ -3,17 +3,19 @@
  * consumers of the wave's RNG stream (appending draws keeps every existing
  * placement identical — the seed-stability lesson): from CRATE_FROM_WAVE (2)
  * a crate sits on a qualifying rooftop no soldier pacer owns, its loot
- * cycling CRATE_ROTATION — the four special weapons plus the two non-weapon
- * drops (bonus heart, score cache). They are NOT targets — not shootable,
- * not counted toward the wave clear (WaveSpec.crate sits beside the target
- * list). Pickup is the pure `crateReached` (one distance check per frame in
- * the rig — the landing-pad pattern); what a pickup grants is the pure
- * `resolveCrateGrant` (weapon override until the run ends / +1 heart with a
- * full-hearts fallback to the score cache / +CRATE_SCORE points). Live:
- * wave 1 publishes no crate (`data-crate-active="no"`); clearing wave 1
- * with the pilot recipe brings wave 2's crate online with the exact seeded
- * coords + loot on the HUD beacon, while the equipped weapon stays the
- * un-picked-up default bolt.
+ * alternating CRATE_ROTATION — non-weapon drops ONLY (bonus heart, score
+ * cache; weapon drops died with the in-game weapon chip — any gun is a
+ * free swipe, so "equip a special" stopped being a reward). They are NOT
+ * targets — not shootable, not counted toward the wave clear
+ * (WaveSpec.crate sits beside the target list). Pickup is the pure
+ * `crateReached` (one distance check per frame in the rig — the
+ * landing-pad pattern); what a pickup grants is the pure
+ * `resolveCrateGrant`: a heart is ALWAYS +1 — uncapped, stacking past the
+ * nominal 3 (the overheal is the reward for the detour) — and a cache
+ * always pays CRATE_SCORE. Live: wave 1 publishes no crate
+ * (`data-crate-active="no"`); clearing wave 1 with the pilot recipe brings
+ * wave 2's crate online with the exact seeded coords + loot on the HUD
+ * beacon, while the equipped weapon stays the un-picked-up default bolt.
  */
 import {
   addStrikeWidget,
@@ -69,24 +71,19 @@ const clearOfSoldiers = specs.every((s) => {
 })
 check('no crate shares a roof with a soldier', clearOfSoldiers)
 
-// The loot cycles the CRATE_ROTATION (every special weapon AND both
-// non-weapon drops rotate through a run).
+// The loot alternates the CRATE_ROTATION (non-weapon drops only — hearts
+// on even waves, score caches on odd).
 check('crate loot follows the rotation',
   specs.every((s, i) => !s.crate || s.crate.loot === CRATE_ROTATION[waves[i] % CRATE_ROTATION.length]))
-check('the rotation covers all four specials and both loot drops',
-  ['laser', 'lob', 'shotgun', 'homing', 'heart', 'score'].every((w) => CRATE_ROTATION.includes(w)))
+check('the rotation is non-weapon loot only (heart + score cache)',
+  CRATE_ROTATION.length === 2 && ['heart', 'score'].every((w) => CRATE_ROTATION.includes(w)))
 
 // --- pure: what a pickup grants (resolveCrateGrant) ---
-const gWeapon = resolveCrateGrant('shotgun', 2, 3)
-check('a weapon crate grants the gun and nothing else',
-  gWeapon.weapon === 'shotgun' && gWeapon.hearts === 0 && gWeapon.score === 0)
-const gHeart = resolveCrateGrant('heart', 2, 3)
-check('a heart crate heals one when hurt', gHeart.weapon === null && gHeart.hearts === 1 && gHeart.score === 0)
-const gFull = resolveCrateGrant('heart', 3, 3)
-check('a heart at full hearts falls back to the score cache (never wasted)',
-  gFull.weapon === null && gFull.hearts === 0 && gFull.score === CRATE_SCORE)
-const gScore = resolveCrateGrant('score', 3, 3)
-check('a score cache pays CRATE_SCORE', gScore.weapon === null && gScore.score === CRATE_SCORE && CRATE_SCORE > 0)
+const gHeart = resolveCrateGrant('heart')
+check('a heart crate grants exactly one heart (uncapped — overheal stacks)',
+  gHeart.hearts === 1 && gHeart.score === 0)
+const gScore = resolveCrateGrant('score')
+check('a score cache pays CRATE_SCORE', gScore.hearts === 0 && gScore.score === CRATE_SCORE && CRATE_SCORE > 0)
 
 // Crates are NOT targets: the target list is unchanged in kind terms.
 check('a crate is not a shootable target',

@@ -499,8 +499,7 @@ and the same pick is switchable **mid-game** via the **weapon chip**
 buttons: swipe up/down on it to scroll the `WEAPON_IDS` order one notch per
 `STEP_PX` (28 px, wrapping — a long swipe scrolls several), tap to cycle,
 mouse-wheel over it to step, or press `1–5`. Every path writes the SAME
-persisted `weapon` field **and clears any crate-weapon override** (a
-deliberate choice beats a pickup). The chip inherits the joystick/fire-button
+persisted `weapon` field. The chip inherits the joystick/fire-button
 pointer-capture hardening; note the tap-to-cycle decision lives in the
 window **capture-phase** pointerup fallback (which fires before the
 element's own handler and clears the pointer id — lesson #95):
@@ -564,35 +563,31 @@ element's own handler and clears the pointer id — lesson #95):
 column (`WeaponCrates`, the LandingPads recipe) sits on a qualifying rooftop
 no soldier pacer owns, seeded as the **last** consumers of the wave's RNG
 stream (appending draws keeps every existing placement identical — the
-seed-stability lesson). The crate's **loot** cycles `CRATE_ROTATION`
-(`waveIndex % 6`: shotgun/homing/laser/**heart**/lob/**score**, ordered to
-keep the original wave-2 laser grant stable) — since the in-game weapon chip
-made "equip a special" a free swipe, crates carry **non-weapon loot** too so
-the rooftop detour stays worth flying: a **bonus heart** (+1 HP; at full
-hearts it falls back to the score cache — never wasted) and a **score
-cache** (+`CRATE_SCORE` 50). What a pickup grants is the pure
-`resolveCrateGrant(loot, hp, maxHp)` (e2e-testable fallback rule); disc/
-beacon and minimap-marker colours are per-loot (cyan/amber/ember/green +
-heart red `#ff5252` / cache magenta `#e040fb`). A crate is **not a
-target** — it lives beside the target list as `WaveSpec.crate` (not a
+seed-stability lesson). Crates originally granted the special weapons, but
+the in-game weapon chip made "equip a special" a free swipe — so they now
+carry **non-weapon loot only**, alternating `CRATE_ROTATION`
+(`waveIndex % 2`): a **bonus heart** on even waves and a **score cache**
+(+`CRATE_SCORE` 50) on odd. A heart is always **+1, uncapped** — picked up
+at full hearts it *stacks on* (4+ hearts), the overheal being the reward
+for the rooftop detour (only the pad recharge is capped at 3; a wave
+restart resets to 3). What a pickup grants is the pure
+`resolveCrateGrant(loot)`; disc/beacon and minimap-marker colours are
+per-loot (heart red `#ff5252` / cache magenta `#e040fb`). A crate is **not
+a target** — it lives beside the target list as `WaveSpec.crate` (not a
 `TargetKind`, so it's unshootable and never counts toward the wave clear).
 Fly onto the disc (`crateReached`, one distance check per frame — the
-landing-pad pattern; the rig consumes it single-use) and the grant applies:
-a **crate weapon overrides the settings pick** — `effectiveWeapon =
-crateWeapon ?? settings weapon` (runtime-only React state, deliberately not
-persisted), kept until the **run ends** (losing all hearts or restarting
-clears it back to the settings pick; a failed-wave retry does NOT keep it) —
-while hearts/score apply instantly. Pickup banners (with the chime,
-`data-sfx-pickup`): LASER ONLINE / LOB CANNON ONLINE / SHOTGUN ONLINE /
-MISSILES ONLINE / ♥ BONUS HEART / SUPPLY CACHE +50. The HUD publishes a
-crate beacon (`data-crate-active/-x/-z/-loot`) and the minimap draws a
-small loot-coloured square so the crate can be found.
+landing-pad pattern; the rig consumes it single-use) and the grant applies
+instantly, bannered ♥ BONUS HEART / SUPPLY CACHE +50 with the pickup chime
+(`data-sfx-pickup`). The HUD publishes a crate beacon
+(`data-crate-active/-x/-z/-loot`) and the minimap draws a small
+loot-coloured square so the crate can be found. (The weapon-override seam —
+`effectiveWeapon = crate ?? settings` — was removed with the weapon drops;
+the backlog's crate-exclusive super weapon will reintroduce it with an
+ammo-based lifetime.)
 
 **Switching weapons despawns in-flight player bolts** and starts the new gun
 cold — `stepProjectiles` sweeps the pool with the *current* spec, so a live
-bolt must not retro-inherit another weapon's gravity/maxAge. This applies to
-both switch paths (settings pick and crate pickup) — the effect keys on the
-*effective* weapon.
+bolt must not retro-inherit another weapon's gravity/maxAge.
 
 ## Test contract (data-*)
 
@@ -651,15 +646,14 @@ kind of list).
 - ~~Ballistic lob~~ — **shipped** (the `LOB` spec + the `TrajectoryArc`
   hint sampled from the same integration via `sampleTrajectory` and the
   rig-published live `aimRay` — see "Player weapons").
-- ~~Weapon switching / pickups~~ — **shipped** (the settings weapon picker +
-  per-wave rooftop crates: `WaveSpec.crate` seeded last in the stream,
-  `crateReached` pickup, `effectiveWeapon = crate ?? settings` kept until the
-  run ends — see "Player weapons"). The whole Weapons backlog is now shipped;
-  room to extend: ~~more specs (shotgun spread, homing)~~ — **both shipped**
-  (see "Player weapons"); ~~crate variants (non-weapon pickups)~~ —
-  **shipped** (the loot rotation: bonus heart + score cache beside the four
-  specials, `resolveCrateGrant` — see the supply-crate section); a timed
-  power-up flavour (shield/overdrive) remains open.
+- ~~Weapon switching / pickups~~ — **shipped, then evolved**: the settings
+  weapon picker and the in-game chip cover switching; the crates' weapon
+  drops were **retired** once the chip made them redundant, and the crates
+  became loot-only — ~~crate variants (non-weapon pickups)~~ — **shipped**
+  (the alternating heart/score `CRATE_ROTATION`, `resolveCrateGrant`,
+  uncapped heart overheal — see the supply-crate section). ~~More specs
+  (shotgun spread, homing)~~ — **both shipped** (see "Player weapons"); a
+  timed power-up flavour (shield/overdrive) remains open.
 - **Crate-exclusive super weapon** — a sixth gun that never appears on the
   weapon chip (e.g. a railgun or cluster lob), only found in crates and
   limited-ammo (gone when spent, back to the previous gun). Builds on the
