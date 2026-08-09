@@ -116,36 +116,43 @@ function GoldenSword() {
   )
 }
 
-/** One dragon wing in root-local coords; `s` = +1 (left, spans −x… wait
- * viewer's left = −x) or −1. Membrane panels angled up-and-out with spike
- * cones on the leading edge, all flat-shaded lime like the reference. */
+/** One dragon wing in root-local coords; `s` = ±1 mirrors it. Built as a
+ * rooted FAN so nothing floats (the blade-joint lesson): every piece shares
+ * ONE sweep-back rotation-y = s·0.35, and within that plane each panel runs
+ * from the ROOT outward at its own angle θ (rotation-z = s·θ) with its
+ * center at half-length along its own axis — inner ends bury into the root
+ * nub, the two panels overlap each other out past their tips, and the spike
+ * cones point outward ALONG the fan directions with their bases sunk into
+ * the panels. In-plane point (u,v) → position (s·0.9394·u, v, −0.3429·u). */
+const SWEEP = 0.35
+const wingPos = (s: number, u: number, v: number): [number, number, number] => [s * 0.9394 * u, v, -0.3429 * u]
 function Wing({ s }: { s: number }) {
   return (
     <>
-      {/* root nub anchoring the wing to the back */}
-      <mesh position={[s * 0.02, 0.03, 0.02]}>
-        <boxGeometry args={[0.12, 0.16, 0.08]} />
+      {/* root nub anchoring the fan to the back */}
+      <mesh position={[s * 0.04, 0.05, 0]}>
+        <boxGeometry args={[0.14, 0.18, 0.1]} />
         <meshStandardMaterial color={LL.lime} {...CLOTH} flatShading />
       </mesh>
-      {/* overlapping membrane panels sweeping up-and-out */}
-      <mesh position={[s * 0.2, 0.12, -0.02]} rotation-z={s * 0.55} rotation-y={s * -0.3}>
-        <boxGeometry args={[0.46, 0.34, 0.024]} />
+      {/* fan panels: upper (θ=0.55) + lower (θ=0.15), rooted and overlapping */}
+      <mesh position={wingPos(s, 0.187, 0.115)} rotation-z={s * 0.55} rotation-y={s * SWEEP}>
+        <boxGeometry args={[0.5, 0.34, 0.024]} />
         <meshStandardMaterial color={LL.lime} {...CLOTH} flatShading />
       </mesh>
-      <mesh position={[s * 0.46, 0.0, -0.1]} rotation-z={s * 0.2} rotation-y={s * -0.4}>
-        <boxGeometry args={[0.4, 0.26, 0.02]} />
+      <mesh position={wingPos(s, 0.277, 0.042)} rotation-z={s * 0.15} rotation-y={s * SWEEP}>
+        <boxGeometry args={[0.62, 0.26, 0.02]} />
         <meshStandardMaterial color={LL.green} {...CLOTH} flatShading />
       </mesh>
-      {/* leading-edge spikes seated on the panel tops */}
-      <mesh position={[s * 0.22, 0.32, -0.03]} rotation-z={s * -0.6}>
+      {/* leading-edge spikes along the fan directions, bases in the panels */}
+      <mesh position={wingPos(s, 0.418, 0.256)} rotation-z={s * (0.55 - Math.PI / 2)} rotation-y={s * SWEEP}>
         <coneGeometry args={[0.035, 0.2, 4]} />
         <meshStandardMaterial color={LL.lime} {...CLOTH} flatShading />
       </mesh>
-      <mesh position={[s * 0.44, 0.2, -0.09]} rotation-z={s * -1.0}>
+      <mesh position={wingPos(s, 0.47, 0.171)} rotation-z={s * (0.35 - Math.PI / 2)} rotation-y={s * SWEEP}>
         <coneGeometry args={[0.032, 0.18, 4]} />
         <meshStandardMaterial color={LL.lime} {...CLOTH} flatShading />
       </mesh>
-      <mesh position={[s * 0.62, 0.04, -0.15]} rotation-z={s * -1.3}>
+      <mesh position={wingPos(s, 0.593, 0.09)} rotation-z={s * (0.15 - Math.PI / 2)} rotation-y={s * SWEEP}>
         <coneGeometry args={[0.028, 0.16, 4]} />
         <meshStandardMaterial color={LL.lime} {...CLOTH} flatShading />
       </mesh>
