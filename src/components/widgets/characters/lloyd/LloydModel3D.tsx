@@ -29,6 +29,7 @@
 // Loaded only via lazy() (the avatar registry's Model3D/Figure3D fields) —
 // never re-export from lloyd/index.ts, or three.js lands in the main chunk.
 import { useRef } from 'react'
+import type { RefObject } from 'react'
 import { useFrame } from '@react-three/fiber'
 import type { Group } from 'three'
 import { LL } from './lloydPalette'
@@ -60,33 +61,55 @@ const ELB_SLASH = -0.7 // blade thrown forward-down at the slash
 /** Wing flap targets (left wing z; right mirrors). */
 const WING_UP = 0.5
 const WING_DOWN = -0.35
+/** Bell rest swing toward plumb (counters the wrist's fixed -0.5 up-tilt). */
+const BELL_BIAS = 0.35
 
 /** The golden scimitar in fist-local coords, authored along +y: pommel ring
  * + bell tassel below the grip, guard above, the curved blade climbing +y
  * and bowing into +z. Mounted flipped (wrist z = π) as the forearm's obtuse
  * extension; the blade is flat in x so the edge leads the swing — already
- * edge-leading as authored, so NO #64 roll on this group. */
-function GoldenSword() {
+ * edge-leading as authored, so NO #64 roll on this group. A BELL tassel
+ * dangles from the pommel ring: the dangle group (`bellRef`) pivots AT the
+ * ring, and the model's useFrame swings it — a smoothed lag behind the chop
+ * arm plus a gentle idle/walk sway. */
+function GoldenSword({ bellRef }: { bellRef: RefObject<Group | null> }) {
   return (
     <group>
-      {/* handle through the fist */}
-      <mesh position={[0, 0.02, 0]}>
-        <cylinderGeometry args={[0.026, 0.026, 0.16, 8]} />
+      {/* handle through the fist — long enough that the pommel ring and the
+          bell hang clear of the fist and forearm */}
+      <mesh position={[0, -0.03, 0]}>
+        <cylinderGeometry args={[0.026, 0.026, 0.26, 8]} />
         <meshStandardMaterial color={LL.goldMid} {...GOLD} />
       </mesh>
-      {/* pommel ring + hanging bell tassel */}
-      <mesh position={[0, -0.1, 0]}>
+      {/* pommel ring */}
+      <mesh position={[0, -0.19, 0]}>
         <torusGeometry args={[0.045, 0.014, 8, 16]} />
         <meshStandardMaterial color={LL.gold} {...GOLD} />
       </mesh>
-      <mesh position={[0, -0.19, 0]}>
-        <cylinderGeometry args={[0.012, 0.012, 0.06, 6]} />
-        <meshStandardMaterial color={LL.gold} {...GOLD} />
-      </mesh>
-      <mesh position={[0, -0.26, 0]}>
-        <coneGeometry args={[0.05, 0.1, 8]} />
-        <meshStandardMaterial color={LL.gold} {...GOLD} />
-      </mesh>
+      {/* dangling bell tassel, pivoted at the ring: cord → cap → flared
+          bell body → lip → clapper peeking below the mouth */}
+      <group ref={bellRef} position={[0, -0.19, 0]}>
+        <mesh position={[0, -0.045, 0]}>
+          <cylinderGeometry args={[0.01, 0.01, 0.07, 6]} />
+          <meshStandardMaterial color={LL.gold} {...GOLD} />
+        </mesh>
+        <mesh position={[0, -0.085, 0]}>
+          <sphereGeometry args={[0.022, 10, 8]} />
+          <meshStandardMaterial color={LL.gold} {...GOLD} />
+        </mesh>
+        <mesh position={[0, -0.135, 0]}>
+          <cylinderGeometry args={[0.018, 0.055, 0.09, 10]} />
+          <meshStandardMaterial color={LL.gold} {...GOLD} />
+        </mesh>
+        <mesh position={[0, -0.184, 0]}>
+          <cylinderGeometry args={[0.062, 0.062, 0.016, 10]} />
+          <meshStandardMaterial color={LL.goldHi} {...GOLD} roughness={0.25} />
+        </mesh>
+        <mesh position={[0, -0.198, 0]}>
+          <sphereGeometry args={[0.016, 8, 6]} />
+          <meshStandardMaterial color={LL.goldDeep} {...GOLD} />
+        </mesh>
+      </group>
       {/* guard flare */}
       <mesh position={[0, 0.11, 0]}>
         <boxGeometry args={[0.05, 0.035, 0.13]} />
@@ -170,6 +193,8 @@ export default function LloydModel3D({ action }: { action?: string }) {
   const wingLRef = useRef<Group>(null)
   const wingRRef = useRef<Group>(null)
   const tailRef = useRef<Group>(null)
+  const bellRef = useRef<Group>(null)
+  const bellSwingRef = useRef(0)
   const t0Ref = useRef(0)
   const prevActionRef = useRef<string | undefined>(undefined)
   const walkPhaseRef = useRef(0)
@@ -190,7 +215,8 @@ export default function LloydModel3D({ action }: { action?: string }) {
     const wingL = wingLRef.current
     const wingR = wingRRef.current
     const tail = tailRef.current
-    if (!armL || !armR || !elbowL || !elbowR || !legL || !legR || !wingL || !wingR || !tail) return
+    const bell = bellRef.current
+    if (!armL || !armR || !elbowL || !elbowR || !legL || !legR || !wingL || !wingR || !tail || !bell) return
 
     // Per-action pose; every mutable written every frame (self-correcting).
     let shR = 0
@@ -254,6 +280,13 @@ export default function LloydModel3D({ action }: { action?: string }) {
     wingL.rotation.z = flap
     wingR.rotation.z = -flap
     tail.rotation.y = tailSway
+    // bell dangle: a smoothed follower lags the chop arm (whips through the
+    // slash, settles after); gentle sway in idle and walk. BELL_BIAS swings
+    // it toward plumb at the carry, countering the fixed wrist up-tilt.
+    const bellTarget =
+      BELL_BIAS + (action === 'chop' ? -shR * 0.4 : action === 'walk' ? Math.sin(walkPhaseRef.current) * 0.18 : Math.sin(t * 2.2) * 0.12)
+    bellSwingRef.current += (bellTarget - bellSwingRef.current) * Math.min(1, delta * 6)
+    bell.rotation.x = bellSwingRef.current
   })
 
   return (
@@ -452,7 +485,7 @@ export default function LloydModel3D({ action }: { action?: string }) {
           {/* scimitar: the forearm's obtuse extension with the fixed wrist
               up-tilt (negative x, the ninja convention), edge leading (#64) */}
           <group position={[0, -0.26, 0]} rotation-z={Math.PI} rotation-x={-0.5}>
-            <GoldenSword />
+            <GoldenSword bellRef={bellRef} />
           </group>
         </group>
       </group>
