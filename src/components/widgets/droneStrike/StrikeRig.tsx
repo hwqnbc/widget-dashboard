@@ -73,7 +73,7 @@ import {
   stepProjectiles,
 } from './combatModel'
 import type { CrateLoot, TargetKind, TargetState } from './waveLayout'
-import { aliveCount, crateReached, stepDrift } from './waveLayout'
+import { aliveCount, crateReached, milestoneHearts, stepDrift } from './waveLayout'
 import type { CrateState } from './WeaponCrates'
 import type { EnemyAIState } from './enemyAI'
 import { CHASER_CONTACT_R, stepEnemy, stepTurret } from './enemyAI'
@@ -205,6 +205,7 @@ export default function StrikeRig({
   aimRay,
   crate,
   onCratePickup,
+  onScoreMilestone,
   minimapCrateRef,
   onHeatEvent,
   heatBarRef,
@@ -284,6 +285,9 @@ export default function StrikeRig({
   /** The player reached the crate — the body applies its loot (bonus heart
    * or score cache). */
   onCratePickup: (loot: CrateLoot) => void
+  /** The session score crossed one or more MILESTONE_SCORE thresholds —
+   * the body pays the bonus heart(s) and banners it. */
+  onScoreMilestone: (hearts: number) => void
   /** Minimap crate marker — position/colour/visibility written on the tick. */
   minimapCrateRef: RefObject<SVGRectElement | null>
   /** Heat latch tripped / cleared (the body banners it, battery-style). */
@@ -354,6 +358,9 @@ export default function StrikeRig({
   // tick as data-sfx-* (the e2e audio contract; the actual voices are fired
   // imperatively at each event via strikeSounds, gated on `audioOn`).
   const sfx = useRef({ fire: 0, pop: 0, hit: 0, alert: 0, clear: 0, crash: 0, zap: 0, pickup: 0 }).current
+  /** Score milestones already paid (see milestoneHearts — self-resyncs on
+   * a run reset because the score drops below the paid line). */
+  const milestonePaidRef = useRef(0)
   const events = useRef(createHitEvents()).current
   const scan = useRef(createHitscanResult()).current
   // Scratch HitEvent for feeding a hitscan outcome through the shared
@@ -895,6 +902,19 @@ export default function StrikeRig({
         // on the hud element) — writing them here too would create dual
         // ownership and a stale-attribute window at wave transitions.
         hud.dataset.score = String(scoreRef.current)
+        // Score milestones: every MILESTONE_SCORE pays a bonus heart. The
+        // tick sees every score source (kills here, crate caches in the
+        // body), and the pure tracker re-syncs itself after a run reset.
+        const ms = milestoneHearts(milestonePaidRef.current, scoreRef.current)
+        if (ms.hearts > 0) {
+          if (audioOn) {
+            sfx.pickup++
+            playPickup()
+          }
+          onScoreMilestone(ms.hearts)
+        }
+        milestonePaidRef.current = ms.paid
+        hud.dataset.milestones = String(ms.paid)
         hud.dataset.shots = String(combat.shots)
         hud.dataset.hits = String(combat.hits)
         hud.dataset.targetsLeft = String(left)

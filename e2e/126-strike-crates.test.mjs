@@ -34,8 +34,10 @@ import {
   CRATE_RADIUS,
   CRATE_ROTATION,
   CRATE_SCORE,
+  MILESTONE_SCORE,
   buildWave,
   crateReached,
+  milestoneHearts,
   resolveCrateGrant,
 } from './.bundle/waveLayout.js'
 
@@ -85,6 +87,24 @@ check('a heart crate grants exactly one heart (uncapped — overheal stacks)',
 const gScore = resolveCrateGrant('score')
 check('a score cache pays CRATE_SCORE', gScore.hearts === 0 && gScore.score === CRATE_SCORE && CRATE_SCORE > 0)
 
+// --- pure: score milestones pay hearts (milestoneHearts) ---
+check('crossing one milestone pays one heart', (() => {
+  const r = milestoneHearts(0, MILESTONE_SCORE + 10)
+  return r.hearts === 1 && r.paid === 1
+})())
+check('a jump across two thresholds in one tick pays both', (() => {
+  const r = milestoneHearts(1, MILESTONE_SCORE * 3 + 5)
+  return r.hearts === 2 && r.paid === 3
+})())
+check('sub-threshold score pays nothing', (() => {
+  const r = milestoneHearts(0, MILESTONE_SCORE - 1)
+  return r.hearts === 0 && r.paid === 0
+})())
+check('a run reset re-syncs the paid line without paying', (() => {
+  const r = milestoneHearts(3, 40) // restart dropped the score to 40
+  return r.hearts === 0 && r.paid === 0
+})())
+
 // Crates are NOT targets: the target list is unchanged in kind terms.
 check('a crate is not a shootable target',
   specs.every((s) => s.targets.every((t) => t.kind !== 'crate')))
@@ -113,6 +133,7 @@ const root = page.locator('[data-testid="drone-strike-root"]')
 
 check('wave 1 goes active', await waitForWaveState(page, 'active'))
 check('wave 1 publishes no crate', (await hud.getAttribute('data-crate-active')) === 'no')
+check('no milestones paid at boot', (await hud.getAttribute('data-milestones')) === '0')
 check('default weapon equipped (nothing picked up)', (await root.getAttribute('data-weapon')) === 'bolt')
 
 // Clear wave 1 with the standard pilot recipe (the 101 idiom).

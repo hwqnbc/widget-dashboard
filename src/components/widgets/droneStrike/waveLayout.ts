@@ -85,6 +85,24 @@ export const CRATE_ROTATION = ['heart', 'score'] as const
 /** Points a score-cache crate pays. */
 export const CRATE_SCORE = 50
 
+/** Every this much session score pays a bonus heart (uncapped, the
+ * crate-heart stacking rule) — the mechanical use of scoring: caches and
+ * kills alike are deferred healing. */
+export const MILESTONE_SCORE = 500
+
+/** Milestone-heart tracker — pure so the crossing rules are e2e-pinned.
+ * `paid` = milestones already paid this run. Crossing one threshold pays 1;
+ * a jump across two in one tick pays 2 (no missed hearts); the score
+ * DROPPING below the paid line means the run was reset (restart/shuffle) —
+ * re-sync downward and pay nothing. */
+export function milestoneHearts(
+  paid: number,
+  score: number,
+): { paid: number; hearts: number } {
+  const now = Math.floor(score / MILESTONE_SCORE)
+  return now < paid ? { paid: now, hearts: 0 } : { paid: now, hearts: now - paid }
+}
+
 /** What picking a crate up grants — pure so the rule is e2e-pinned: a heart
  * is ALWAYS +1 (uncapped — at full hearts it stacks on as an overheal, never
  * converts or evaporates), a cache is always the points. */

@@ -55,6 +55,7 @@ import {
   CRATE_SCORE,
   DIFFICULTY,
   ENEMY_FIRE_WAVE,
+  MILESTONE_SCORE,
   buildWave,
   coerceDifficulty,
   createTargetStates,
@@ -525,6 +526,18 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
     resetFlightState(flight)
   }, [flight])
 
+  // Score milestones: every MILESTONE_SCORE session points the rig's tick
+  // pays a bonus heart — uncapped, the crate-heart stacking rule — so the
+  // score caches (and every kill) are deferred healing.
+  const onScoreMilestone = useCallback(
+    (hearts: number) => {
+      setHp((h) => h + hearts)
+      vibrate(GATE_PULSE)
+      showBanner(`\u2665 ${MILESTONE_SCORE} SCORE \u2014 BONUS HEART`)
+    },
+    [showBanner],
+  )
+
   // Resting on the pad mid-wave restores hearts — the survival valve for
   // the harder waves.
   const onHeal = useCallback(() => {
@@ -916,6 +929,7 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
             aimRay={aimRay}
             crate={crateState}
             onCratePickup={onCratePickup}
+            onScoreMilestone={onScoreMilestone}
             minimapCrateRef={minimapCrateRef}
             onHeatEvent={onHeatEvent}
             heatBarRef={heatBarRef}
@@ -977,6 +991,7 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
         data-targets-left="0"
         data-lock="-1"
         data-proj="0"
+        data-milestones="0"
         data-hp="3"
         data-crash-state="none"
         data-safe="off"

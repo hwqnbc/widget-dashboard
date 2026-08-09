@@ -361,7 +361,14 @@ while a hoverer stays near-level; wave 4 fields a lone strafer, waves 5+
 one hoverer + one strafer.
 
 Scoring: balloon 10, drifter 15, ground truck 20, enemy 25 (2 HP),
-jet trooper 30 (strafer 40), kamikaze chaser 35, AA turret 30. Session
+jet trooper 30 (strafer 40), kamikaze chaser 35, AA turret 30. **Every
+`MILESTONE_SCORE` (500) session points pays a bonus heart** (uncapped, the
+crate-heart stacking rule) — the mechanical use of scoring: kills and
+score-cache crates alike are deferred healing. The rig's 150 ms tick runs
+the pure `milestoneHearts` tracker on the session score (it sees every
+score source and self-resyncs after a restart, since the score drops below
+the paid line), pays through the body (banner + the pickup chime) and
+publishes `data-milestones`. Session
 score and wave
 are runtime-only; `bestScore`/`bestWave` persist (written at wave-clear).
 Losing all HP fails the wave — banner, then the same wave restarts with
@@ -609,7 +616,9 @@ at full hearts it *stacks on* (4+ hearts), the overheal being the reward
 for the rooftop detour (only the pad recharge is capped at 3; a wave
 restart resets to 3). What a pickup grants is the pure
 `resolveCrateGrant(loot)`; disc/beacon and minimap-marker colours are
-per-loot (heart red `#ff5252` / cache magenta `#e040fb`). A crate is **not
+per-loot (heart red `#ff5252` / cache magenta `#e040fb`); the cache also
+feeds the score-milestone hearts (see Scoring), so it is deferred healing,
+not just leaderboard sugar. A crate is **not
 a target** — it lives beside the target list as `WaveSpec.crate` (not a
 `TargetKind`, so it's unshootable and never counts toward the wave clear).
 Fly onto the disc (`crateReached`, one distance check per frame — the
