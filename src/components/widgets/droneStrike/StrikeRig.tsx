@@ -65,6 +65,7 @@ import {
   findLockTarget,
   fireHitscan,
   leadPoint,
+  pelletDir,
   spawnLaserBeam,
   spawnProjectile,
   stepHeat,
@@ -346,6 +347,8 @@ export default function StrikeRig({
   const scanEvent = useRef<HitEvent>({ kind: 'world', targetIdx: -1, x: 0, y: 0, z: 0 }).current
   const fireDir = useRef<Vec3>({ x: 0, y: 0, z: -1 }).current
   const muzzle = useRef<Vec3>({ x: 0, y: 0, z: 0 }).current
+  // Scratch direction for shotgun pellets (allocation-free fan).
+  const pellet = useRef<Vec3>({ x: 0, y: 0, z: -1 }).current
   const aimPoint = useRef<Vec3>({ x: 0, y: 0, z: 0 }).current
   const lockIdxRef = useRef(-1)
   const lockHold = useRef(0)
@@ -736,14 +739,25 @@ export default function StrikeRig({
           scanEvent.z = scan.z
           applyPlayerHitEvent(scanEvent)
         }
-      } else if (spawnProjectile(combat.player, muzzle, fireDir, weapon)) {
-        combat.cooldown = weapon.cooldown
-        combat.shots++
-        aim.recoil += RECOIL_KICK
-        spawnBurst(sparks, muzzle.x, muzzle.y, muzzle.z, 'muzzle')
-        if (audioOn) {
-          sfx.fire++
-          playFire(weapon.cooldown)
+      } else {
+        // Projectile weapons: one pull spawns `pellets` bolts (default 1) —
+        // pellet 0 flies true, the rest fan deterministically (pelletDir).
+        // Stats count PULLS, not pellets (accuracy = pulls that connect).
+        const pellets = weapon.pellets ?? 1
+        let spawned = false
+        for (let i = 0; i < pellets; i++) {
+          const d = pellets > 1 ? pelletDir(fireDir, i, weapon.spread ?? 0, pellet) : fireDir
+          if (spawnProjectile(combat.player, muzzle, d, weapon)) spawned = true
+        }
+        if (spawned) {
+          combat.cooldown = weapon.cooldown
+          combat.shots++
+          aim.recoil += RECOIL_KICK * (pellets > 1 ? 1.8 : 1) // the pump kicks
+          spawnBurst(sparks, muzzle.x, muzzle.y, muzzle.z, 'muzzle')
+          if (audioOn) {
+            sfx.fire++
+            playFire(weapon.cooldown)
+          }
         }
       }
     }

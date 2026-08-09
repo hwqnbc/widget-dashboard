@@ -501,6 +501,16 @@ persisted `weapon` field, root `data-weapon`) selects among `WEAPON_SPECS`:
   straight-line flight-time assumption undershoots moving targets with the
   lob.
 
+- **`shotgun`** — one trigger pull fans **7 pellets** through the ordinary
+  projectile integrator/sweep: pellet 0 flies true, the rest ring the aim
+  axis via the pure, deterministic `pelletDir` (golden-angle azimuths +
+  index-jittered radii, no `Math.random`), capped at the spec's `spread`
+  half-angle (0.09 rad). Each pellet does bolt damage — a point-blank fan can
+  multi-hit one target — balanced by short range (45) and a slow 0.9 s pump
+  (with extra recoil kick). Stats count PULLS, not pellets, so accuracy stays
+  meaningful. The fan is generic spec config (`pellets`/`spread` on
+  `WeaponSpec`) — any future weapon can fan.
+
 **Rooftop weapon crates** put the special guns *in the game*: from wave 2, a
 pulsing disc + crate + beacon column (`WeaponCrates`, the LandingPads recipe,
 cyan for laser / amber for lob) sits on a qualifying rooftop no soldier pacer
@@ -546,7 +556,7 @@ equipped), joysticks/buttons/settings testids mirror the sim's.
 
 E2E: suites `100-strike-core` … `109-strike-ground` plus `117-strike-audio`,
 `119-strike-soldiers`, `123-strike-sparks`, `124-strike-laser`,
-`125-strike-lob` and `126-strike-crates`
+`125-strike-lob`, `126-strike-crates` and `127-strike-shotgun`
 (see `e2e/README.md`); pure modules are esbuild-bundled for the suites in a
 second flat pass in `run.mjs`.
 
@@ -584,8 +594,9 @@ kind of list).
   per-wave rooftop crates: `WaveSpec.crate` seeded last in the stream,
   `crateReached` pickup, `effectiveWeapon = crate ?? settings` kept until the
   run ends — see "Player weapons"). The whole Weapons backlog is now shipped;
-  room to extend: more specs (shotgun spread, homing), crate variants
-  (shield/battery pickups), or a timed power-up flavour.
+  room to extend: more specs (~~shotgun spread~~ — **shipped**, see "Player
+  weapons"; homing), crate variants (shield/battery pickups), or a timed
+  power-up flavour.
 - ~~Muzzle flash + impact sparks~~ — **shipped** (the pure `sparkModel.ts`
   burst pool + `SparkField` single-draw-call Points renderer: a muzzle flash
   on every shot, impact showers at `HitEvent` coordinates — targets, world,

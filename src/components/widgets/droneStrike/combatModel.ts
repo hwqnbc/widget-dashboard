@@ -35,6 +35,11 @@ export interface WeaponSpec {
   tracerLen: number
   /** How a spawned projectile is drawn (defaults to `'bolt'`). */
   projectile?: ProjectileVisual
+  /** Projectiles per trigger pull (default 1). >1 = a shotgun-style fan,
+   * spread by `pelletDir`. */
+  pellets?: number
+  /** Fan half-angle (radians) for multi-pellet weapons. */
+  spread?: number
 }
 
 /** The player's gun: fast enough to feel snappy, slow enough that leading
@@ -110,17 +115,89 @@ export const LOB: WeaponSpec = {
   tracerLen: 0.9,
 }
 
+/** The pump shotgun: one trigger pull fans `pellets` short-range bolts
+ * through the same integrator/sweep as any bolt (each pellet does bolt
+ * damage, so a point-blank fan can multi-hit one target). Slow pump cadence
+ * balances it; the fan itself comes from the deterministic `pelletDir`. */
+export const SHOTGUN: WeaponSpec = {
+  kind: 'bolt',
+  speed: 45,
+  cooldown: 0.9,
+  gravity: 0,
+  maxRange: 45,
+  tracerLen: 0.6,
+  pellets: 7,
+  spread: 0.09,
+}
+
 /** The persisted weapon-picker ids (crate pickups reuse the same ids). */
-export type WeaponId = 'bolt' | 'laser' | 'lob'
+export type WeaponId = 'bolt' | 'laser' | 'lob' | 'shotgun'
 
 export const WEAPON_SPECS: Record<WeaponId, WeaponSpec> = {
   bolt: BOLT,
   laser: LASER,
   lob: LOB,
+  shotgun: SHOTGUN,
 }
 
 export const coerceWeapon = (v: unknown): WeaponId | undefined =>
-  v === 'bolt' || v === 'laser' || v === 'lob' ? v : undefined
+  v === 'bolt' || v === 'laser' || v === 'lob' || v === 'shotgun' ? v : undefined
+
+/** Golden angle (radians) — even ring coverage without randomness. */
+const GOLDEN = 2.399963229728653
+
+/**
+ * Direction of pellet `index` in a `count`-pellet fan around unit `dir`:
+ * pellet 0 flies true, the rest ring the axis at golden-angle azimuths and
+ * index-jittered radii up to `spread` radians — deterministic (no
+ * Math.random), so suites can assert the exact fan. Writes into `out`
+ * (allocation-free) and returns it.
+ */
+export function pelletDir(
+  dir: Vec3,
+  index: number,
+  spread: number,
+  out: Vec3,
+): Vec3 {
+  if (index === 0) {
+    out.x = dir.x
+    out.y = dir.y
+    out.z = dir.z
+    return out
+  }
+  // Orthonormal basis perpendicular to dir (fall back off the world-up axis
+  // when aiming straight up/down).
+  let rx = -dir.z
+  let ry = 0
+  let rz = dir.x
+  let rl = Math.hypot(rx, ry, rz)
+  if (rl < 1e-6) {
+    rx = 1
+    ry = 0
+    rz = 0
+    rl = 1
+  }
+  rx /= rl
+  ry /= rl
+  rz /= rl
+  // up = dir × right
+  const ux = dir.y * rz - dir.z * ry
+  const uy = dir.z * rx - dir.x * rz
+  const uz = dir.x * ry - dir.y * rx
+  const az = index * GOLDEN
+  const jitter = index * 0.618
+  const r = spread * (0.45 + 0.55 * (jitter - Math.floor(jitter)))
+  const ox = Math.cos(az) * r
+  const oy = Math.sin(az) * r
+  out.x = dir.x + rx * ox + ux * oy
+  out.y = dir.y + ry * ox + uy * oy
+  out.z = dir.z + rz * ox + uz * oy
+  const len = Math.hypot(out.x, out.y, out.z)
+  out.x /= len
+  out.y /= len
+  out.z /= len
+  return out
+}
 
 export const MAX_PLAYER_PROJECTILES = 24
 export const MAX_ENEMY_PROJECTILES = 16

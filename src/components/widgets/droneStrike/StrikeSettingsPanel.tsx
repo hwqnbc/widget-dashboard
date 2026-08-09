@@ -174,12 +174,13 @@ export default function StrikeSettingsPanel({
           <ListItem disableGutters sx={{ py: 0.5 }}>
             <ListItemText
               primary="Weapon"
-              secondary="Bolt: the classic tracer gun. Laser: instant hitscan beam, no travel time — but it heats up; overheat and it goes offline until it cools. Lob: a slow ballistic shell that arcs under gravity — follow the trajectory line."
+              secondary="Bolt: the classic tracer gun. Laser: instant hitscan beam, no travel time — but it heats up; overheat and it goes offline until it cools. Lob: a slow ballistic shell that arcs under gravity — follow the trajectory line. Shotgun: a 7-pellet close-range fan on a slow pump."
               slotProps={{ primary: { sx: { fontWeight: 600 } }, secondary: { sx: { fontSize: 12 } } }}
             />
             <ToggleButtonGroup
               size="small"
               exclusive
+              orientation="vertical"
               data-testid="strike-weapon"
               value={weapon}
               onChange={(_, v) => {
@@ -195,6 +196,9 @@ export default function StrikeSettingsPanel({
               </ToggleButton>
               <ToggleButton value="lob" data-testid="strike-weapon-lob">
                 Lob
+              </ToggleButton>
+              <ToggleButton value="shotgun" data-testid="strike-weapon-shotgun">
+                Shotgun
               </ToggleButton>
             </ToggleButtonGroup>
           </ListItem>
