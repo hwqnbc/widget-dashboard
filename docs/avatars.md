@@ -49,6 +49,7 @@ goldgunner/ GoldGunnerHead, GunnerFigure, GoldGunnerFigure, GoldGunnerCelebratio
 scar/      ScarHead, SoldierFigure, ScarFigure, ScarCelebration, ScarFigure3D, ScarModel3D, scarPalette, index
 bazookajoe/ BazookaJoeHead, BazookaFigure, BazookaJoeFigure, BazookaJoeCelebration, BazookaJoeFigure3D, BazookaJoeModel3D, bazookaJoePalette, index
 lloyd/     LloydHead, ChopFigure, LloydFigure, LloydCelebration, LloydFigure3D, LloydModel3D, lloydPalette, index
+jettrooper/ JetTrooperHead, JetBlastFigure, JetTrooperFigure, JetTrooperCelebration, JetTrooperFigure3D, JetTrooperModel3D, jetTrooperPalette, index
 boy/       Boy.tsx                    (an ImageToggle figure, not a game avatar)
 ```
 - **Head** = the standalone `<svg>` chip/mark (`size` prop; default `'100%'`).
@@ -297,7 +298,20 @@ counter-sways — and the wings stir / tail wags in idle and walk; plus
 behind and the tail countering, whose rate AND depth scale with an
 optional `flyEffort` ref (0..1, read per frame; constant mid effort when
 absent). The Drone Sim mounts this action as its `craft: 'lloyd'`
-swap — see `docs/drone-sim.md` "Craft: Fly as Lloyd").
+swap — see `docs/drone-sim.md` "Craft: Fly as Lloyd"),
+and jettrooper (`JetTrooperModel3D` — the tan-fatigues trooper: peach
+minifig face with brows/smirk under the brown cap dome + tan visor band,
+white earguard slabs with dark speaker discs, vest slabs + pouches + the
+silver rank badge over the flared tan torso, chunky brown boots, the
+twin-tank JETPACK on the back (pack box, flanking fuel tanks, hip
+thruster housings with emissive cyan exhaust cones hidden until the jet
+burns) and the beam weapon in the right fist — dark receiver + barrel
+widening into the red concentric-lens dish, pistol-gripped ⊥ the forearm
+like the imperium claw; action `[jet "Jet & Blast"]` — the 2D
+celebration's 2.6 s loop: a `liftRef` group raises the WHOLE figure
+(rise → hover bob → settle) while the exhaust cones flicker `visible`,
+the legs trail, and the weapon arm levels to fire TWO red BeamBurst
+windows with elbow recoil kicks).
 Scar's Sight & Fire
 and Bazooka Joe's Take Aim are the **canned
 counterparts of the in-game aim** these models gained for Drone Strike's

@@ -11,6 +11,7 @@ import { GoldGunnerHead, GoldGunnerFigure, GoldGunnerCelebration } from '../comp
 import { ScarHead, ScarFigure, ScarCelebration } from '../components/widgets/characters/scar'
 import { BazookaJoeHead, BazookaJoeFigure, BazookaJoeCelebration } from '../components/widgets/characters/bazookajoe'
 import { LloydHead, LloydFigure, LloydCelebration } from '../components/widgets/characters/lloyd'
+import { JetTrooperHead, JetTrooperFigure, JetTrooperCelebration } from '../components/widgets/characters/jettrooper'
 
 /**
  * The visual pieces of an avatar, grouped: the head (used as the game chip/mark),
@@ -75,6 +76,8 @@ const BazookaJoeFigure3D = lazy(() => import('../components/widgets/characters/b
 const BazookaJoeModel3D = lazy(() => import('../components/widgets/characters/bazookajoe/BazookaJoeModel3D'))
 const LloydFigure3D = lazy(() => import('../components/widgets/characters/lloyd/LloydFigure3D'))
 const LloydModel3D = lazy(() => import('../components/widgets/characters/lloyd/LloydModel3D'))
+const JetTrooperFigure3D = lazy(() => import('../components/widgets/characters/jettrooper/JetTrooperFigure3D'))
+const JetTrooperModel3D = lazy(() => import('../components/widgets/characters/jettrooper/JetTrooperModel3D'))
 
 export const avatarVisualById: Record<AvatarId, AvatarVisual> = {
   toy: {
@@ -190,6 +193,17 @@ export const avatarVisualById: Record<AvatarId, AvatarVisual> = {
       { id: 'walk', name: 'Walk' },
       { id: 'chop', name: 'Sword Chop' },
       { id: 'fly', name: 'Fly' },
+    ],
+  },
+  jettrooper: {
+    Head: JetTrooperHead,
+    Figure: JetTrooperFigure,
+    Celebration: JetTrooperCelebration,
+    Figure3D: JetTrooperFigure3D,
+    Model3D: JetTrooperModel3D,
+    actions3d: [
+      { id: 'walk', name: 'Walk' },
+      { id: 'jet', name: 'Jet & Blast' },
     ],
   },
 }

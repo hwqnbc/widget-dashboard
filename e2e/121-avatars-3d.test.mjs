@@ -4,7 +4,7 @@
  * ('available'/'unavailable' for the selected avatar).
  *
  * Covers: 2D default, toggling to 3D lazy-loads the three.js chunk and
- * renders a WebGL canvas for every avatar (ALL ten carry a Figure3D now),
+ * renders a WebGL canvas for every avatar (ALL eleven carry a Figure3D now),
  * the action toggle lists the 3D model's named-move library (registry
  * `actions3d`; **the shared Walk (leg-gait) action is pinned FIRST** so the
  * universal moves lead — Idle, Walk, then the avatar's specials): toy
@@ -12,8 +12,8 @@
  * [Walk, Fire Blade], darkarin [Walk, Twin Cross], frak [Walk, Blade
  * Flurry], imperium [Walk, Claw Slash], goldgunner [Walk, Guns Blazing],
  * scar [Walk, Breach & Clear, Sight & Fire],
- * bazookajoe [Walk, Rocket Launch, Take Aim], lloyd [Walk, Sword Chop, Fly])
- * and each action drives
+ * bazookajoe [Walk, Rocket Launch, Take Aim], lloyd [Walk, Sword Chop, Fly],
+ * jettrooper [Walk, Jet & Blast]) and each action drives
  * `data-action`/`data-playing`, tapping the 3D figure toggles the turntable
  * (`data-spin`, one uniform rule for every avatar, persisted per widget),
  * switching back restores each view, and the chosen view + spin preference
@@ -242,6 +242,24 @@ check('Walk plays on lloyd', (await attr('data-action')) === 'walk')
 await celebration.nth(0).click()
 await page.waitForTimeout(150)
 check('Idle resets the lloyd action', (await attr('data-action')) === 'idle')
+
+// jettrooper's 3D figure: jetpack + beam weapon, Walk + Jet & Blast round-trip
+await picker.nth(10).click()
+await page.waitForTimeout(150)
+check('jettrooper advertises an available 3D figure', (await attr('data-figure3d')) === 'available')
+await page.waitForSelector('[data-testid="figure3d-stage"] canvas', { timeout: 20000 })
+check('jettrooper 3d view renders a WebGL canvas', (await stageCanvas.count()) === 1)
+check('jettrooper 3d actions: Idle + Walk + Jet & Blast', (await celebration.count()) === 3)
+await celebration.nth(2).click() // Jet & Blast (lift-off + beam pulses)
+await page.waitForTimeout(150)
+check('Jet & Blast plays', (await attr('data-action')) === 'jet')
+check('Jet & Blast sets playing', (await attr('data-playing')) === 'yes')
+await celebration.nth(1).click() // Walk (the shared leg-gait action)
+await page.waitForTimeout(150)
+check('Walk plays on jettrooper', (await attr('data-action')) === 'walk')
+await celebration.nth(0).click()
+await page.waitForTimeout(150)
+check('Idle resets the jettrooper action', (await attr('data-action')) === 'idle')
 
 // back to toy: the 3D figure returns and the toggle re-enables
 await picker.nth(0).click()

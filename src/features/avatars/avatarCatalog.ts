@@ -9,6 +9,7 @@ import { GG } from '../../components/widgets/characters/goldgunner/goldGunnerPal
 import { SC } from '../../components/widgets/characters/scar/scarPalette'
 import { BJ } from '../../components/widgets/characters/bazookajoe/bazookaJoePalette'
 import { LL } from '../../components/widgets/characters/lloyd/lloydPalette'
+import { JT } from '../../components/widgets/characters/jettrooper/jetTrooperPalette'
 
 /**
  * Component-free avatar metadata (name + brand colour). Kept free of component
@@ -35,6 +36,7 @@ export const AVATAR_CATALOG: AvatarMeta[] = [
   { id: 'scar', name: 'Scar', color: SC.redDeep },
   { id: 'bazookajoe', name: 'Bazooka Joe', color: BJ.red },
   { id: 'lloyd', name: 'Lloyd', color: LL.green },
+  { id: 'jettrooper', name: 'Jet Trooper', color: JT.vest },
 ]
 
 export const avatarMetaById = Object.fromEntries(
