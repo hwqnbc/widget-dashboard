@@ -140,6 +140,7 @@ Normal 5, Hard 4). So wave 1 is a gentle full-variety wave, not a bare gallery.
 | 1 | the full mix, gentle: static balloons + drifting ring-drones + a moving military truck + a moving SWAT car + **1 throttled, non-firing enemy drone** + **1 non-firing AA turret** + **1 non-firing rooftop-patrol soldier** |
 | 2–4 | same kinds, ramping — more/faster enemies (throttle climbs), more road vehicles, up to 2 turrets, up to 2 soldiers (rooftop pacers + a ground patrol from wave 3); **a flying jet-trooper gunner from wave 2**; **from wave 3 the last enemy of every wave is a kamikaze chaser** |
 | 5+ | enemies + turrets + soldiers return fire (Normal/Hard; Easy at 7); enemy throttle at full; **from wave 5 the first enemy of every wave is a shielded drone (only hurt from behind)**; player has 3 HP per wave attempt |
+| every 5th (5, 10, 15…) | **BOSS WAVE** — the normal mix PLUS the boss gunship (weak-point pods, health bar; see below) |
 | scaling | more/smaller balloons (gallery cap 6 — trimmed to fund the jets), up to 4 enemies, **up to 2 jet troopers (the last a skyline strafer from wave 4)**, 4 trucks + 3 cars + 2 turrets + 3 patrolling soldiers (rooftop + ground), `MAX_TARGETS` 28 |
 
 **Ground targets** (unlocked by the gimbal's −70° look-down): deck-level
@@ -330,6 +331,57 @@ sanctuary: while the player is pad-safe a locked chaser **hovers in place**
 (it must not fall back to the absolute orbit write, which would teleport it
 back onto its ring — see lessons.md).
 
+**Boss wave** (every `BOSS_EVERY` 5th wave — 5, 10, 15…): a single oversized
+**boss gunship** joins that wave. It *joins*: the boss is appended as the
+very LAST consumer of the wave's seeded stream (after even the crate), so
+adding bosses moved no other placement on any wave — waves 1–4 and every
+other target of wave 5 are byte-identical to the pre-boss campaign (the
+append-only rule, lesson #54; suite 135 asserts it rather than assuming it).
+
+Movement is free: `stepEnemy`'s guard accepts `'boss'`, so the boss rides the
+plain **orbiter patrol** seeded through the usual drift fields — a slow, wide
+(radius 10–14), high (`maxRoofH + 4..6`, ~22–24 u) circuit above the skyline,
+evading the reticle like any drone and answering with a heavier
+**`BOSS_BOLT`** (18 u/s on a 1.2 s cadence, still unled and LOS-gated) once
+the difficulty's return-fire wave has passed.
+
+What makes it a boss is the **damage model**: its hull is **armour**. Every
+shot that lands on bare hull deflects (spark + shell flash + the metallic
+clank + `data-deflects`, no damage/score/combo — the shielded drone's path),
+and damage only lands inside one of **three weak-point pods** riding a
+horizontal ring around the hull (`bossModel`: `BOSS_POD_COUNT` 3,
+`BOSS_POD_RING` 1.9 with `BOSS_POD_RADIUS` 0.85, so the pods bulge visibly
+past the 2.2 hull and each covers a ±22° cap of it). The ring **spins**
+(`BOSS_SPIN` 0.6 rad/s), so a firing position is only good while a pod sweeps
+through your bearing — and because the pods sit at hull height you have to
+climb roughly **level** with the boss (the ceiling is `MAX_ALT` 40, so that's
+always possible) instead of plinking it from below. Each pod has
+`bossPodHp(wave, difficulty)` hit points (Easy wave-5 3, Normal/Hard 4,
+climbing one per boss fought); a spent pod goes **dark, shrinks and turns
+inert** — hits there deflect too, so you must keep repositioning to a live
+one. The boss's own `hp` is seeded as the aggregate (pods × podHp), which
+means the ordinary shared damage path (`t.hp--` → kill → score × combo) kills
+it exactly when the last pod is spent, with no bespoke death code.
+
+Two details make it honest:
+- **The pods you see are the pods you can hit.** `podPhase` is written once
+  per frame by the rig (single writer); `BossDrone` positions its pod meshes
+  with the same pure `podCenter` the rig's `podHitAt` resolves impacts
+  against, in the boss group's *unrotated* local frame (only the hull child
+  takes the travel yaw), so no rotation convention can drift the drawn pods
+  away from the hittable ones.
+- **Aim assist is retargeted.** `leadPoint`/`bendAim` (and the gimbal soft
+  track) normally aim at a target's *centre* — which on an armoured boss is
+  the one place shots do nothing, so at the default assist the boss would be
+  unkillable. Both now aim at `nearestLivePod(...)` for boss targets (see
+  `docs/lessons.md`).
+
+Feedback: a **health bar** across the top (`strike-boss`, mounted on boss
+waves, rig-written from hp/hpMax — purple → amber → red, hidden the moment
+the boss dies) plus `data-boss-active/-hp/-pods`, a fat purple minimap blip,
+a `WAVE n — BOSS` intro banner, and the crash rumble under the pop when it
+finally goes down for **`BOSS_POINTS` 150** (×combo).
+
 **Shielded drone** (from `SHIELD_FROM_WAVE` 5): the **first-seeded enemy of
 every wave** is SHIELDED (`variant: 2` — index-derived like the chaser, so
 the seeded rand stream gains no draws and waves 1–4 stay byte-identical; the
@@ -390,7 +442,7 @@ one hoverer + one strafer.
 
 Scoring: balloon 10, drifter 15, ground truck 20, enemy 25 (2 HP),
 jet trooper 30 (strafer 40), kamikaze chaser 35, shielded drone 45,
-AA turret 30. **Combo
+AA turret 30, **boss gunship 150**. **Combo
 scoring**: each kill bumps a chain and refreshes a `COMBO_WINDOW` (5 s)
 timer — the multiplier paid on a kill is `min(chain, COMBO_MAX)` (first
 kill ×1, a second inside the window ×2, capped ×4); the chain dies when
@@ -546,7 +598,10 @@ meshes, so the pool cap matches the wave's own jet cap),
 orbiter / orange kamikaze chaser / blue shielded, with a pursuit nose-tilt;
 a shielded drone renders at 1.33× — matching its 0.8 hit sphere — under a
 translucent blue front half-dome that flashes on each deflect via
-`hitFlash`), `Tracers`
+`hitFlash`), `BossDrone` (the boss gunship: a 3.2× hull yawing into travel
+plus the three weak-point pods positioned every frame by the shared
+`podCenter`/`podPhase` — live pods glow and flash, spent ones go dark and
+shrink), `Tracers`
 (one InstancedMesh for all bolts, oriented along velocity — skips
 rocket-`visual` shots in both pools), `EnemyRockets`
 (**pool-generic despite the name** — mounted once for the enemy pool
@@ -685,7 +740,9 @@ Root `drone-strike-root`: `data-world-seed/-view/-auto-fire/-aim-assist/
 `strike-hud` (150 ms tick):
 `data-x/-z/-alt/-yaw/-speed/-wave/-wave-state(intro|active|cleared|failed)/
 -score/-milestones/-combo/-deflects/-shots/-hits/-targets-left/-lock/-proj/
--enemy-proj/-hp/-input-source`, the **sound-effect counters**
+-enemy-proj/-hp/-input-source`, the **boss telemetry**
+`data-boss-active/-hp/-pods` (the root also carries `data-boss-wave`), the
+**sound-effect counters**
 `data-sfx-fire/-pop/-hit/-alert/-clear/-crash/-zap/-pickup`, the monotonic
 spark-burst count `data-sparks`, the **supply-crate beacon**
 `data-crate-active/-x/-z/-loot`, plus the
@@ -695,13 +752,16 @@ aim closed-loop without window globals. Chips: `strike-score` (`data-score/-wave
 (`data-pressed`), the weapon chip `strike-weapon-chip` (`data-weapon`,
 mirrors the root's), the laser heat bar `strike-heat`/`strike-heat-fill`
 (`data-level` 0–100 + `data-overheated`, mounted only while the laser is
-equipped), joysticks/buttons/settings testids mirror the sim's.
+equipped), the boss health bar `strike-boss`/`strike-boss-fill`
+(`data-level` 0–100 + `data-pods`, mounted only on boss waves),
+joysticks/buttons/settings testids mirror the sim's.
 
 E2E: suites `100-strike-core` … `109-strike-ground` plus `117-strike-audio`,
 `119-strike-soldiers`, `123-strike-sparks`, `124-strike-laser`,
 `125-strike-lob`, `126-strike-crates`, `127-strike-shotgun`,
 `128-strike-homing`, `129-strike-weapon-chip`, `131-strike-chaser`,
-`132-strike-jets`, `133-strike-combo` and `134-strike-shield`
+`132-strike-jets`, `133-strike-combo`, `134-strike-shield` and
+`135-strike-boss`
 (see `e2e/README.md`); pure modules are esbuild-bundled for the suites in a
 second flat pass in `run.mjs`.
 
@@ -830,8 +890,14 @@ kind of list).
   wave-5+ `variant: 2` shielded drone (a facing gate on the HitEvent's new
   shot direction rather than a `stepEnemy` mode — see Gameplay). Next
   escalations would be new archetypes (see the boss wave below).
-- **Boss wave every 5th** — one large multi-HP drone with weak-point
-  spheres (extra `Hittable`s attached to its pose) and a health bar chip.
+- ~~**Boss wave every 5th**~~ — **shipped**: the every-5th-wave boss gunship
+  with three spinning weak-point pods and a health bar (see Gameplay above).
+  The weak points landed as a pure hit-location gate (`bossModel.podHitAt`
+  off the HitEvent impact point) rather than extra pool `Hittable`s — same
+  feel, and it keeps the wave-clear count and the target pool untouched.
+  Remaining boss ideas: **multiple phases** (a pod-count threshold that
+  swaps the flight pattern or arms a new weapon), and an escort wing that
+  spawns with it.
 - ~~Combo scoring~~ — **shipped**, as a kill chain rather than the
   original hits-without-a-miss sketch (which the shotgun's 7-pellet fan
   and the laser's tick stream would have broken by design): kills inside

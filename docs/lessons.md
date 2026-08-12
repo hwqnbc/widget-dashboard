@@ -1413,3 +1413,25 @@ carried over; these are the new ones.
     the feature. Diagnose with a probe script that samples position/lock/
     shots alongside the beacon: "position frozen + shots frozen + lock -1"
     reads immediately as a blind stall.
+
+98. **Aim assist bends toward a target's CENTRE, so a centre-armoured target
+    needs the assist retargeted at its weak point — or the mechanic ships
+    unkillable.** The boss gunship's hull deflects everything and damage
+    only lands inside its rotating weak-point pods. Every piece of that was
+    correct and pinned in isolation (pure pod geometry, the hit gate through
+    the real projectile sweep, the shared damage path), yet the fight would
+    have been *impossible at the default settings*: the fire path does
+    `leadPoint(playerPos, t.pos, …)` then `bendAim(...)`, so aim assist
+    (Easy default: strong, 0.6 bend) drags every bolt from a hand-aimed pod
+    straight onto the armour, and the gimbal's soft track parks the reticle
+    there too. The fix is one seam — a single `aimTargetPos(t)` used by BOTH
+    the lead/bend and the track, returning `nearestLivePod(...)` for the
+    armoured kind and `t.pos` for everything else. The general rule: any
+    feature that makes *part* of a target's silhouette the only valid impact
+    zone (weak points, rear-only shields, boss phases, crit spots) has to be
+    threaded through every assist/auto-aim/tracking path that assumes
+    "target = one point", and the retarget belongs in one shared helper so a
+    new assist path can't silently miss it. Worth checking the *player-aid*
+    systems, not just the damage code, whenever hit geometry stops being
+    "the whole sphere" — and worth a live sanity probe, because a pure suite
+    happily passes while the shipped game is unwinnable.

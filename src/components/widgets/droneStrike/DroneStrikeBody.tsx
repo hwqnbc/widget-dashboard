@@ -60,6 +60,7 @@ import {
   coerceDifficulty,
   createTargetStates,
   enemyAggressionScale,
+  isBossWave,
   loadWave,
   resolveCrateGrant,
 } from './waveLayout'
@@ -83,6 +84,7 @@ import TurretTargets from './TurretTargets'
 import SoldierTargets from './SoldierTargets'
 import JetTargets from './JetTargets'
 import EnemyDrones from './EnemyDrones'
+import BossDrone from './BossDrone'
 import Tracers from './Tracers'
 import EnemyRockets from './EnemyRockets'
 import SparkField from './SparkField'
@@ -266,6 +268,7 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
   const batteryRef = useRef<BatteryState>(createBatteryState())
   const batteryBarRef = useRef<HTMLDivElement>(null)
   const heatBarRef = useRef<HTMLDivElement>(null)
+  const bossBarRef = useRef<HTMLDivElement>(null)
   const crashRef = useRef<CrashState>({ active: false, until: 0, spinX: 0, spinZ: 0 })
   const padStateRef = useRef<'idle' | 'active'>('idle')
   const padChipRef = useRef<HTMLDivElement>(null)
@@ -369,7 +372,8 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
     // phase banner this effect is about to own.
     if (bannerTimer.current) clearTimeout(bannerTimer.current)
     if (phase === 'intro') {
-      setBanner(`WAVE ${wave}`)
+      // Every BOSS_EVERY-th wave announces the gunship joining the mix.
+      setBanner(isBossWave(wave) ? `WAVE ${wave} — BOSS` : `WAVE ${wave}`)
       setHp(PLAYER_HP)
       const t = setTimeout(() => {
         clearProjectiles(combat)
@@ -779,6 +783,7 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
       data-aim-mode={aimMode}
       data-difficulty={difficulty}
       data-audio={audio ? 'on' : 'off'}
+      data-boss-wave={isBossWave(wave) ? 'yes' : 'no'}
       onMouseDown={(e) => e.stopPropagation()}
       onTouchStart={(e) => e.stopPropagation()}
       sx={{
@@ -886,6 +891,7 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
           <SoldierTargets targets={targets} playerPos={flight.pos} />
           <JetTargets targets={targets} playerPos={flight.pos} />
           <EnemyDrones targets={targets} />
+          <BossDrone targets={targets} />
           {/* Player tracers follow the equipped weapon; the enemy pool shares
            * this prop (scaled), so a tracer-less weapon (laser, len 0) falls
            * back to BOLT's length to keep enemy fire visible. */}
@@ -933,6 +939,7 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
             minimapCrateRef={minimapCrateRef}
             onHeatEvent={onHeatEvent}
             heatBarRef={heatBarRef}
+            bossBarRef={bossBarRef}
             aimRef={aimRef}
             weapon={weaponSpec}
             assist={aimAssist}
@@ -994,6 +1001,9 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
         data-milestones="0"
         data-combo="0"
         data-deflects="0"
+        data-boss-active="no"
+        data-boss-hp="0"
+        data-boss-pods="0"
         data-hp="3"
         data-crash-state="none"
         data-safe="off"
@@ -1115,6 +1125,38 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
             data-level="0"
             data-overheated="no"
             sx={{ height: '100%', width: '0%', bgcolor: '#4fc3f7' }}
+          />
+        </Box>
+      )}
+
+      {/* Boss health bar — the wave's gunship, mounted on boss waves only.
+        * Wider than the battery/heat bars (it's the fight's status) and
+        * centred at the top; the rig writes the fill from the aggregate
+        * weak-point hp and hides the whole bar once the boss is down. */}
+      {isBossWave(wave) && (
+        <Box
+          data-testid="strike-boss"
+          sx={{
+            position: 'absolute',
+            top: 8,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            width: '46%',
+            maxWidth: 260,
+            height: 10,
+            borderRadius: 1,
+            bgcolor: alpha('#000', 0.5),
+            border: `1px solid ${alpha('#ba68c8', 0.7)}`,
+            overflow: 'hidden',
+            pointerEvents: 'none',
+          }}
+        >
+          <Box
+            ref={bossBarRef}
+            data-testid="strike-boss-fill"
+            data-level="100"
+            data-pods="3"
+            sx={{ height: '100%', width: '100%', bgcolor: '#ba68c8' }}
           />
         </Box>
       )}

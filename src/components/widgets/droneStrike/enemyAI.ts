@@ -116,7 +116,10 @@ export function stepEnemy(
    * the spawn pad — the sanctuary rule the return fire already follows). */
   canChase = true,
 ): void {
-  if (!t.alive || t.kind !== 'enemy') return
+  // The BOSS is an orbiter too — a slow, wide, high patrol seeded through the
+  // same drift fields — so it rides this whole step (orbit + evade + return
+  // fire) with no bespoke AI; only its damage model differs (bossModel).
+  if (!t.alive || (t.kind !== 'enemy' && t.kind !== 'boss')) return
 
   const dx = t.pos.x - playerPos.x
   const dy = t.pos.y - playerPos.y

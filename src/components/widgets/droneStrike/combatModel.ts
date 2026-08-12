@@ -67,6 +67,18 @@ export const ENEMY_BOLT: WeaponSpec = {
   tracerLen: 1.0,
 }
 
+/** The boss gunship's cannon: heavier than a drone's — faster and on a much
+ * shorter cadence, so orbiting a boss in the open is genuinely punishing
+ * (still unled and LOS-gated by `stepEnemy`, so it stays dodgeable). */
+export const BOSS_BOLT: WeaponSpec = {
+  kind: 'bolt',
+  speed: 18,
+  cooldown: 1.2,
+  gravity: 0,
+  maxRange: 80,
+  tracerLen: 1.6,
+}
+
 /** Rooftop Bazooka Joe soldier: launches a slow rocket you can see incoming
  * and dodge (drawn as a warhead + smoke trail by EnemyRockets). */
 export const SOLDIER_ROCKET: WeaponSpec = {

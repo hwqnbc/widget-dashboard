@@ -19,6 +19,7 @@
 import type { Vec3 } from '../droneSim/flightModel'
 import { SPAWN, WORLD_HALF } from '../droneSim/flightModel'
 import type { WorldLayout } from '../droneSim/worldLayout'
+import { BOSS_POD_COUNT } from './bossModel'
 
 export type TargetKind =
   | 'balloon'
@@ -29,6 +30,7 @@ export type TargetKind =
   | 'car'
   | 'soldier'
   | 'jet'
+  | 'boss'
 
 export interface TargetSpec {
   kind: TargetKind
@@ -58,6 +60,10 @@ export interface TargetSpec {
   /** Soldier line route heading, radians (dir = (cos, sin)); 0 = +x, π/2 = +z.
    * Ignored for loops. */
   routeAngle?: number
+  /** Boss only: hit points PER weak-point pod (`bossPodHp`). The boss's own
+   * `hp` is the aggregate (pods × this), so the shared damage path kills it
+   * exactly when the last pod is spent. */
+  podHp?: number
 }
 
 /** What a crate can hold — non-weapon loot only: a bonus heart or a score
@@ -142,6 +148,38 @@ export const SHIELD_POINTS = 45
  * render pool scales it up to match) AND an honestly larger hit sphere than
  * the normal 0.6 — fair, because damage is shield-gated anyway. */
 export const SHIELD_RADIUS = 0.8
+
+/* ------------------------------- boss wave ------------------------------- */
+
+/** Every this many waves is a BOSS wave (5, 10, 15…) — the campaign's
+ * escalation beat: the boss JOINS the wave's normal mix (it's appended last
+ * to the seeded stream, so no other placement moves). */
+export const BOSS_EVERY = 5
+
+/** Is wave `waveIndex` a boss wave? Pure so the rule is e2e-pinned and the
+ * body can banner/mount the health bar off it. */
+export function isBossWave(waveIndex: number): boolean {
+  return waveIndex > 0 && waveIndex % BOSS_EVERY === 0
+}
+
+/** Killing the boss is the biggest single payout on the board. */
+export const BOSS_POINTS = 150
+/** The boss's hull hit sphere (mirrors bossModel's BOSS_HULL_R — the hull is
+ * armour: only weak-point pod hits damage it). */
+export const BOSS_RADIUS = 2.2
+/** Hit points per weak-point pod on the FIRST boss at the easiest setting. */
+export const BOSS_POD_HP_BASE = 3
+
+/**
+ * Hit points per weak-point pod: the base, +1 per boss already fought (so
+ * each boss is tougher than the last) and +1 on the difficulties that give
+ * enemies 2 HP. Easy wave 5 = 3/pod (9 pod hits to kill), Normal/Hard = 4
+ * (12). Pure so the ramp is e2e-pinned.
+ */
+export function bossPodHp(waveIndex: number, preset: DifficultyPreset): number {
+  const n = Math.max(1, Math.floor(waveIndex / BOSS_EVERY))
+  return BOSS_POD_HP_BASE + (n - 1) + (preset.enemyHp - 1)
+}
 /** ...and shoot back from this one (normal; difficulty shifts it). Every
  * difficulty's fireWave is > 1, so wave-1 enemies + turrets hold fire. */
 export const ENEMY_FIRE_WAVE = 5
@@ -228,6 +266,7 @@ export const POINTS: Record<TargetKind, number> = {
   car: 25,
   soldier: 40,
   jet: 30,
+  boss: BOSS_POINTS,
 }
 
 /** Same PRNG as the world builder — copied, not exported from worldLayout,
@@ -705,6 +744,57 @@ export function buildWave(
     }
   }
 
+  // BOSS (every BOSS_EVERY-th wave) — deliberately the very LAST consumer of
+  // this wave's seeded stream, after even the crate: appending draws can never
+  // move a placement above (lesson #54), so adding bosses left waves 1-4 AND
+  // every other target on the boss waves byte-identical. The boss JOINS the
+  // wave's normal mix rather than replacing it.
+  //
+  // Movement is stepEnemy's orbiter patrol (its guard accepts 'boss'), seeded
+  // through the drift fields like an enemy drone: amp = orbit radius, speed =
+  // angular rate, phase = start angle — slow and wide, a circling gunship.
+  // It flies ABOVE THE SKYLINE (like the jet strafers), so the placement needs
+  // no building test — just bounds and spawn distance.
+  if (isBossWave(waveIndex) && targets.length < MAX_TARGETS) {
+    const podHp = bossPodHp(waveIndex, diff)
+    const orbitR = 10 + rand() * 4
+    const y = maxRoofH + 4 + rand() * 2
+    const speed = 0.15 + rand() * 0.1
+    const phase = rand() * Math.PI * 2
+    let bx = 0
+    let bz = 0
+    let placed = false
+    for (let a = 0; a < 20 && !placed; a++) {
+      const cx = (rand() * 2 - 1) * (WORLD_HALF - 4 - orbitR)
+      const cz = (rand() * 2 - 1) * (WORLD_HALF - 4 - orbitR)
+      if (Math.hypot(cx - SPAWN.x, cz - SPAWN.z) < MIN_FROM_SPAWN + orbitR) continue
+      bx = cx
+      bz = cz
+      placed = true
+    }
+    if (!placed) {
+      bx = 0
+      bz = -(MIN_FROM_SPAWN + orbitR + 4)
+    }
+    targets.push({
+      kind: 'boss',
+      x: bx,
+      y,
+      z: bz,
+      radius: BOSS_RADIUS,
+      driftAmp: orbitR,
+      driftSpeed: speed,
+      driftPhase: phase,
+      driftAxis: 0,
+      // Aggregate hp = every pod's hp, so the shared damage path kills the
+      // boss exactly when the last pod is spent.
+      hp: BOSS_POD_COUNT * podHp,
+      points: BOSS_POINTS,
+      variant: 0,
+      podHp,
+    })
+  }
+
   return { index: waveIndex, targets, enemiesShoot: waveIndex >= diff.fireWave, crate }
 }
 
@@ -740,6 +830,8 @@ export interface TargetState {
   vel: Vec3
   radius: number
   hp: number
+  /** The hp the target loaded with — the boss health bar's denominator. */
+  hpMax: number
   points: number
   /** Drift anchor. */
   base: Vec3
@@ -768,6 +860,13 @@ export interface TargetState {
    * so the patrol resumes smoothly from where a plant froze it (not jumped
    * forward as if wall-clock time had elapsed while it stood still). */
   driftHold: number
+  /** Boss only: per-pod hit points (length BOSS_POD_COUNT, allocated once).
+   * A pod at 0 is destroyed — inert, and hits there deflect off the hull. */
+  podHp: number[]
+  /** Boss only: the weak-point ring's rotation phase. Written once per frame
+   * by StrikeRig (single writer) and read by BOTH the hit test (`podHitAt`)
+   * and the renderer, so the pods you see are the pods you can hit. */
+  podPhase: number
 }
 
 export function createTargetStates(): TargetState[] {
@@ -778,6 +877,7 @@ export function createTargetStates(): TargetState[] {
     vel: { x: 0, y: 0, z: 0 },
     radius: 1,
     hp: 1,
+    hpMax: 1,
     points: 0,
     base: { x: 0, y: 0, z: 0 },
     driftAmp: 0,
@@ -791,6 +891,8 @@ export function createTargetStates(): TargetState[] {
     routeAngle: 0,
     plantTimer: 0,
     driftHold: 0,
+    podHp: Array.from({ length: BOSS_POD_COUNT }, () => 0),
+    podPhase: 0,
   }))
 }
 
@@ -816,6 +918,7 @@ export function loadWave(states: TargetState[], wave: WaveSpec): void {
     s.vel.z = 0
     s.radius = spec.radius
     s.hp = spec.hp
+    s.hpMax = spec.hp
     s.points = spec.points
     s.driftAmp = spec.driftAmp
     s.driftSpeed = spec.driftSpeed
@@ -828,6 +931,10 @@ export function loadWave(states: TargetState[], wave: WaveSpec): void {
     s.routeAngle = spec.routeAngle ?? 0
     s.plantTimer = 0
     s.driftHold = 0
+    // Boss weak points: every pod loads at the spec's per-pod hp (0 for every
+    // other kind, so a non-boss slot can never register a pod hit).
+    for (let p = 0; p < s.podHp.length; p++) s.podHp[p] = spec.podHp ?? 0
+    s.podPhase = 0
   }
 }
 
@@ -890,7 +997,9 @@ export function stepDrift(t: TargetState, timeS: number): void {
     }
     return
   }
-  if (t.driftAmp === 0 || t.kind === 'enemy') return
+  // Enemies AND the boss are AI-driven (stepEnemy's parametrized orbit) — the
+  // sinusoid below would fight their absolute position writes (lesson #96).
+  if (t.driftAmp === 0 || t.kind === 'enemy' || t.kind === 'boss') return
   const phase = timeS * t.driftSpeed + t.driftPhase
   const offset = Math.sin(phase) * t.driftAmp
   const deriv = Math.cos(phase) * t.driftAmp * t.driftSpeed

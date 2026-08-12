@@ -256,7 +256,15 @@ model, 1st/3rd-person camera rig, and the ref-based zero-render input path).
 See `docs/drone-strike.md` for the Drone Strike widget (FPV wave shooter on
 the Drone Sim's flight model and city — fly-to-aim reticle, fire button +
 auto-fire, aim assist with target leading, segment-swept tracer bolts,
-seeded waves with enemy AI drones (from wave 3 the last enemy of each wave
+seeded waves with enemy AI drones (**every 5th wave is a BOSS wave** — an
+oversized gunship appended LAST to the seeded stream, so it joins the normal
+mix without moving any other placement; it orbits via the same `stepEnemy`
+path, its hull is armour and damage only lands inside one of three spinning
+**weak-point pods** (pure `bossModel` — `podHitAt` off the HitEvent impact
+point, the same `podCenter`/`podPhase` `BossDrone` draws them with), aggregate
+hp = pods × `bossPodHp` so the shared damage path kills it when the last pod
+is spent, with a `strike-boss` health bar and the aim assist retargeted to the
+nearest live pod; from wave 3 the last enemy of each wave
 is a **kamikaze chaser** — orange beacon, lurks on orbit then pursues at a
 capped `boomClipT`-clipped speed and detonates on contact for a heart;
 shooting it early pays bonus points; from wave 5 the first enemy is a

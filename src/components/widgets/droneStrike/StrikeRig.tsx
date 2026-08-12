@@ -56,6 +56,7 @@ import {
   AIM_CONE_RAD,
   AIM_CONE_RAD_ZOOM,
   AUTO_FIRE_HOLD_S,
+  BOSS_BOLT,
   COMBO_MAX,
   ENEMY_BOLT,
   JET_BEAM,
@@ -80,6 +81,7 @@ import {
 } from './combatModel'
 import type { CrateLoot, TargetKind, TargetState } from './waveLayout'
 import { aliveCount, crateReached, milestoneHearts, stepDrift } from './waveLayout'
+import { BOSS_SPIN, nearestLivePod, podHitAt, podsLeft } from './bossModel'
 import type { CrateState } from './WeaponCrates'
 import type { EnemyAIState } from './enemyAI'
 import { CHASER_CONTACT_R, stepEnemy, stepTurret } from './enemyAI'
@@ -121,7 +123,13 @@ const BLIP_COLORS: Record<TargetKind, string> = {
   car: '#42a5f5',
   soldier: '#ffca28',
   jet: '#40c4ff',
+  boss: '#ba68c8',
 }
+/** The boss's minimap blip is drawn fatter than a normal target's (blips are
+ * authored at BLIP_R — a slot reused by a smaller kind next wave must be
+ * written back, so both radii are set explicitly every tick). */
+const BLIP_R_BOSS = '3.2'
+const BLIP_R = '1.8'
 /** Enemy blips are variant-aware so the map matches the beacon colours:
  * orbiter red (BLIP_COLORS.enemy), kamikaze chaser orange, shielded blue. */
 const BLIP_CHASER = '#ff9100'
@@ -219,6 +227,7 @@ export default function StrikeRig({
   minimapCrateRef,
   onHeatEvent,
   heatBarRef,
+  bossBarRef,
   aimRef,
   weapon,
   assist,
@@ -304,6 +313,10 @@ export default function StrikeRig({
   onHeatEvent: (event: HeatEvent) => void
   /** Laser heat bar fill — width/colour/data-level written on the tick. */
   heatBarRef: RefObject<HTMLDivElement | null>
+  /** Boss health bar fill (mounted on boss waves) — width/colour/data-level/
+   * data-pods written on the tick; the tick also hides the whole bar (its
+   * parent) once the boss is down. */
+  bossBarRef: RefObject<HTMLDivElement | null>
   /** Shared aim offset (gyro fine-aim + recoil) — also read by the camera. */
   aimRef: { current: AimOffset }
   weapon: WeaponSpec
@@ -392,6 +405,8 @@ export default function StrikeRig({
   // Scratch direction for shotgun pellets (allocation-free fan).
   const pellet = useRef<Vec3>({ x: 0, y: 0, z: -1 }).current
   const aimPoint = useRef<Vec3>({ x: 0, y: 0, z: 0 }).current
+  // Scratch world position of the boss pod the assist/track is aiming at.
+  const podPoint = useRef<Vec3>({ x: 0, y: 0, z: 0 }).current
   const lockIdxRef = useRef(-1)
   const lockHold = useRef(0)
   const clearedSent = useRef(false)
@@ -528,6 +543,17 @@ export default function StrikeRig({
       )
     }
 
+    // Where to AIM at a target. Normally its centre — but a BOSS's hull is
+    // armour, so the centre is the one place shots do nothing: aim assist and
+    // the soft track both retarget to its nearest live weak-point pod (see
+    // docs/lessons.md — a centre-seeking assist would make the boss
+    // unkillable at the default assist level).
+    const aimTargetPos = (t: TargetState): Vec3 =>
+      t.kind === 'boss' &&
+      nearestLivePod(flight.pos, t.pos, t.podPhase, t.podHp, podPoint) >= 0
+        ? podPoint
+        : t.pos
+
     // Soft track: while last frame's lock is alive, the gimbal slews toward
     // the led target (error-reducing, arc-clamped, strength per assist) —
     // the sensor-operator's track mode that makes fast evaders hittable.
@@ -537,7 +563,7 @@ export default function StrikeRig({
       targets[lockIdxRef.current]?.alive
     if (tracking) {
       const t = targets[lockIdxRef.current]
-      leadPoint(flight.pos, t.pos, t.vel, weapon.speed, aimPoint)
+      leadPoint(flight.pos, aimTargetPos(t), t.vel, weapon.speed, aimPoint)
       const dx = aimPoint.x - flight.pos.x
       const dy = aimPoint.y - flight.pos.y
       const dz = aimPoint.z - flight.pos.z
@@ -593,7 +619,11 @@ export default function StrikeRig({
       } else {
         stepDrift(t, clock.elapsedTime)
       }
-      if (waveActive && t.kind === 'enemy') {
+      // The boss's weak-point ring sweeps at a constant rate. ONE writer (this
+      // loop), read by both the hit test below and BossDrone's renderer — so
+      // the pods drawn are exactly the pods that can be hit.
+      if (t.kind === 'boss') t.podPhase = clock.elapsedTime * BOSS_SPIN
+      if (waveActive && (t.kind === 'enemy' || t.kind === 'boss')) {
         stepEnemy(
           t,
           enemyAI[i],
@@ -604,7 +634,8 @@ export default function StrikeRig({
           colliders,
           enemiesShoot && !playerSafe,
           combat.enemy,
-          ENEMY_BOLT,
+          // The boss answers with its heavier cannon; drones keep the bolt.
+          t.kind === 'boss' ? BOSS_BOLT : ENEMY_BOLT,
           enemyMove,
           !playerSafe, // chasers break off while the player rests on the pad
         )
@@ -753,6 +784,29 @@ export default function StrikeRig({
         }
         return
       }
+      // BOSS: the hull is armour — damage only lands inside a LIVE weak-point
+      // pod (the ring the renderer draws from the same podPhase). Anything
+      // else, including a destroyed pod's socket, deflects like the shield.
+      if (t.kind === 'boss') {
+        const pod = podHitAt(e, t.pos, t.podPhase, t.podHp)
+        if (pod < 0) {
+          t.hitFlash = 0.25
+          deflectsRef.current++
+          vibrate(HIT_PULSE)
+          if (audioOn) {
+            sfx.hit++
+            playDeflect()
+          }
+          return
+        }
+        t.podHp[pod]--
+        // A pod blowing out is the milestone of the fight — a second burst on
+        // the pod itself and a heavier tick, so it reads through the hull.
+        if (t.podHp[pod] === 0) {
+          spawnBurst(sparks, e.x, e.y, e.z, 'impact')
+          vibrate(KILL_PULSE)
+        }
+      }
       combat.hits++
       t.hp--
       t.hitFlash = 0.25
@@ -766,6 +820,11 @@ export default function StrikeRig({
         if (audioOn) {
           sfx.pop++
           playPop(t.kind)
+          // A boss going down gets the crash rumble under the pop.
+          if (t.kind === 'boss') {
+            sfx.crash++
+            playCrash()
+          }
         }
         onTargetDown(t.points)
       } else {
@@ -796,8 +855,9 @@ export default function StrikeRig({
     if (wantsFire && combat.cooldown === 0) {
       if (lockIdx >= 0) {
         const t = targets[lockIdx]
-        // Lead the moving target, then bend the bolt by the assist level.
-        leadPoint(flight.pos, t.pos, t.vel, weapon.speed, aimPoint)
+        // Lead the moving target (a boss: its nearest live pod), then bend the
+        // bolt by the assist level.
+        leadPoint(flight.pos, aimTargetPos(t), t.vel, weapon.speed, aimPoint)
         bendAim(fireDir, flight.pos, aimPoint, AIM_BEND[assist])
       }
       muzzle.x = flight.pos.x + fireDir.x * MUZZLE_OFFSET
@@ -932,6 +992,15 @@ export default function StrikeRig({
     hudClock.current += dt
     if (hudClock.current >= HUD_INTERVAL) {
       hudClock.current = 0
+      // The wave's live boss (at most one) — read by both the HUD attributes
+      // and the health bar below.
+      let bossNow: TargetState | null = null
+      for (const t of targets) {
+        if (t.alive && t.kind === 'boss') {
+          bossNow = t
+          break
+        }
+      }
       const hud = hudRef.current
       if (hud) {
         const alt = flight.pos.y
@@ -962,6 +1031,10 @@ export default function StrikeRig({
         hud.dataset.milestones = String(ms.paid)
         hud.dataset.combo = String(combat.chain)
         hud.dataset.deflects = String(deflectsRef.current)
+        // Boss telemetry — the fight's state without pixels.
+        hud.dataset.bossActive = bossNow ? 'yes' : 'no'
+        hud.dataset.bossHp = String(bossNow ? bossNow.hp : 0)
+        hud.dataset.bossPods = String(bossNow ? podsLeft(bossNow.podHp) : 0)
         hud.dataset.shots = String(combat.shots)
         hud.dataset.hits = String(combat.hits)
         hud.dataset.targetsLeft = String(left)
@@ -1072,6 +1145,23 @@ export default function StrikeRig({
         heatBar.dataset.level = level.toFixed(0)
         heatBar.dataset.overheated = combat.overheated ? 'yes' : 'no'
       }
+      // Boss health bar (mounted only on boss waves): fill = remaining
+      // aggregate pod hp, and the whole bar hides once the boss is down.
+      const bossBar = bossBarRef.current
+      if (bossBar) {
+        const host = bossBar.parentElement
+        if (bossNow) {
+          const pct = bossNow.hpMax > 0 ? Math.max(0, (bossNow.hp / bossNow.hpMax) * 100) : 0
+          bossBar.style.width = `${pct}%`
+          bossBar.style.backgroundColor =
+            pct > 60 ? '#ba68c8' : pct > 25 ? '#ffb300' : '#ef5350'
+          bossBar.dataset.level = pct.toFixed(0)
+          bossBar.dataset.pods = String(podsLeft(bossNow.podHp))
+          if (host) host.style.display = 'block'
+        } else if (host) {
+          host.style.display = 'none'
+        }
+      }
       const marker = minimapDroneRef.current
       if (marker) {
         marker.setAttribute(
@@ -1110,6 +1200,8 @@ export default function StrikeRig({
                   ? BLIP_CHASER
                   : BLIP_COLORS[t.kind],
             )
+            // The boss reads as the big threat on the map too.
+            el.setAttribute('r', t.kind === 'boss' ? BLIP_R_BOSS : BLIP_R)
             el.removeAttribute('display')
           } else {
             el.setAttribute('display', 'none')
