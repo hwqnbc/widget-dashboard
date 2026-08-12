@@ -259,7 +259,12 @@ auto-fire, aim assist with target leading, segment-swept tracer bolts,
 seeded waves with enemy AI drones (from wave 3 the last enemy of each wave
 is a **kamikaze chaser** — orange beacon, lurks on orbit then pursues at a
 capped `boomClipT`-clipped speed and detonates on contact for a heart;
-shooting it early pays bonus points; from wave 2 **jet-trooper flying
+shooting it early pays bonus points; from wave 5 the first enemy is a
+**shielded drone** — a bigger blue-beaconed airframe under a blue front
+half-dome, normal orbiter AI but only hurt **from behind**: the pure
+`shieldBlocks` facing gate on the `HitEvent`'s normalized shot direction
+deflects frontal fire (sparks + clank + `data-deflects`, no damage/combo/
+score) in the rig's shared damage path; from wave 2 **jet-trooper flying
 gunners** — the Jet Trooper avatar `Model3D` airborne via the shared
 `ModelTargets`/`aimRef` seams, hover-strafing on the seeded drift — or,
 from wave 4, flying fast strafing runs above the skyline — and firing

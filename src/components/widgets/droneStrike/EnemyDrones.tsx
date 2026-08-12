@@ -1,15 +1,23 @@
 import { useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
-import type { Group, MeshBasicMaterial } from 'three'
+import type { Group, Mesh, MeshBasicMaterial } from 'three'
+import { DoubleSide } from 'three'
 import { createControlInput } from '../droneSim/flightModel'
 import DroneModel from '../droneSim/DroneModel'
 
 /** Waves field at most this many enemies at once (see waveLayout). */
 const MAX_ENEMY_RENDER = 4
 /** Beacon tint per enemy variant: orbiter red, kamikaze chaser orange (the
- * "get away from me" colour — mirrors nothing else in the palette). */
+ * "get away from me" colour — mirrors nothing else in the palette), shielded
+ * blue (matching its dome + minimap blip). */
 const BEACON_ORBITER = '#ff1744'
 const BEACON_CHASER = '#ff9100'
+const BEACON_SHIELD = '#2979ff'
+/** The shielded drone renders bigger — matching its seeded SHIELD_RADIUS
+ * (0.8) vs the normal 0.6 hit sphere, so look and hitbox agree. */
+const SHIELD_SCALE = 1.33
+/** Dome shell opacity at rest; a deflect flashes it via `hitFlash`. */
+const SHIELD_OPACITY = 0.22
 
 /**
  * Enemy drones as real quadcopter models (≤4 per wave). A fixed set of
@@ -17,7 +25,10 @@ const BEACON_CHASER = '#ff9100'
  * slots — position + heading written imperatively, spare slots hidden. The
  * beacon on top separates them from the player's craft at a glance, and its
  * colour marks the variant (a chaser also pitches nose-down while it
- * pursues — speed-proportional, so the dive reads as intent).
+ * pursues — speed-proportional, so the dive reads as intent). A SHIELDED
+ * drone (variant 2) reads at range: a bigger airframe, the blue beacon, and
+ * a translucent blue front half-dome showing exactly the covered arc — the
+ * uncovered tail is the weak side — which flashes when it deflects a shot.
  */
 export default function EnemyDrones({
   targets,
@@ -25,13 +36,15 @@ export default function EnemyDrones({
   targets: readonly {
     alive: boolean
     kind: string
-    variant: 0 | 1
+    variant: 0 | 1 | 2
+    hitFlash: number
     pos: { x: number; y: number; z: number }
     vel: { x: number; y: number; z: number }
   }[]
 }) {
   const groupRefs = useRef<(Group | null)[]>([])
   const beaconRefs = useRef<(MeshBasicMaterial | null)[]>([])
+  const shieldRefs = useRef<(Mesh | null)[]>([])
   // Rotors idle at hover speed — the model reads throttle from controls.
   const neutral = useRef(createControlInput()).current
 
@@ -43,6 +56,8 @@ export default function EnemyDrones({
       if (g) {
         g.visible = true
         g.position.set(t.pos.x, t.pos.y, t.pos.z)
+        // Shielded drones are a heavier airframe — scaled to the hitbox ratio.
+        g.scale.setScalar(t.variant === 2 ? SHIELD_SCALE : 1)
         // Nose (-Z at yaw 0) into the direction of travel.
         if (t.vel.x !== 0 || t.vel.z !== 0) {
           g.rotation.y = Math.atan2(-t.vel.x, -t.vel.z)
@@ -51,7 +66,20 @@ export default function EnemyDrones({
         const speed = Math.hypot(t.vel.x, t.vel.z)
         g.rotation.x = t.variant === 1 ? Math.min(0.35, speed * 0.06) : 0
         const beacon = beaconRefs.current[slot]
-        if (beacon) beacon.color.set(t.variant === 1 ? BEACON_CHASER : BEACON_ORBITER)
+        if (beacon) {
+          beacon.color.set(
+            t.variant === 2 ? BEACON_SHIELD : t.variant === 1 ? BEACON_CHASER : BEACON_ORBITER,
+          )
+        }
+        const shield = shieldRefs.current[slot]
+        if (shield) {
+          shield.visible = t.variant === 2
+          if (shield.visible) {
+            // Deflects pulse the shell (the rig sets hitFlash without damage).
+            const mat = shield.material as MeshBasicMaterial
+            mat.opacity = SHIELD_OPACITY + t.hitFlash * 2.4
+          }
+        }
       }
       slot++
     }
@@ -79,6 +107,25 @@ export default function EnemyDrones({
                 beaconRefs.current[i] = el
               }}
               color="#ff1744"
+              toneMapped={false}
+            />
+          </mesh>
+          {/* Front half-dome shield shell (variant 2 only): the sphere's
+              phi∈[0,π] half faces +Z, rotated to cover the -Z nose. */}
+          <mesh
+            ref={(el) => {
+              shieldRefs.current[i] = el
+            }}
+            rotation-y={Math.PI}
+            visible={false}
+          >
+            <sphereGeometry args={[0.55, 16, 12, 0, Math.PI]} />
+            <meshBasicMaterial
+              color="#2979ff"
+              transparent
+              opacity={SHIELD_OPACITY}
+              depthWrite={false}
+              side={DoubleSide}
               toneMapped={false}
             />
           </mesh>

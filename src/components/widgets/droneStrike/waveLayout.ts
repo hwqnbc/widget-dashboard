@@ -46,9 +46,11 @@ export interface TargetSpec {
   /** Per-kind sub-type. Soldier: 0 = rocket (Bazooka Joe), 1 = SMG (Scar) —
    * drives both the weapon fired (StrikeRig) and the rendered model
    * (SoldierTargets), so the two always agree. Enemy: 0 = orbiter, 1 =
-   * kamikaze CHASER (pursues + rams; see enemyAI). Jet: 0 = hoverer, 1 =
-   * STRAFER (long fast passes above the skyline). Undefined / 0 elsewhere. */
-  variant?: 0 | 1
+   * kamikaze CHASER (pursues + rams; see enemyAI), 2 = SHIELDED (front dome
+   * deflects — only rear shots damage it; see combatModel.shieldBlocks).
+   * Jet: 0 = hoverer, 1 = STRAFER (long fast passes above the skyline).
+   * Undefined / 0 elsewhere. */
+  variant?: 0 | 1 | 2
   /** Soldier patrol shape: 0 = line (paces back & forth along `routeAngle`),
    * 1 = loop (circles the anchor at radius `driftAmp`). Undefined / 0 for
    * every other kind. */
@@ -128,6 +130,18 @@ export const CHASER_FROM_WAVE = 3
 /** A chaser is worth more than an orbiter — shooting it down before it
  * connects is the payoff. */
 export const CHASER_POINTS = 35
+/** From this wave the FIRST enemy of each wave is SHIELDED (`variant: 2`) —
+ * its front dome deflects the player's fire; only shots arriving from behind
+ * (travelling WITH its heading) damage it. Index-derived like the chaser, so
+ * the seeded stream gains no draws (waves below this stay byte-identical). */
+export const SHIELD_FROM_WAVE = 5
+/** A shielded drone outpays even the chaser — flanking it is the hardest
+ * kill on the board. */
+export const SHIELD_POINTS = 45
+/** The shielded drone is a heavier, bigger airframe: visibly larger (the
+ * render pool scales it up to match) AND an honestly larger hit sphere than
+ * the normal 0.6 — fair, because damage is shield-gated anyway. */
+export const SHIELD_RADIUS = 0.8
 /** ...and shoot back from this one (normal; difficulty shifts it). Every
  * difficulty's fireWave is > 1, so wave-1 enemies + turrets hold fire. */
 export const ENEMY_FIRE_WAVE = 5
@@ -263,7 +277,7 @@ export const SOLDIER_PLANT_TAIL = 0.9
  * off-canvas (the halt/freeze itself lives in `StrikeRig` + `stepDrift`).
  */
 export function soldierPlantHold(
-  variant: 0 | 1,
+  variant: 0 | 1 | 2,
   hasShot: boolean,
   cooldown: number,
   current: number,
@@ -437,17 +451,21 @@ export function buildWave(
     // chaser (variant 1, bonus points) — derived from the loop index, never
     // from a rand() draw, so the crate/soldier picks downstream of this
     // block stay byte-identical (the append-only stream rule, lesson #54).
+    // From SHIELD_FROM_WAVE the FIRST enemy is the SHIELDED drone (variant
+    // 2): same orbit AI, bigger airframe, front dome only hurt from behind.
+    // The chaser wins a collision (single-enemy wave), keeping it LAST.
     const chaser = waveIndex >= CHASER_FROM_WAVE && i === enemies - 1
+    const shielded = !chaser && waveIndex >= SHIELD_FROM_WAVE && i === 0
     place({
       kind: 'enemy',
-      radius: 0.6,
+      radius: shielded ? SHIELD_RADIUS : 0.6,
       driftAmp: 4 + rand() * 4,
       driftSpeed: 0.5 + rand() * 0.4,
       driftPhase: rand() * Math.PI * 2,
       driftAxis: 0,
       hp: diff.enemyHp,
-      points: chaser ? CHASER_POINTS : POINTS.enemy,
-      variant: chaser ? 1 : 0,
+      points: chaser ? CHASER_POINTS : shielded ? SHIELD_POINTS : POINTS.enemy,
+      variant: chaser ? 1 : shielded ? 2 : 0,
     })
   }
 
@@ -731,8 +749,8 @@ export interface TargetState {
   driftAxis: 0 | 1 | 2
   /** Seconds of hit-flash tint remaining. */
   hitFlash: number
-  /** Per-kind sub-type (soldier: rocket/SMG; enemy: orbiter/chaser). */
-  variant: 0 | 1
+  /** Per-kind sub-type (soldier: rocket/SMG; enemy: orbiter/chaser/shielded). */
+  variant: 0 | 1 | 2
   /** Soldier only: seconds of firing-pose animation remaining. Set on each
    * shot (stepTurret), decayed each frame; SoldierTargets feeds it to the
    * model's aim ref so the figure plays its recoil/muzzle/launch pose. */
@@ -767,7 +785,7 @@ export function createTargetStates(): TargetState[] {
     driftPhase: 0,
     driftAxis: 0 as 0 | 1 | 2,
     hitFlash: 0,
-    variant: 0 as 0 | 1,
+    variant: 0 as 0 | 1 | 2,
     fireTimer: 0,
     routeKind: 0 as 0 | 1,
     routeAngle: 0,

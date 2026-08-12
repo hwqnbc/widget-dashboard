@@ -31,6 +31,7 @@ import {
   playAlert,
   playClear,
   playCrash,
+  playDeflect,
   playFire,
   playHit,
   playOverheat,
@@ -69,6 +70,7 @@ import {
   createHitscanResult,
   findLockTarget,
   fireHitscan,
+  shieldBlocks,
   leadPoint,
   pelletDir,
   spawnLaserBeam,
@@ -120,6 +122,10 @@ const BLIP_COLORS: Record<TargetKind, string> = {
   soldier: '#ffca28',
   jet: '#40c4ff',
 }
+/** Enemy blips are variant-aware so the map matches the beacon colours:
+ * orbiter red (BLIP_COLORS.enemy), kamikaze chaser orange, shielded blue. */
+const BLIP_CHASER = '#ff9100'
+const BLIP_SHIELD = '#2979ff'
 /** Minimap crate-marker tint per loot (mirrors WeaponCrates). */
 const CRATE_BLIP: Record<CrateLoot, string> = {
   heart: '#ff5252',
@@ -369,7 +375,18 @@ export default function StrikeRig({
   const scan = useRef(createHitscanResult()).current
   // Scratch HitEvent for feeding a hitscan outcome through the shared
   // player-hit consequence path (mutated per shot, never allocated).
-  const scanEvent = useRef<HitEvent>({ kind: 'world', targetIdx: -1, x: 0, y: 0, z: 0 }).current
+  const scanEvent = useRef<HitEvent>({
+    kind: 'world',
+    targetIdx: -1,
+    x: 0,
+    y: 0,
+    z: 0,
+    dx: 0,
+    dy: 0,
+    dz: 0,
+  }).current
+  /** Monotonic count of shots deflected off shielded drones (data-deflects). */
+  const deflectsRef = useRef(0)
   const fireDir = useRef<Vec3>({ x: 0, y: 0, z: -1 }).current
   const muzzle = useRef<Vec3>({ x: 0, y: 0, z: 0 }).current
   // Scratch direction for shotgun pellets (allocation-free fan).
@@ -722,6 +739,20 @@ export default function StrikeRig({
       if (e.kind !== 'target') return
       const t = targets[e.targetIdx]
       if (!t.alive) return
+      // Shielded drone (enemy variant 2): the front dome deflects any shot
+      // not arriving from behind (with its heading) — full feedback (sparks
+      // above, shell flash, clank) but no damage, combo, score or accuracy
+      // credit. The tell that teaches "get behind it".
+      if (t.kind === 'enemy' && t.variant === 2 && shieldBlocks(e.dx, e.dy, e.dz, t.vel)) {
+        t.hitFlash = 0.25
+        deflectsRef.current++
+        vibrate(HIT_PULSE)
+        if (audioOn) {
+          sfx.hit++
+          playDeflect()
+        }
+        return
+      }
       combat.hits++
       t.hp--
       t.hitFlash = 0.25
@@ -796,6 +827,9 @@ export default function StrikeRig({
           scanEvent.x = scan.x
           scanEvent.y = scan.y
           scanEvent.z = scan.z
+          scanEvent.dx = scan.dx
+          scanEvent.dy = scan.dy
+          scanEvent.dz = scan.dz
           applyPlayerHitEvent(scanEvent)
         }
       } else {
@@ -927,6 +961,7 @@ export default function StrikeRig({
         milestonePaidRef.current = ms.paid
         hud.dataset.milestones = String(ms.paid)
         hud.dataset.combo = String(combat.chain)
+        hud.dataset.deflects = String(deflectsRef.current)
         hud.dataset.shots = String(combat.shots)
         hud.dataset.hits = String(combat.hits)
         hud.dataset.targetsLeft = String(left)
@@ -1067,7 +1102,14 @@ export default function StrikeRig({
           if (t.alive) {
             el.setAttribute('cx', t.pos.x.toFixed(1))
             el.setAttribute('cy', t.pos.z.toFixed(1))
-            el.setAttribute('fill', BLIP_COLORS[t.kind])
+            el.setAttribute(
+              'fill',
+              t.kind === 'enemy' && t.variant === 2
+                ? BLIP_SHIELD
+                : t.kind === 'enemy' && t.variant === 1
+                  ? BLIP_CHASER
+                  : BLIP_COLORS[t.kind],
+            )
             el.removeAttribute('display')
           } else {
             el.setAttribute('display', 'none')

@@ -46,6 +46,13 @@ export function playHit(): void {
   tone({ freq: 1500, dur: 0.045, type: 'square', gain: 0.08 })
 }
 
+/** Shot deflected off a shielded drone's dome — a bright metallic clank,
+ * deliberately unlike the damage tick (`playHit`): it connected but bounced. */
+export function playDeflect(): void {
+  tone({ freq: 2100, sweepTo: 1450, dur: 0.07, type: 'triangle', gain: 0.15 })
+  noise({ dur: 0.05, gain: 0.1, cutoff: 3800 })
+}
+
 /** Incoming fire — a two-tone alert the frame an enemy/turret shoots. */
 export function playAlert(): void {
   tone({ freq: 680, dur: 0.09, type: 'sawtooth', gain: 0.12 })

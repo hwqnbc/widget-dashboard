@@ -993,6 +993,7 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
         data-proj="0"
         data-milestones="0"
         data-combo="0"
+        data-deflects="0"
         data-hp="3"
         data-crash-state="none"
         data-safe="off"

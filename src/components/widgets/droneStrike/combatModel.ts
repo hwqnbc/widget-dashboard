@@ -401,6 +401,12 @@ export interface HitEvent {
   x: number
   y: number
   z: number
+  /** Normalized direction the shot was travelling at impact — lets the
+   * consumer resolve facing-dependent armour (the shielded drone's front
+   * dome only passes shots arriving from behind). */
+  dx: number
+  dy: number
+  dz: number
 }
 
 /** Fixed-capacity event ring reused every frame — reset count, never realloc. */
@@ -420,6 +426,9 @@ export function createHitEvents(): HitEvents {
       x: 0,
       y: 0,
       z: 0,
+      dx: 0,
+      dy: 0,
+      dz: 0,
     })),
   }
 }
@@ -431,6 +440,9 @@ function pushHit(
   x: number,
   y: number,
   z: number,
+  dx: number,
+  dy: number,
+  dz: number,
 ): void {
   if (events.count >= events.items.length) return
   const e = events.items[events.count++]
@@ -439,6 +451,33 @@ function pushHit(
   e.x = x
   e.y = y
   e.z = z
+  e.dx = dx
+  e.dy = dy
+  e.dz = dz
+}
+
+/* -------------------------------- shield -------------------------------- */
+
+/** Facing gate for the SHIELDED enemy drone (variant 2): the shot must
+ * travel WITH the drone's heading — arrive from behind — to damage it. A
+ * rear shot's direction dotted with the heading ≈ +1; a frontal shot ≈ −1.
+ * The small positive margin keeps pure side-on hits deflecting too (the
+ * dome wraps a little past the beam). */
+export const SHIELD_REAR_COS = 0.15
+/** Below this speed the drone has no meaningful facing — the shield falls
+ * open (no infinite-shield edge case while it hovers or stalls). */
+const SHIELD_MIN_SPEED = 0.05
+
+/**
+ * Does a shielded drone's front dome block this hit? `dx/dy/dz` is the
+ * normalized shot direction at impact (from the HitEvent), `vel` the
+ * target's live velocity (its heading). Pure — shared by the rig's damage
+ * path and the e2e suite.
+ */
+export function shieldBlocks(dx: number, dy: number, dz: number, vel: Vec3): boolean {
+  const speed = Math.hypot(vel.x, vel.y, vel.z)
+  if (speed < SHIELD_MIN_SPEED) return false
+  return (dx * vel.x + dy * vel.y + dz * vel.z) / speed < SHIELD_REAR_COS
 }
 
 /**
@@ -617,6 +656,10 @@ export function stepProjectiles(
 
     if (bestT <= 1) {
       p.active = false
+      // Shot direction at impact from the live velocity — also correct for
+      // a curving homing missile (it's the direction it actually arrived on).
+      const speed = Math.hypot(p.vel.x, p.vel.y, p.vel.z)
+      const inv = speed > 0 ? 1 / speed : 0
       pushHit(
         events,
         bestKind,
@@ -624,6 +667,9 @@ export function stepProjectiles(
         p.prev.x + (p.pos.x - p.prev.x) * bestT,
         p.prev.y + (p.pos.y - p.prev.y) * bestT,
         p.prev.z + (p.pos.z - p.prev.z) * bestT,
+        p.vel.x * inv,
+        p.vel.y * inv,
+        p.vel.z * inv,
       )
       continue
     }
@@ -646,10 +692,15 @@ export interface HitscanResult {
   x: number
   y: number
   z: number
+  /** The beam's (normalized) direction — the HitEvent shot direction, so
+   * hitscan hits carry the same facing information a swept bolt does. */
+  dx: number
+  dy: number
+  dz: number
 }
 
 export function createHitscanResult(): HitscanResult {
-  return { hit: null, targetIdx: -1, x: 0, y: 0, z: 0 }
+  return { hit: null, targetIdx: -1, x: 0, y: 0, z: 0, dx: 0, dy: 0, dz: 0 }
 }
 
 /** Scratch segment endpoints reused by every hitscan (allocation-free). */
@@ -705,6 +756,9 @@ export function fireHitscan(
   out.x = SCAN_FROM.x + (SCAN_TO.x - SCAN_FROM.x) * t
   out.y = SCAN_FROM.y + (SCAN_TO.y - SCAN_FROM.y) * t
   out.z = SCAN_FROM.z + (SCAN_TO.z - SCAN_FROM.z) * t
+  out.dx = dir.x
+  out.dy = dir.y
+  out.dz = dir.z
   return out
 }
 

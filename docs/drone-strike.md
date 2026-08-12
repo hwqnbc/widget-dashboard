@@ -139,7 +139,7 @@ Normal 5, Hard 4). So wave 1 is a gentle full-variety wave, not a bare gallery.
 | --- | --- |
 | 1 | the full mix, gentle: static balloons + drifting ring-drones + a moving military truck + a moving SWAT car + **1 throttled, non-firing enemy drone** + **1 non-firing AA turret** + **1 non-firing rooftop-patrol soldier** |
 | 2–4 | same kinds, ramping — more/faster enemies (throttle climbs), more road vehicles, up to 2 turrets, up to 2 soldiers (rooftop pacers + a ground patrol from wave 3); **a flying jet-trooper gunner from wave 2**; **from wave 3 the last enemy of every wave is a kamikaze chaser** |
-| 5+ | enemies + turrets + soldiers return fire (Normal/Hard; Easy at 7); enemy throttle at full; player has 3 HP per wave attempt |
+| 5+ | enemies + turrets + soldiers return fire (Normal/Hard; Easy at 7); enemy throttle at full; **from wave 5 the first enemy of every wave is a shielded drone (only hurt from behind)**; player has 3 HP per wave attempt |
 | scaling | more/smaller balloons (gallery cap 6 — trimmed to fund the jets), up to 4 enemies, **up to 2 jet troopers (the last a skyline strafer from wave 4)**, 4 trucks + 3 cars + 2 turrets + 3 patrolling soldiers (rooftop + ground), `MAX_TARGETS` 28 |
 
 **Ground targets** (unlocked by the gimbal's −70° look-down): deck-level
@@ -330,6 +330,34 @@ sanctuary: while the player is pad-safe a locked chaser **hovers in place**
 (it must not fall back to the absolute orbit write, which would teleport it
 back onto its ring — see lessons.md).
 
+**Shielded drone** (from `SHIELD_FROM_WAVE` 5): the **first-seeded enemy of
+every wave** is SHIELDED (`variant: 2` — index-derived like the chaser, so
+the seeded rand stream gains no draws and waves 1–4 stay byte-identical; the
+chaser stays LAST, so both coexist from wave 5). It flies the **normal
+orbiter AI** — the puzzle is positional, not behavioural: its front dome
+**deflects the player's fire**, and only shots arriving **from behind**
+(travelling WITH its heading) damage it. The gate is the pure
+`shieldBlocks(dx, dy, dz, vel)` (combatModel): every `HitEvent` now carries
+the **normalized shot direction** (written by `stepProjectiles` from the
+live bolt velocity at impact — so a curving homing missile is judged by the
+direction it actually arrived on — and by `fireHitscan` from the beam
+direction), and a hit is blocked when its direction · heading <
+`SHIELD_REAR_COS` (0.15 — the small positive margin keeps pure side-on hits
+deflecting too). A **stalled drone has no facing, so the shield falls open**
+(no infinite-shield edge case). The rig's single shared damage path
+(`applyPlayerHitEvent`) checks the gate before `hp--`: a deflect gives full
+feedback — the impact spark burst, a shell flash (`hitFlash` without
+damage), a metallic **deflect clank** (deliberately unlike the damage tick)
+and the monotonic HUD `data-deflects` — but pays **no damage, no combo, no
+score and no accuracy credit**, which is the tell that teaches *get behind
+it*. Identification stack (it must read at a glance): a **bigger airframe**
+(`SHIELD_RADIUS` 0.8 hit sphere vs 0.6, honestly matched by a 1.33× render
+scale), the **blue beacon** (vs red orbiter / orange chaser), a translucent
+**blue front half-dome** showing exactly the covered arc — the uncovered
+tail is the weak side — and a **blue minimap blip** (enemy blips are
+variant-aware). Flanking it pays **`SHIELD_POINTS` 45**, the top drone
+bounty.
+
 **Jet troopers** (from `JET_WAVE` 2): the **Jet Trooper avatar airborne** as
 a second flying enemy beside the AI drones — a **flying gunner**. Up to two
 per wave (`min(1 + ⌊(wave−2)/3⌋, 2, enemyCap)`, difficulty-gated) hover-
@@ -361,7 +389,8 @@ while a hoverer stays near-level; wave 4 fields a lone strafer, waves 5+
 one hoverer + one strafer.
 
 Scoring: balloon 10, drifter 15, ground truck 20, enemy 25 (2 HP),
-jet trooper 30 (strafer 40), kamikaze chaser 35, AA turret 30. **Combo
+jet trooper 30 (strafer 40), kamikaze chaser 35, shielded drone 45,
+AA turret 30. **Combo
 scoring**: each kill bumps a chain and refreshes a `COMBO_WINDOW` (5 s)
 timer — the multiplier paid on a kill is `min(chain, COMBO_MAX)` (first
 kill ×1, a second inside the window ×2, capped ×4); the chain dies when
@@ -514,7 +543,10 @@ burning, legs trailed, beam elevated by `pitch`, flash by `fire`; ~130
 meshes, so the pool cap matches the wave's own jet cap),
 `EnemyDrones`
 (≤4 `DroneModel`s slot-assigned per frame, beacon tinted by variant — red
-orbiter / orange kamikaze chaser, with a pursuit nose-tilt), `Tracers`
+orbiter / orange kamikaze chaser / blue shielded, with a pursuit nose-tilt;
+a shielded drone renders at 1.33× — matching its 0.8 hit sphere — under a
+translucent blue front half-dome that flashes on each deflect via
+`hitFlash`), `Tracers`
 (one InstancedMesh for all bolts, oriented along velocity — skips
 rocket-`visual` shots in both pools), `EnemyRockets`
 (**pool-generic despite the name** — mounted once for the enemy pool
@@ -652,8 +684,8 @@ Root `drone-strike-root`: `data-world-seed/-view/-auto-fire/-aim-assist/
 -weapon`. HUD
 `strike-hud` (150 ms tick):
 `data-x/-z/-alt/-yaw/-speed/-wave/-wave-state(intro|active|cleared|failed)/
--score/-shots/-hits/-targets-left/-lock/-proj/-enemy-proj/-hp/
--input-source`, the **sound-effect counters**
+-score/-milestones/-combo/-deflects/-shots/-hits/-targets-left/-lock/-proj/
+-enemy-proj/-hp/-input-source`, the **sound-effect counters**
 `data-sfx-fire/-pop/-hit/-alert/-clear/-crash/-zap/-pickup`, the monotonic
 spark-burst count `data-sparks`, the **supply-crate beacon**
 `data-crate-active/-x/-z/-loot`, plus the
@@ -669,7 +701,7 @@ E2E: suites `100-strike-core` … `109-strike-ground` plus `117-strike-audio`,
 `119-strike-soldiers`, `123-strike-sparks`, `124-strike-laser`,
 `125-strike-lob`, `126-strike-crates`, `127-strike-shotgun`,
 `128-strike-homing`, `129-strike-weapon-chip`, `131-strike-chaser`,
-`132-strike-jets` and `133-strike-combo`
+`132-strike-jets`, `133-strike-combo` and `134-strike-shield`
 (see `e2e/README.md`); pure modules are esbuild-bundled for the suites in a
 second flat pass in `run.mjs`.
 
@@ -788,16 +820,16 @@ kind of list).
   - **turning gait / waypoint loops** — legs swing but feet still slide on the
     turns; foot-planting (IK) and multi-segment waypoint routes are the next
     fidelity step.
-- **Enemy variety** — ~~a *chaser* that pursues the player / a *kamikaze*
-  that dives once locked~~ — **shipped** as one enemy: the wave-3+
-  kamikaze chaser (lurk → locked pursuit → contact detonation; see
-  Gameplay). ~~A second flying enemy~~ — **shipped**: the wave-2+
-  jet-trooper flying gunner (the Jet Trooper avatar airborne — see
-  Gameplay). Remaining: a *shielded* drone only hurt from
-  behind (dot product of hit direction vs heading — the `HitEvent` already
-  carries the impact point) — one more `stepEnemy` mode. ~~A jet-trooper
-  *strafing run* variant~~ — **shipped** (the wave-4+ `variant: 1` skyline
-  strafer — see the jet-trooper section).
+- ~~**Enemy variety**~~ — fully **shipped** across four rounds: ~~a
+  *chaser* that pursues the player / a *kamikaze* that dives once locked~~
+  as one enemy — the wave-3+ kamikaze chaser (lurk → locked pursuit →
+  contact detonation; see Gameplay); ~~a second flying enemy~~ — the
+  wave-2+ jet-trooper flying gunner (the Jet Trooper avatar airborne);
+  ~~a jet-trooper *strafing run* variant~~ — the wave-4+ `variant: 1`
+  skyline strafer; and ~~a *shielded* drone only hurt from behind~~ — the
+  wave-5+ `variant: 2` shielded drone (a facing gate on the HitEvent's new
+  shot direction rather than a `stepEnemy` mode — see Gameplay). Next
+  escalations would be new archetypes (see the boss wave below).
 - **Boss wave every 5th** — one large multi-HP drone with weak-point
   spheres (extra `Hittable`s attached to its pose) and a health bar chip.
 - ~~Combo scoring~~ — **shipped**, as a kill chain rather than the
