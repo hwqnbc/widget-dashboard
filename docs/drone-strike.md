@@ -808,7 +808,64 @@ kind of list).
   limited-ammo (gone when spent, back to the previous gun). Builds on the
   same seams: one more `WeaponSpec`, the `effectiveWeapon` override with an
   ammo counter instead of the run-end lifetime, and a chip that skips
-  unowned exclusives.
+  unowned exclusives. A **capture delivery** (below) is a natural second
+  source for its charges.
+- **Capture net + pad-reload economy** — a one-charge, non-damaging weapon
+  that **reloads only on the spawn pad**, turning the pad from a pure
+  sanctuary into a supply base. Firing the net attaches to an enemy, which
+  becomes **cargo**: it stops shooting and stops threatening, but stays
+  `alive` (so `aliveCount` keeps the wave open until it's resolved), and the
+  drone tows it home — heavier, slower, wider turns. Landing on the pad
+  **delivers** the catch and reloads the net in one motion: the reload trip
+  and the payout trip are the same trip.
+
+  *Why capture rather than kill.* Shooting already pays points and a combo
+  tick, so a capture is only worth the detour if it produces something a
+  kill cannot. Three categories, in rough order of how well they fit this
+  game:
+  1. **A state change on a target you can't beat right now** (the strongest
+     fit, because two enemies are already geometry-gated): netting a
+     **shielded drone** tumbles it, handing you the rear-only kill window;
+     netting the **boss** stalls its pod ring for a few seconds so you can
+     drain one pod instead of waiting out the sweep; netting a **kamikaze
+     chaser** mid-dive is the panic button for the one enemy that punishes
+     hesitation; netting a **jet trooper** lets gravity finish it.
+  2. **A resource you carry home** — the delivery pays what shooting can't:
+     a bonus heart, salvage into the score/milestone economy, or a charge of
+     the crate-exclusive super weapon above.
+  3. **A living asset** — deliver it and it's reprogrammed, redeploying as a
+     wingman that orbits and engages for the rest of the wave.
+
+  *The design problem to solve first.* A pad trip is currently **free** —
+  no wave timer, enemies don't advance or destroy anything while you're
+  away, and the pad recharges hearts and battery on top — so an unpressured
+  reload run is 15 s of downtime, which is worse than a bad mechanic
+  because it's a boring one. The cheapest fix that doesn't impose a global
+  clock on a game that has never had one is **containment decay**: the net
+  holds ~30 s, and a catch that isn't delivered breaks free (fleeing, or
+  waking up faster and angrier). That puts urgency on the tow leg alone.
+  The bigger alternative is making the wave *advance* while you're away
+  (enemies pressing the pad, the uncollected supply crate destroyed).
+
+  *Integration points — nearly all of it exists.* `onPad(flight)` +
+  `padStateRef`/`padChipRef` for the delivery trigger and its chip text;
+  `crateReached`'s proximity-check shape for the net attaching (and
+  `CHASER_CONTACT_R` for the contact radius); `resolveCrateGrant`'s pure
+  payout shape for what a delivery grants; the `WeaponChip` for the "1 net"
+  charge readout, greyed when spent; the target pool for towing (a captured
+  slot is just one whose `pos` the rig writes from the drone each frame,
+  with `vel` zeroed so leading and the AI see a captive); `stepEnemy` /
+  `stepTurret` skipped for captured slots; the battery/heat-bar recipe for a
+  containment-decay meter; and a pure `captureModel.ts` (attach test,
+  decay/break-free rules, delivery payout) so the whole thing is
+  e2e-pinnable the way `shieldBlocks` and `podHitAt` are.
+
+  *Risks.* If delivery pays only points, nobody nets anything — shooting is
+  faster, so the payout must be something shooting can't give. Don't let it
+  trivialise the boss (too heavy to net; at most a brief pod-ring stall).
+  Keep it at **one** charge — a second charge turns every use from a
+  decision into a rotation. And a tow must leave you committed, not safe:
+  the wave keeps shooting while you're slow.
 - ~~Muzzle flash + impact sparks~~ — **shipped** (the pure `sparkModel.ts`
   burst pool + `SparkField` single-draw-call Points renderer: a muzzle flash
   on every shot, impact showers at `HitEvent` coordinates — targets, world,
