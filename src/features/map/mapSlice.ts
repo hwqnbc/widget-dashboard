@@ -43,6 +43,12 @@ export interface MapBookmark {
   viewpoint: SavedViewpoint
 }
 
+/** A drawn overlay (WGS84): a planted marker or a sketched polygon. */
+export type NewMapDrawing =
+  | { kind: 'marker'; lon: number; lat: number }
+  | { kind: 'polygon'; rings: [number, number][][] }
+export type MapDrawing = NewMapDrawing & { id: string }
+
 export interface MapState {
   /** 2D flat map (MapView) or 3D globe (SceneView). */
   viewMode: MapViewMode
@@ -55,6 +61,10 @@ export interface MapState {
   /** Show the OSM 3D Trees scene layer (visible effect in 3D only). */
   trees: boolean
   bookmarks: MapBookmark[]
+  drawings: MapDrawing[]
+  /** Overlay-layer visibility (the overlays panel's switches). */
+  showPins: boolean
+  showDrawings: boolean
 }
 
 const initialState: MapState = {
@@ -65,6 +75,9 @@ const initialState: MapState = {
   buildings: true,
   trees: true,
   bookmarks: [],
+  drawings: [],
+  showPins: true,
+  showDrawings: true,
 }
 
 /** Map-page state (persisted): the 2D/3D choice and the dropped pins. */
@@ -118,6 +131,27 @@ const mapSlice = createSlice({
     deleteBookmark(state, action: PayloadAction<string>) {
       state.bookmarks = (state.bookmarks ?? []).filter((b) => b.id !== action.payload)
     },
+    addDrawing: {
+      prepare(drawing: NewMapDrawing) {
+        return { payload: { ...drawing, id: nanoid() } }
+      },
+      reducer(state, action: PayloadAction<MapDrawing>) {
+        if (!state.drawings) state.drawings = []
+        state.drawings.push(action.payload)
+      },
+    },
+    deleteDrawing(state, action: PayloadAction<string>) {
+      state.drawings = (state.drawings ?? []).filter((d) => d.id !== action.payload)
+    },
+    clearDrawings(state) {
+      state.drawings = []
+    },
+    setShowPins(state, action: PayloadAction<boolean>) {
+      state.showPins = action.payload
+    },
+    setShowDrawings(state, action: PayloadAction<boolean>) {
+      state.showDrawings = action.payload
+    },
   },
 })
 
@@ -133,5 +167,10 @@ export const {
   setTrees,
   saveBookmark,
   deleteBookmark,
+  addDrawing,
+  deleteDrawing,
+  clearDrawings,
+  setShowPins,
+  setShowDrawings,
 } = mapSlice.actions
 export default mapSlice.reducer

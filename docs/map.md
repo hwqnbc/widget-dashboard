@@ -57,8 +57,28 @@ on it works without a backend server or API key.
   construct/destroy path is also wrapped (`safeDestroy`, try/catch around
   creation): with its CDN unreachable ArcGIS constructors and teardown really
   do throw.
-- **3D buildings & trees** — two independent toggles (visible in 3D mode,
-  persisted, default on) add Esri's public Living Atlas scene layers:
+- **Overlays panel** (`OverlaysPanel.tsx`) — a Layers button floating at the
+  map's right edge slides out a panel (absolute inside the map wrapper, so
+  it works in fullscreen; `translateX` transition; transient open state,
+  `data-panel`). It hosts the overlay visibility switches (3D buildings,
+  3D trees — 3D mode only — plus Pins and Drawings layer visibility,
+  `showPins`/`showDrawings` in the slice), the drawing tools and the
+  drawings list.
+- **Drawing overlays** (`SketchBinding.tsx`) — Marker and Polygon modes in
+  the panel bind ArcGIS's client-side `SketchViewModel` (no key) to a
+  transient **scratch layer**; completed sketches are converted to WGS84
+  (`webMercatorUtils`), removed from the scratch layer and dispatched to the
+  persisted `drawings` list (`MapDrawing` union), which a mirror effect
+  renders onto the separate **drawings layer** — the redux mirror is the
+  single source of truth, same as pins. Markers plant continuously until
+  Esc/toggle-off; polygons finish on double-click. Draw modes and the strip
+  tools are mutually exclusive click claimants (`handleViewClick` yields
+  while a draw mode is active). Per-item delete + confirm-guarded clear-all
+  in the panel. Contract: `data-draw-mode`, `data-drawings`,
+  `data-pins-visible`, `data-drawings-visible`.
+- **3D buildings & trees** — two independent switches **in the overlays
+  panel** (3D mode, persisted, default on) add Esri's public Living Atlas
+  scene layers:
   **"OpenStreetMap 3D Buildings"** (portal item
   `ca0470dbbddb4db28bad74ed39949e25`) and **"OpenStreetMap 3D Trees
   (Thematic)"** (`f75fef56b2d944fe92ef9f7737b4f953`; the Realistic variant
@@ -217,6 +237,12 @@ visual verification happens on the GitHub Pages deploy.
 - ~~Bookmarks~~ — shipped (star save + jump menu, see the tools section).
 - ~~Coordinate readout~~ — shipped (pointer-tracking chip with copy, see the
   tools section).
+- **More draw tools** — polyline/freehand modes (SketchViewModel supports
+  them), polygon area/perimeter labels (`geometryEngine.geodesicArea`),
+  naming/renaming drawings, per-drawing colors; all extend `MapDrawing` and
+  the panel list.
+- **Edit drawings in place** — SketchViewModel `update` mode (drag vertices,
+  move shapes) wired to clicking a drawing.
 - **Swipe compare** — ArcGIS `Swipe` widget between two free basemaps.
 - **Heatmap renderer** — over the earthquake feed or a bundled CSV
   (`CSVLayer`).

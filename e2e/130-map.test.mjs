@@ -173,6 +173,22 @@ const online = await page.evaluate(() =>
 )
 if (!online) {
   console.log('NOTE: ArcGIS CDN unreachable — tile-dependent checks degrade to offline mode')
+  // Fail the blocked hosts INSTANTLY instead of letting proxy connections
+  // hang: ArcGIS then gives up on the basemap quickly and view.when settles
+  // (ready, with a broken basemap) — which is what lets the click-driven
+  // branch below run offline deterministically.
+  for (const host of [
+    'js.arcgis.com',
+    'cdn.arcgis.com',
+    'basemaps.arcgis.com',
+    'static.arcgis.com',
+    'ibasemaps-api.arcgis.com',
+    'services.arcgisonline.com',
+    'tiles.arcgis.com',
+    'www.arcgis.com',
+  ]) {
+    await page.route(`**://${host}/**`, (r) => r.abort())
+  }
 }
 
 // ---- navigate via the app-bar link; the lazy chunk loads on demand ----
@@ -188,6 +204,9 @@ check(
 )
 
 // ---- view readiness contract (view.when → data-map-status) ----
+// Offline the view still settles eventually: ArcGIS gives up on the blocked
+// basemap and resolves view.when with a broken basemap — clicks, toMap and
+// goTo all work from then on. Only tile-dependent checks stay online-gated.
 if (online) {
   const status = await waitForAttr('data-map-status', (v) => v === 'ready', 45000)
   check('map view becomes ready', status === 'ready', `status=${status}`)
@@ -200,8 +219,8 @@ if (online) {
 } else {
   const status = await root().getAttribute('data-map-status')
   check(
-    'offline: status stays loading/error (no crash)',
-    status === 'loading' || status === 'error',
+    'offline: status is a legal state (no crash)',
+    status === 'loading' || status === 'error' || status === 'ready',
     `status=${status}`,
   )
 }
@@ -233,14 +252,50 @@ await page.getByRole('button', { name: 'Switch to light mode' }).click()
 await page.waitForTimeout(300)
 check('toggle back restores gray-vector', (await root().getAttribute('data-basemap')) === 'gray-vector')
 
-// ---- 2D/3D toggle + persistence, 3D buildings toggle ----
+// ---- overlays panel: slide-out at the map's right edge ----
+check('panel starts closed', (await root().getAttribute('data-panel')) === 'closed')
+await page.locator('[data-testid="map-overlays-toggle"]').click()
+await page.waitForTimeout(350)
+check('panel opens', (await root().getAttribute('data-panel')) === 'open')
+{
+  const panelBox = await page.locator('[data-testid="map-overlays-panel"]').boundingBox()
+  const mapBox = await page.locator('[data-testid="map-container"]').boundingBox()
+  check(
+    'panel slides in at the right edge of the map',
+    panelBox != null &&
+      Math.abs(panelBox.x + panelBox.width - (mapBox.x + mapBox.width)) < 3 &&
+      panelBox.width > 200,
+    JSON.stringify(panelBox),
+  )
+}
+check('pins overlay on by default', (await root().getAttribute('data-pins-visible')) === 'on')
+await page.locator('[data-testid="map-pins-visible"]').click()
+await page.waitForTimeout(200)
+check('pins overlay toggles off', (await root().getAttribute('data-pins-visible')) === 'off')
+await page.locator('[data-testid="map-pins-visible"]').click()
+await page.waitForTimeout(200)
+check('drawings overlay on by default', (await root().getAttribute('data-drawings-visible')) === 'on')
+check('no drawings initially', (await root().getAttribute('data-drawings')) === '0')
+check('draw mode starts none', (await root().getAttribute('data-draw-mode')) === 'none')
+{
+  // draw tools follow view readiness — offline the view may or may not have
+  // settled yet, so assert consistency rather than a fixed state
+  const st = await root().getAttribute('data-map-status')
+  check(
+    'draw tools follow view readiness',
+    (await page.locator('[data-testid="map-draw-marker"]').isDisabled()) === (st !== 'ready'),
+    `status=${st}`,
+  )
+}
+
+// ---- 2D/3D toggle + persistence, 3D buildings/trees switches (in panel) ----
 check('starts in 2D', (await root().getAttribute('data-view-mode')) === '2d')
 check(
-  'buildings toggle hidden in 2D',
+  'buildings switch hidden in 2D',
   (await page.locator('[data-testid="map-buildings"]').count()) === 0,
 )
 check(
-  'trees toggle hidden in 2D',
+  'trees switch hidden in 2D',
   (await page.locator('[data-testid="map-trees"]').count()) === 0,
 )
 await page.locator('[data-testid="map-mode-3d"]').click()
@@ -251,22 +306,22 @@ if (online) {
   check('scene view becomes ready', status3d === 'ready', `status=${status3d}`)
 }
 check(
-  'buildings toggle appears in 3D, on by default',
+  'buildings switch appears in 3D, on by default',
   (await page.locator('[data-testid="map-buildings"]').count()) === 1 &&
     (await root().getAttribute('data-buildings')) === 'on',
 )
 check(
-  'trees toggle appears in 3D, on by default',
+  'trees switch appears in 3D, on by default',
   (await page.locator('[data-testid="map-trees"]').count()) === 1 &&
     (await root().getAttribute('data-trees')) === 'on',
 )
 await page.locator('[data-testid="map-buildings"]').click()
 await page.waitForTimeout(300)
-check('buildings toggle off', (await root().getAttribute('data-buildings')) === 'off')
+check('buildings switch off', (await root().getAttribute('data-buildings')) === 'off')
 await page.locator('[data-testid="map-trees"]').click()
 await page.waitForTimeout(300)
 check(
-  'trees toggle off (independent of buildings)',
+  'trees switch off (independent of buildings)',
   (await root().getAttribute('data-trees')) === 'off',
 )
 await page.reload({ waitUntil: 'networkidle' })
@@ -283,12 +338,19 @@ check(
   'trees choice persists across reload',
   (await root().getAttribute('data-trees')) === 'off',
 )
+// panel open state is transient — reopen to reach the switches
+check('panel closed after reload (transient)', (await root().getAttribute('data-panel')) === 'closed')
+await page.locator('[data-testid="map-overlays-toggle"]').click()
+await page.waitForTimeout(350)
 await page.locator('[data-testid="map-buildings"]').click()
 await page.waitForTimeout(300)
 check('buildings back on', (await root().getAttribute('data-buildings')) === 'on')
 await page.locator('[data-testid="map-trees"]').click()
 await page.waitForTimeout(300)
 check('trees back on', (await root().getAttribute('data-trees')) === 'on')
+await page.locator('[data-testid="map-overlays-toggle"]').click()
+await page.waitForTimeout(350)
+check('panel closes', (await root().getAttribute('data-panel')) === 'closed')
 await page.locator('[data-testid="map-mode-2d"]').click()
 await page.waitForTimeout(500)
 check('back to 2D', (await root().getAttribute('data-view-mode')) === '2d')
@@ -325,10 +387,12 @@ check(
   'bookmarks menu disabled when empty',
   await page.locator('[data-testid="map-bookmarks-open"]').isDisabled(),
 )
-if (!online) {
+{
+  const st = await root().getAttribute('data-map-status')
   check(
-    'offline: bookmark save disabled (view never ready)',
-    await page.locator('[data-testid="map-bookmark-save"]').isDisabled(),
+    'bookmark save follows view readiness',
+    (await page.locator('[data-testid="map-bookmark-save"]').isDisabled()) === (st !== 'ready'),
+    `status=${st}`,
   )
 }
 
@@ -411,9 +475,17 @@ check(
   (await root().evaluate((el) => getComputedStyle(el).position)) !== 'fixed',
 )
 
-if (online) {
-  // ---- route: two map clicks → mocked OSRM → distance chip ----
-  if (await waitForAttr('data-map-status', (v) => v === 'ready', 45000) === 'ready') {
+// The click-driven checks need a READY view, not tiles: offline the view
+// settles ready with a broken basemap, and clicks/toMap/goTo/SketchVM all
+// work against the view transform. OSRM is mocked either way.
+{
+  // Offline this is opportunistic: the first view settles ready fast, but a
+  // view re-created after the 2D/3D swaps waits on the failed scene layers
+  // and may never settle — then this branch skips, same as tile checks.
+  const interactive =
+    (await waitForAttr('data-map-status', (v) => v === 'ready', online ? 45000 : 15000)) ===
+    'ready'
+  if (interactive) {
     const box = await page.locator('[data-testid="map-container"]').boundingBox()
     const at = (fx, fy) => [box.x + box.width * fx, box.y + box.height * fy]
 
@@ -654,11 +726,80 @@ if (online) {
     check('deleting a bookmark empties the list', (await root().getAttribute('data-bookmarks')) === '0')
     await page.keyboard.press('Escape')
     await page.waitForTimeout(200)
-  } else {
+
+    // ---- drawing overlays: plant markers, draw a polygon, persist ----
+    await page.locator('[data-testid="map-overlays-toggle"]').click()
+    await page.waitForTimeout(350)
+    check(
+      'draw tools enabled once the view is ready',
+      !(await page.locator('[data-testid="map-draw-marker"]').isDisabled()),
+    )
+    await page.locator('[data-testid="map-draw-marker"]').click()
+    await page.waitForTimeout(200)
+    check('marker mode active', (await root().getAttribute('data-draw-mode')) === 'marker')
+    await page.mouse.click(box.x + box.width * 0.3, box.y + box.height * 0.4)
+    await waitForAttr('data-drawings', (v) => v === '1', 10000)
+    await page.mouse.click(box.x + box.width * 0.35, box.y + box.height * 0.45)
+    await waitForAttr('data-drawings', (v) => v === '2', 10000)
+    check(
+      'marker mode plants continuously',
+      (await root().getAttribute('data-drawings')) === '2',
+    )
+    await page.keyboard.press('Escape')
+    await page.waitForTimeout(300)
+    check('Escape ends marker mode', (await root().getAttribute('data-draw-mode')) === 'none')
+
+    await page.locator('[data-testid="map-draw-polygon"]').click()
+    await page.waitForTimeout(200)
+    check('polygon mode active', (await root().getAttribute('data-draw-mode')) === 'polygon')
+    await page.mouse.click(box.x + box.width * 0.25, box.y + box.height * 0.6)
+    await page.waitForTimeout(300)
+    await page.mouse.click(box.x + box.width * 0.35, box.y + box.height * 0.6)
+    await page.waitForTimeout(300)
+    await page.mouse.click(box.x + box.width * 0.3, box.y + box.height * 0.7)
+    await page.waitForTimeout(300)
+    await page.mouse.dblclick(box.x + box.width * 0.3, box.y + box.height * 0.7)
+    await waitForAttr('data-drawings', (v) => v === '3', 10000)
+    check('polygon drawn and committed', (await root().getAttribute('data-drawings')) === '3')
+    check(
+      'polygon completion ends the mode',
+      (await waitForAttr('data-draw-mode', (v) => v === 'none', 5000)) === 'none',
+    )
+    check(
+      'drawings listed in the panel',
+      (await page.locator('[data-testid="map-drawing-item"]').count()) === 3,
+    )
+
+    await page.reload({ waitUntil: 'networkidle' })
+    await page.waitForSelector('[data-testid="map-page"]', { timeout: 30000 })
+    check(
+      'drawings persist across reload',
+      (await root().getAttribute('data-drawings')) === '3',
+    )
+    await page.locator('[data-testid="map-overlays-toggle"]').click()
+    await page.waitForTimeout(350)
+    await page.locator('[data-testid="map-drawings-visible"]').click()
+    await page.waitForTimeout(200)
+    check(
+      'drawings layer can be hidden',
+      (await root().getAttribute('data-drawings-visible')) === 'off',
+    )
+    await page.locator('[data-testid="map-drawings-visible"]').click()
+    await page.waitForTimeout(200)
+    await page.locator('[data-testid="map-drawing-delete"]').first().click()
+    await page.waitForTimeout(300)
+    check('per-item delete removes one drawing', (await root().getAttribute('data-drawings')) === '2')
+    await page.locator('[data-testid="map-drawings-clear"]').click()
+    await page.getByRole('button', { name: 'Remove all' }).click()
+    await page.waitForTimeout(300)
+    check('clear-all removes the rest', (await root().getAttribute('data-drawings')) === '0')
+    await page.locator('[data-testid="map-overlays-toggle"]').click()
+    await page.waitForTimeout(350)
+  } else if (online) {
     check('online but view never ready', false, 'ready wait timed out')
+  } else {
+    console.log('SKIP: view never settled ready offline — click-driven checks skipped')
   }
-} else {
-  console.log('SKIP: click-driven pins/route/measure checks need a ready view (CDN blocked)')
 }
 
 // ---- deep link ----

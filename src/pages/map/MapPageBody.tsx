@@ -23,10 +23,9 @@ import {
   Tooltip,
   useTheme,
 } from '@mui/material'
-import ForestIcon from '@mui/icons-material/Forest'
 import FullscreenIcon from '@mui/icons-material/Fullscreen'
 import FullscreenExitIcon from '@mui/icons-material/FullscreenExit'
-import LocationCityIcon from '@mui/icons-material/LocationCity'
+import LayersIcon from '@mui/icons-material/Layers'
 import PushPinIcon from '@mui/icons-material/PushPin'
 import StraightenIcon from '@mui/icons-material/Straighten'
 import SquareFootIcon from '@mui/icons-material/SquareFoot'
@@ -41,7 +40,9 @@ import GraphicsLayer from '@arcgis/core/layers/GraphicsLayer'
 import SceneLayer from '@arcgis/core/layers/SceneLayer'
 import Graphic from '@arcgis/core/Graphic'
 import Point from '@arcgis/core/geometry/Point'
+import Polygon from '@arcgis/core/geometry/Polygon'
 import Polyline from '@arcgis/core/geometry/Polyline'
+import SimpleFillSymbol from '@arcgis/core/symbols/SimpleFillSymbol'
 import SimpleMarkerSymbol from '@arcgis/core/symbols/SimpleMarkerSymbol'
 import type Viewpoint from '@arcgis/core/Viewpoint'
 import lightCss from '@arcgis/core/assets/esri/themes/light/main.css?inline'
@@ -49,18 +50,24 @@ import darkCss from '@arcgis/core/assets/esri/themes/dark/main.css?inline'
 import { nanoid } from '@reduxjs/toolkit'
 import { useAppDispatch, useAppSelector } from '../../app/hooks'
 import {
+  addDrawing,
   addPin,
+  clearDrawings,
   clearPins,
   deleteBookmark,
+  deleteDrawing,
   deleteRoute,
   removePin,
   saveBookmark,
   saveRoute,
   setBuildings,
+  setShowDrawings,
+  setShowPins,
   setTrees,
   setViewMode,
   setViewpoint,
   type MapBookmark,
+  type MapDrawing,
   type MapPin,
   type MapViewMode,
   type SavedRoute,
@@ -69,6 +76,8 @@ import {
 import BookmarksControl from './BookmarksControl'
 import ConfirmDialog from '../../components/widgets/ConfirmDialog'
 import CoordinateReadout from './CoordinateReadout'
+import OverlaysPanel from './OverlaysPanel'
+import SketchBinding, { type DrawMode } from './SketchBinding'
 import LocateControl from './LocateControl'
 import MeasureBinding from './MeasureControls'
 import RouteControl from './RouteControl'
@@ -167,6 +176,18 @@ function safeDestroy(target: { destroy(): void } | null | undefined) {
 const NO_PINS: MapPin[] = []
 const NO_ROUTES: SavedRoute[] = []
 const NO_BOOKMARKS: MapBookmark[] = []
+const NO_DRAWINGS: MapDrawing[] = []
+
+const DRAWING_MARKER_SYMBOL = new SimpleMarkerSymbol({
+  style: 'diamond',
+  color: '#7b1fa2',
+  size: 14,
+  outline: { color: 'white', width: 1.5 },
+})
+const DRAWING_POLYGON_SYMBOL = new SimpleFillSymbol({
+  color: [123, 31, 162, 0.18],
+  outline: { color: '#7b1fa2', width: 2 },
+})
 
 const PIN_SYMBOL = new SimpleMarkerSymbol({
   style: 'circle',
@@ -203,6 +224,9 @@ export default function MapPageBody() {
   const bookmarks = useAppSelector((state) => state.map.bookmarks) ?? NO_BOOKMARKS
   const buildings = useAppSelector((state) => state.map.buildings) ?? true
   const trees = useAppSelector((state) => state.map.trees) ?? true
+  const drawings = useAppSelector((state) => state.map.drawings) ?? NO_DRAWINGS
+  const showPins = useAppSelector((state) => state.map.showPins) ?? true
+  const showDrawings = useAppSelector((state) => state.map.showDrawings) ?? true
 
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<EsriMap | null>(null)
@@ -211,6 +235,8 @@ export default function MapPageBody() {
   const pinsLayerRef = useRef<GraphicsLayer | null>(null)
   const routeLayerRef = useRef<GraphicsLayer | null>(null)
   const locateLayerRef = useRef<GraphicsLayer | null>(null)
+  const drawingsLayerRef = useRef<GraphicsLayer | null>(null)
+  const sketchLayerRef = useRef<GraphicsLayer | null>(null)
   const viewpointRef = useRef<Viewpoint | null>(null)
   const basemapIdRef = useRef(basemapId)
 
@@ -231,6 +257,9 @@ export default function MapPageBody() {
   // (lessons.md #72), which is why the widgets' FullscreenProvider isn't
   // reused here.
   const [fullscreen, setFullscreen] = useState(false)
+  // Overlays panel visibility (transient) + active drawing mode.
+  const [panelOpen, setPanelOpen] = useState(false)
+  const [drawMode, setDrawMode] = useState<DrawMode>('none')
   const [routeEdit, setRouteEdit] = useState<RouteEdit>({ points: [], history: [] })
   const [routeProfile, setRouteProfile] = useState<RouteProfile>('drive')
 
@@ -238,6 +267,18 @@ export default function MapPageBody() {
   // handler (registered once per view) never needs re-registering.
   const toolRef = useRef(tool)
   toolRef.current = tool
+  const drawModeRef = useRef(drawMode)
+  drawModeRef.current = drawMode
+
+  // Drawing and the strip tools are mutually exclusive claimants of map
+  // clicks — activating one releases the other.
+  const handleDrawMode = (mode: DrawMode) => {
+    setDrawMode(mode)
+    if (mode !== 'none') {
+      setTool('none')
+      clearRoute()
+    }
+  }
 
   // Every waypoint edit funnels through here so undo always has the
   // previous list. Pure functional updates — the click handler is async and
@@ -386,10 +427,19 @@ export default function MapPageBody() {
       pinsLayerRef.current = new GraphicsLayer({ elevationInfo: { mode: 'on-the-ground' } })
       routeLayerRef.current = new GraphicsLayer({ elevationInfo: { mode: 'on-the-ground' } })
       locateLayerRef.current = new GraphicsLayer({ elevationInfo: { mode: 'on-the-ground' } })
+      drawingsLayerRef.current = new GraphicsLayer({ elevationInfo: { mode: 'on-the-ground' } })
+      // scratch layer for in-progress sketches only — never mirrored
+      sketchLayerRef.current = new GraphicsLayer({ elevationInfo: { mode: 'on-the-ground' } })
       mapRef.current = new EsriMap({
         basemap: Basemap.fromId(basemapIdRef.current),
         ground: 'world-elevation',
-        layers: [routeLayerRef.current, pinsLayerRef.current, locateLayerRef.current],
+        layers: [
+          drawingsLayerRef.current,
+          routeLayerRef.current,
+          pinsLayerRef.current,
+          locateLayerRef.current,
+          sketchLayerRef.current,
+        ],
       })
     }
     return mapRef.current
@@ -406,6 +456,8 @@ export default function MapPageBody() {
       pinsLayerRef.current = null
       routeLayerRef.current = null
       locateLayerRef.current = null
+      drawingsLayerRef.current = null
+      sketchLayerRef.current = null
       document.getElementById('arcgis-theme')?.remove()
     }
   }, [])
@@ -561,6 +613,7 @@ export default function MapPageBody() {
     v: AnyView,
     event: { mapPoint: Point | null | undefined; x: number; y: number },
   ) {
+    if (drawModeRef.current !== 'none') return // SketchViewModel owns clicks
     const activeTool = toolRef.current
     if (activeTool === 'pins') {
       // Clicking an existing pin removes it; empty ground adds one.
@@ -678,6 +731,34 @@ export default function MapPageBody() {
     )
   }, [pins])
 
+  // Mirror the persisted drawings onto their layer (markers + polygons).
+  useEffect(() => {
+    const layer = drawingsLayerRef.current
+    if (!layer) return
+    layer.removeAll()
+    layer.addMany(
+      drawings.map((d) =>
+        d.kind === 'marker'
+          ? new Graphic({
+              geometry: new Point({ longitude: d.lon, latitude: d.lat }),
+              symbol: DRAWING_MARKER_SYMBOL,
+              attributes: { drawingId: d.id },
+            })
+          : new Graphic({
+              geometry: new Polygon({ rings: d.rings.map((r) => r.map(([x, y]) => [x, y])) }),
+              symbol: DRAWING_POLYGON_SYMBOL,
+              attributes: { drawingId: d.id },
+            }),
+      ),
+    )
+  }, [drawings])
+
+  // Overlay-layer visibility follows the panel switches.
+  useEffect(() => {
+    if (pinsLayerRef.current) pinsLayerRef.current.visible = showPins
+    if (drawingsLayerRef.current) drawingsLayerRef.current.visible = showDrawings
+  }, [showPins, showDrawings])
+
   const route = useOsrmRoute(routeLayerRef, routeEdit.points, routeProfile)
   // The fetched route geometry, readable from the long-lived click handler.
   const routeDataRef = useRef(route)
@@ -687,6 +768,7 @@ export default function MapPageBody() {
     const t = next ?? 'none'
     setTool(t)
     if (t !== 'route') clearRoute()
+    if (t !== 'none') setDrawMode('none')
   }
 
   return (
@@ -710,6 +792,11 @@ export default function MapPageBody() {
       data-buildings={buildings ? 'on' : 'off'}
       data-trees={trees ? 'on' : 'off'}
       data-fullscreen={fullscreen ? 'on' : 'off'}
+      data-panel={panelOpen ? 'open' : 'closed'}
+      data-draw-mode={drawMode}
+      data-drawings={drawings.length}
+      data-pins-visible={showPins ? 'on' : 'off'}
+      data-drawings-visible={showDrawings ? 'on' : 'off'}
       sx={{
         display: 'flex',
         flexDirection: 'column',
@@ -749,34 +836,6 @@ export default function MapPageBody() {
             3D
           </ToggleButton>
         </ToggleButtonGroup>
-        {viewMode === '3d' && (
-          <>
-            <Tooltip title="3D buildings (OpenStreetMap)">
-              <ToggleButton
-                size="small"
-                value="buildings"
-                selected={buildings}
-                onChange={() => dispatch(setBuildings(!buildings))}
-                data-testid="map-buildings"
-                aria-label="3D buildings"
-              >
-                <LocationCityIcon fontSize="small" />
-              </ToggleButton>
-            </Tooltip>
-            <Tooltip title="3D trees (OpenStreetMap)">
-              <ToggleButton
-                size="small"
-                value="trees"
-                selected={trees}
-                onChange={() => dispatch(setTrees(!trees))}
-                data-testid="map-trees"
-                aria-label="3D trees"
-              >
-                <ForestIcon fontSize="small" />
-              </ToggleButton>
-            </Tooltip>
-          </>
-        )}
         <Divider orientation="vertical" flexItem />
         <ToggleButtonGroup
           size="small"
@@ -859,6 +918,45 @@ export default function MapPageBody() {
       <Box sx={{ position: 'relative', flexGrow: 1, borderRadius: 1, overflow: 'hidden' }}>
         <Box ref={containerRef} data-testid="map-container" sx={{ width: '100%', height: '100%' }} />
         <CoordinateReadout viewRef={viewRef} viewRevision={viewRevision} />
+        <Tooltip title={panelOpen ? 'Close overlays' : 'Overlays'}>
+          <IconButton
+            size="small"
+            data-testid="map-overlays-toggle"
+            aria-label={panelOpen ? 'Close overlays' : 'Overlays'}
+            onClick={() => setPanelOpen((open) => !open)}
+            sx={{
+              position: 'absolute',
+              top: 8,
+              right: panelOpen ? 288 : 8,
+              zIndex: 3,
+              bgcolor: 'background.paper',
+              border: 1,
+              borderColor: 'divider',
+              transition: 'right 200ms ease',
+              '&:hover': { bgcolor: 'background.paper' },
+            }}
+          >
+            <LayersIcon fontSize="small" />
+          </IconButton>
+        </Tooltip>
+        <OverlaysPanel
+          open={panelOpen}
+          is3d={viewMode === '3d'}
+          buildings={buildings}
+          onBuildings={(on) => dispatch(setBuildings(on))}
+          trees={trees}
+          onTrees={(on) => dispatch(setTrees(on))}
+          showPins={showPins}
+          onShowPins={(on) => dispatch(setShowPins(on))}
+          showDrawings={showDrawings}
+          onShowDrawings={(on) => dispatch(setShowDrawings(on))}
+          canDraw={status === 'ready'}
+          drawMode={drawMode}
+          onDrawMode={handleDrawMode}
+          drawings={drawings}
+          onDeleteDrawing={(id) => dispatch(deleteDrawing(id))}
+          onClearDrawings={() => dispatch(clearDrawings())}
+        />
         {status === 'error' && (
           <Alert
             severity="warning"
@@ -870,6 +968,14 @@ export default function MapPageBody() {
         )}
       </Box>
       <MeasureBinding viewRef={viewRef} viewRevision={viewRevision} tool={tool} />
+      <SketchBinding
+        viewRef={viewRef}
+        viewRevision={viewRevision}
+        sketchLayerRef={sketchLayerRef}
+        drawMode={drawMode}
+        onCreated={(drawing) => dispatch(addDrawing(drawing))}
+        onModeEnd={() => setDrawMode('none')}
+      />
       <ConfirmDialog
         open={confirmClear}
         title="Remove all pins?"

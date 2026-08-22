@@ -1435,3 +1435,19 @@ carried over; these are the new ones.
     systems, not just the damage code, whenever hit geometry stops being
     "the whole sphere" — and worth a live sanity probe, because a pure suite
     happily passes while the shipped game is unwinnable.
+
+74. **Offline, an ArcGIS view still settles ready — a FAILED layer doesn't
+    block `view.when`, but a HANGING request does.** Discovered while
+    testing the drawing tools: with the CDN blocked, the first MapView
+    resolved `ready` (broken basemap, everything interactive — clicks,
+    `toMap`, `goTo`, SketchViewModel all work off the view transform), so
+    "offline ⇒ never ready" assumptions in the suite were wrong AND racy —
+    checks written as `disabled because never ready` must instead assert
+    consistency with the CURRENT `data-map-status`. Two practical rules:
+    (a) in tests, `page.route(...).abort()` the blocked hosts so failures
+    are instant instead of proxy-hang-dependent — determinism comes from
+    failing fast, not from being offline; (b) gate click-driven checks on
+    the view actually REACHING ready (opportunistic offline, guaranteed
+    online), not on network reachability — but know that a view re-created
+    over a map holding still-pending (hung) layers may never settle, so the
+    gate needs a bounded wait + a graceful skip.
