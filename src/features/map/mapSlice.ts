@@ -43,11 +43,19 @@ export interface MapBookmark {
   viewpoint: SavedViewpoint
 }
 
-/** A drawn overlay (WGS84): a planted marker or a sketched polygon. */
+/** A named group of drawn shapes — the unit users add/rename/hide/delete. */
+export interface MapOverlay {
+  id: string
+  name: string
+  visible: boolean
+}
+
+/** A drawn shape (WGS84): a planted marker or a sketched polygon, living
+ * inside one overlay group. */
 export type NewMapDrawing =
   | { kind: 'marker'; lon: number; lat: number }
   | { kind: 'polygon'; rings: [number, number][][] }
-export type MapDrawing = NewMapDrawing & { id: string }
+export type MapDrawing = NewMapDrawing & { id: string; overlayId?: string }
 
 export interface MapState {
   /** 2D flat map (MapView) or 3D globe (SceneView). */
@@ -62,9 +70,11 @@ export interface MapState {
   trees: boolean
   bookmarks: MapBookmark[]
   drawings: MapDrawing[]
-  /** Overlay-layer visibility (the overlays panel's switches). */
+  /** The named drawing groups; new shapes land in the active one. */
+  overlays: MapOverlay[]
+  activeOverlayId: string | null
+  /** Pins-layer visibility (the overlays panel's switch). */
   showPins: boolean
-  showDrawings: boolean
 }
 
 const initialState: MapState = {
@@ -76,8 +86,9 @@ const initialState: MapState = {
   trees: true,
   bookmarks: [],
   drawings: [],
+  overlays: [],
+  activeOverlayId: null,
   showPins: true,
-  showDrawings: true,
 }
 
 /** Map-page state (persisted): the 2D/3D choice and the dropped pins. */
@@ -132,7 +143,7 @@ const mapSlice = createSlice({
       state.bookmarks = (state.bookmarks ?? []).filter((b) => b.id !== action.payload)
     },
     addDrawing: {
-      prepare(drawing: NewMapDrawing) {
+      prepare(drawing: NewMapDrawing & { overlayId: string }) {
         return { payload: { ...drawing, id: nanoid() } }
       },
       reducer(state, action: PayloadAction<MapDrawing>) {
@@ -143,14 +154,53 @@ const mapSlice = createSlice({
     deleteDrawing(state, action: PayloadAction<string>) {
       state.drawings = (state.drawings ?? []).filter((d) => d.id !== action.payload)
     },
-    clearDrawings(state) {
-      state.drawings = []
+    addOverlay: {
+      prepare(overlay: Omit<MapOverlay, 'id'>) {
+        return { payload: { ...overlay, id: nanoid() } }
+      },
+      reducer(state, action: PayloadAction<MapOverlay>) {
+        if (!state.overlays) state.overlays = []
+        state.overlays.push(action.payload)
+        state.activeOverlayId = action.payload.id // a new group becomes active
+      },
+    },
+    renameOverlay(state, action: PayloadAction<{ id: string; name: string }>) {
+      const overlay = (state.overlays ?? []).find((o) => o.id === action.payload.id)
+      if (overlay && action.payload.name.trim()) overlay.name = action.payload.name.trim()
+    },
+    deleteOverlay(state, action: PayloadAction<string>) {
+      state.overlays = (state.overlays ?? []).filter((o) => o.id !== action.payload)
+      state.drawings = (state.drawings ?? []).filter((d) => d.overlayId !== action.payload)
+      if (state.activeOverlayId === action.payload) {
+        state.activeOverlayId = state.overlays[0]?.id ?? null
+      }
+    },
+    setOverlayVisible(state, action: PayloadAction<{ id: string; visible: boolean }>) {
+      const overlay = (state.overlays ?? []).find((o) => o.id === action.payload.id)
+      if (overlay) overlay.visible = action.payload.visible
+    },
+    setActiveOverlay(state, action: PayloadAction<string>) {
+      if ((state.overlays ?? []).some((o) => o.id === action.payload)) {
+        state.activeOverlayId = action.payload
+      }
+    },
+    /** Migration sweep: shapes drawn before overlay groups existed (or whose
+     * group vanished) are collected into a new "Imported" overlay. No-op on
+     * clean state; dispatched once when the Map page mounts. */
+    adoptOrphanDrawings(state) {
+      if (!state.overlays) state.overlays = []
+      const known = new Set(state.overlays.map((o) => o.id))
+      const orphans = (state.drawings ?? []).filter(
+        (d) => !d.overlayId || !known.has(d.overlayId),
+      )
+      if (orphans.length === 0) return
+      const overlay: MapOverlay = { id: nanoid(), name: 'Imported', visible: true }
+      state.overlays.push(overlay)
+      for (const d of orphans) d.overlayId = overlay.id
+      state.activeOverlayId ??= overlay.id
     },
     setShowPins(state, action: PayloadAction<boolean>) {
       state.showPins = action.payload
-    },
-    setShowDrawings(state, action: PayloadAction<boolean>) {
-      state.showDrawings = action.payload
     },
   },
 })
@@ -169,8 +219,12 @@ export const {
   deleteBookmark,
   addDrawing,
   deleteDrawing,
-  clearDrawings,
+  addOverlay,
+  renameOverlay,
+  deleteOverlay,
+  setOverlayVisible,
+  setActiveOverlay,
+  adoptOrphanDrawings,
   setShowPins,
-  setShowDrawings,
 } = mapSlice.actions
 export default mapSlice.reducer

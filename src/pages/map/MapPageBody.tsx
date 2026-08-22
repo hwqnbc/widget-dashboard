@@ -51,25 +51,31 @@ import { nanoid } from '@reduxjs/toolkit'
 import { useAppDispatch, useAppSelector } from '../../app/hooks'
 import {
   addDrawing,
+  addOverlay,
   addPin,
-  clearDrawings,
+  adoptOrphanDrawings,
   clearPins,
   deleteBookmark,
   deleteDrawing,
+  deleteOverlay,
   deleteRoute,
   removePin,
+  renameOverlay,
   saveBookmark,
   saveRoute,
+  setActiveOverlay,
   setBuildings,
-  setShowDrawings,
+  setOverlayVisible,
   setShowPins,
   setTrees,
   setViewMode,
   setViewpoint,
   type MapBookmark,
   type MapDrawing,
+  type MapOverlay,
   type MapPin,
   type MapViewMode,
+  type NewMapDrawing,
   type SavedRoute,
   type SavedViewpoint,
 } from '../../features/map/mapSlice'
@@ -177,6 +183,7 @@ const NO_PINS: MapPin[] = []
 const NO_ROUTES: SavedRoute[] = []
 const NO_BOOKMARKS: MapBookmark[] = []
 const NO_DRAWINGS: MapDrawing[] = []
+const NO_OVERLAYS: MapOverlay[] = []
 
 const DRAWING_MARKER_SYMBOL = new SimpleMarkerSymbol({
   style: 'diamond',
@@ -225,8 +232,17 @@ export default function MapPageBody() {
   const buildings = useAppSelector((state) => state.map.buildings) ?? true
   const trees = useAppSelector((state) => state.map.trees) ?? true
   const drawings = useAppSelector((state) => state.map.drawings) ?? NO_DRAWINGS
+  const overlays = useAppSelector((state) => state.map.overlays) ?? NO_OVERLAYS
+  const activeOverlayId = useAppSelector((state) => state.map.activeOverlayId) ?? null
+  const activeOverlayIdRef = useRef(activeOverlayId)
+  activeOverlayIdRef.current = activeOverlayId
   const showPins = useAppSelector((state) => state.map.showPins) ?? true
-  const showDrawings = useAppSelector((state) => state.map.showDrawings) ?? true
+
+  // Sweep any shapes from before overlay groups existed into an "Imported"
+  // overlay (no-op on clean state).
+  useEffect(() => {
+    dispatch(adoptOrphanDrawings())
+  }, [dispatch])
 
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<EsriMap | null>(null)
@@ -271,13 +287,30 @@ export default function MapPageBody() {
   drawModeRef.current = drawMode
 
   // Drawing and the strip tools are mutually exclusive claimants of map
-  // clicks — activating one releases the other.
+  // clicks — activating one releases the other. Drawing with no overlay yet
+  // auto-creates one (it becomes active in the reducer).
   const handleDrawMode = (mode: DrawMode) => {
     setDrawMode(mode)
     if (mode !== 'none') {
       setTool('none')
       clearRoute()
+      if (!activeOverlayIdRef.current) {
+        const action = dispatch(addOverlay({ name: 'Overlay 1', visible: true }))
+        activeOverlayIdRef.current = action.payload.id
+      }
     }
+  }
+
+  // A completed sketch lands in the active overlay (guard-creating one if
+  // the user deleted it mid-draw).
+  const handleDrawingCreated = (drawing: NewMapDrawing) => {
+    let overlayId = activeOverlayIdRef.current
+    if (!overlayId) {
+      const action = dispatch(addOverlay({ name: 'Overlay 1', visible: true }))
+      overlayId = action.payload.id
+      activeOverlayIdRef.current = overlayId
+    }
+    dispatch(addDrawing({ ...drawing, overlayId }))
   }
 
   // Every waypoint edit funnels through here so undo always has the
@@ -731,33 +764,36 @@ export default function MapPageBody() {
     )
   }, [pins])
 
-  // Mirror the persisted drawings onto their layer (markers + polygons).
+  // Mirror the persisted drawings onto their layer — only shapes whose
+  // overlay group is visible render.
   useEffect(() => {
     const layer = drawingsLayerRef.current
     if (!layer) return
+    const visibleIds = new Set(overlays.filter((o) => o.visible).map((o) => o.id))
     layer.removeAll()
     layer.addMany(
-      drawings.map((d) =>
-        d.kind === 'marker'
-          ? new Graphic({
-              geometry: new Point({ longitude: d.lon, latitude: d.lat }),
-              symbol: DRAWING_MARKER_SYMBOL,
-              attributes: { drawingId: d.id },
-            })
-          : new Graphic({
-              geometry: new Polygon({ rings: d.rings.map((r) => r.map(([x, y]) => [x, y])) }),
-              symbol: DRAWING_POLYGON_SYMBOL,
-              attributes: { drawingId: d.id },
-            }),
-      ),
+      drawings
+        .filter((d) => d.overlayId != null && visibleIds.has(d.overlayId))
+        .map((d) =>
+          d.kind === 'marker'
+            ? new Graphic({
+                geometry: new Point({ longitude: d.lon, latitude: d.lat }),
+                symbol: DRAWING_MARKER_SYMBOL,
+                attributes: { drawingId: d.id },
+              })
+            : new Graphic({
+                geometry: new Polygon({ rings: d.rings.map((r) => r.map(([x, y]) => [x, y])) }),
+                symbol: DRAWING_POLYGON_SYMBOL,
+                attributes: { drawingId: d.id },
+              }),
+        ),
     )
-  }, [drawings])
+  }, [drawings, overlays])
 
-  // Overlay-layer visibility follows the panel switches.
+  // Pins-layer visibility follows the panel switch.
   useEffect(() => {
     if (pinsLayerRef.current) pinsLayerRef.current.visible = showPins
-    if (drawingsLayerRef.current) drawingsLayerRef.current.visible = showDrawings
-  }, [showPins, showDrawings])
+  }, [showPins])
 
   const route = useOsrmRoute(routeLayerRef, routeEdit.points, routeProfile)
   // The fetched route geometry, readable from the long-lived click handler.
@@ -795,8 +831,12 @@ export default function MapPageBody() {
       data-panel={panelOpen ? 'open' : 'closed'}
       data-draw-mode={drawMode}
       data-drawings={drawings.length}
+      data-overlays={overlays.length}
+      data-active-overlay={activeOverlayId ?? ''}
+      data-visible-drawings={
+        drawings.filter((d) => overlays.some((o) => o.id === d.overlayId && o.visible)).length
+      }
       data-pins-visible={showPins ? 'on' : 'off'}
-      data-drawings-visible={showDrawings ? 'on' : 'off'}
       sx={{
         display: 'flex',
         flexDirection: 'column',
@@ -948,14 +988,18 @@ export default function MapPageBody() {
           onTrees={(on) => dispatch(setTrees(on))}
           showPins={showPins}
           onShowPins={(on) => dispatch(setShowPins(on))}
-          showDrawings={showDrawings}
-          onShowDrawings={(on) => dispatch(setShowDrawings(on))}
           canDraw={status === 'ready'}
           drawMode={drawMode}
           onDrawMode={handleDrawMode}
+          overlays={overlays}
+          activeOverlayId={activeOverlayId}
           drawings={drawings}
+          onAddOverlay={() => dispatch(addOverlay({ name: `Overlay ${overlays.length + 1}`, visible: true }))}
+          onRenameOverlay={(id, name) => dispatch(renameOverlay({ id, name }))}
+          onDeleteOverlay={(id) => dispatch(deleteOverlay(id))}
+          onOverlayVisible={(id, visible) => dispatch(setOverlayVisible({ id, visible }))}
+          onActivateOverlay={(id) => dispatch(setActiveOverlay(id))}
           onDeleteDrawing={(id) => dispatch(deleteDrawing(id))}
-          onClearDrawings={() => dispatch(clearDrawings())}
         />
         {status === 'error' && (
           <Alert
@@ -973,7 +1017,7 @@ export default function MapPageBody() {
         viewRevision={viewRevision}
         sketchLayerRef={sketchLayerRef}
         drawMode={drawMode}
-        onCreated={(drawing) => dispatch(addDrawing(drawing))}
+        onCreated={handleDrawingCreated}
         onModeEnd={() => setDrawMode('none')}
       />
       <ConfirmDialog

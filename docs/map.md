@@ -64,18 +64,26 @@ on it works without a backend server or API key.
   3D trees — 3D mode only — plus Pins and Drawings layer visibility,
   `showPins`/`showDrawings` in the slice), the drawing tools and the
   drawings list.
-- **Drawing overlays** (`SketchBinding.tsx`) — Marker and Polygon modes in
-  the panel bind ArcGIS's client-side `SketchViewModel` (no key) to a
-  transient **scratch layer**; completed sketches are converted to WGS84
-  (`webMercatorUtils`), removed from the scratch layer and dispatched to the
-  persisted `drawings` list (`MapDrawing` union), which a mirror effect
-  renders onto the separate **drawings layer** — the redux mirror is the
-  single source of truth, same as pins. Markers plant continuously until
-  Esc/toggle-off; polygons finish on double-click. Draw modes and the strip
-  tools are mutually exclusive click claimants (`handleViewClick` yields
-  while a draw mode is active). Per-item delete + confirm-guarded clear-all
-  in the panel. Contract: `data-draw-mode`, `data-drawings`,
-  `data-pins-visible`, `data-drawings-visible`.
+- **Drawing into overlay groups** (`SketchBinding.tsx` + the panel's "My
+  overlays" list) — an **overlay** is a named group of shapes
+  (`MapOverlay {id, name, visible}`); the **active** overlay (highlighted,
+  `activeOverlayId`, persisted) receives new shapes, and the panel manages
+  the groups: add ("+ New", auto-created on first draw if none exist),
+  rename (dialog), per-group show/hide (eye — the drawings mirror joins
+  visibility, rendering only shapes of visible groups), delete
+  (confirm-guarded when the group has shapes, removes them too), expand →
+  per-shape list with delete. Marker and Polygon modes bind ArcGIS's
+  client-side `SketchViewModel` (no key) to a transient **scratch layer**;
+  completed sketches convert to WGS84 (`webMercatorUtils`) and dispatch into
+  the persisted `drawings` list (`MapDrawing` with `overlayId`), mirrored
+  onto the **drawings layer** — redux is the single source of truth, same
+  as pins. Markers plant continuously until Esc/toggle-off; polygons finish
+  on double-click; draw modes and the strip tools are mutually exclusive
+  click claimants. Shapes from before groups existed are swept into an
+  "Imported" overlay by `adoptOrphanDrawings` on mount. Contract:
+  `data-draw-mode`, `data-drawings`, `data-overlays`, `data-active-overlay`,
+  `data-visible-drawings`, `data-pins-visible` + per-row
+  `data-active/-visible/-count` on `map-overlay-item`.
 - **3D buildings & trees** — two independent switches **in the overlays
   panel** (3D mode, persisted, default on) add Esri's public Living Atlas
   scene layers:

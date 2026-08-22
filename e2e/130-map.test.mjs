@@ -274,9 +274,70 @@ await page.waitForTimeout(200)
 check('pins overlay toggles off', (await root().getAttribute('data-pins-visible')) === 'off')
 await page.locator('[data-testid="map-pins-visible"]').click()
 await page.waitForTimeout(200)
-check('drawings overlay on by default', (await root().getAttribute('data-drawings-visible')) === 'on')
 check('no drawings initially', (await root().getAttribute('data-drawings')) === '0')
 check('draw mode starts none', (await root().getAttribute('data-draw-mode')) === 'none')
+
+// ---- overlay groups: add / activate / hide / rename / delete (pure redux,
+// asserts offline) ----
+const overlayRows = page.locator('[data-testid="map-overlay-item"]')
+check(
+  'no overlays initially',
+  (await root().getAttribute('data-overlays')) === '0' &&
+    (await root().getAttribute('data-active-overlay')) === '',
+)
+await page.locator('[data-testid="map-overlay-add"]').click()
+await page.waitForTimeout(200)
+check(
+  'new overlay created and active',
+  (await root().getAttribute('data-overlays')) === '1' &&
+    (await overlayRows.nth(0).getAttribute('data-active')) === 'yes' &&
+    ((await overlayRows.nth(0).textContent()) ?? '').includes('Overlay 1'),
+)
+await page.locator('[data-testid="map-overlay-add"]').click()
+await page.waitForTimeout(200)
+check(
+  'second overlay becomes active',
+  (await root().getAttribute('data-overlays')) === '2' &&
+    (await overlayRows.nth(1).getAttribute('data-active')) === 'yes',
+)
+await overlayRows.nth(0).locator('[data-testid="map-overlay-name"]').click()
+await page.waitForTimeout(200)
+check(
+  'clicking a name re-activates that overlay',
+  (await overlayRows.nth(0).getAttribute('data-active')) === 'yes' &&
+    (await overlayRows.nth(1).getAttribute('data-active')) === 'no',
+)
+await overlayRows.nth(0).locator('[data-testid="map-overlay-eye"]').click()
+await page.waitForTimeout(200)
+check('eye hides an overlay', (await overlayRows.nth(0).getAttribute('data-visible')) === 'no')
+await overlayRows.nth(0).locator('[data-testid="map-overlay-eye"]').click()
+await page.waitForTimeout(200)
+check('eye shows it again', (await overlayRows.nth(0).getAttribute('data-visible')) === 'yes')
+await overlayRows.nth(0).locator('[data-testid="map-overlay-rename"]').click()
+await page.waitForTimeout(300)
+await page.locator('[data-testid="map-overlay-rename-name"]').fill('Site A')
+await page.locator('[data-testid="map-overlay-rename-confirm"]').click()
+await page.waitForTimeout(300)
+check(
+  'rename updates the overlay',
+  ((await overlayRows.nth(0).textContent()) ?? '').includes('Site A'),
+)
+await page.reload({ waitUntil: 'networkidle' })
+await page.waitForSelector('[data-testid="map-page"]', { timeout: 30000 })
+await page.locator('[data-testid="map-overlays-toggle"]').click()
+await page.waitForTimeout(350)
+check(
+  'overlays persist across reload (names + active)',
+  (await root().getAttribute('data-overlays')) === '2' &&
+    ((await overlayRows.nth(0).textContent()) ?? '').includes('Site A') &&
+    (await overlayRows.nth(0).getAttribute('data-active')) === 'yes',
+)
+await overlayRows.nth(1).locator('[data-testid="map-overlay-delete"]').click()
+await page.waitForTimeout(200)
+check(
+  'deleting an empty overlay is instant',
+  (await root().getAttribute('data-overlays')) === '1',
+)
 {
   // draw tools follow view readiness — offline the view may or may not have
   // settled yet, so assert consistency rather than a fixed state
@@ -727,7 +788,9 @@ check(
     await page.keyboard.press('Escape')
     await page.waitForTimeout(200)
 
-    // ---- drawing overlays: plant markers, draw a polygon, persist ----
+    // ---- drawing into overlay groups: markers + polygon land in the
+    // active overlay ("Site A" from the offline block), a second overlay
+    // collects its own shapes, visibility joins per group ----
     await page.locator('[data-testid="map-overlays-toggle"]').click()
     await page.waitForTimeout(350)
     check(
@@ -766,33 +829,80 @@ check(
       (await waitForAttr('data-draw-mode', (v) => v === 'none', 5000)) === 'none',
     )
     check(
-      'drawings listed in the panel',
+      'shapes land in the active overlay',
+      (await overlayRows.nth(0).getAttribute('data-count')) === '3' &&
+        (await root().getAttribute('data-visible-drawings')) === '3',
+    )
+
+    // second overlay collects its own shapes
+    await page.locator('[data-testid="map-overlay-add"]').click()
+    await page.waitForTimeout(200)
+    await page.locator('[data-testid="map-draw-marker"]').click()
+    await page.waitForTimeout(200)
+    await page.mouse.click(box.x + box.width * 0.55, box.y + box.height * 0.35)
+    await waitForAttr('data-drawings', (v) => v === '4', 10000)
+    await page.keyboard.press('Escape')
+    await page.waitForTimeout(300)
+    check(
+      'new shapes follow the newly active overlay',
+      (await overlayRows.nth(1).getAttribute('data-count')) === '1' &&
+        (await overlayRows.nth(0).getAttribute('data-count')) === '3',
+    )
+
+    // per-group visibility joins into the rendered set
+    await overlayRows.nth(0).locator('[data-testid="map-overlay-eye"]').click()
+    await page.waitForTimeout(200)
+    check(
+      'hiding a group hides only its shapes',
+      (await root().getAttribute('data-visible-drawings')) === '1' &&
+        (await root().getAttribute('data-drawings')) === '4',
+    )
+    await overlayRows.nth(0).locator('[data-testid="map-overlay-eye"]').click()
+    await page.waitForTimeout(200)
+
+    // expand → per-shape list + delete
+    await overlayRows.nth(0).locator('[data-testid="map-overlay-expand"]').click()
+    await page.waitForTimeout(300)
+    check(
+      'expanding lists the group shapes',
       (await page.locator('[data-testid="map-drawing-item"]').count()) === 3,
+    )
+    await page.locator('[data-testid="map-drawing-delete"]').first().click()
+    await page.waitForTimeout(300)
+    check(
+      'per-shape delete removes one',
+      (await root().getAttribute('data-drawings')) === '3' &&
+        (await overlayRows.nth(0).getAttribute('data-count')) === '2',
     )
 
     await page.reload({ waitUntil: 'networkidle' })
     await page.waitForSelector('[data-testid="map-page"]', { timeout: 30000 })
     check(
-      'drawings persist across reload',
-      (await root().getAttribute('data-drawings')) === '3',
+      'grouped drawings persist across reload',
+      (await root().getAttribute('data-drawings')) === '3' &&
+        (await root().getAttribute('data-overlays')) === '2',
     )
     await page.locator('[data-testid="map-overlays-toggle"]').click()
     await page.waitForTimeout(350)
-    await page.locator('[data-testid="map-drawings-visible"]').click()
-    await page.waitForTimeout(200)
+    // deleting a group with shapes confirms, and takes its shapes with it
+    await overlayRows.nth(0).locator('[data-testid="map-overlay-delete"]').click()
+    await page.waitForTimeout(300)
+    await page.getByRole('button', { name: 'Delete', exact: true }).click()
+    await page.waitForTimeout(300)
     check(
-      'drawings layer can be hidden',
-      (await root().getAttribute('data-drawings-visible')) === 'off',
+      'deleting a group removes its shapes',
+      (await root().getAttribute('data-overlays')) === '1' &&
+        (await root().getAttribute('data-drawings')) === '1',
     )
-    await page.locator('[data-testid="map-drawings-visible"]').click()
-    await page.waitForTimeout(200)
-    await page.locator('[data-testid="map-drawing-delete"]').first().click()
+    await overlayRows.nth(0).locator('[data-testid="map-overlay-delete"]').click()
     await page.waitForTimeout(300)
-    check('per-item delete removes one drawing', (await root().getAttribute('data-drawings')) === '2')
-    await page.locator('[data-testid="map-drawings-clear"]').click()
-    await page.getByRole('button', { name: 'Remove all' }).click()
+    await page.getByRole('button', { name: 'Delete', exact: true }).click()
     await page.waitForTimeout(300)
-    check('clear-all removes the rest', (await root().getAttribute('data-drawings')) === '0')
+    check(
+      'map fully cleared',
+      (await root().getAttribute('data-overlays')) === '0' &&
+        (await root().getAttribute('data-drawings')) === '0',
+    )
     await page.locator('[data-testid="map-overlays-toggle"]').click()
     await page.waitForTimeout(350)
   } else if (online) {
