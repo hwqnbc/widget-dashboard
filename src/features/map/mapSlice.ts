@@ -154,6 +154,17 @@ const mapSlice = createSlice({
     deleteDrawing(state, action: PayloadAction<string>) {
       state.drawings = (state.drawings ?? []).filter((d) => d.id !== action.payload)
     },
+    /** Edit-in-place commit: replace a drawing's geometry, keeping its
+     * identity and overlay membership (reshape/move can't change the kind). */
+    updateDrawingGeometry(
+      state,
+      action: PayloadAction<{ id: string; geometry: NewMapDrawing }>,
+    ) {
+      const i = (state.drawings ?? []).findIndex((d) => d.id === action.payload.id)
+      if (i < 0) return
+      const { id, overlayId } = state.drawings[i]
+      state.drawings[i] = { ...action.payload.geometry, id, overlayId }
+    },
     addOverlay: {
       prepare(overlay: Omit<MapOverlay, 'id'>) {
         return { payload: { ...overlay, id: nanoid() } }
@@ -219,6 +230,7 @@ export const {
   deleteBookmark,
   addDrawing,
   deleteDrawing,
+  updateDrawingGeometry,
   addOverlay,
   renameOverlay,
   deleteOverlay,

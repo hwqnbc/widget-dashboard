@@ -70,6 +70,7 @@ import {
   setTrees,
   setViewMode,
   setViewpoint,
+  updateDrawingGeometry,
   type MapBookmark,
   type MapDrawing,
   type MapOverlay,
@@ -1016,8 +1017,10 @@ export default function MapPageBody() {
         viewRef={viewRef}
         viewRevision={viewRevision}
         sketchLayerRef={sketchLayerRef}
+        drawingsLayerRef={drawingsLayerRef}
         drawMode={drawMode}
         onCreated={handleDrawingCreated}
+        onUpdated={(id, geometry) => dispatch(updateDrawingGeometry({ id, geometry }))}
         onModeEnd={() => setDrawMode('none')}
       />
       <ConfirmDialog

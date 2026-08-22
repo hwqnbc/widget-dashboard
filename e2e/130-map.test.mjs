@@ -344,7 +344,8 @@ check(
   const st = await root().getAttribute('data-map-status')
   check(
     'draw tools follow view readiness',
-    (await page.locator('[data-testid="map-draw-marker"]').isDisabled()) === (st !== 'ready'),
+    (await page.locator('[data-testid="map-draw-marker"]').isDisabled()) === (st !== 'ready') &&
+      (await page.locator('[data-testid="map-draw-edit"]').isDisabled()) === (st !== 'ready'),
     `status=${st}`,
   )
 }
@@ -884,6 +885,41 @@ check(
     )
     await page.locator('[data-testid="map-overlays-toggle"]').click()
     await page.waitForTimeout(350)
+
+    // ---- edit-in-place: select overlay B's marker, drag it, commit ----
+    await waitForAttr('data-map-status', (v) => v === 'ready', 45000)
+    await overlayRows.nth(1).locator('[data-testid="map-overlay-expand"]').click()
+    await page.waitForTimeout(300)
+    const labelBefore = await page.locator('[data-testid="map-drawing-item"]').first().textContent()
+    await page.locator('[data-testid="map-draw-edit"]').click()
+    await page.waitForTimeout(200)
+    check('edit mode active', (await root().getAttribute('data-draw-mode')) === 'edit')
+    await page.mouse.click(box.x + box.width * 0.55, box.y + box.height * 0.35)
+    await page.waitForTimeout(800) // selection handles appear
+    await page.mouse.move(box.x + box.width * 0.55, box.y + box.height * 0.35)
+    await page.mouse.down()
+    for (let i = 1; i <= 5; i++) {
+      await page.mouse.move(
+        box.x + box.width * (0.55 + 0.014 * i),
+        box.y + box.height * (0.35 - 0.01 * i),
+      )
+      await page.waitForTimeout(60)
+    }
+    await page.mouse.up()
+    await page.waitForTimeout(400)
+    await page.mouse.click(box.x + box.width * 0.85, box.y + box.height * 0.85) // commit
+    await page.waitForTimeout(800)
+    const labelAfter = await page.locator('[data-testid="map-drawing-item"]').first().textContent()
+    check(
+      'dragging a shape commits new geometry',
+      labelAfter != null && labelAfter !== labelBefore &&
+        (await root().getAttribute('data-drawings')) === '3',
+      `${labelBefore} -> ${labelAfter}`,
+    )
+    await page.locator('[data-testid="map-draw-edit"]').click()
+    await page.waitForTimeout(200)
+    check('edit mode toggles off', (await root().getAttribute('data-draw-mode')) === 'none')
+
     // deleting a group with shapes confirms, and takes its shapes with it
     await overlayRows.nth(0).locator('[data-testid="map-overlay-delete"]').click()
     await page.waitForTimeout(300)

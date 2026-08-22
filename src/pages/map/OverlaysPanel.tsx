@@ -25,6 +25,7 @@ import DeleteIcon from '@mui/icons-material/Delete'
 import EditIcon from '@mui/icons-material/Edit'
 import ExpandLessIcon from '@mui/icons-material/ExpandLess'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
+import OpenWithIcon from '@mui/icons-material/OpenWith'
 import PentagonIcon from '@mui/icons-material/Pentagon'
 import PlaceIcon from '@mui/icons-material/Place'
 import VisibilityIcon from '@mui/icons-material/Visibility'
@@ -38,6 +39,7 @@ const PANEL_WIDTH = 280
 const DRAW_HINTS: Record<Exclude<DrawMode, 'none'>, string> = {
   marker: 'Tap the map to plant markers into the active overlay. Esc to finish.',
   polygon: 'Click to add vertices, double-click to finish. Esc cancels.',
+  edit: 'Tap a shape, then drag its vertices or the whole shape. Click elsewhere to commit, Esc reverts.',
 }
 
 function drawingLabel(drawing: MapDrawing): string {
@@ -183,6 +185,14 @@ export default function OverlaysPanel({
           disabled={!canDraw}
         >
           <PentagonIcon fontSize="small" sx={{ mr: 0.5 }} /> Polygon
+        </ToggleButton>
+        <ToggleButton
+          value="edit"
+          data-testid="map-draw-edit"
+          aria-label="Edit shapes"
+          disabled={!canDraw}
+        >
+          <OpenWithIcon fontSize="small" sx={{ mr: 0.5 }} /> Edit
         </ToggleButton>
       </ToggleButtonGroup>
       {drawMode !== 'none' && (

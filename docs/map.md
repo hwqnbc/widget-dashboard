@@ -79,8 +79,14 @@ on it works without a backend server or API key.
   onto the **drawings layer** — redux is the single source of truth, same
   as pins. Markers plant continuously until Esc/toggle-off; polygons finish
   on double-click; draw modes and the strip tools are mutually exclusive
-  click claimants. Shapes from before groups existed are swept into an
-  "Imported" overlay by `adoptOrphanDrawings` on mount. Contract:
+  click claimants. **Edit mode** (third draw toggle) binds an update-mode
+  `SketchViewModel` to the mirrored drawings layer (`updateOnGraphicClick`
+  + reshape/move tools): tap a shape → drag its vertices (polygons) or the
+  whole shape (markers), click elsewhere to commit — the new geometry
+  round-trips through `updateDrawingGeometry` (id/overlay preserved) and
+  the mirror rebuilds — Esc reverts (aborted updates are not committed;
+  update-cancel does not exit edit mode). Shapes from before groups existed
+  are swept into an "Imported" overlay by `adoptOrphanDrawings` on mount. Contract:
   `data-draw-mode`, `data-drawings`, `data-overlays`, `data-active-overlay`,
   `data-visible-drawings`, `data-pins-visible` + per-row
   `data-active/-visible/-count` on `map-overlay-item`.
@@ -249,8 +255,8 @@ visual verification happens on the GitHub Pages deploy.
   them), polygon area/perimeter labels (`geometryEngine.geodesicArea`),
   naming/renaming drawings, per-drawing colors; all extend `MapDrawing` and
   the panel list.
-- **Edit drawings in place** — SketchViewModel `update` mode (drag vertices,
-  move shapes) wired to clicking a drawing.
+- ~~Edit drawings in place~~ — shipped (Edit draw mode, see the drawing
+  bullet above).
 - **Swipe compare** — ArcGIS `Swipe` widget between two free basemaps.
 - **Heatmap renderer** — over the earthquake feed or a bundled CSV
   (`CSVLayer`).

@@ -7,7 +7,7 @@ import type Polygon from '@arcgis/core/geometry/Polygon'
 import type { NewMapDrawing } from '../../features/map/mapSlice'
 import type { AnyView } from './MapPageBody'
 
-export type DrawMode = 'none' | 'marker' | 'polygon'
+export type DrawMode = 'none' | 'marker' | 'polygon' | 'edit'
 
 /** View-SR geometry → WGS84 (the view runs Web Mercator; storage is lon/lat). */
 function toGeographic<G extends Point | Polygon>(g: G): G {
@@ -17,6 +17,21 @@ function toGeographic<G extends Point | Polygon>(g: G): G {
   } catch {
     return g
   }
+}
+
+/** ArcGIS geometry → the serializable drawing shape, or null if malformed. */
+function toDrawingGeometry(g: Point | Polygon | null | undefined): NewMapDrawing | null {
+  if (g?.type === 'point') {
+    const p = toGeographic(g)
+    if (p.longitude == null || p.latitude == null) return null
+    return { kind: 'marker', lon: p.longitude, lat: p.latitude }
+  }
+  if (g?.type === 'polygon') {
+    const poly = toGeographic(g)
+    const rings = poly.rings.map((ring) => ring.map(([x, y]): [number, number] => [x, y]))
+    return rings.length > 0 && rings[0].length >= 3 ? { kind: 'polygon', rings } : null
+  }
+  return null
 }
 
 /**
@@ -33,79 +48,96 @@ export default function SketchBinding({
   viewRef,
   viewRevision,
   sketchLayerRef,
+  drawingsLayerRef,
   drawMode,
   onCreated,
+  onUpdated,
   onModeEnd,
 }: {
   viewRef: RefObject<AnyView | null>
   viewRevision: number
   sketchLayerRef: RefObject<GraphicsLayer | null>
+  drawingsLayerRef: RefObject<GraphicsLayer | null>
   drawMode: DrawMode
   onCreated: (drawing: NewMapDrawing) => void
+  onUpdated: (id: string, geometry: NewMapDrawing) => void
   onModeEnd: () => void
 }) {
   useEffect(() => {
     void viewRevision // re-bind when the view is swapped (2D/3D toggle)
     const view = viewRef.current
-    const layer = sketchLayerRef.current
+    const layer = drawMode === 'edit' ? drawingsLayerRef.current : sketchLayerRef.current
     if (drawMode === 'none' || !view || view.destroyed || !layer) return
 
     let vm: SketchViewModel | null = null
     let handle: { remove(): void } | null = null
     try {
-      vm = new SketchViewModel({
-        view,
-        layer,
-        pointSymbol: {
-          type: 'simple-marker',
-          style: 'diamond',
-          color: '#7b1fa2',
-          size: 14,
-          outline: { color: 'white', width: 1.5 },
-        },
-        polygonSymbol: {
-          type: 'simple-fill',
-          color: [123, 31, 162, 0.18],
-          outline: { color: '#7b1fa2', width: 2 },
-        },
-        defaultCreateOptions: { hasZ: false },
-      })
-      handle = vm.on('create', (event) => {
-        if (event.state === 'cancel') {
-          onModeEnd()
-          return
-        }
-        if (event.state !== 'complete') return
-        const graphic = event.graphic
-        try {
-          layer.remove(graphic)
-        } catch {
-          /* already gone */
-        }
-        const g = graphic?.geometry
-        if (g?.type === 'point') {
-          const p = toGeographic(g as Point)
-          if (p.longitude != null && p.latitude != null) {
-            onCreated({ kind: 'marker', lon: p.longitude, lat: p.latitude })
+      if (drawMode === 'edit') {
+        // Edit-in-place: the VM binds to the MIRRORED drawings layer;
+        // clicking a shape shows its handles (vertex-drag for polygons,
+        // move for markers). Complete commits via onUpdated → redux, which
+        // rebuilds the mirror after the VM has released the graphic; Esc
+        // aborts and reverts. Update-cancel does NOT end edit mode.
+        vm = new SketchViewModel({
+          view,
+          layer,
+          updateOnGraphicClick: true,
+          defaultUpdateOptions: { tool: 'reshape', toggleToolOnClick: true },
+        })
+        handle = vm.on('update', (event) => {
+          if (event.state !== 'complete' || event.aborted) return
+          for (const graphic of event.graphics) {
+            const id = graphic.attributes?.drawingId as string | undefined
+            if (!id) continue
+            const geometry = toDrawingGeometry(graphic.geometry as Point | Polygon | null)
+            if (geometry) onUpdated(id, geometry)
           }
-          // continuous planting until the user toggles off / hits Escape
+        })
+      } else {
+        vm = new SketchViewModel({
+          view,
+          layer,
+          pointSymbol: {
+            type: 'simple-marker',
+            style: 'diamond',
+            color: '#7b1fa2',
+            size: 14,
+            outline: { color: 'white', width: 1.5 },
+          },
+          polygonSymbol: {
+            type: 'simple-fill',
+            color: [123, 31, 162, 0.18],
+            outline: { color: '#7b1fa2', width: 2 },
+          },
+          defaultCreateOptions: { hasZ: false },
+        })
+        handle = vm.on('create', (event) => {
+          if (event.state === 'cancel') {
+            onModeEnd()
+            return
+          }
+          if (event.state !== 'complete') return
+          const graphic = event.graphic
           try {
-            vm?.create('point')
+            layer.remove(graphic)
           } catch {
+            /* already gone */
+          }
+          const geometry = toDrawingGeometry(graphic?.geometry as Point | Polygon | null)
+          if (geometry) onCreated(geometry)
+          if (geometry?.kind === 'marker' || graphic?.geometry?.type === 'point') {
+            // continuous planting until the user toggles off / hits Escape
+            try {
+              vm?.create('point')
+            } catch {
+              onModeEnd()
+            }
+          } else {
             onModeEnd()
           }
-        } else if (g?.type === 'polygon') {
-          const poly = toGeographic(g as Polygon)
-          const rings = poly.rings.map((ring) =>
-            ring.map(([x, y]): [number, number] => [x, y]),
-          )
-          if (rings.length > 0 && rings[0].length >= 3) {
-            onCreated({ kind: 'polygon', rings })
-          }
-          onModeEnd()
-        }
-      })
-      vm.create(drawMode === 'marker' ? 'point' : 'polygon')
+        })
+        vm.create(drawMode === 'marker' ? 'point' : 'polygon')
+      }
     } catch {
       // offline/broken view — leave draw mode rather than crash React
       onModeEnd()
@@ -121,10 +153,10 @@ export default function SketchBinding({
         /* already unusable */
       }
     }
-    // onCreated/onModeEnd are stable enough (recreated per render but
-    // equivalent); re-running on their identity would cancel live sketches.
+    // onCreated/onUpdated/onModeEnd are stable enough (recreated per render
+    // but equivalent); re-running on their identity would cancel live edits.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [viewRef, viewRevision, sketchLayerRef, drawMode])
+  }, [viewRef, viewRevision, sketchLayerRef, drawingsLayerRef, drawMode])
 
   return null
 }
