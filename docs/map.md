@@ -297,8 +297,12 @@ failure per session triggers one automatic page reload (fetching the fresh
 `index.html`), a second failure falls through to the boundary, which
 detects chunk-load errors and swaps its copy + primary button for
 **Reload page**. The flag lives in sessionStorage (no loops) and clears on
-the next successful load. The helper is generic — the heavy widget
-wrappers can adopt it too.
+the next successful load. The helper is adopted by **every lazy chunk in the
+app**: the MapPage body, the Drone Sim / Drone Strike / Tank Battle /
+Model Viewer widget bodies, the in-game lazy models (soldiers, jet
+troopers, Lloyd craft — sharing their widget's key) and the avatar
+registry's `Figure3D`/`Model3D` fields (one shared `avatar3d` key — one
+reload attempt covers the whole family).
 
 ## Verifying
 

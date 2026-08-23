@@ -1,11 +1,12 @@
-import { Suspense, lazy } from 'react'
+import { Suspense } from 'react'
 import { Box, CircularProgress } from '@mui/material'
 import type { WidgetProps } from '../../../registry/widgetRegistry'
+import { lazyWithReload } from '../../../utils/lazyWithReload'
 
 // three.js + @react-three/fiber only load when a Model Viewer widget is on
 // the board — the dynamic import splits into the shared three/fiber chunk
 // the game widgets already use.
-const ModelViewerBody = lazy(() => import('./ModelViewerBody'))
+const ModelViewerBody = lazyWithReload(() => import('./ModelViewerBody'), 'modelviewer')
 
 export default function ModelViewerWidget({ id }: WidgetProps) {
   return (

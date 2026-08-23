@@ -1,9 +1,10 @@
-import { Suspense, lazy, useRef } from 'react'
+import { Suspense, useRef } from 'react'
 import ModelTargets from './ModelTargets'
 import type { Vec3 } from '../droneSim/flightModel'
 import type { TargetState } from './waveLayout'
 import { SOLDIER_FIRE_CLIP } from './enemyAI'
 import type { AimPose } from '../characters/shared/aimPose'
+import { lazyWithReload } from '../../../utils/lazyWithReload'
 
 // Jet troopers reuse the Jet Trooper avatar's 3D model as an in-game flying
 // enemy. Resolve the `Model3D` **directly** (not through `avatarRegistry`) so
@@ -11,7 +12,7 @@ import type { AimPose } from '../characters/shared/aimPose'
 // SoldierTargets uses. Low-spec by construction (only meshStandardMaterial,
 // no transmission), but it's ~130 meshes — roughly 2× a soldier figure — so
 // the pool is capped at the wave's own jet cap (draw-call cost).
-const JetTrooperModel3D = lazy(() => import('../characters/jettrooper/JetTrooperModel3D'))
+const JetTrooperModel3D = lazyWithReload(() => import('../characters/jettrooper/JetTrooperModel3D'), 'strike')
 
 /** Waves field at most this many jets at once (see waveLayout's cap:
  * `min(1 + ⌊(wave−2)/3⌋, 2, enemyCap)`). */

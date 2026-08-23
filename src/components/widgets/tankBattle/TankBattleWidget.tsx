@@ -1,12 +1,13 @@
-import { Suspense, lazy } from 'react'
+import { Suspense } from 'react'
 import { Box, CircularProgress, useTheme } from '@mui/material'
 import type { WidgetProps } from '../../../registry/widgetRegistry'
 import { DAY_PALETTE, NIGHT_PALETTE } from '../droneSim/palettes'
+import { lazyWithReload } from '../../../utils/lazyWithReload'
 
 // three.js + @react-three/fiber only load when a Tank Battle widget is on
 // the board — the dynamic import splits into the shared three/fiber chunk
 // the drone widgets already use.
-const TankBattleBody = lazy(() => import('./TankBattleBody'))
+const TankBattleBody = lazyWithReload(() => import('./TankBattleBody'), 'tank')
 
 export default function TankBattleWidget({ id }: WidgetProps) {
   const mode = useTheme().palette.mode

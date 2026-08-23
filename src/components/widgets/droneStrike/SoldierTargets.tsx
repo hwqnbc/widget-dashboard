@@ -1,10 +1,11 @@
-import { Suspense, lazy, useRef } from 'react'
+import { Suspense, useRef } from 'react'
 import type { Group } from 'three'
 import ModelTargets from './ModelTargets'
 import type { Vec3 } from '../droneSim/flightModel'
 import type { TargetState } from './waveLayout'
 import { SOLDIER_FIRE_CLIP } from './enemyAI'
 import type { AimPose } from '../characters/shared/aimPose'
+import { lazyWithReload } from '../../../utils/lazyWithReload'
 
 // Rooftop soldiers reuse the weaponized avatar 3D models as in-game enemies.
 // Resolve the `Model3D`s **directly** (not through `avatarRegistry`) so
@@ -13,8 +14,8 @@ import type { AimPose } from '../characters/shared/aimPose'
 // meshStandardMaterial, no transmission/physical/persistent emissive), but
 // they're ~45–60 meshes each, so the pool is capped small (draw-call cost,
 // not material cost — see docs/lessons.md).
-const ScarModel3D = lazy(() => import('../characters/scar/ScarModel3D'))
-const BazookaJoeModel3D = lazy(() => import('../characters/bazookajoe/BazookaJoeModel3D'))
+const ScarModel3D = lazyWithReload(() => import('../characters/scar/ScarModel3D'), 'strike')
+const BazookaJoeModel3D = lazyWithReload(() => import('../characters/bazookajoe/BazookaJoeModel3D'), 'strike')
 
 /** Waves field at most this many soldiers at once (see waveLayout's cap:
  * `min(1 + ⌊wave/3⌋, 3, enemyCap)` — rooftop + ground combined). */

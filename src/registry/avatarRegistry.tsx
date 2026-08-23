@@ -1,4 +1,4 @@
-import { lazy } from 'react'
+import { lazyWithReload } from '../utils/lazyWithReload'
 import type { ComponentType } from 'react'
 import type { AvatarId } from '../features/avatars/types'
 import { ToyHead, ToyFigure, ToyCelebration } from '../components/widgets/characters/toy'
@@ -56,28 +56,28 @@ export interface AvatarVisual {
 }
 
 // Per-avatar 3D figures — dynamic imports keep three.js out of the main chunk.
-const ToyFigure3D = lazy(() => import('../components/widgets/characters/toy/ToyFigure3D'))
-const ToyModel3D = lazy(() => import('../components/widgets/characters/toy/ToyModel3D'))
-const NinjaFigure3D = lazy(() => import('../components/widgets/characters/ninja/NinjaFigure3D'))
-const NinjaModel3D = lazy(() => import('../components/widgets/characters/ninja/NinjaModel3D'))
-const FireNinjaFigure3D = lazy(() => import('../components/widgets/characters/fireninja/FireNinjaFigure3D'))
-const FireNinjaModel3D = lazy(() => import('../components/widgets/characters/fireninja/FireNinjaModel3D'))
-const DarkArinFigure3D = lazy(() => import('../components/widgets/characters/darkarin/DarkArinFigure3D'))
-const DarkArinModel3D = lazy(() => import('../components/widgets/characters/darkarin/DarkArinModel3D'))
-const FrakFigure3D = lazy(() => import('../components/widgets/characters/frak/FrakFigure3D'))
-const FrakModel3D = lazy(() => import('../components/widgets/characters/frak/FrakModel3D'))
-const ImperiumFigure3D = lazy(() => import('../components/widgets/characters/imperium/ImperiumFigure3D'))
-const ImperiumModel3D = lazy(() => import('../components/widgets/characters/imperium/ImperiumModel3D'))
-const GoldGunnerFigure3D = lazy(() => import('../components/widgets/characters/goldgunner/GoldGunnerFigure3D'))
-const GoldGunnerModel3D = lazy(() => import('../components/widgets/characters/goldgunner/GoldGunnerModel3D'))
-const ScarFigure3D = lazy(() => import('../components/widgets/characters/scar/ScarFigure3D'))
-const ScarModel3D = lazy(() => import('../components/widgets/characters/scar/ScarModel3D'))
-const BazookaJoeFigure3D = lazy(() => import('../components/widgets/characters/bazookajoe/BazookaJoeFigure3D'))
-const BazookaJoeModel3D = lazy(() => import('../components/widgets/characters/bazookajoe/BazookaJoeModel3D'))
-const LloydFigure3D = lazy(() => import('../components/widgets/characters/lloyd/LloydFigure3D'))
-const LloydModel3D = lazy(() => import('../components/widgets/characters/lloyd/LloydModel3D'))
-const JetTrooperFigure3D = lazy(() => import('../components/widgets/characters/jettrooper/JetTrooperFigure3D'))
-const JetTrooperModel3D = lazy(() => import('../components/widgets/characters/jettrooper/JetTrooperModel3D'))
+const ToyFigure3D = lazyWithReload(() => import('../components/widgets/characters/toy/ToyFigure3D'), 'avatar3d')
+const ToyModel3D = lazyWithReload(() => import('../components/widgets/characters/toy/ToyModel3D'), 'avatar3d')
+const NinjaFigure3D = lazyWithReload(() => import('../components/widgets/characters/ninja/NinjaFigure3D'), 'avatar3d')
+const NinjaModel3D = lazyWithReload(() => import('../components/widgets/characters/ninja/NinjaModel3D'), 'avatar3d')
+const FireNinjaFigure3D = lazyWithReload(() => import('../components/widgets/characters/fireninja/FireNinjaFigure3D'), 'avatar3d')
+const FireNinjaModel3D = lazyWithReload(() => import('../components/widgets/characters/fireninja/FireNinjaModel3D'), 'avatar3d')
+const DarkArinFigure3D = lazyWithReload(() => import('../components/widgets/characters/darkarin/DarkArinFigure3D'), 'avatar3d')
+const DarkArinModel3D = lazyWithReload(() => import('../components/widgets/characters/darkarin/DarkArinModel3D'), 'avatar3d')
+const FrakFigure3D = lazyWithReload(() => import('../components/widgets/characters/frak/FrakFigure3D'), 'avatar3d')
+const FrakModel3D = lazyWithReload(() => import('../components/widgets/characters/frak/FrakModel3D'), 'avatar3d')
+const ImperiumFigure3D = lazyWithReload(() => import('../components/widgets/characters/imperium/ImperiumFigure3D'), 'avatar3d')
+const ImperiumModel3D = lazyWithReload(() => import('../components/widgets/characters/imperium/ImperiumModel3D'), 'avatar3d')
+const GoldGunnerFigure3D = lazyWithReload(() => import('../components/widgets/characters/goldgunner/GoldGunnerFigure3D'), 'avatar3d')
+const GoldGunnerModel3D = lazyWithReload(() => import('../components/widgets/characters/goldgunner/GoldGunnerModel3D'), 'avatar3d')
+const ScarFigure3D = lazyWithReload(() => import('../components/widgets/characters/scar/ScarFigure3D'), 'avatar3d')
+const ScarModel3D = lazyWithReload(() => import('../components/widgets/characters/scar/ScarModel3D'), 'avatar3d')
+const BazookaJoeFigure3D = lazyWithReload(() => import('../components/widgets/characters/bazookajoe/BazookaJoeFigure3D'), 'avatar3d')
+const BazookaJoeModel3D = lazyWithReload(() => import('../components/widgets/characters/bazookajoe/BazookaJoeModel3D'), 'avatar3d')
+const LloydFigure3D = lazyWithReload(() => import('../components/widgets/characters/lloyd/LloydFigure3D'), 'avatar3d')
+const LloydModel3D = lazyWithReload(() => import('../components/widgets/characters/lloyd/LloydModel3D'), 'avatar3d')
+const JetTrooperFigure3D = lazyWithReload(() => import('../components/widgets/characters/jettrooper/JetTrooperFigure3D'), 'avatar3d')
+const JetTrooperModel3D = lazyWithReload(() => import('../components/widgets/characters/jettrooper/JetTrooperModel3D'), 'avatar3d')
 
 export const avatarVisualById: Record<AvatarId, AvatarVisual> = {
   toy: {

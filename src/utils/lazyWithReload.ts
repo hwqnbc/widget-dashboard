@@ -12,7 +12,8 @@ import { lazy, type ComponentType } from 'react'
  * chunk-error card. The sessionStorage flag prevents reload loops and is
  * cleared on the next successful load.
  */
-export function lazyWithReload<T extends ComponentType<unknown>>(
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- mirrors React.lazy's own signature; ComponentType<unknown> would reject prop-taking components (contravariance)
+export function lazyWithReload<T extends ComponentType<any>>(
   load: () => Promise<{ default: T }>,
   key: string,
 ) {

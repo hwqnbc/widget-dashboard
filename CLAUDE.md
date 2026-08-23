@@ -141,7 +141,10 @@ Provider order (`main.tsx`): `Provider` → `PersistGate` → `AppThemeProvider`
 3. Build the component in `components/widgets/` and register it in
    `registry/widgetRegistry.ts`.
 
-Reusable primitives for new widgets: `hooks/useNow` (ticking clock),
+Reusable primitives for new widgets: `utils/lazyWithReload` (React.lazy with
+stale-deploy recovery — ALWAYS use it instead of bare `lazy()` for chunk
+imports; hashed chunks die on every deploy, lessons.md #76),
+`hooks/useNow` (ticking clock),
 `features/widgets/useWidgetField` (typed persisted-`data` selector),
 `components/widgets/TapStage` (tap-to-animate button),
 `components/widgets/droneSim/webAudio` (synthesized Web Audio SFX engine —

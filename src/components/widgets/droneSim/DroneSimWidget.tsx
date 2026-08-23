@@ -1,11 +1,12 @@
-import { Suspense, lazy } from 'react'
+import { Suspense } from 'react'
 import { Box, CircularProgress, useTheme } from '@mui/material'
 import type { WidgetProps } from '../../../registry/widgetRegistry'
 import { DAY_PALETTE, NIGHT_PALETTE } from './palettes'
+import { lazyWithReload } from '../../../utils/lazyWithReload'
 
 // three.js + @react-three/fiber only load when a Drone Sim widget is actually
 // on the board — Vite splits the dynamic import into its own chunk.
-const DroneSimBody = lazy(() => import('./DroneSimBody'))
+const DroneSimBody = lazyWithReload(() => import('./DroneSimBody'), 'dronesim')
 
 export default function DroneSimWidget({ id }: WidgetProps) {
   const mode = useTheme().palette.mode

@@ -1,4 +1,4 @@
-import { Suspense, lazy, useRef } from 'react'
+import { Suspense, useRef } from 'react'
 import type { RefObject } from 'react'
 import { useFrame } from '@react-three/fiber'
 import type { Group, Mesh, MeshBasicMaterial } from 'three'
@@ -42,10 +42,11 @@ import {
 import type { SoundEngine } from './sound'
 import DroneModel from './DroneModel'
 import type { GateFlash } from './GateRings'
+import { lazyWithReload } from '../../../utils/lazyWithReload'
 
 // The 'lloyd' craft — the winged avatar's mesh model, lazy like the avatar
 // registry so it stays in its own chunk until first flown.
-const LloydModel3D = lazy(() => import('../characters/lloyd/LloydModel3D'))
+const LloydModel3D = lazyWithReload(() => import('../characters/lloyd/LloydModel3D'), 'dronesim')
 
 /** Lloyd (1.85u tall, feet at y=0, faces +Z) posed as the craft: scaled to
  * the drone's visual bulk, torso centred on the flight position, turned to
