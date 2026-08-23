@@ -1451,3 +1451,23 @@ carried over; these are the new ones.
     online), not on network reachability — but know that a view re-created
     over a map holding still-pending (hung) layers may never settle, so the
     gate needs a bounded wait + a graceful skip.
+
+75. **An SPA without an error boundary reports every bug as a blank page —
+    and persisted state can make the blank PERMANENT.** The user's "map
+    page is blank" report was undiagnosable from the outside: with no
+    boundary, any render exception unmounts the entire React tree, and the
+    actual error lives only in their devtools console. Worse, when the
+    crash is caused by persisted state (redux-persist rehydrates on every
+    load), reloading reproduces it forever. Standing fixes: (a) one
+    route-level `ErrorBoundary` around the router `<Outlet/>`, KEYED BY
+    PATHNAME so navigating away resets it (an unkeyed boundary keeps
+    showing the error card on every route), showing the error name/message
+    + a retry; (b) give it an escape hatch that clears the relevant
+    persisted slice and reloads — self-service recovery from poisoned
+    state; (c) guard render paths that read persisted objects
+    (`Number.isFinite`, shape checks) so one malformed entry degrades
+    instead of throwing. Also: verify the PRODUCTION bundle, not just dev —
+    `vite preview` needs the prod base passed explicitly
+    (`--base=/widget-dashboard/`), because the config's `command === 'build'`
+    check doesn't apply to preview and a wrong-base preview 404s every
+    chunk while curl "succeeds" via the SPA fallback.

@@ -191,10 +191,19 @@ if (!online) {
   }
 }
 
+check(
+  'no error boundary tripped on the dashboard',
+  (await page.locator('[data-testid="error-boundary"]').count()) === 0,
+)
+
 // ---- navigate via the app-bar link; the lazy chunk loads on demand ----
 await page.getByRole('link', { name: 'Map' }).click()
 await page.waitForSelector('[data-testid="map-page"]', { timeout: 30000 })
 check('map page renders via nav link', true)
+check(
+  'no error boundary tripped on the map page',
+  (await page.locator('[data-testid="error-boundary"]').count()) === 0,
+)
 const resourcesAfter = await page.evaluate(() =>
   performance.getEntriesByType('resource').map((r) => r.name),
 )

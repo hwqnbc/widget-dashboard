@@ -86,7 +86,11 @@ export default function BookmarksControl({
           >
             <ListItemText
               primary={bookmark.name}
-              secondary={`${bookmark.viewpoint.z != null ? '3D' : '2D'} · ${bookmark.viewpoint.lat.toFixed(3)}, ${bookmark.viewpoint.lon.toFixed(3)}`}
+              secondary={
+                Number.isFinite(bookmark.viewpoint?.lat) && Number.isFinite(bookmark.viewpoint?.lon)
+                  ? `${bookmark.viewpoint.z != null ? '3D' : '2D'} · ${bookmark.viewpoint.lat.toFixed(3)}, ${bookmark.viewpoint.lon.toFixed(3)}`
+                  : 'saved view'
+              }
             />
             <IconButton
               size="small"

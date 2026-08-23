@@ -275,6 +275,19 @@ visual verification happens on the GitHub Pages deploy.
   `BASEMAP_BY_MODE` to `osm`/CARTO, drop `world-elevation` if it goes
   key-gated (3D degrades to a flat globe).
 
+## Error recovery
+
+A route-level `ErrorBoundary` (`src/components/ErrorBoundary.tsx`, wrapped
+around the `<Outlet/>` in `AppLayout`, keyed by pathname so navigation
+resets it) converts any page crash into a visible card naming the error —
+never a blank page — with **Try again** (re-render) and **Reset map data**
+(drops the persisted `map` slice from localStorage and reloads; because
+persisted state rehydrates on every load, a crash caused by poisoned state
+is otherwise permanent). Render paths that read persisted map data
+(drawing/bookmark labels, the viewport focus, the drawings mirror) are
+additionally guarded with `Number.isFinite`/shape checks so malformed
+entries degrade instead of throwing.
+
 ## Verifying
 
 - `npm run build` — type-checks; entry chunk unchanged, `MapPageBody-*.js`

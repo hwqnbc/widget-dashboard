@@ -138,6 +138,16 @@ const OSM_BUILDINGS_ITEM = 'ca0470dbbddb4db28bad74ed39949e25'
  * variant is item 33383da8a75f4d24b4b6a0d0532abe6e if ever preferred. */
 const OSM_TREES_ITEM = 'f75fef56b2d944fe92ef9f7737b4f953'
 
+/** Malformed persisted numbers must never crash the render. */
+function isValidViewpoint(vp: SavedViewpoint | null): vp is SavedViewpoint {
+  return (
+    vp != null &&
+    Number.isFinite(vp.lon) &&
+    Number.isFinite(vp.lat) &&
+    Number.isFinite(vp.scale)
+  )
+}
+
 /** Snapshot the camera as plain serializable numbers for redux-persist.
  * Null while the view isn't ready (or mid-teardown — ArcGIS getters throw). */
 function captureViewpoint(view: AnyView): SavedViewpoint | null {
@@ -450,7 +460,8 @@ export default function MapPageBody() {
 
   // Render-computed viewport contract (persisted value or the Singapore
   // default) — like data-basemap, it asserts in e2e even with no network.
-  const focus = savedViewpoint ?? DEFAULT_VIEW
+  // Guarded: malformed persisted numbers must never crash the render.
+  const focus = isValidViewpoint(savedViewpoint) ? savedViewpoint : DEFAULT_VIEW
 
   // One shared Map (basemap + graphics layers) for both view modes — pins
   // and routes survive the 2D/3D swap because they live on the map, not the
@@ -516,7 +527,9 @@ export default function MapPageBody() {
       // Where to open: the in-session carry-over (2D/3D toggle) is exact,
       // else the persisted last viewpoint, else the Singapore default.
       const carried = viewpointRef.current
-      const saved = savedViewpointRef.current ?? DEFAULT_VIEW
+      const saved = isValidViewpoint(savedViewpointRef.current)
+        ? savedViewpointRef.current
+        : DEFAULT_VIEW
       if (viewMode === '3d') {
         const props: __esri.SceneViewProperties = { container, map }
         if (carried) props.viewpoint = carried
@@ -774,7 +787,15 @@ export default function MapPageBody() {
     layer.removeAll()
     layer.addMany(
       drawings
-        .filter((d) => d.overlayId != null && visibleIds.has(d.overlayId))
+        .filter(
+          (d) =>
+            d.overlayId != null &&
+            visibleIds.has(d.overlayId) &&
+            // never build ArcGIS geometry from malformed persisted entries
+            (d.kind === 'marker'
+              ? Number.isFinite(d.lon) && Number.isFinite(d.lat)
+              : (d.rings?.[0]?.length ?? 0) >= 3),
+        )
         .map((d) =>
           d.kind === 'marker'
             ? new Graphic({

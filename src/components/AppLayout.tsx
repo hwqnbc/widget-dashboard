@@ -5,9 +5,10 @@ import SettingsIcon from '@mui/icons-material/Settings'
 import DarkModeIcon from '@mui/icons-material/DarkMode'
 import LightModeIcon from '@mui/icons-material/LightMode'
 import WidgetsIcon from '@mui/icons-material/Widgets'
-import { NavLink, Outlet } from 'react-router-dom'
+import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { useAppDispatch, useAppSelector } from '../app/hooks'
 import { toggleMode } from '../features/ui/uiSlice'
+import ErrorBoundary from './ErrorBoundary'
 import FullscreenProvider from './fullscreen/FullscreenProvider'
 
 interface NavItem {
@@ -26,6 +27,7 @@ const NAV_ITEMS: NavItem[] = [
 export default function AppLayout() {
   const dispatch = useAppDispatch()
   const mode = useAppSelector((state) => state.ui.mode)
+  const location = useLocation()
 
   return (
     <Box sx={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
@@ -67,7 +69,12 @@ export default function AppLayout() {
       </AppBar>
       <FullscreenProvider>
         <Container maxWidth="xl" sx={{ py: 3, flexGrow: 1 }}>
-          <Outlet />
+          {/* A page crash shows a recoverable card instead of unmounting the
+              whole app into a blank page; the app bar stays navigable, and
+              the pathname key resets the boundary when the route changes. */}
+          <ErrorBoundary key={location.pathname}>
+            <Outlet />
+          </ErrorBoundary>
         </Container>
       </FullscreenProvider>
     </Box>

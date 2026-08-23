@@ -42,10 +42,15 @@ const DRAW_HINTS: Record<Exclude<DrawMode, 'none'>, string> = {
   edit: 'Tap a shape, then drag its vertices or the whole shape. Click elsewhere to commit, Esc reverts.',
 }
 
+/** Guarded against malformed persisted entries — a bad shape must never
+ * crash the panel render (persisted state rehydrates on every load). */
 function drawingLabel(drawing: MapDrawing): string {
-  return drawing.kind === 'marker'
-    ? `Marker · ${drawing.lat.toFixed(4)}, ${drawing.lon.toFixed(4)}`
-    : `Polygon · ${drawing.rings[0]?.length ?? 0} vertices`
+  if (drawing.kind === 'marker') {
+    return Number.isFinite(drawing.lat) && Number.isFinite(drawing.lon)
+      ? `Marker · ${drawing.lat.toFixed(4)}, ${drawing.lon.toFixed(4)}`
+      : 'Marker'
+  }
+  return `Polygon · ${drawing.rings?.[0]?.length ?? 0} vertices`
 }
 
 /** Right-side slide-out panel: layer visibility switches, the draw tools,
