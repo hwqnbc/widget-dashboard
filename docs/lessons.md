@@ -1471,3 +1471,21 @@ carried over; these are the new ones.
     (`--base=/widget-dashboard/`), because the config's `command === 'build'`
     check doesn't apply to preview and a wrong-base preview 404s every
     chunk while curl "succeeds" via the SPA fallback.
+
+76. **Hashed chunks die on every deploy — lazy routes need retry-by-reload,
+    or stale tabs report "Importing a module script failed".** Root cause
+    of the user's blank map page (named by the new error boundary, which is
+    what made the report diagnosable at all — lesson #75 paying off one
+    round later): each deploy renames `MapPageBody-<hash>.js`, so a browser
+    holding a cached index.html (or a tab opened before the deploy)
+    requests a chunk that no longer exists; the dynamic import rejects
+    (Safari: "Importing a module script failed", Chrome: "Failed to fetch
+    dynamically imported module"). Frequent deploys make this routine, and
+    without handling, React.lazy turns it into a page crash. The cure
+    (`src/utils/lazyWithReload.ts`): on the first import failure per
+    session/key, set a sessionStorage flag and reload the page once — the
+    fresh index.html has the current hashes; on a repeat failure, rethrow
+    so the boundary shows a chunk-specific "Reload page" card (its message
+    regex covers both browsers' wordings). Clear the flag on success. The
+    whole cycle is e2e-testable offline by aborting the chunk URL with
+    page.route in an isolated context.

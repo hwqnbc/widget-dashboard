@@ -288,6 +288,18 @@ is otherwise permanent). Render paths that read persisted map data
 additionally guarded with `Number.isFinite`/shape checks so malformed
 entries degrade instead of throwing.
 
+**Stale-deploy chunks** (the user-reported blank page's root cause): hashed
+chunk filenames change every deploy, so a cached `index.html` or an
+already-open tab requests a chunk that no longer exists — the dynamic
+import rejects (Safari: "Importing a module script failed").
+`src/utils/lazyWithReload.ts` wraps the MapPage lazy import: the first
+failure per session triggers one automatic page reload (fetching the fresh
+`index.html`), a second failure falls through to the boundary, which
+detects chunk-load errors and swaps its copy + primary button for
+**Reload page**. The flag lives in sessionStorage (no loops) and clears on
+the next successful load. The helper is generic — the heavy widget
+wrappers can adopt it too.
+
 ## Verifying
 
 - `npm run build` — type-checks; entry chunk unchanged, `MapPageBody-*.js`

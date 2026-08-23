@@ -83,6 +83,35 @@ await page.route('**/routing.openstreetmap.de/**', (route) => {
   })
 })
 
+// ---- stale-chunk recovery: a dead lazy-chunk URL triggers one automatic
+// reload; a persistent failure shows the boundary's Reload card; removing
+// the block and reloading recovers. Isolated context — its reload games
+// must not disturb the main flow. ----
+{
+  const ctx2 = await browser.newContext({ viewport: { width: 1280, height: 900 } })
+  const p2 = await ctx2.newPage()
+  await p2.route('**/MapPageBody*', (r) => r.abort())
+  await p2.goto(`${BASE_URL}map`, { waitUntil: 'domcontentloaded' })
+  await p2.waitForSelector('[data-testid="error-boundary"]', { timeout: 20000 })
+  check(
+    'persistent chunk failure shows the boundary with Reload page',
+    (await p2.locator('[data-testid="error-boundary-reload"]').count()) === 1,
+  )
+  check(
+    'reload-once flag recorded (auto-reload happened first)',
+    (await p2.evaluate(() => sessionStorage.getItem('chunk-reload:map'))) === '1',
+  )
+  await p2.unroute('**/MapPageBody*')
+  await p2.locator('[data-testid="error-boundary-reload"]').click()
+  await p2.waitForSelector('[data-testid="map-page"]', { timeout: 30000 })
+  check('Reload page recovers once the chunk is reachable', true)
+  check(
+    'reload-once flag cleared on successful load',
+    (await p2.evaluate(() => sessionStorage.getItem('chunk-reload:map'))) === null,
+  )
+  await ctx2.close()
+}
+
 // ---- pure route-geometry unit checks (bundled module, no network) ----
 {
   const path = [
