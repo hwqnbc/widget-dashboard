@@ -11,6 +11,9 @@ export default defineConfig(({ command, mode }) => ({
   // survives at runtime ("process is not defined").
   define: {
     'process.env.NODE_ENV': JSON.stringify(mode),
+    // Build timestamp shown on the Settings page — baked in when the bundle
+    // is built (dev-server start time in dev), so it identifies the deploy.
+    __BUILD_TIME__: JSON.stringify(new Date().toISOString()),
   },
   // Pre-bundle the deep @arcgis/core entries the Map page imports. They sit
   // behind a lazy route chunk, so without this the first /map visit makes the

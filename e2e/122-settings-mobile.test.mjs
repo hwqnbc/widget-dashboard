@@ -9,7 +9,8 @@
  * for both seats, the page has no horizontal overflow, and the widest
  * button (previously pushed off-screen) is actually clickable: selecting
  * Imperium for Player 1 round-trips aria-pressed, then the suite swaps
- * back to Toy.
+ * back to Toy. Also pins the About build stamp (`yymmdd-hh:mm` text +
+ * parseable data-build-iso), the "which deploy am I on?" glance.
  */
 import { BASE_URL, launch, reporter } from './helpers.mjs'
 
@@ -40,6 +41,19 @@ for (let i = 0; i < n; i++) {
 }
 check('every avatar button fits the phone width', allInside)
 check('buttons are real-sized, not collapsed', widest > 80)
+
+// Build stamp: local-time yymmdd-hh:mm text and a parseable ISO attribute.
+const stamp = page.locator('[data-testid="build-stamp"]')
+check('build stamp renders', (await stamp.count()) === 1)
+check(
+  'build stamp text is Build yymmdd-hh:mm',
+  /^Build \d{6}-\d{2}:\d{2}$/.test((await stamp.textContent()) ?? ''),
+)
+const buildIso = await stamp.getAttribute('data-build-iso')
+check(
+  'build stamp carries a valid ISO timestamp',
+  buildIso != null && !Number.isNaN(new Date(buildIso).getTime()),
+)
 
 // No horizontal page overflow anywhere on the settings page.
 const overflow = await page.evaluate(

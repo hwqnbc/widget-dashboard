@@ -23,6 +23,15 @@ import { avatarVisualById } from '../registry/avatarRegistry'
 const SEAT_LABEL: Record<Seat, string> = { toy: 'Player 1', ninja: 'Player 2' }
 const other = (seat: Seat): Seat => (seat === 'toy' ? 'ninja' : 'toy')
 
+// yymmdd-hh:mm in the viewer's local timezone — a quick "am I on the latest
+// deploy?" glance after the stale-cache saga (lessons.md #76).
+const formatBuildStamp = (iso: string): string => {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return iso
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${p(d.getFullYear() % 100)}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}:${p(d.getMinutes())}`
+}
+
 /** Settings: theme mode, per-player avatars, and a reset-to-default-layout action. */
 export default function SettingsPage() {
   const dispatch = useAppDispatch()
@@ -128,6 +137,20 @@ export default function SettingsPage() {
               Reset layout
             </Button>
           </Stack>
+
+          <Divider sx={{ my: 2 }} />
+
+          <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+            About
+          </Typography>
+          <Typography
+            variant="caption"
+            color="text.secondary"
+            data-testid="build-stamp"
+            data-build-iso={__BUILD_TIME__}
+          >
+            Build {formatBuildStamp(__BUILD_TIME__)}
+          </Typography>
         </CardContent>
       </Card>
     </Box>

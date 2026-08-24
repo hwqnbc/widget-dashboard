@@ -8,3 +8,7 @@ declare module '*.css?inline' {
   const css: string
   export default css
 }
+
+// Compile-time constant from vite.config.ts `define`: the ISO timestamp of
+// when the bundle was built (dev-server start time in dev).
+declare const __BUILD_TIME__: string
