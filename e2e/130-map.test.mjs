@@ -5,7 +5,9 @@
  * actually sees) picks between the online and offline branches:
  *  - always: nav link, lazy-chunk isolation (no @arcgis code until the Map
  *    page is visited), theme-follow (data-basemap + injected ArcGIS CSS flip
- *    with the app toggle — render-computed, works offline), 2D/3D toggle +
+ *    with the app toggle — render-computed, works offline), the basemap
+ *    gallery (12 tiles, explicit pick beats the theme, CARTO WebTileLayer
+ *    path, persistence, back to Auto + pure resolver units), 2D/3D toggle +
  *    persistence, tool toggles, pure routeGeometry unit checks (bundled
  *    module: insert index, nearest-distance, tap threshold), undo-disabled
  *    state, deep-link render.
@@ -31,6 +33,7 @@ import {
   dragPointerUp,
   dragStep,
 } from './.bundle/dragModel.js'
+import { BASEMAP_DEFS, resolveBasemapId } from './.bundle/basemapCatalog.js'
 
 const { check, finish } = reporter('map')
 const { browser, context, page } = await launch()
@@ -178,6 +181,29 @@ await page.route('**/routing.openstreetmap.de/**', (route) => {
     dragPointerDown(s) // next gesture begins before any end arrived
     check('pointer-down clears a lost gesture', s.index === null && !s.active && s.pos === null)
   }
+
+  // Basemap catalog resolver — 'auto' and junk follow the theme, known ids win.
+  check(
+    'resolveBasemapId: auto follows the theme',
+    resolveBasemapId('auto', 'light') === 'gray-vector' &&
+      resolveBasemapId('auto', 'dark') === 'dark-gray-vector',
+  )
+  check(
+    'resolveBasemapId: explicit choice wins over the theme',
+    resolveBasemapId('osm', 'dark') === 'osm' &&
+      resolveBasemapId('carto-voyager', 'light') === 'carto-voyager',
+  )
+  check(
+    'resolveBasemapId: unknown/malformed persisted values fall back',
+    resolveBasemapId('not-a-basemap', 'light') === 'gray-vector' &&
+      resolveBasemapId(undefined, 'dark') === 'dark-gray-vector' &&
+      resolveBasemapId(42, 'light') === 'gray-vector',
+  )
+  check(
+    'catalog entries each construct one way (esriId xor cartoUrl)',
+    BASEMAP_DEFS.length === 11 &&
+      BASEMAP_DEFS.every((d) => Boolean(d.esriId) !== Boolean(d.cartoUrl)),
+  )
 }
 
 // ---- dashboard first: the arcgis chunk must NOT load with the app shell ----
@@ -218,6 +244,8 @@ if (!online) {
   ]) {
     await page.route(`**://${host}/**`, (r) => r.abort())
   }
+  // CARTO raster tiles (a–d.basemaps.cartocdn.com) — same fail-fast reasoning.
+  await page.route('**://*.cartocdn.com/**', (r) => r.abort())
 }
 
 check(
@@ -306,6 +334,60 @@ check('panel opens', (await root().getAttribute('data-panel')) === 'open')
     JSON.stringify(panelBox),
   )
 }
+// ---- basemap gallery: choice + effective id are render-computed (redux +
+// pure resolver), so every check here asserts identically offline ----
+const tiles = page.locator('[data-testid="map-basemap-tile"]')
+const tile = (id) => page.locator(`[data-testid="map-basemap-tile"][data-id="${id}"]`)
+check('gallery renders 12 tiles (Auto + 11 basemaps)', (await tiles.count()) === 12)
+check(
+  'Auto selected by default',
+  (await root().getAttribute('data-basemap-choice')) === 'auto' &&
+    (await tile('auto').getAttribute('data-selected')) === 'yes',
+)
+await tile('osm').click()
+await page.waitForTimeout(200)
+check(
+  'picking OpenStreetMap switches the effective basemap',
+  (await root().getAttribute('data-basemap')) === 'osm' &&
+    (await root().getAttribute('data-basemap-choice')) === 'osm' &&
+    (await tile('osm').getAttribute('data-selected')) === 'yes',
+)
+await page.getByRole('button', { name: 'Switch to dark mode' }).click()
+await page.waitForTimeout(300)
+check(
+  'explicit choice wins over the theme toggle',
+  (await root().getAttribute('data-basemap')) === 'osm',
+)
+await page.getByRole('button', { name: 'Switch to light mode' }).click()
+await page.waitForTimeout(300)
+await tile('carto-voyager').click()
+await page.waitForTimeout(300)
+check(
+  'CARTO basemap constructs via WebTileLayer without crashing',
+  (await root().getAttribute('data-basemap')) === 'carto-voyager' &&
+    (await page.locator('[data-testid="error-boundary"]').count()) === 0,
+)
+await page.reload({ waitUntil: 'networkidle' })
+await page.waitForSelector('[data-testid="map-page"]', { timeout: 30000 })
+check(
+  'basemap choice persists across reload',
+  (await root().getAttribute('data-basemap-choice')) === 'carto-voyager' &&
+    (await root().getAttribute('data-basemap')) === 'carto-voyager',
+)
+await page.locator('[data-testid="map-overlays-toggle"]').click()
+await page.waitForTimeout(350)
+check(
+  'persisted tile shown selected after reload',
+  (await tile('carto-voyager').getAttribute('data-selected')) === 'yes',
+)
+await tile('auto').click()
+await page.waitForTimeout(200)
+check(
+  'back to Auto follows the theme again',
+  (await root().getAttribute('data-basemap-choice')) === 'auto' &&
+    (await root().getAttribute('data-basemap')) === 'gray-vector',
+)
+
 check('pins overlay on by default', (await root().getAttribute('data-pins-visible')) === 'on')
 await page.locator('[data-testid="map-pins-visible"]').click()
 await page.waitForTimeout(200)

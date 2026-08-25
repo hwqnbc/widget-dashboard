@@ -23,15 +23,27 @@ on it works without a backend server or API key.
   **5.x major** — don't cross it casually; the free-basemap + CDN-asset
   behaviour here is verified on 4.x (upgrade is a backlog item).
 
-## Basemap & theme follow
+## Basemap & theme follow — and the gallery
 
-- `BASEMAP_BY_MODE` (`MapPageBody.tsx`) maps the MUI palette mode to Esri's
-  **legacy basemaps `gray-vector` / `dark-gray-vector` — free, no API key**
-  (modern `arcgis/*` basemap styles require one). The theme effect swaps
-  `map.basemap = Basemap.fromId(...)` in place; no view re-create. Esri
-  sunsets legacy basemaps in Mar 2028 / Dec 2029 — when that lands, swap the
-  constant for `osm` (raster OSM) or CARTO `light_all`/`dark_all` via
-  `WebTileLayer`, all key-free.
+- The basemap **gallery** lives at the top of the overlays panel: a grid of
+  swatch tiles (CSS gradients, no network thumbnails — renders offline) over
+  every free, key-free option. The catalog is the PURE module
+  `src/pages/map/basemapCatalog.ts` (e2e-bundled): eight Esri **legacy**
+  basemaps via `Basemap.fromId` (`gray-vector`, `dark-gray-vector`, `osm`,
+  `streets-vector`, `streets-night-vector`, `topo-vector`, `satellite`,
+  `hybrid` — modern `arcgis/*` styles require an API key, these don't) plus
+  three **CARTO** raster styles (`voyager`, `light_all`, `dark_all`) built as
+  `WebTileLayer` basemaps with the OSM/CARTO attribution (fair-use tiles, no
+  key).
+- The persisted choice (`map.basemap`, plain string, default **`'auto'`**)
+  resolves through the pure `resolveBasemapId(choice, themeMode)`: `'auto'`
+  follows the app theme via `BASEMAP_BY_MODE` (light → `gray-vector`, dark →
+  `dark-gray-vector`) — the original behaviour — while an explicit pick wins
+  over the theme toggle; unknown/malformed persisted values fall back to the
+  theme pair (never crash the render). The swap effect assigns
+  `map.basemap = createBasemap(id)` in place; no view re-create. Esri
+  sunsets the legacy styles in Mar 2028 / Dec 2029 — the CARTO entries in
+  this same catalog are the migration path (flip what `'auto'` maps to).
 - ArcGIS widget chrome CSS ships as two separate stylesheets. Both are
   imported **`?inline`** (strings, typed by the `*.css?inline` shim in
   `src/vite-env.d.ts`) and the matching one is held in a single swapped
@@ -60,10 +72,10 @@ on it works without a backend server or API key.
 - **Overlays panel** (`OverlaysPanel.tsx`) — a Layers button floating at the
   map's right edge slides out a panel (absolute inside the map wrapper, so
   it works in fullscreen; `translateX` transition; transient open state,
-  `data-panel`). It hosts the overlay visibility switches (3D buildings,
-  3D trees — 3D mode only — plus Pins and Drawings layer visibility,
-  `showPins`/`showDrawings` in the slice), the drawing tools and the
-  drawings list.
+  `data-panel`). It hosts the basemap gallery (see the basemap section),
+  the overlay visibility switches (3D buildings, 3D trees — 3D mode only —
+  plus Pins and Drawings layer visibility, `showPins`/`showDrawings` in the
+  slice), the drawing tools and the drawings list.
 - **Drawing into overlay groups** (`SketchBinding.tsx` + the panel's "My
   overlays" list) — an **overlay** is a named group of shapes
   (`MapOverlay {id, name, visible}`); the **active** overlay (highlighted,
@@ -228,9 +240,8 @@ visual verification happens on the GitHub Pages deploy.
 
 ## Future work (enhancement backlog)
 
-- **Basemap gallery** — a small picker over the free options (`gray-vector`,
-  `dark-gray-vector`, `osm`, CARTO `light_all`/`dark_all`/`voyager` via
-  `WebTileLayer`); builds on `BASEMAP_BY_MODE` becoming a catalog.
+- ~~Basemap gallery~~ — shipped (panel tile grid over 11 free basemaps +
+  Auto, see the basemap section above).
 - **Live USGS earthquakes overlay** — `GeoJSONLayer` on the public CORS feed
   (`earthquake.usgs.gov/.../all_day.geojson`), magnitude-scaled renderer +
   popups; toggle in the control strip.
@@ -271,9 +282,10 @@ visual verification happens on the GitHub Pages deploy.
   setting and/or a **hillshade** basemap option for visible relief in 2D.
 - **@arcgis/core 5.x migration** — new major; re-verify free basemaps + CDN
   asset defaults before crossing.
-- **Legacy-basemap sunset migration** (before Mar 2028) — swap
-  `BASEMAP_BY_MODE` to `osm`/CARTO, drop `world-elevation` if it goes
-  key-gated (3D degrades to a flat globe).
+- **Legacy-basemap sunset migration** (before Mar 2028) — repoint
+  `BASEMAP_BY_MODE` (now in `basemapCatalog.ts`) at the CARTO entries and
+  drop the retired Esri tiles from the gallery; drop `world-elevation` if it
+  goes key-gated (3D degrades to a flat globe).
 
 ## Error recovery
 

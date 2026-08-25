@@ -102,6 +102,7 @@ const mapBundle = spawnSync(
     'esbuild',
     'src/pages/map/routeGeometry.ts',
     'src/pages/map/dragModel.ts',
+    'src/pages/map/basemapCatalog.ts',
     '--bundle',
     '--format=esm',
     `--outdir=${join(here, '.bundle')}`,

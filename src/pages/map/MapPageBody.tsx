@@ -8,8 +8,8 @@
  * Test contract (asserted by e2e/130-map.test.mjs): the root publishes
  * `data-map-status` (loading|ready|error, from view.when — networkidle is
  * meaningless with tile servers), `data-basemap` (render-computed from the
- * theme so it works offline), `data-view-mode`, `data-tool`,
- * `data-pin-count` and `data-route-*`.
+ * gallery choice + theme so it works offline), `data-basemap-choice`,
+ * `data-view-mode`, `data-tool`, `data-pin-count` and `data-route-*`.
  */
 import { useEffect, useRef, useState } from 'react'
 import {
@@ -38,6 +38,7 @@ import MapView from '@arcgis/core/views/MapView'
 import SceneView from '@arcgis/core/views/SceneView'
 import GraphicsLayer from '@arcgis/core/layers/GraphicsLayer'
 import SceneLayer from '@arcgis/core/layers/SceneLayer'
+import WebTileLayer from '@arcgis/core/layers/WebTileLayer'
 import Graphic from '@arcgis/core/Graphic'
 import Point from '@arcgis/core/geometry/Point'
 import Polygon from '@arcgis/core/geometry/Polygon'
@@ -64,6 +65,7 @@ import {
   saveBookmark,
   saveRoute,
   setActiveOverlay,
+  setBasemap,
   setBuildings,
   setOverlayVisible,
   setShowPins,
@@ -92,15 +94,28 @@ import { useOsrmRoute } from './useOsrmRoute'
 import { insertIndexFor, nearestOnPath, pathDistanceThresholdMeters } from './routeGeometry'
 import { armDrag, createDragState, dragPointerDown, dragPointerUp, dragStep } from './dragModel'
 import type { LonLat, RouteProfile } from './osrm'
+import { basemapDefById, CARTO_COPYRIGHT, resolveBasemapId } from './basemapCatalog'
 
-/**
- * Esri's legacy basemaps — free, no API key. They sunset in 2028/2029;
- * swap here for `osm` (raster OSM) or CARTO tiles via WebTileLayer then.
- */
-export const BASEMAP_BY_MODE = {
-  light: 'gray-vector',
-  dark: 'dark-gray-vector',
-} as const
+/** Gallery id → an ArcGIS Basemap: Esri legacy styles via fromId, the CARTO
+ * raster styles via a WebTileLayer basemap (see basemapCatalog for the
+ * catalog itself — kept pure so e2e can unit-check the resolver). */
+function createBasemap(id: string): Basemap {
+  const def = basemapDefById[id]
+  if (def?.cartoUrl) {
+    return new Basemap({
+      title: def.label,
+      baseLayers: [
+        new WebTileLayer({
+          urlTemplate: def.cartoUrl,
+          subDomains: ['a', 'b', 'c', 'd'],
+          copyright: CARTO_COPYRIGHT,
+        }),
+      ],
+    })
+  }
+  // fromId types as nullable (unknown ids) — an empty Basemap beats a crash.
+  return Basemap.fromId(def?.esriId ?? id) ?? new Basemap({ title: id })
+}
 
 // Production keeps the 4.x default: runtime assets (workers, fonts, widget
 // locale bundles) come from the ArcGIS CDN, which sidesteps the GitHub Pages
@@ -229,7 +244,10 @@ function applyArcgisTheme(mode: 'light' | 'dark') {
 export default function MapPageBody() {
   const dispatch = useAppDispatch()
   const mode = useTheme().palette.mode
-  const basemapId = BASEMAP_BY_MODE[mode]
+  // Gallery choice ('auto' follows the theme; catalog validates + falls back
+  // on unknown persisted values) → the effective basemap id.
+  const basemapChoice = useAppSelector((state) => state.map.basemap) ?? 'auto'
+  const basemapId = resolveBasemapId(basemapChoice, mode)
   const viewMode = useAppSelector((state) => state.map.viewMode) ?? '2d'
   const pins = useAppSelector((state) => state.map.pins) ?? NO_PINS
   // The persisted "reopen here" viewpoint (kept fresh by the stationary
@@ -476,7 +494,7 @@ export default function MapPageBody() {
       // scratch layer for in-progress sketches only — never mirrored
       sketchLayerRef.current = new GraphicsLayer({ elevationInfo: { mode: 'on-the-ground' } })
       mapRef.current = new EsriMap({
-        basemap: Basemap.fromId(basemapIdRef.current),
+        basemap: createBasemap(basemapIdRef.current),
         ground: 'world-elevation',
         layers: [
           drawingsLayerRef.current,
@@ -721,13 +739,17 @@ export default function MapPageBody() {
     }
   }
 
-  // Follow the app theme: swap the injected ArcGIS CSS and the basemap in
-  // place — no view re-create.
+  // Follow the app theme and the gallery choice: swap the injected ArcGIS
+  // CSS and the basemap in place — no view re-create.
   useEffect(() => {
     applyArcgisTheme(mode)
     if (basemapIdRef.current !== basemapId && mapRef.current) {
       basemapIdRef.current = basemapId
-      mapRef.current.basemap = Basemap.fromId(basemapId)
+      try {
+        mapRef.current.basemap = createBasemap(basemapId)
+      } catch (e) {
+        console.warn('Basemap swap failed', e)
+      }
     }
   }, [mode, basemapId])
 
@@ -834,6 +856,7 @@ export default function MapPageBody() {
       data-testid="map-page"
       data-map-status={status}
       data-basemap={basemapId}
+      data-basemap-choice={basemapChoice}
       data-view-mode={viewMode}
       data-tool={tool}
       data-pin-count={pins.length}
@@ -1003,6 +1026,8 @@ export default function MapPageBody() {
         </Tooltip>
         <OverlaysPanel
           open={panelOpen}
+          basemap={basemapChoice}
+          onBasemap={(id) => dispatch(setBasemap(id))}
           is3d={viewMode === '3d'}
           buildings={buildings}
           onBuildings={(on) => dispatch(setBuildings(on))}

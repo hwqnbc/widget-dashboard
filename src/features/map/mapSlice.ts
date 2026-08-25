@@ -75,6 +75,10 @@ export interface MapState {
   activeOverlayId: string | null
   /** Pins-layer visibility (the overlays panel's switch). */
   showPins: boolean
+  /** Basemap gallery choice: 'auto' follows the app theme; otherwise an id
+   * from pages/map basemapCatalog (kept a plain string so the slice never
+   * depends on pages/ — the catalog validates and falls back on read). */
+  basemap: string
 }
 
 const initialState: MapState = {
@@ -89,6 +93,7 @@ const initialState: MapState = {
   overlays: [],
   activeOverlayId: null,
   showPins: true,
+  basemap: 'auto',
 }
 
 /** Map-page state (persisted): the 2D/3D choice and the dropped pins. */
@@ -213,6 +218,9 @@ const mapSlice = createSlice({
     setShowPins(state, action: PayloadAction<boolean>) {
       state.showPins = action.payload
     },
+    setBasemap(state, action: PayloadAction<string>) {
+      state.basemap = action.payload
+    },
   },
 })
 
@@ -238,5 +246,6 @@ export const {
   setActiveOverlay,
   adoptOrphanDrawings,
   setShowPins,
+  setBasemap,
 } = mapSlice.actions
 export default mapSlice.reducer

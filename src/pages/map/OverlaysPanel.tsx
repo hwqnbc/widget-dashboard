@@ -2,6 +2,7 @@ import { Fragment, useState } from 'react'
 import {
   Box,
   Button,
+  ButtonBase,
   Collapse,
   Dialog,
   DialogActions,
@@ -33,8 +34,16 @@ import VisibilityOffIcon from '@mui/icons-material/VisibilityOff'
 import ConfirmDialog from '../../components/widgets/ConfirmDialog'
 import type { MapDrawing, MapOverlay } from '../../features/map/mapSlice'
 import type { DrawMode } from './SketchBinding'
+import { BASEMAP_DEFS } from './basemapCatalog'
 
 const PANEL_WIDTH = 280
+
+/** The gallery's "follow the app theme" pseudo-entry, rendered first. */
+const AUTO_TILE = {
+  id: 'auto',
+  label: 'Auto (theme)',
+  swatch: ['#e8e8e6', '#1e1e1e'] as [string, string],
+}
 
 const DRAW_HINTS: Record<Exclude<DrawMode, 'none'>, string> = {
   marker: 'Tap the map to plant markers into the active overlay. Esc to finish.',
@@ -53,12 +62,14 @@ function drawingLabel(drawing: MapDrawing): string {
   return `Polygon · ${drawing.rings?.[0]?.length ?? 0} vertices`
 }
 
-/** Right-side slide-out panel: layer visibility switches, the draw tools,
- * and the named overlay groups (add / rename / show-hide / delete; the
- * ACTIVE overlay receives new shapes). Positioned inside the map wrapper so
- * it works in fullscreen too. */
+/** Right-side slide-out panel: the basemap gallery, layer visibility
+ * switches, the draw tools, and the named overlay groups (add / rename /
+ * show-hide / delete; the ACTIVE overlay receives new shapes). Positioned
+ * inside the map wrapper so it works in fullscreen too. */
 export default function OverlaysPanel({
   open,
+  basemap,
+  onBasemap,
   is3d,
   buildings,
   onBuildings,
@@ -80,6 +91,9 @@ export default function OverlaysPanel({
   onDeleteDrawing,
 }: {
   open: boolean
+  /** Persisted gallery choice: 'auto' or a basemapCatalog id. */
+  basemap: string
+  onBasemap: (id: string) => void
   is3d: boolean
   buildings: boolean
   onBuildings: (on: boolean) => void
@@ -155,6 +169,55 @@ export default function OverlaysPanel({
         transition: 'transform 200ms ease',
       }}
     >
+      <Typography variant="subtitle2" sx={{ fontWeight: 700, mb: 0.5 }}>
+        Basemap
+      </Typography>
+      <Box
+        sx={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(3, 1fr)',
+          gap: 0.75,
+        }}
+      >
+        {[AUTO_TILE, ...BASEMAP_DEFS].map((def) => {
+          const selected = basemap === def.id
+          return (
+            <ButtonBase
+              key={def.id}
+              data-testid="map-basemap-tile"
+              data-id={def.id}
+              data-selected={selected ? 'yes' : 'no'}
+              aria-label={`Basemap: ${def.label}`}
+              onClick={() => onBasemap(def.id)}
+              sx={{
+                flexDirection: 'column',
+                alignItems: 'stretch',
+                borderRadius: 1,
+                border: 2,
+                borderColor: selected ? 'primary.main' : 'divider',
+                overflow: 'hidden',
+              }}
+            >
+              {/* CSS-gradient swatch — no network images, renders offline */}
+              <Box
+                sx={{
+                  height: 30,
+                  background: `linear-gradient(135deg, ${def.swatch[0]}, ${def.swatch[1]})`,
+                }}
+              />
+              <Typography
+                variant="caption"
+                noWrap
+                sx={{ fontSize: 10, px: 0.25, fontWeight: selected ? 700 : 400 }}
+              >
+                {def.label}
+              </Typography>
+            </ButtonBase>
+          )
+        })}
+      </Box>
+
+      <Divider sx={{ my: 1 }} />
       <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
         Layers
       </Typography>
