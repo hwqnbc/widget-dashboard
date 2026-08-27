@@ -145,8 +145,9 @@ Reusable primitives for new widgets: `utils/consoleLog` + `hooks/useConsoleLog`
 (app-wide console/error capture behind the app-bar Console dialog — the way to
 read a runtime error on a phone; see `docs/console.md`),
 `utils/lazyWithReload` (React.lazy with
-stale-deploy recovery — ALWAYS use it instead of bare `lazy()` for chunk
-imports; hashed chunks die on every deploy, lessons.md #76),
+stale-deploy + flaky-network recovery: ONE cache-busted reload, latched per
+chunk and per build — ALWAYS use it instead of bare `lazy()` for chunk
+imports; hashed chunks die on every deploy, lessons.md #76 and #81-83),
 `hooks/useNow` (ticking clock),
 `features/widgets/useWidgetField` (typed persisted-`data` selector),
 `components/widgets/TapStage` (tap-to-animate button),

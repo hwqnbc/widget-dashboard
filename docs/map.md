@@ -304,11 +304,34 @@ entries degrade instead of throwing.
 chunk filenames change every deploy, so a cached `index.html` or an
 already-open tab requests a chunk that no longer exists — the dynamic
 import rejects (Safari: "Importing a module script failed").
-`src/utils/lazyWithReload.ts` wraps the MapPage lazy import: the first
-failure per session triggers one automatic page reload (fetching the fresh
-`index.html`), a second failure falls through to the boundary, which
+`src/utils/lazyWithReload.ts` wraps the MapPage lazy import: a failure
+triggers one automatic page reload (fetching the fresh `index.html`), and a
+failure in the *reloaded* document falls through to the boundary, which
 detects chunk-load errors and swaps its copy + primary button for
-**Reload page**. The flag lives in sessionStorage (no loops) and clears on
+**Reload page**.
+
+Three details do the real work, each of them a bug we hit (suite
+`142-chunk-recovery` pins all of them):
+
+- **The reload is the retry.** Re-calling the failed dynamic import inside
+  the same document issues no request at all — the browser's module map
+  remembers the failure for the document's lifetime. Only a fresh document
+  can retry.
+- **The reload is cache-busted** (`?_rv=<now>`, via `location.replace`, and
+  the parameter is stripped from the address bar on the way back up). Pages
+  serves `index.html` with `max-age=600`, so a plain `location.reload()` can
+  be answered from cache — returning the same stale document with the same
+  dead chunk names, and burning the one reload we allow.
+- **The latch is keyed per chunk AND per build** (`chunk-reload:<key>:<build
+  time>`) and stores a timestamp, not a bare flag. The original one-shot
+  flag was a poison pill: once a tab had failed twice (a phone can hold a
+  tab open for weeks), every later failure — including on a brand-new
+  deploy — skipped the reload and went straight to the error card. Latches
+  from other builds are swept, and one older than the 60 s episode window is
+  treated as a new episode, so a second bad-connection drop minutes later
+  still gets its reload.
+
+The flag lives in sessionStorage (no loops) and clears on
 the next successful load. The helper is adopted by **every lazy chunk in the
 app**: the MapPage body, the Drone Sim / Drone Strike / Tank Battle /
 Model Viewer widget bodies, the in-game lazy models (soldiers, jet

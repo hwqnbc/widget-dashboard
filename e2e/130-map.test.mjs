@@ -100,18 +100,16 @@ await page.route('**/routing.openstreetmap.de/**', (route) => {
     'persistent chunk failure shows the boundary with Reload page',
     (await p2.locator('[data-testid="error-boundary-reload"]').count()) === 1,
   )
-  check(
-    'reload-once flag recorded (auto-reload happened first)',
-    (await p2.evaluate(() => sessionStorage.getItem('chunk-reload:map'))) === '1',
-  )
+  // The latch is keyed `chunk-reload:<chunk>:<build>` (suite 142 owns the
+  // full policy) — match the prefix, not a fixed key.
+  const mapLatches = () =>
+    p2.evaluate(() => Object.keys(sessionStorage).filter((k) => k.startsWith('chunk-reload:map:')))
+  check('reload-once flag recorded (auto-reload happened first)', (await mapLatches()).length === 1)
   await p2.unroute('**/MapPageBody*')
   await p2.locator('[data-testid="error-boundary-reload"]').click()
   await p2.waitForSelector('[data-testid="map-page"]', { timeout: 30000 })
   check('Reload page recovers once the chunk is reachable', true)
-  check(
-    'reload-once flag cleared on successful load',
-    (await p2.evaluate(() => sessionStorage.getItem('chunk-reload:map'))) === null,
-  )
+  check('reload-once flag cleared on successful load', (await mapLatches()).length === 0)
   await ctx2.close()
 }
 

@@ -1535,3 +1535,60 @@ carried over; these are the new ones.
     hundred lines of noise. If a file needs reflowing, run prettier with
     `--single-quote --no-semi --print-width 110`, or (better) match the
     surrounding file by hand.
+
+81. **Retrying a failed dynamic import in the same document is a no-op —
+    the module map caches the failure.** The obvious hardening for a flaky
+    phone connection (the Map route pulls ~800 module files, so one dropped
+    request rejects the whole import) is "retry the import before doing
+    anything drastic". Measured, it does nothing: a second `load()` issues
+    **no network request** and re-rejects instantly, in the Vite dev server
+    and the production build alike (probe: abort the first chunk request
+    only, count requests — it stays at 1 until a page load happens). The
+    HTML spec's module map records the failed fetch for the lifetime of the
+    document, so the only real retry is a new document. Design the recovery
+    around one reload, not around import retries.
+
+82. **A one-shot `sessionStorage` latch is a poison pill on mobile.**
+    `lazyWithReload` (#76) allowed one reload per session, keyed
+    `chunk-reload:<chunk>`, cleared only by a later successful load of that
+    chunk. If the chunk failed twice — a stale deploy, or the user
+    navigating away before the route retried — the flag stayed set **for the
+    life of the tab**, and iOS Safari keeps tabs alive for weeks. Every
+    later failure then skipped the reload entirely and went straight to the
+    error card, even on a freshly deployed index.html (exactly the
+    user-reported "index.html is new but map still fails"). Fixes: key the
+    latch by BUILD id (`__BUILD_TIME__`) so an older bundle's flag can never
+    gag a newer one, sweep other builds' keys when writing, and store a
+    TIMESTAMP so a latch older than the episode window (60 s) is a new
+    episode rather than a permanent verdict. A latch that outlives the
+    condition it describes is worse than no latch.
+
+83. **`location.reload()` can be answered from cache — cache-bust the
+    recovery reload.** GitHub Pages serves `index.html` with
+    `max-age=600`, so the reload meant to fetch a fresh document with fresh
+    chunk hashes can return the very same stale document, burning the one
+    reload the latch allows. Reload onto a URL the cache has never seen
+    (`?_rv=<now>` via `location.replace`, keeping it out of the history
+    stack) and strip the parameter with `history.replaceState` at startup so
+    the address bar stays clean. Assert it in e2e by watching the DOCUMENT
+    request (`request.resourceType() === 'document'`), not the address bar —
+    by the time you read the URL, it has already been tidied.
+
+84. **When a suite regresses, baseline it before believing it.** After the
+    recovery change, `130-map` reported 95/102 and then 99/102 — including
+    a check that looked genuinely related. Stashing the change and re-running
+    gave 100/102 with two pre-existing environment failures (the ArcGIS 3D
+    view never becomes ready from this machine), and a third run WITH the
+    change also gave 100/102: the extra failures were the flake the runner's
+    retry policy exists for. Isolating the suspicious check into a
+    4-iteration probe (identical results on both versions) settled it in a
+    minute. `git stash` + re-run is the cheapest control experiment there
+    is — do it before diagnosing.
+
+85. **Git Bash mangles leading-slash arguments on Windows.** `vite preview
+    --base=/widget-dashboard/` from the Bash tool becomes
+    `--base=C:/Program Files/Git/widget-dashboard/` (MSYS path conversion),
+    and the preview then 404s every path while looking like a config bug.
+    Prefix the command with `MSYS_NO_PATHCONV=1` (or use the PowerShell
+    tool) whenever an argument is a POSIX-looking path that is NOT a real
+    file path — base paths, container paths, URL paths.
