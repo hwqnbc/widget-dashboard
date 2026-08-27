@@ -1489,3 +1489,49 @@ carried over; these are the new ones.
     regex covers both browsers' wordings). Clear the flag on success. The
     whole cycle is e2e-testable offline by aborting the chunk URL with
     page.route in an isolated context.
+
+77. **On a phone there are no dev tools — so the app has to be its own
+    console.** Every mobile bug report until now was "the page misbehaves",
+    with the message that would explain it locked inside a browser that
+    exposes no console. The cure (`src/utils/consoleLog.ts` +
+    `ConsoleLogDialog`, `docs/console.md`) is a patch seam over
+    `console.*` plus the two silent channels — `window` `'error'` in the
+    CAPTURE phase (resource failures fire on the element and never bubble,
+    and carry no `error` object) and `'unhandledrejection'` — feeding a
+    ring buffer that a dialog renders. Four things that matter more than
+    the UI: (a) still call the original console method, so real dev tools
+    are unchanged; (b) format arguments properly — `String(arg)` turns the
+    object you logged into `[object Object]`, and the formatter needs a
+    cycle guard, a depth cap and a length cap or a hostile value takes the
+    page down; (c) collapse CONSECUTIVE identical messages into one counted
+    row and cap the ring, because a game loop logging per frame will
+    otherwise fill it in eight seconds; (d) coalesce subscriber
+    notifications on a timer (150 ms) — a chatty page must not drive
+    per-frame React renders.
+
+78. **An always-mounted badge must subscribe to a NUMBER, not a list.**
+    The app-bar error badge sits above the whole routed tree, so if it
+    subscribed to the console entry array, every `console.log` anywhere in
+    the app would re-render every page below it. Split the store's
+    `useSyncExternalStore` bindings by snapshot type instead:
+    `useConsoleIssueCount()` returns a plain `number` (React bails out
+    unless it moves) and only the mounted dialog reads the array. The
+    array binding has its own rule — return a CACHED snapshot invalidated
+    by a version counter; a `getSnapshot` that allocates a fresh array on
+    every call makes `useSyncExternalStore` loop forever.
+
+79. **MUI v9's typed `slotProps` rejects unknown `data-*` props.** Hanging
+    a test contract on a Dialog's paper (`slotProps={{ paper: { 'data-testid':
+    … } }}`) is a type error — `SlotProps` only admits the slot's own props.
+    Put the `data-*` root on a wrapper `<Box>` INSIDE the Dialog (flex
+    column, `flexGrow: 1`, `minHeight: 0` so the scroll area still works),
+    and use `slotProps.htmlInput` for a TextField's input attributes —
+    `inputProps` is gone in this major.
+
+80. **This repo is hand-formatted; do not run bare `prettier --write` on
+    it.** There is no prettier config, and the house style is single
+    quotes with no semicolons. A default prettier run rewrites whole files
+    into double quotes + semicolons and buries the actual change in a
+    hundred lines of noise. If a file needs reflowing, run prettier with
+    `--single-quote --no-semi --print-width 110`, or (better) match the
+    surrounding file by hand.

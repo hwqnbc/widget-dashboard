@@ -1,5 +1,17 @@
-import { AppBar, Box, Button, Container, IconButton, Toolbar, Tooltip, Typography } from '@mui/material'
+import { useState } from 'react'
+import {
+  AppBar,
+  Badge,
+  Box,
+  Button,
+  Container,
+  IconButton,
+  Toolbar,
+  Tooltip,
+  Typography,
+} from '@mui/material'
 import DashboardIcon from '@mui/icons-material/Dashboard'
+import TerminalIcon from '@mui/icons-material/Terminal'
 import MapIcon from '@mui/icons-material/Map'
 import SettingsIcon from '@mui/icons-material/Settings'
 import DarkModeIcon from '@mui/icons-material/DarkMode'
@@ -9,7 +21,9 @@ import { NavLink, Outlet, useLocation } from 'react-router-dom'
 import { useAppDispatch, useAppSelector } from '../app/hooks'
 import { toggleMode } from '../features/ui/uiSlice'
 import ErrorBoundary from './ErrorBoundary'
+import ConsoleLogDialog from './ConsoleLogDialog'
 import FullscreenProvider from './fullscreen/FullscreenProvider'
+import { useConsoleIssueCount } from '../hooks/useConsoleLog'
 
 interface NavItem {
   label: string
@@ -28,6 +42,10 @@ export default function AppLayout() {
   const dispatch = useAppDispatch()
   const mode = useAppSelector((state) => state.ui.mode)
   const location = useLocation()
+  const [consoleOpen, setConsoleOpen] = useState(false)
+  // A number snapshot: the always-mounted badge re-renders only when the
+  // warn/error tally moves, never on ordinary console.log traffic.
+  const issues = useConsoleIssueCount()
 
   return (
     <Box sx={{ minHeight: '100vh', display: 'flex', flexDirection: 'column' }}>
@@ -60,6 +78,22 @@ export default function AppLayout() {
               </Button>
             ))}
           </Box>
+          {/* Console viewer — a phone has no dev tools, so this lives in the
+              app bar: reachable on every page, and still reachable when the
+              page below has fallen back to the error boundary. */}
+          <Tooltip title="Console log">
+            <IconButton
+              color="inherit"
+              onClick={() => setConsoleOpen(true)}
+              data-testid="console-log-button"
+              data-issues={issues}
+              aria-label="Open console log"
+            >
+              <Badge badgeContent={issues} color="error" max={99}>
+                <TerminalIcon />
+              </Badge>
+            </IconButton>
+          </Tooltip>
           <Tooltip title={mode === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}>
             <IconButton color="inherit" onClick={() => dispatch(toggleMode())}>
               {mode === 'dark' ? <LightModeIcon /> : <DarkModeIcon />}
@@ -77,6 +111,7 @@ export default function AppLayout() {
           </ErrorBoundary>
         </Container>
       </FullscreenProvider>
+      <ConsoleLogDialog open={consoleOpen} onClose={() => setConsoleOpen(false)} />
     </Box>
   )
 }

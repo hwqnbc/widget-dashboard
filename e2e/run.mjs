@@ -111,6 +111,20 @@ const mapBundle = spawnSync(
 )
 if (mapBundle.status !== 0) process.exit(mapBundle.status ?? 1)
 
+// The app-wide console capture store — fifth flat pass, same reasoning.
+const consoleBundle = spawnSync(
+  'npx',
+  [
+    'esbuild',
+    'src/utils/consoleLog.ts',
+    '--bundle',
+    '--format=esm',
+    `--outdir=${join(here, '.bundle')}`,
+  ],
+  { cwd: root, stdio: 'inherit' },
+)
+if (consoleBundle.status !== 0) process.exit(consoleBundle.status ?? 1)
+
 // 2. Start the dev server and wait for it.
 const server = spawn('npx', ['vite', '--port', PORT, '--strictPort'], {
   cwd: root,

@@ -6,6 +6,12 @@ import { BrowserRouter } from 'react-router-dom'
 import { persistor, store } from './app/store'
 import AppThemeProvider from './theme/AppThemeProvider'
 import App from './App'
+import { installConsoleCapture } from './utils/consoleLog'
+
+// Before anything renders: mirror console output + uncaught errors into the
+// in-app ring the app-bar Console dialog reads. On a phone there are no dev
+// tools, so this is the only way to see what went wrong.
+installConsoleCapture()
 
 const rootElement = document.getElementById('root')
 if (!rootElement) throw new Error('Root element #root not found')

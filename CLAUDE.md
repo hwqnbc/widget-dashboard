@@ -141,7 +141,10 @@ Provider order (`main.tsx`): `Provider` → `PersistGate` → `AppThemeProvider`
 3. Build the component in `components/widgets/` and register it in
    `registry/widgetRegistry.ts`.
 
-Reusable primitives for new widgets: `utils/lazyWithReload` (React.lazy with
+Reusable primitives for new widgets: `utils/consoleLog` + `hooks/useConsoleLog`
+(app-wide console/error capture behind the app-bar Console dialog — the way to
+read a runtime error on a phone; see `docs/console.md`),
+`utils/lazyWithReload` (React.lazy with
 stale-deploy recovery — ALWAYS use it instead of bare `lazy()` for chunk
 imports; hashed chunks die on every deploy, lessons.md #76),
 `hooks/useNow` (ticking clock),
@@ -332,6 +335,10 @@ See `docs/map.md` for the Map page (the first page-level heavy feature —
 basemaps following the theme toggle, 2D map / 3D globe switch, locate/pins/
 measure/OSRM-route tools, the ArcGIS-out-of-React rule, and the
 offline-tolerant e2e contract).
+See `docs/console.md` for the in-app console viewer (the app-bar Console
+dialog: the `console.*`/uncaught-error capture ring, the split
+number-vs-list store subscriptions, and why it's session-scoped — it's how
+a phone-only error gets read at all).
 See `docs/avatars.md` for the avatar system (seat-vs-avatar model, the per-avatar
 character folders, the catalog/registry split, the Settings picker, and how to add
 a new figure). See `docs/fullscreen.md` for full-screen mode (the WidgetCard
