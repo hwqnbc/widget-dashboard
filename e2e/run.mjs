@@ -126,7 +126,21 @@ const netplayBundle = spawnSync(
 )
 if (netplayBundle.status !== 0) process.exit(netplayBundle.status ?? 1)
 
-// The app-wide console capture store — sixth flat pass, same reasoning.
+// Maze Runner's pure model — sixth flat pass, same reasoning.
+const mazeBundle = spawnSync(
+  'npx',
+  [
+    'esbuild',
+    'src/components/widgets/mazeRunner/mazeModel.ts',
+    '--bundle',
+    '--format=esm',
+    `--outdir=${join(here, '.bundle')}`,
+  ],
+  { cwd: root, stdio: 'inherit' },
+)
+if (mazeBundle.status !== 0) process.exit(mazeBundle.status ?? 1)
+
+// The app-wide console capture store — seventh flat pass, same reasoning.
 const consoleBundle = spawnSync(
   'npx',
   [

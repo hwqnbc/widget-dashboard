@@ -144,7 +144,9 @@ Provider order (`main.tsx`): `Provider` → `PersistGate` → `AppThemeProvider`
 3. Build the component in `components/widgets/` and register it in
    `registry/widgetRegistry.ts`.
 
-Reusable primitives for new widgets: `utils/consoleLog` + `hooks/useConsoleLog`
+Reusable primitives for new widgets: `utils/isTypingTarget` (the guard every
+window-level key handler needs so typing in Notes is not stolen),
+`utils/consoleLog` + `hooks/useConsoleLog`
 (app-wide console/error capture behind the app-bar Console dialog — the way to
 read a runtime error on a phone; see `docs/console.md`),
 `utils/lazyWithReload` (React.lazy with
@@ -340,6 +342,13 @@ right stick orbits the camera with the turret chasing it, auto-turn hull
 assist (default on), automatic gun elevation via a ballistic solver,
 Waves/Roam mode toggle, patrol/engage/attack enemy tank AI with terrain
 line of sight).
+See `docs/maze-runner.md` for the Maze Runner widget (seeded perfect maze —
+recursive-backtracker carve, only the seed persisted; the board's OWN aspect
+ratio picks the maze's proportions at generation time so rotating never
+destroys a run; corridor-following swipe/arrow movement, breadcrumb / plain /
+BFS-fog aids, three-path SVG rendering with no per-cell DOM, a discrete-move
+timer with per-size bests, and a hot-seat two-player race where player 2 runs
+the MIRROR so watching player 1 solve it is no help).
 See `docs/map.md` for the Map page (the first page-level heavy feature —
 @arcgis/core lazy route chunk, free no-key `gray-vector`/`dark-gray-vector`
 basemaps following the theme toggle, 2D map / 3D globe switch, locate/pins/

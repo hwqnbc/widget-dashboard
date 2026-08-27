@@ -1652,3 +1652,65 @@ carried over; these are the new ones.
     that "deselects" a mode by clicking it again asserts nothing and fails
     confusingly. Click the mode you actually want instead. Worth remembering
     whenever a suite drives a segmented control.
+
+92. **"Stops at a junction" and "follows the corridor" are different games —
+    measure which one you built.** A swipe rule that stops at any *bend* sounds
+    equivalent to one that stops at any *choice*, and is not: a
+    recursive-backtracker maze is windy, so long straight runs barely exist.
+    Measured over every cell and direction of a 17×13 board, the straight-only
+    rule advanced an average of **1.39 cells** — all but identical to
+    one-cell-per-swipe, which would have made the whole setting a lie.
+    Following the corridor round its corners and stopping only where the player
+    genuinely has to decide measures **8.85**. The lesson is the measurement:
+    two lines of a scratch script over every (cell, direction) pair told me in
+    seconds what reading the code did not.
+
+93. **`vectorEffect="non-scaling-stroke"` reinterprets `strokeWidth` as screen
+    pixels.** With a viewBox in cell units, a perfectly sensible
+    `strokeWidth={0.13}` becomes a sub-pixel hairline — the walls render as
+    faint grey suggestions and it looks like a colour bug, not a geometry one.
+    Either keep the width in user units and drop the effect (walls then scale
+    with the board, usually what you want), or keep the effect and give the
+    width in pixels. Never both halves of different systems. Screenshot every
+    new drawn widget: this was invisible in 70 passing assertions.
+
+94. **A pointer-blocking overlay does not block keys.** `TurnBanner` guards a
+    hand-off by covering the board, which stops taps — but a `window`
+    `keydown` listener fires regardless of what is on top, so the next player
+    could move during the banner (and a `ConfirmDialog` traps focus without
+    stopping window keys either). Any widget with keyboard controls must check
+    its own "blocked" state in the handler; the overlay is a second guard, not
+    the first.
+
+95. **Never mix `performance.now()` with `useNow()`.** `useNow` returns a
+    `Date`; an accumulator built on `performance.now()` (which is
+    document-relative, and therefore must never be persisted) cannot be
+    subtracted from it. The fix is to use the hook purely as a **re-render
+    pulse** and read `performance.now()` at render time — and to say so in a
+    comment, or someone will helpfully "fix" it into `Date.now()`. Related:
+    only mount the ticking child while the clock is actually running, or an
+    idle widget re-renders 10×/s forever.
+
+96. **Drive a solved-path walk closed-loop, not open-loop.** When one input can
+    consume several cells of a route (a corridor-following move, a multi-cell
+    slide), replaying a precomputed direction list desyncs on the first long
+    move and fails as a timeout three presses later — which reads like a flake.
+    Re-read the widget's actual position after every input and re-solve from
+    there. Same principle as the drone suites' P-controller: assert against
+    where the thing *is*, never where the script assumed it would be.
+
+97. **Watch for a state change that never appears because the widget moves on
+    in the same tick.** The maze's duel hand-off sets the runner to player 2's
+    starting cell in the very dispatch that records player 1's finish, so
+    `data-pos` is never once equal to player 1's goal — a loop waiting for it
+    spins until it times out. When a transition is atomic, watch the thing that
+    *survives* it (here `data-turn`), not the intermediate value you expected
+    to be able to observe.
+
+98. **A test failure is not automatically a code failure.** Two of the first
+    maze suite's failures were both in the suite: `data-best-ms` lives on the
+    timer element and was being read off the root (`parseInt(null)` → `NaN`,
+    silently falsy), and a "swipe moves it back" assertion assumed a symmetry
+    corridor-following does not have. A 20-line scratch script that printed the
+    real attributes settled both in one run — cheaper than re-reading the
+    widget looking for a bug that was never there.

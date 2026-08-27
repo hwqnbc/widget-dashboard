@@ -68,6 +68,7 @@ import TankMinimap from './TankMinimap'
 import TankSettingsPanel from './TankSettingsPanel'
 import TankHelpDialog from './TankHelpDialog'
 import TankSafePad from './TankSafePad'
+import { isTypingTarget } from '../../../utils/isTypingTarget'
 
 const clampNum = (lo: number, hi: number) => (v: unknown) =>
   typeof v === 'number' && Number.isFinite(v)
@@ -408,18 +409,12 @@ export default function TankBattleBody({ id }: WidgetProps) {
   useEffect(() => {
     const keys = new Set<string>()
     const sample = createExternalSample()
-    const isTyping = (t: EventTarget | null) =>
-      t instanceof HTMLElement &&
-      (t.tagName === 'INPUT' ||
-        t.tagName === 'TEXTAREA' ||
-        t.tagName === 'SELECT' ||
-        t.isContentEditable)
     const push = () => {
       keySetToSample(keys, sample)
       applyExternal(externalRef.current, 'keyboard', sample, controls)
     }
     const onDown = (e: KeyboardEvent) => {
-      if (e.ctrlKey || e.metaKey || e.altKey || isTyping(e.target)) return
+      if (e.ctrlKey || e.metaKey || e.altKey || isTypingTarget(e.target)) return
       if (e.code === 'Space') {
         e.preventDefault()
         fireHeldRef.current = true

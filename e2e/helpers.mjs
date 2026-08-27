@@ -80,6 +80,40 @@ export async function addAvatarWidget(page) {
   await page.waitForSelector('[data-testid="avatar-actions"]')
 }
 
+/** Fresh dashboard with one Maze Runner widget. */
+export async function addMazeWidget(page) {
+  await page.goto(BASE_URL, { waitUntil: 'networkidle' })
+  await page.getByRole('button', { name: 'Add widget' }).click()
+  await page.getByRole('menuitem', { name: /Maze Runner/ }).click()
+  await page.waitForSelector('[data-testid="maze-board"]')
+}
+
+/** Swipe the maze board one notch in a compass direction via CDP touch. The
+ * widget commits a move once the drag passes its threshold, so the gesture is
+ * stepped past it rather than teleporting (a single jump can be coalesced). */
+export async function swipeMaze(page, context, dir, distance = 60) {
+  const box = await page.locator('[data-testid="maze-board"]').boundingBox()
+  const x = box.x + box.width / 2
+  const y = box.y + box.height / 2
+  const dx = dir === 'e' ? distance : dir === 'w' ? -distance : 0
+  const dy = dir === 's' ? distance : dir === 'n' ? -distance : 0
+  const cdp = await context.newCDPSession(page)
+  await cdp.send('Input.dispatchTouchEvent', {
+    type: 'touchStart',
+    touchPoints: [{ x, y, id: 21 }],
+  })
+  const steps = 5
+  for (let i = 1; i <= steps; i++) {
+    await cdp.send('Input.dispatchTouchEvent', {
+      type: 'touchMove',
+      touchPoints: [{ x: x + (dx * i) / steps, y: y + (dy * i) / steps, id: 21 }],
+    })
+    await page.waitForTimeout(30)
+  }
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
+  await cdp.detach()
+}
+
 /** Readers over the HUD/chip data-* attributes (the widget's test contract). */
 export function readers(page) {
   const hud = page.locator('[data-testid="dronesim-hud"]')

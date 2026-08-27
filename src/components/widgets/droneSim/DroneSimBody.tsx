@@ -82,6 +82,7 @@ import {
 } from './operatorWalk'
 import SettingsPanel from './SettingsPanel'
 import VirtualJoystick from './VirtualJoystick'
+import { isTypingTarget } from '../../../utils/isTypingTarget'
 
 /** What "Reset settings" restores: every settings-panel field, sourced from
  * the catalog defaults. Records (score/best/ghost/landingBest), the camera
@@ -222,19 +223,13 @@ export default function DroneSimBody({ id }: WidgetProps) {
   useEffect(() => {
     const keys = new Set<string>()
     const sample = createExternalSample()
-    const isTyping = (t: EventTarget | null) =>
-      t instanceof HTMLElement &&
-      (t.tagName === 'INPUT' ||
-        t.tagName === 'TEXTAREA' ||
-        t.tagName === 'SELECT' ||
-        t.isContentEditable)
     const push = () => {
       keySetToSample(keys, sample)
       applyExternal(externalRef.current, 'keyboard', sample, controls)
     }
     const onDown = (e: KeyboardEvent) => {
       if (!DRONE_KEYS.has(e.code)) return
-      if (e.ctrlKey || e.metaKey || e.altKey || isTyping(e.target)) return
+      if (e.ctrlKey || e.metaKey || e.altKey || isTypingTarget(e.target)) return
       e.preventDefault() // arrows scroll the page otherwise
       if (keys.has(e.code)) return // key auto-repeat
       keys.add(e.code)

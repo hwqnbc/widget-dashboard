@@ -27,6 +27,8 @@ export default function TurnBanner({
   return (
     <Box
       onClick={onSkip}
+      data-testid="turn-banner"
+      data-player={player}
       sx={{
         position: 'absolute',
         inset: 0,

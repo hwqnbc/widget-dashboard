@@ -2,6 +2,7 @@ import type { WidgetType } from './types'
 // Data-only modules (no components/React) — safe for the catalog to import.
 import { DEFAULT_SEED } from '../../components/widgets/droneSim/worldLayout'
 import { DEFAULT_TANK_SEED } from '../../components/widgets/tankBattle/terrain'
+import { DEFAULT_MAZE_SEED } from '../../components/widgets/mazeRunner/mazeModel'
 
 /**
  * Static metadata about each widget type. Kept free of component imports so
@@ -107,6 +108,14 @@ export const WIDGET_CATALOG: WidgetMeta[] = [
     description: 'Orbit around your 3D models',
     defaultSize: { w: 4, h: 6, minW: 3, minH: 4 },
   },
+  {
+    type: 'mazeRunner',
+    // No preferredOrientation: the maze is generated to fit whichever way the
+    // board is shaped, so unlike the 3D games it is at home in both.
+    title: 'Maze Runner',
+    description: 'Find the way out — swipe or arrow keys',
+    defaultSize: { w: 5, h: 6, minW: 4, minH: 5 },
+  },
 ]
 
 export const widgetMetaByType = Object.fromEntries(
@@ -211,6 +220,27 @@ export function defaultWidgetData(type: WidgetType): Record<string, unknown> {
         audio: true,
         zoomPower: 2,
         weapon: 'bolt',
+      }
+    case 'mazeRunner':
+      return {
+        // `cols`/`rows` are 0 until the board has been measured: the reducer
+        // cannot know how the card is shaped, and the maze's proportions come
+        // from that (see MazeRunnerWidget's fill-in effect).
+        seed: DEFAULT_MAZE_SEED,
+        cols: 0,
+        rows: 0,
+        size: 'medium',
+        moveRule: 'junction',
+        aid: 'trail',
+        mode: 'solo',
+        pos: 0,
+        trail: [0],
+        elapsedMs: 0,
+        bestSmall: 0,
+        bestMedium: 0,
+        bestLarge: 0,
+        turn: 'toy',
+        times: { toy: 0, ninja: 0 },
       }
     case 'tankBattle':
       return {
