@@ -117,6 +117,9 @@ src/
                       FullscreenView overlay; presentation context (usePresentation)
   hooks/useViewport   live viewport size + orientation (portrait/landscape)
   features/map/       mapSlice (Map page: 2D/3D choice + dropped pins)
+  features/netplay/   two-device play: NetTransport seam (webrtc | loopback),
+                      compact SDP pairing codec, wire protocol, useNetplay
+  components/netplay/ pairing dialog + QR encode/scan (lazy chunk)
   pages/              DashboardPage, SettingsPage, MapPage (+ pages/map/ —
                       the @arcgis/core lazy chunk; see docs/map.md)
 ```
@@ -251,7 +254,13 @@ Tic-Tac-Toe widget's considerations (difficulty levels incl. the "sane player"
 Easy AI, 2-player vs vs-computer, the pass-opening-move button, board
 responsiveness, and the persisted state model). See `docs/connect-4.md` for the
 Connect 4 widget (7×6 board, depth-based Easy/Medium/Hard alpha-beta AI,
-animated disc drop; reuses the same modes, latency, pass button and glow). See
+animated disc drop; reuses the same modes, latency, pass button and glow —
+plus **2 Devices** mode, the first net-played widget). See `docs/netplay.md`
+for two-device play (peer-to-peer WebRTC on one wifi with **no server** —
+`iceServers: []` so traffic never leaves the LAN, QR codes as the signaling
+channel, a compact SDP codec that gets a pairing token down to ~120
+characters, the game-agnostic move protocol, and the `loopback` transport the
+e2e suites pair through). See
 `docs/memory.md` for the Memory widget (2-player pairs, 4×4/6×6, card faces are
 every avatar head × colour sampled at random, flip animation; reuses PlayerBadge, ConfirmDialog
 and WinnerCelebration). See `docs/archery.md` for the Archery widget (2-player

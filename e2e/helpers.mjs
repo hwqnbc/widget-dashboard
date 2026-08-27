@@ -34,12 +34,16 @@ export function reporter(suite) {
 }
 
 /** Headless Chromium with a software-WebGL fallback (no GPU in CI).
- * Pass `viewport` to emulate other screens (e.g. a phone in landscape). */
-export async function launch({ viewport } = {}) {
+ * Pass `viewport` to emulate other screens (e.g. a phone in landscape), or
+ * `args` for extra Chromium switches (the netplay suite needs WebRTC's mDNS
+ * host-candidate obfuscation off — there is no mDNS responder in a
+ * container, so the two peers could never resolve each other's `.local`
+ * addresses). */
+export async function launch({ viewport, args = [] } = {}) {
   const browser = await chromium.launch({
     executablePath: CHROMIUM_PATH,
     headless: true,
-    args: ['--enable-unsafe-swiftshader', '--use-angle=swiftshader'],
+    args: ['--enable-unsafe-swiftshader', '--use-angle=swiftshader', ...args],
   })
   const context = await browser.newContext({
     viewport: viewport ?? { width: 1280, height: 900 },

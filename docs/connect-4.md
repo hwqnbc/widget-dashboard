@@ -13,7 +13,8 @@ diagonal) wins. The two discs reuse the SVG heads — **Toy** (`ToyHead`) vs
 holes become white discs carrying a character head.
 
 ## Modes & difficulty
-- **2-Player** (`pvp`) and **vs Computer** (`ai`); human plays Toy.
+- **2-Player** (`pvp`), **vs Computer** (`ai`) and **2 Devices** (`online`);
+  human plays Toy.
 - Three difficulties (Computer mode), a `ToggleButtonGroup`: **Easy / Medium /
   Hard**. Switching mode or difficulty reinitializes the game — but if a game is
   in progress it first pops a shared `ConfirmDialog` ("Restart game?"), so an
@@ -57,6 +58,43 @@ Same as Tic-Tac-Toe: in `pvp` a non-winning drop shows a brief `TurnBanner`
 overlay (tinted `TurnBanner`/`useHandoff`, ~1s, tap-to-skip) that locks the
 board so you can't mis-click into the next player's move; vs-Computer has none.
 
+## 2 Devices (online mode)
+The first net-played widget. Two people on the same wifi play one game from two
+devices, with **no server anywhere** — the browsers talk directly over a WebRTC
+data channel, and pairing happens by holding a QR code up to the other device's
+camera. The whole link layer lives in `src/features/netplay/` and is
+game-agnostic; see **`docs/netplay.md`** for how the token gets small enough to
+scan, why there are no ICE servers, and the transport seam the tests use.
+
+What Connect 4 itself adds:
+
+- **Seats by role.** Host is Player 1 (`toy`), guest Player 2 (`ninja`) — no
+  negotiation needed. `link.seat` is the local seat; the chip in the header
+  reads *"Linked — you are Player 1"*.
+- **`netBlocked`** — `online && (!connected || turn !== link.seat)` — folds into
+  the existing `locked`, so an unpaired or waiting device gets exactly the same
+  dead board the AI's turn already produced. No new lock concept.
+- **Moves, not state.** A drop sends `{ t:'move', seat, ply, move: col }` where
+  `ply` is the position *before* the drop. The receiver applies it only if it is
+  that seat's turn and the ply matches; anything else is dropped, because a
+  missed move resyncs and a misapplied one corrupts. `dropInto` then runs the
+  same reducer on both devices.
+- **Position sync.** On connect the host sends `{ t:'sync', state:{ board, first } }`,
+  so a device joining a game already in progress (or re-pairing after a sleep)
+  lands on the same board. `coerceBoard` validates every cell — a peer is
+  outside this component's control, same as persisted data.
+- **New game is a broadcast.** Either side may restart; `{ t:'new', first }`
+  puts both back to the same opening.
+- **No hand-off banner.** `TurnBanner` exists to stop one person mis-clicking
+  into the other's move on a shared screen. With two screens each device only
+  ever shows its own turn, so online mode skips it.
+- **The mode is persisted; the link is not.** A saved "connected" flag would be
+  a lie the moment a tablet sleeps and reloads. Leaving online mode disconnects
+  rather than leaving a data channel alive behind a board nobody is playing.
+
+Root test contract: `data-mode`, `data-net`, `data-seat`, `data-turn`,
+`data-ply`, `data-winner` on `[data-testid="connect4-root"]`.
+
 ## Connect-4-specific bits
 - **Animated drop:** a component `useState lastDrop` holds the just-filled index
   (set in the human handler and the AI effect); that disc gets the `dropAnim`
@@ -68,8 +106,42 @@ board so you can't mis-click into the next player's move; vs-Computer has none.
   grid-track fix as TTT) so discs never resize the board.
 
 ## Verifying
-`npm run build` + `npm run lint`, then drive it headless (Chromium at
-`/opt/pw-browsers/chromium`). The board is a 7×6 CSS grid of cells, each
+`npm run build` + `npm run lint`, then `npm run e2e netplay` for the two-device
+mode (`143-netplay` over the loopback transport, `144-netplay-webrtc` through a
+real `RTCPeerConnection`). The board is a 7×6 CSS grid of cells, each
 `data-testid="c4-slot-<index>"` (0–41) with a `data-col`; clicking any cell
 drops into that column. Each cell centres a true circular disc (sized off the
 cell's smaller dimension) so the head SVGs always sit centred.
+
+## Future work (enhancement backlog)
+
+**Gameplay modes**
+- **Best-of-N match** — persist a series score across games; the winner's badge
+  becomes a rally counter. Builds on the existing `first` alternation.
+- **Timed moves** — a per-turn clock (reuse `hooks/useNow`), forfeiting or
+  auto-playing on expiry. Would want the clock in `sync` for online play.
+- **Bigger boards** — 8×7 or 9×7 as a settings toggle. `WINDOWS`, `calcWin` and
+  `evaluate` are already generated from `ROWS`/`COLS`, so mostly a UI change.
+- **Gravity variants** — "Pop Out" (remove your own bottom disc) or a
+  five-in-a-row board, both reachable from `dropInto` + a second move type.
+
+**AI**
+- **Expert difficulty** — iterative deepening with a transposition table; depth
+  6 is the current ceiling inside the think-delay budget.
+- **Opening book** — the perfect-play centre opening, so Hard stops losing
+  tempo on move 1.
+- **Personality** — an AI that prefers traps over blocks, as a named opponent
+  rather than a depth number.
+
+**Online (see `docs/netplay.md` for the shared backlog)**
+- **Rematch without re-pairing** — `new` already broadcasts; a "play again"
+  prompt on both devices after a win would close the loop.
+- **Desync detector** — a board hash on each `move`, triggering a host `sync`
+  on mismatch.
+- **Emoji reactions** — a tiny extra message type, the cheapest possible way to
+  make a remote game feel social.
+
+**Feel**
+- **Sound** — drop thunk and win fanfare via `droneSim/webAudio` (no assets).
+- **Threat highlight** — an optional beginner aid ringing any column that would
+  let the opponent win next move; `winningCol` already computes it.

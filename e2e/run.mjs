@@ -111,7 +111,22 @@ const mapBundle = spawnSync(
 )
 if (mapBundle.status !== 0) process.exit(mapBundle.status ?? 1)
 
-// The app-wide console capture store — fifth flat pass, same reasoning.
+// Netplay's pure modules — fifth flat pass, same reasoning.
+const netplayBundle = spawnSync(
+  'npx',
+  [
+    'esbuild',
+    'src/features/netplay/sdpCodec.ts',
+    'src/features/netplay/netProtocol.ts',
+    '--bundle',
+    '--format=esm',
+    `--outdir=${join(here, '.bundle')}`,
+  ],
+  { cwd: root, stdio: 'inherit' },
+)
+if (netplayBundle.status !== 0) process.exit(netplayBundle.status ?? 1)
+
+// The app-wide console capture store — sixth flat pass, same reasoning.
 const consoleBundle = spawnSync(
   'npx',
   [

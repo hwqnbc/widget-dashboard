@@ -1592,3 +1592,63 @@ carried over; these are the new ones.
     Prefix the command with `MSYS_NO_PATHCONV=1` (or use the PowerShell
     tool) whenever an argument is a POSIX-looking path that is NOT a real
     file path — base paths, container paths, URL paths.
+
+86. **A serverless app can still have two-player-across-devices — the QR is
+    the signaling channel.** WebRTC's reputation for needing infrastructure
+    is about STUN/TURN and a signaling server. On one LAN you need neither:
+    `iceServers: []` gathers host candidates only, and the offer/answer
+    exchange fits in two QR codes held up to two cameras. What blocks it is
+    never NAT — it's that `RTCPeerConnection` is a **secure-context API**, so
+    both devices must load the app over https (the deployed URL), not
+    `http://<lan-ip>:5173`. `localhost` is a secure context, which is why the
+    e2e suite can drive the real handshake but a phone on the dev server
+    cannot.
+
+87. **A QR-sized handshake comes from deleting boilerplate, not from
+    compression.** A data-channel offer SDP is ~700–1000 characters, of which
+    only five things vary: ICE ufrag, ICE password, DTLS fingerprint, DTLS
+    setup role, and the candidates. Everything else is fixed for the
+    connection shape and rebuilds from a template. Keeping only those (plus
+    UDP `typ host` candidates, capped) gives **118–162 characters** — a QR
+    around version 7 that scans instantly, versus a version-40 wall that a
+    child cannot hold steady enough to read. Chrome's mDNS `<uuid>.local`
+    candidates compress further by storing the uuid as bare hex. Always keep
+    a raw-SDP escape hatch for anything the compact path can't represent: a
+    big dense QR still works, a subtly wrong small one never does.
+
+88. **Give a network feature a loopback transport and the tests write
+    themselves.** Behind a `NetTransport` seam (`createOffer` /
+    `acceptOffer` / `send` / `close`), a second implementation that pairs two
+    widgets in the SAME document puts every line of the feature except the
+    socket under test — seat assignment, move relay, turn locks, out-of-turn
+    rejection, resync, broadcast restart — with no cameras, no ICE waits and
+    no second browser. Select it with a URL parameter (`?netloop=1`) rather
+    than a build flag, so the bundle under test is the bundle that ships.
+    Then cover the socket itself in ONE separate suite against a real
+    `RTCPeerConnection`. Two suites, each fast and each honest.
+
+89. **Two "devices" in e2e must be two browser CONTEXTS, not two tabs.**
+    Same-origin tabs share localStorage, so with redux-persist in play the
+    two boards can agree without a single byte crossing the link — the suite
+    passes while proving nothing. `browser.newContext()` per device fixes it.
+    Related: in a container there is no mDNS responder, so Chrome's default
+    `<uuid>.local` candidates can never resolve; launch with
+    `--disable-features=WebRtcHideLocalIpsWithMdns`. On real devices on real
+    wifi, mDNS resolution is exactly what makes it work — so assert the
+    codec carries those names in the pure tests, where it costs nothing.
+
+90. **Send moves, not state.** A turn-based game needs one message per turn —
+    latency-tolerant, no prediction, no rollback, both peers running the same
+    reducer they already had. The one thing that keeps two boards honest is a
+    **ply counter**: apply a move only if it is that seat's turn AND the ply
+    matches the local position. A duplicated, reordered or stale delivery is
+    then dropped rather than guessed at, and a missed move resyncs where a
+    misapplied one corrupts. (Real-time games are a different project — tick
+    sync, interpolation, hit authority — and reuse the transport, not the
+    protocol.)
+
+91. **An `exclusive` ToggleButtonGroup reports `null` when you re-tap the
+    selected button.** `changeMode(null)` is correctly a no-op, so a test
+    that "deselects" a mode by clicking it again asserts nothing and fails
+    confusingly. Click the mode you actually want instead. Worth remembering
+    whenever a suite drives a segmented control.
