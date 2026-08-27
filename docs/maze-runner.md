@@ -55,10 +55,16 @@ One pure function, returning **every cell entered** (never the origin), so `[]`
 unambiguously means blocked, the last element is the new position, and the
 breadcrumb trail can mark a whole corridor.
 
-- **Step** (`'cell'`) — exactly one cell. Precise; tedious on a big board.
-- **Run** (`'junction'`, default) — follow the corridor, *turning corners*,
-  until the cell entered offers something other than exactly one way onward: a
-  real junction, a dead end, or the goal.
+- **Step** (`'cell'`, **default**) — exactly one cell. Precise, and the pace a
+  player should meet first.
+- **Run** (`'junction'`) — follow the corridor, *turning corners*, until the
+  cell entered offers something other than exactly one way onward: a real
+  junction, a dead end, or the goal.
+
+Run shipped as the default and was demoted: it solved a 17×13 maze in about
+eight presses, which is too fast for the thing you are handed on opening the
+widget. It stays as the opt-in pace for a bigger board, where stepping cell by
+cell across 21×23 is a chore.
 
 Following corners is the whole point, and the first version got it wrong. That
 version stopped at any bend — which sounds equivalent and is not. A
@@ -66,8 +72,8 @@ recursive-backtracker maze is windy, so measured over every cell and direction
 of a 17×13 board it advanced an average of **1.39 cells**: all but
 indistinguishable from Step, and the setting would have been a lie.
 Corridor-following measures **8.85**, with runs up to 40 cells, and makes one
-swipe mean "go to the next real decision" — which is the move a maze game
-actually wants. (Lesson #92.)
+swipe mean "go to the next real decision" — which is what makes Run worth
+having as a distinct setting at all. (Lesson #92.)
 
 ## Aids (one exclusive toggle)
 - **Trail** (default) — a dim fill, in the runner's avatar colour, on every
@@ -149,24 +155,34 @@ player 2 (via `useHandoff`, announced only on a genuine pass — lesson #18), an
 the board resets. Faster time wins, shown with `PlayerBadge` +
 `WinnerCelebration`; equal times give "Dead heat!".
 
-**Player 2 runs the mirror image** (`mirrorMaze`: reflected left-to-right, start
-and goal moving to the opposite corners). Hot-seat on the identical maze would
-hand player 2 a large memorisation advantage — they just watched it solved —
-which Memory and Archery never have to worry about because those games are
-symmetric. A mirror has an identical passage count and an identical solution
-length, so difficulty is unchanged, and mirroring twice is the identity.
+**Player 2 runs the mirror image by default** (`mirrorMaze`: reflected
+left-to-right, start and goal moving to the opposite corners). Hot-seat on the
+identical maze hands player 2 a large memorisation advantage — they just
+watched it solved — which Memory and Archery never have to worry about because
+those games are symmetric. A mirror has an identical passage count and an
+identical solution length, so difficulty is unchanged, and mirroring twice is
+the identity.
+
+The **Mirror / Same** toggle turns it off, giving player 2 the identical maze:
+easier to explain to a child who notices the star has moved corners, at the
+cost of the fairness the mirror buys. It appears **only in 2-player mode** —
+it means nothing in solo — but `data-mirror` is published either way so the
+attribute is never absent. With it off, `p2Maze` is simply `p1Maze`, and the
+hand-off's existing `p2Maze.start` sends player 2 to the same corner with no
+extra branch.
 
 Because the hand-off happens in the *same tick* player 1 finishes, `data-pos`
 never once reads as player 1's goal — anything watching for the finish has to
 watch `data-turn` instead. The suite learned this the hard way.
 
-Changing **Run/Step or the aid mid-duel restarts it** (behind the usual
-`ConfirmDialog`): peeling the fog off, or changing how far a swipe carries,
-between the two runs would make the times incomparable. In solo both switch
-live, since looking at your own board differently destroys nothing.
+Changing **Run/Step, the aid, or the mirror mid-duel restarts it** (behind the
+usual `ConfirmDialog`): peeling the fog off, changing how far a swipe carries,
+or swapping the maze itself between the two runs would make the times
+incomparable. In solo the rule and the aid switch live, since looking at your
+own board differently destroys nothing.
 
 ## State model (persisted `data`, via `useWidgetField`)
-`seed`, `cols`, `rows` · `size`, `moveRule`, `aid`, `mode` · `pos`, `trail`
+`seed`, `cols`, `rows` · `size`, `moveRule`, `aid`, `mode`, `mirror` · `pos`, `trail`
 (deduped visited cells) · `elapsedMs` · `bestSmall`/`bestMedium`/`bestLarge` ·
 `turn`, `times`.
 
@@ -178,7 +194,8 @@ the effects (lesson #10).
 
 ## Test contract (`data-*`)
 On `[data-testid="maze-root"]`: `data-mode`, `data-size`, `data-rule`,
-`data-aid`, `data-seed`, `data-cols`, `data-rows`, `data-pos`, `data-goal`,
+`data-aid`, `data-mirror` (`on`/`off`), `data-seed`, `data-cols`, `data-rows`,
+`data-pos`, `data-goal`,
 `data-state` (`ready`/`running`/`won`), `data-turn`, `data-trail` (count).
 On `[data-testid="maze-timer"]`: `data-ms`, `data-best-ms`. Plus
 `[data-testid="maze-board"]` (the SVG), `maze-goal`, `maze-celebration`, and

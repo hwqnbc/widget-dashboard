@@ -223,7 +223,8 @@ const timerNum = async (name) => parseInt(await timerChip.getAttribute(name), 10
 
 check('defaults to solo', (await attr('data-mode')) === 'solo')
 check('defaults to the medium size', (await attr('data-size')) === 'medium')
-check('defaults to the junction rule', (await attr('data-rule')) === 'junction')
+check('defaults to the one-step rule', (await attr('data-rule')) === 'cell')
+check('the mirror defaults on', (await attr('data-mirror')) === 'on')
 check('defaults to the breadcrumb trail', (await attr('data-aid')) === 'trail')
 check('starts ready, at the start cell', (await attr('data-state')) === 'ready')
 check('marker begins on the start cell', (await num('data-pos')) === 0)
@@ -249,8 +250,19 @@ await page.keyboard.press(KEY[firstDir])
 await page.waitForTimeout(150)
 const afterKey = await num('data-pos')
 check('an arrow key moves the marker', afterKey !== 0)
+check(
+  'the default one-step rule moves exactly one cell',
+  afterKey === neighbour(liveMaze, 0, firstDir),
+)
 check('the first move starts the run', (await attr('data-state')) === 'running')
 check('the trail records where we have been', (await num('data-trail')) >= 2)
+
+// Everything below runs under the Run rule: a corridor-following press eats
+// several cells at once, which keeps the solution walk to a handful of presses
+// instead of one per cell.
+await root.locator('[data-testid="maze-rule-junction"]').click()
+await page.waitForTimeout(150)
+check('the corridor-running rule can be selected', (await attr('data-rule')) === 'junction')
 
 // A swipe moves it too. The destination is deliberately not asserted: under
 // the junction rule a swipe runs the corridor, so "back the way you came"
@@ -311,29 +323,33 @@ check('New maze clears the win', (await attr('data-state')) === 'ready')
 await root.locator('[data-testid="maze-aid-fog"]').click()
 await page.waitForTimeout(150)
 check('fog can be selected', (await attr('data-aid')) === 'fog')
-await root.locator('[data-testid="maze-rule-cell"]').click()
-await page.waitForTimeout(150)
-check('the one-step rule can be selected', (await attr('data-rule')) === 'cell')
 
-// Under the one-step rule a key moves exactly one cell.
-const beforeStep = await num('data-pos')
-const stepMaze = generateMaze(await num('data-seed'), await num('data-cols'), await num('data-rows'))
-const stepDir = ['n', 'e', 's', 'w'].find((d) => isOpen(stepMaze, beforeStep, d))
-await page.keyboard.press(KEY[stepDir])
-await page.waitForTimeout(150)
-check(
-  'the one-step rule moves exactly one cell',
-  (await num('data-pos')) === neighbour(stepMaze, beforeStep, stepDir),
+// Put a real move on the board: the reload probe below is only meaningful if
+// there is a position to preserve, and the size-change guard after it only
+// fires while a run is in progress.
+const midMaze = generateMaze(await num('data-seed'), await num('data-cols'), await num('data-rows'))
+const midDir = ['s', 'e', 'n', 'w'].find((d) => isOpen(midMaze, 0, d))
+await page.keyboard.press(KEY[midDir])
+await page.waitForFunction(
+  () => document.querySelector('[data-testid="maze-root"]')?.dataset.pos !== '0',
+  null,
+  { timeout: 3000 },
 )
+check('the board is mid-run again', (await attr('data-state')) === 'running')
 
-// Settings and the maze itself survive a reload; the trail does too.
+// Both probes are deliberately NON-default values ('trail' and 'cell' are what
+// a fresh widget has), so surviving a reload proves something was stored.
+// Settings and the maze itself survive it; so does the trail.
 const keptSeed = await num('data-seed')
 const keptPos = await num('data-pos')
 await page.reload({ waitUntil: 'networkidle' })
 await page.waitForSelector('[data-testid="maze-board"]')
 check('the maze survives a reload', (await num('data-seed')) === keptSeed)
 check('the runner stays where it was', (await num('data-pos')) === keptPos)
-check('settings survive a reload', (await attr('data-aid')) === 'fog' && (await attr('data-rule')) === 'cell')
+check(
+  'non-default settings survive a reload',
+  (await attr('data-aid')) === 'fog' && (await attr('data-rule')) === 'junction',
+)
 
 // Changing the size mid-run is confirm-guarded (lessons #16).
 await root.locator('[data-testid="maze-size-small"]').click()
@@ -416,5 +432,38 @@ await page.waitForFunction(
 )
 check('the duel ends with a celebration', (await page.locator('[data-testid="maze-celebration"]').count()) === 1)
 check('a duel records a best time', (await timerNum('data-best-ms')) > 0)
+
+// ------------------------------------------------------- 7. mirror toggle
+
+// Turning the mirror off is a change to the maze itself, so with times on the
+// board it restarts behind the confirm dialog like every other setting.
+await root.locator('[data-testid="maze-mirror-off"]').click()
+await page.waitForSelector('.MuiDialog-root')
+check('turning the mirror off asks first', (await attr('data-mirror')) === 'on')
+await page.getByRole('button', { name: 'Restart' }).click()
+await page.waitForTimeout(300)
+check('the mirror can be turned off', (await attr('data-mirror')) === 'off')
+check('turning it off restarts the duel', (await attr('data-turn')) === 'toy' && (await num('data-pos')) === 0)
+
+// With it off, player 2 runs the IDENTICAL maze — same corner, same walls —
+// rather than the reflection.
+const sameMaze = generateMaze(await num('data-seed'), await num('data-cols'), await num('data-rows'))
+check(
+  'player 1 reaches the goal again',
+  await walkUntil(sameMaze, sameMaze.goal, async () => (await attr('data-turn')) === 'ninja'),
+)
+await page.waitForSelector('[data-testid="turn-banner"]')
+check('player 2 starts from the SAME corner when the mirror is off', (await num('data-pos')) === sameMaze.start)
+check('player 2 aims at the same goal', (await num('data-goal')) === sameMaze.goal)
+
+// The Mirror/Same group is a two-player concern only.
+await page.locator('[data-testid="turn-banner"]').click()
+await page.waitForSelector('[data-testid="turn-banner"]', { state: 'detached' })
+await root.locator('[data-testid="maze-mode-solo"]').click()
+await page.waitForSelector('.MuiDialog-root')
+await page.getByRole('button', { name: 'Restart' }).click()
+await page.waitForTimeout(250)
+check('solo hides the mirror toggle', (await root.locator('[data-testid="maze-mirror-on"]').count()) === 0)
+check('the mirror setting is still published in solo', (await attr('data-mirror')) === 'off')
 
 await finish(browser)

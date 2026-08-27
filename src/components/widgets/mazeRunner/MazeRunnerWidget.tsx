@@ -138,13 +138,14 @@ export default function MazeRunnerWidget({ id }: WidgetProps) {
   const size = useWidgetField<MazeSize>(id, 'size', 'medium', (v) =>
     v === 'small' || v === 'large' ? v : 'medium',
   )
-  const moveRule = useWidgetField<MoveRule>(id, 'moveRule', 'junction', (v) =>
-    v === 'cell' ? 'cell' : 'junction',
+  const moveRule = useWidgetField<MoveRule>(id, 'moveRule', 'cell', (v) =>
+    v === 'junction' ? 'junction' : 'cell',
   )
   const aid = useWidgetField<Aid>(id, 'aid', 'trail', (v) =>
     v === 'none' || v === 'fog' ? v : 'trail',
   )
   const mode = useWidgetField<Mode>(id, 'mode', 'solo', (v) => (v === 'duel' ? 'duel' : 'solo'))
+  const mirror = useWidgetField(id, 'mirror', true)
   const pos = useWidgetField(id, 'pos', 0)
   const trail = useWidgetField<number[]>(id, 'trail', START_TRAIL, (v) =>
     // Returned AS-IS: building a new array here would be a fresh reference
@@ -174,15 +175,18 @@ export default function MazeRunnerWidget({ id }: WidgetProps) {
   const lastMoveAt = useRef<number | null>(null)
   const lastRepeatAt = useRef(0)
 
-  // Player 1 runs the maze; player 2 runs its mirror image, so watching P1
-  // solve it is no help (see `mirrorMaze`).
+  // Player 1 runs the maze; by default player 2 runs its mirror image, so
+  // watching P1 solve it is no help (see `mirrorMaze`). Turning the mirror off
+  // hands P2 the identical maze — simpler to explain, easier to memorise.
   const p1Maze = useMemo(
     () => (cols > 0 && rows > 0 ? generateMaze(seed, cols, rows) : null),
     [seed, cols, rows],
   )
-  const p2Maze = useMemo(() => (p1Maze ? mirrorMaze(p1Maze) : null), [p1Maze])
-  const mirrored = mode === 'duel' && turn === 'ninja'
-  const maze = mirrored ? p2Maze : p1Maze
+  const p2Maze = useMemo(
+    () => (p1Maze ? (mirror ? mirrorMaze(p1Maze) : p1Maze) : null),
+    [p1Maze, mirror],
+  )
+  const maze = mode === 'duel' && turn === 'ninja' ? p2Maze : p1Maze
 
   // Dimensions come from the BOARD's own shape, not the window's: a tall card
   // in a landscape window still wants a tall maze. Chosen once, when the maze
@@ -303,7 +307,8 @@ export default function MazeRunnerWidget({ id }: WidgetProps) {
         return
       }
       if (turn === 'toy') {
-        // Hand over: player 2 starts from their own (mirrored) maze's corner.
+        // Hand over: player 2 starts from their own maze's corner — the
+        // opposite one when mirrored, the same one when not.
         setGame({
           times: { ...times, toy: finished },
           turn: 'ninja',
@@ -424,6 +429,7 @@ export default function MazeRunnerWidget({ id }: WidgetProps) {
       data-size={size}
       data-rule={moveRule}
       data-aid={aid}
+      data-mirror={mirror ? 'on' : 'off'}
       data-seed={seed}
       data-cols={cols}
       data-rows={rows}
@@ -517,6 +523,28 @@ export default function MazeRunnerWidget({ id }: WidgetProps) {
             Fog
           </ToggleButton>
         </ToggleButtonGroup>
+        {/* Meaningless in solo, so it only appears once there are two players
+            — the row already carries four groups. */}
+        {mode === 'duel' && (
+          <ToggleButtonGroup
+            size="small"
+            exclusive
+            value={mirror ? 'mirror' : 'same'}
+            onChange={(_, v: string | null) => {
+              if (!v || (v === 'mirror') === mirror) return
+              // Swapping the maze under a half-finished duel would make the two
+              // runs incomparable, so it restarts like every other setting.
+              requestChange({ mirror: v === 'mirror' })
+            }}
+          >
+            <ToggleButton value="mirror" data-testid="maze-mirror-on" sx={toggleSx}>
+              Mirror
+            </ToggleButton>
+            <ToggleButton value="same" data-testid="maze-mirror-off" sx={toggleSx}>
+              Same
+            </ToggleButton>
+          </ToggleButtonGroup>
+        )}
       </Stack>
 
       <Box
