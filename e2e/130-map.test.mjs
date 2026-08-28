@@ -319,7 +319,25 @@ check('toggle back restores gray-vector', (await root().getAttribute('data-basem
 // ---- overlays panel: slide-out at the map's right edge ----
 check('panel starts closed', (await root().getAttribute('data-panel')) === 'closed')
 await page.locator('[data-testid="map-overlays-toggle"]').click()
-await page.waitForTimeout(350)
+// Wait for the slide-in to FINISH rather than guessing an interval. The
+// panel's transform is a matrix throughout its 200ms animation and exactly
+// `none` only once it has settled open, so this is unambiguous.
+//
+// Two things make the obvious alternatives wrong. A fixed sleep races the
+// animation: measured on a loaded main thread, the transition does not even
+// START until ~260ms after the click (React re-render + style recalc), so at
+// the old 350ms the panel was still moving — right edge 1317 against a
+// settled 1256, which is precisely what made this assertion flaky. And
+// "wait until the position stops changing" latches onto that pre-transition
+// stillness and resolves before the slide has begun.
+await page.waitForFunction(
+  () => {
+    const el = document.querySelector('[data-testid="map-overlays-panel"]')
+    return el != null && getComputedStyle(el).transform === 'none'
+  },
+  null,
+  { timeout: 10000 },
+)
 check('panel opens', (await root().getAttribute('data-panel')) === 'open')
 {
   const panelBox = await page.locator('[data-testid="map-overlays-panel"]').boundingBox()

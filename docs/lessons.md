@@ -1750,3 +1750,31 @@ carried over; these are the new ones.
     fix was an `afterHost` callback so the helper still exposes the one moment
     that state is observable. Compare check counts before and after any test
     refactor; a drop is a regression even when everything is green.
+
+103. **"Wait until it stops moving" latches onto the stillness BEFORE the
+     animation starts.** The map's overlays panel is motionless at its closed
+     position for ~260ms after the click — React re-render plus MUI style
+     recalculation — and only then does its 200ms transform transition begin.
+     A stability check (position unchanged across N frames) resolves during
+     that dead time and measures a panel that has not moved yet; it fixed 5 of
+     6 attempts, which is the worst kind of nearly-working. Wait on a signal
+     that can only mean *finished*: here the computed `transform` is a matrix
+     throughout the slide and exactly `none` once settled open. Wait on the
+     animation, assert the geometry — that strengthens the check rather than
+     relaxing it, which is the line between de-flaking a test and weakening it.
+
+104. **A fixed sleep does not race the animation's duration, it races when the
+     animation STARTS.** 350ms looks like ample margin over a 200ms
+     transition, and is not, because on a loaded main thread the transition
+     began at ~260ms. When a wait "should obviously be enough" and still
+     fails, measure the start, not just the length.
+
+105. **Sample the whole hierarchy before naming a cause.** I had recorded a
+     second failure mode for this assertion — the map container being narrower
+     than its wrapper — inferred from a repeated exact value. Logging the
+     panel, the container AND the wrapper together across the animation showed
+     the container and wrapper at an identical 1256 in every frame, including
+     before the click: there was only ever one failure mode. The repeated
+     value was just a deterministic sampling point on the easing curve. An
+     inference from one number is a hypothesis; three numbers over time is a
+     diagnosis.

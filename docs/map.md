@@ -238,50 +238,59 @@ On this project's sandboxed dev environment the ArcGIS hosts
 its offline branch there; the online branch runs on a normal network. Full
 visual verification happens on the GitHub Pages deploy.
 
-### Known flake: "panel slides in at the right edge of the map"
+### The overlays-panel geometry assertion, and why it was flaky
 
-One assertion in the suite is unreliable and has not been fixed. It checks
-that `panelBox.x + panelBox.width` lands within 3px of
-`mapBox.x + mapBox.width` after opening the overlays panel.
+The suite checks that the panel's right edge lands within 3px of the map
+container's after the overlays panel opens. That assertion used to fail
+roughly half the time; it is fixed, and the cause is worth keeping because the
+obvious repairs are both wrong.
 
-The reason it is fragile is structural: `map-container` and `OverlaysPanel`
-are **siblings** inside `map-page` (`MapPageBody.tsx:1004` and `:1027`), not
-parent and child. The panel is `position: absolute; right: 0` with a **200ms
-transform transition** (`OverlaysPanel.tsx:152-170`); the container is
-`width: 100%` and is resized by ArcGIS. So the assertion needs *two*
-independent things to have settled — the slide-in **and** the container
-reaching its final width — and it waits a flat `waitForTimeout(350)`, which
-guarantees neither.
+`map-container` and `OverlaysPanel` are siblings inside the same
+`position: relative` wrapper (`MapPageBody.tsx:1003-1027`); the container is
+`width: 100%` of it and the panel is `position: absolute; right: 0`, with a
+**200ms transform transition** (`OverlaysPanel.tsx`). Once settled they are
+flush by construction.
 
-Both failure modes were observed. Most failures are **mid-slide**: right
-edges of 1268-1295 against a settled 1256, varying continuously run to run,
-which is the signature of a race rather than a layout bug. A second, distinct
-and repeatable mode reports exactly 1279.1 — there the panel *has* settled,
-flush to the page wrapper, while the container is narrower; that one is a
-width mismatch, not the transition.
+**Measured, not guessed.** Sampling the computed transform and all three
+boxes from the moment of the click:
 
-**Proposed fix.** Replace the fixed sleep with a wait for the panel's
-`getBoundingClientRect().x` to hold steady across ~3 animation frames. This
-was prototyped and fixed **5 of 6** attempts. It does not address the second
-mode, so a complete fix also has to wait for `map-container`'s width to stop
-changing — or assert against the page wrapper, which is what the panel is
-actually flush to. Note this strengthens the assertion rather than relaxing
-it: it asserts the same alignment, just against a settled layout.
+```
+t=0     transform matrix(…308…)   panelRight 1564  contRight 1256  wrapRight 1256
+t=200   transform matrix(…308…)   panelRight 1564  contRight 1256  wrapRight 1256
+t=300   transform matrix(…182…)   panelRight 1438  contRight 1256  wrapRight 1256
+t=350   transform matrix(…60.9…)  panelRight 1317  contRight 1256  wrapRight 1256
+settled transform none            panelRight 1256  contRight 1256  wrapRight 1256
+```
 
-**Caveat for whoever picks this up.** The flake surfaced alongside a commit
-whose diff contains nothing the `/map` route executes (a maze widget's
-internals, two `defaultWidgetData` values, docs). Baselining put `main` at
-4/4 clean while that branch went 2/11 in the same session, and no mechanism
-was ever found linking the two. Re-baseline both commits before trusting
-either number — the correlation may well be an artifact of measurement order.
+Two things fall out. **The container is never the problem** — `contRight` and
+`wrapRight` are 1256 in every sample, including before the click. (An earlier
+version of this note claimed a second, container-width failure mode; that was
+wrong, and the measurement above is what disproved it.) And **the transition
+does not start until ~260ms after the click** — React's re-render plus MUI's
+style recalculation — so the old flat `waitForTimeout(350)` was sampling a
+panel that was still moving, at right edge 1317 against a settled 1256. Every
+observed failure was this one mode.
+
+**The fix** waits for the computed transform to become exactly `none`. That is
+unambiguous: it is a matrix throughout the animation and `none` only once the
+panel has settled open. It waits on the *animation* and still asserts the
+*geometry*, so the check is strengthened rather than relaxed.
+
+The tempting alternative — "wait until the position stops changing" — is
+**wrong here**, and was tried: for the first ~260ms the panel is perfectly
+still at its closed position, so a stability check latches onto that and
+resolves before the slide has even begun. It fixed 5 of 6 attempts, which is
+exactly the kind of nearly-working that hides a bug.
+
+Verified over 10 consecutive runs, from a baseline of roughly one failure in
+two.
 
 ## Future work (enhancement backlog)
 
 - ~~Basemap gallery~~ — shipped (panel tile grid over 11 free basemaps +
   Auto, see the basemap section above).
-- **De-flake the overlays-panel geometry assertion** — swap `130-map`'s fixed
-  350ms wait for a settled-layout wait, and handle the container-width mode
-  too (see *Known flake* above; the prototype fixed 5 of 6 attempts).
+- ~~De-flake the overlays-panel geometry assertion~~ — shipped; the wait is now
+  on the transform settling to `none` (see the test-contract section above).
 - **Live USGS earthquakes overlay** — `GeoJSONLayer` on the public CORS feed
   (`earthquake.usgs.gov/.../all_day.geojson`), magnitude-scaled renderer +
   popups; toggle in the control strip.
