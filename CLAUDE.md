@@ -356,8 +356,10 @@ recursive-backtracker carve, only the seed persisted; the board's OWN aspect
 ratio picks the maze's proportions at generation time so rotating never
 destroys a run; corridor-following swipe/arrow movement, breadcrumb / plain /
 BFS-fog aids, three-path SVG rendering with no per-cell DOM, a discrete-move
-timer with per-size bests, and a hot-seat two-player race where player 2 runs
-the MIRROR by default — toggleable — so watching player 1 solve it is no help).
+timer with per-size bests, a hot-seat two-player race where player 2 runs
+the MIRROR by default — toggleable — so watching player 1 solve it is no help,
+and a **2 Devices ghost race**: the netplay layer's first non-turn-based
+consumer, with a synced countdown and the opponent shown as a marker).
 See `docs/map.md` for the Map page (the first page-level heavy feature —
 @arcgis/core lazy route chunk, free no-key `gray-vector`/`dark-gray-vector`
 basemaps following the theme toggle, 2D map / 3D globe switch, locate/pins/

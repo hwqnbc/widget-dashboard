@@ -80,6 +80,17 @@ export async function addAvatarWidget(page) {
   await page.waitForSelector('[data-testid="avatar-actions"]')
 }
 
+/** Fresh dashboard with `count` Maze Runner widgets, loopback transport armed
+ * (see `addTicTacToeWidgets` for why `?netloop=1`). */
+export async function addMazeWidgets(page, count = 2) {
+  await page.goto(`${BASE_URL}?netloop=1`, { waitUntil: 'networkidle' })
+  for (let i = 0; i < count; i++) {
+    await page.getByRole('button', { name: 'Add widget' }).click()
+    await page.getByRole('menuitem', { name: /Maze Runner/ }).click()
+  }
+  await page.locator('[data-testid="maze-root"]').nth(count - 1).waitFor()
+}
+
 /** Fresh dashboard with `count` Tic-Tac-Toe widgets, loopback transport armed.
  * `?netloop=1` swaps WebRTC for the in-page transport so two widgets in one
  * document can pair; everything else is the production path. */
@@ -134,9 +145,13 @@ export async function addMazeWidget(page) {
 
 /** Swipe the maze board one notch in a compass direction via CDP touch. The
  * widget commits a move once the drag passes its threshold, so the gesture is
- * stepped past it rather than teleporting (a single jump can be coalesced). */
-export async function swipeMaze(page, context, dir, distance = 60) {
-  const box = await page.locator('[data-testid="maze-board"]').boundingBox()
+ * stepped past it rather than teleporting (a single jump can be coalesced).
+ *
+ * `index` picks which maze board when several are on one dashboard. That
+ * matters for the race suite: every widget's key handler listens on `window`,
+ * so an arrow key moves EVERY maze on the page, while a swipe lands on one. */
+export async function swipeMaze(page, context, dir, { distance = 60, index = 0 } = {}) {
+  const box = await page.locator('[data-testid="maze-board"]').nth(index).boundingBox()
   const x = box.x + box.width / 2
   const y = box.y + box.height / 2
   const dx = dir === 'e' ? distance : dir === 'w' ? -distance : 0

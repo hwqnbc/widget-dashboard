@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Box,
   Button,
@@ -19,6 +19,16 @@ import { useSeatAvatars, useSeatVisual } from '../../../features/avatars/useSeat
 import { useHandoff } from '../../../hooks/useHandoff'
 import { useNow } from '../../../hooks/useNow'
 import { isTypingTarget } from '../../../utils/isTypingTarget'
+import { lazyWithReload } from '../../../utils/lazyWithReload'
+import { useNetplay } from '../../../features/netplay/useNetplay'
+import NetplayChip from '../../netplay/NetplayChip'
+
+/** The pairing UI pulls in a QR encoder and decoder — kept out of the main
+ * bundle, since most sessions never open it. */
+const NetplayDialog = lazyWithReload(
+  () => import('../../netplay/NetplayDialog'),
+  'netplay-dialog',
+)
 import { fmtLap } from '../droneSim/lapTimer'
 import ConfirmDialog from '../ConfirmDialog'
 import PlayerBadge from '../PlayerBadge'
@@ -43,7 +53,8 @@ import {
 
 /** Which breadcrumb / visibility aid is active. */
 type Aid = 'trail' | 'none' | 'fog'
-type Mode = 'solo' | 'duel'
+/** `online` is the two-device ghost race — both run the SAME maze at once. */
+type Mode = 'solo' | 'duel' | 'online'
 interface Times {
   toy: number
   ninja: number
@@ -69,6 +80,10 @@ const BEST_KEY: Record<MazeSize, 'bestSmall' | 'bestMedium' | 'bestLarge'> = {
 const STROKE = 0.14
 /** Padding round the viewBox so half a border stroke isn't clipped away. */
 const PAD = STROKE / 2 + 0.02
+
+/** Countdown before a race starts: three ticks, then GO. */
+const COUNT_FROM = 3
+const COUNT_MS = 700
 
 /** Pointer travel that commits one move, in CSS pixels. */
 const SWIPE_PX = 26
@@ -144,7 +159,9 @@ export default function MazeRunnerWidget({ id }: WidgetProps) {
   const aid = useWidgetField<Aid>(id, 'aid', 'trail', (v) =>
     v === 'none' || v === 'fog' ? v : 'trail',
   )
-  const mode = useWidgetField<Mode>(id, 'mode', 'solo', (v) => (v === 'duel' ? 'duel' : 'solo'))
+  const mode = useWidgetField<Mode>(id, 'mode', 'solo', (v) =>
+    v === 'duel' || v === 'online' ? v : 'solo',
+  )
   const mirror = useWidgetField(id, 'mirror', true)
   const pos = useWidgetField(id, 'pos', 0)
   const trail = useWidgetField<number[]>(id, 'trail', START_TRAIL, (v) =>
@@ -186,7 +203,121 @@ export default function MazeRunnerWidget({ id }: WidgetProps) {
     () => (p1Maze ? (mirror ? mirrorMaze(p1Maze) : p1Maze) : null),
     [p1Maze, mirror],
   )
+  // In a race both devices run the SAME maze: the mirror exists so a hot-seat
+  // player 2 can't retrace what they watched, and nobody watched anybody here.
+  const online = mode === 'online'
   const maze = mode === 'duel' && turn === 'ninja' ? p2Maze : p1Maze
+
+  // ------------------------------------------------------------------ race
+  // All of this is transient. A race is a live thing between two devices;
+  // persisting "counting" or a ghost's position would be a lie the moment
+  // either tablet reloads.
+  const [linkOpen, setLinkOpen] = useState(false)
+  const [ghostCell, setGhostCell] = useState<number | null>(null)
+  const [countdown, setCountdown] = useState<number | null>(null)
+  const [started, setStarted] = useState(false)
+  const [result, setResult] = useState<'won' | 'lost' | null>(null)
+
+  /** Begin this device's run. Called at GO on both sides. */
+  const startRun = useCallback(() => {
+    const from = p1Maze?.start ?? 0
+    setStarted(true)
+    setResult(null)
+    setGhostCell(from)
+    // The clock starts at GO, not on the first move as it does in solo: with a
+    // synchronised start, time spent staring at the maze has to count, or the
+    // two elapsed times aren't comparable.
+    lastMoveAt.current = performance.now()
+    setGame({ pos: from, trail: [from], elapsedMs: 0 })
+  }, [p1Maze, setGame])
+
+  const link = useNetplay((msg) => {
+    if (msg.t === 'sync') {
+      // The host's settings win, or one device races with fog and the other
+      // without. Dimensions come over the wire too, so both boards are the
+      // same maze regardless of how each card is shaped.
+      const setup = msg.state as Record<string, unknown> | null
+      if (!setup || typeof setup.seed !== 'number') return
+      setGame({
+        seed: setup.seed,
+        cols: setup.cols,
+        rows: setup.rows,
+        size: setup.size,
+        moveRule: setup.moveRule,
+        aid: setup.aid,
+      })
+      return
+    }
+    if (msg.t === 'go') {
+      setCountdown(COUNT_FROM)
+      return
+    }
+    if (msg.t === 'pos') {
+      setGhostCell(msg.cell)
+      return
+    }
+    if (msg.t === 'done') {
+      // Whoever finishes first wins, and with a synchronised start that is
+      // also the lower time — so no arbitration, and ordering can't flip it.
+      setResult((prev) => prev ?? 'lost')
+    }
+  })
+
+  const raceState = !online
+    ? 'off'
+    : result !== null
+      ? result
+      : countdown !== null
+        ? 'counting'
+        : started
+          ? 'running'
+          : 'idle'
+
+  // Tick the countdown down, then start both runs.
+  useEffect(() => {
+    if (countdown === null) return
+    if (countdown === 0) {
+      setCountdown(null)
+      startRun()
+      return
+    }
+    const timer = setTimeout(() => setCountdown((n) => (n === null ? null : n - 1)), COUNT_MS)
+    return () => clearTimeout(timer)
+  }, [countdown, startRun])
+
+  // On connect the host pushes the race setup, exactly as the turn-based games
+  // push the board.
+  useEffect(() => {
+    if (!online || !link.connected) return
+    if (link.role === 'host') {
+      link.send({ t: 'sync', state: { seed, cols, rows, size, moveRule, aid } })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [online, link.connected, link.role])
+
+  // Leaving the mode drops the link and every trace of the race.
+  useEffect(() => {
+    if (!online) {
+      link.disconnect()
+      setLinkOpen(false)
+      setCountdown(null)
+      setStarted(false)
+      setResult(null)
+      setGhostCell(null)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [online])
+
+  useEffect(() => {
+    if (online && link.status === 'idle') setLinkOpen(true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [online])
+
+  /** Either side may start; the sender counts down too. */
+  const startRace = () => {
+    link.send({ t: 'go' })
+    setCountdown(COUNT_FROM)
+  }
 
   // Dimensions come from the BOARD's own shape, not the window's: a tall card
   // in a landscape window still wants a tall maze. Chosen once, when the maze
@@ -212,9 +343,16 @@ export default function MazeRunnerWidget({ id }: WidgetProps) {
 
   const won = maze !== null && pos === maze.goal
   const duelOver = mode === 'duel' && times.toy > 0 && times.ninja > 0
-  const running = !won && (elapsedMs > 0 || trail.length > 1)
+  // In a race the clock starts at GO, so it must read as running before the
+  // first move — otherwise the display sits at 0.0s while time it will
+  // actually be charged for ticks away.
+  const running = !won && (online ? raceState === 'running' : elapsedMs > 0 || trail.length > 1)
   const state = won ? 'won' : running ? 'running' : 'ready'
-  const runner: Seat = mode === 'duel' ? turn : 'toy'
+  /** In a race the seat is which DEVICE this is (`link.seat`), not whose turn
+   * it is — `turn` keeps its hot-seat meaning and is unused here. */
+  const mySeat: Seat = link.seat ?? 'toy'
+  const ghostSeat: Seat = mySeat === 'toy' ? 'ninja' : 'toy'
+  const runner: Seat = mode === 'duel' ? turn : online ? mySeat : 'toy'
   const seatAvatars = useSeatAvatars()
   const colorOf = (seat: Seat) => avatarMetaById[seatAvatars[seat]].color
   const duelWinner: Seat | null = !duelOver
@@ -228,7 +366,15 @@ export default function MazeRunnerWidget({ id }: WidgetProps) {
   /** No input while a dialog or the hand-off banner is up, or the run is over.
    * The banner blocks taps by covering the board, but a window key listener
    * would sail straight past it. */
-  const blocked = maze === null || won || duelOver || pending !== null || hand.player !== null
+  const blocked =
+    maze === null ||
+    won ||
+    duelOver ||
+    pending !== null ||
+    hand.player !== null ||
+    // Dead before the countdown ends. Deliberately NOT blocked on `lost`: a
+    // trailing player should still get to finish their own run.
+    (online && (raceState === 'idle' || raceState === 'counting'))
 
   const reset = useCallback(
     (extra: Record<string, unknown> = {}) => {
@@ -290,12 +436,28 @@ export default function MazeRunnerWidget({ id }: WidgetProps) {
 
       if (next !== maze.goal) {
         setGame({ pos: next, trail: nextTrail, elapsedMs: nextElapsed })
+        if (online) link.send({ t: 'pos', seat: mySeat, cell: next })
         return
       }
 
       // Reached the goal.
       lastMoveAt.current = null
       const finished = Math.round(nextElapsed)
+      if (online) {
+        link.send({ t: 'pos', seat: mySeat, cell: next })
+        link.send({ t: 'done', seat: mySeat, ms: finished })
+        // `?? 'won'` and not a plain set: if their `done` already landed we
+        // lost, and finishing afterwards must not overwrite that.
+        setResult((prev) => prev ?? 'won')
+        const isBestRace = bestMs === 0 || finished < bestMs
+        setGame({
+          pos: next,
+          trail: nextTrail,
+          elapsedMs: nextElapsed,
+          ...(isBestRace ? { [BEST_KEY[size]]: finished } : {}),
+        })
+        return
+      }
       if (mode === 'solo') {
         const isBest = bestMs === 0 || finished < bestMs
         setGame({
@@ -332,7 +494,7 @@ export default function MazeRunnerWidget({ id }: WidgetProps) {
     },
     [
       blocked, maze, pos, moveRule, elapsedMs, trail, mode, turn, times,
-      bestMs, size, p2Maze, hand, setGame,
+      bestMs, size, p2Maze, hand, setGame, online, link, mySeat,
     ],
   )
 
@@ -414,6 +576,8 @@ export default function MazeRunnerWidget({ id }: WidgetProps) {
 
   const { Head } = useSeatVisual(runner)
   const runnerColor = colorOf(runner)
+  const { Head: GhostHead } = useSeatVisual(ghostSeat)
+  const ghostColor = colorOf(ghostSeat)
   const wallColor = theme.palette.text.primary
   const toggleSx = { textTransform: 'none', py: 0.1, px: 0.75 } as const
 
@@ -430,6 +594,10 @@ export default function MazeRunnerWidget({ id }: WidgetProps) {
       data-rule={moveRule}
       data-aid={aid}
       data-mirror={mirror ? 'on' : 'off'}
+      data-net={online ? link.status : 'off'}
+      data-seat={online ? mySeat : ''}
+      data-race={raceState}
+      data-ghost={ghostCell ?? -1}
       data-seed={seed}
       data-cols={cols}
       data-rows={rows}
@@ -465,6 +633,9 @@ export default function MazeRunnerWidget({ id }: WidgetProps) {
           </ToggleButton>
           <ToggleButton value="duel" data-testid="maze-mode-duel" sx={toggleSx}>
             2 Players
+          </ToggleButton>
+          <ToggleButton value="online" data-testid="maze-mode-online" sx={toggleSx}>
+            2 Devices
           </ToggleButton>
         </ToggleButtonGroup>
         <ToggleButtonGroup
@@ -547,6 +718,27 @@ export default function MazeRunnerWidget({ id }: WidgetProps) {
         )}
       </Stack>
 
+      {online && (
+        <Stack
+          direction="row"
+          spacing={1}
+          sx={{ justifyContent: 'center', alignItems: 'center', flexWrap: 'wrap', rowGap: 0.5 }}
+        >
+          <NetplayChip link={link} testId="maze-link" onOpen={() => setLinkOpen(true)} />
+          {link.connected && raceState !== 'counting' && (
+            <Button
+              size="small"
+              variant="contained"
+              data-testid="maze-start-race"
+              onClick={startRace}
+              sx={{ textTransform: 'none', py: 0.1 }}
+            >
+              {raceState === 'idle' ? 'Start race' : 'Race again'}
+            </Button>
+          )}
+        </Stack>
+      )}
+
       <Box
         ref={boardRef}
         sx={{
@@ -588,6 +780,22 @@ export default function MazeRunnerWidget({ id }: WidgetProps) {
               strokeLinecap="round"
               strokeLinejoin="round"
             />
+            {/* The other runner. Drawn BEFORE the fog so a fogged race hides a
+                ghost you have no business seeing, and with no trail — knowing
+                they are near the flag is fair, knowing their route is not. */}
+            {online && ghostCell !== null && ghostCell !== pos && (
+              <g
+                opacity={0.45}
+                data-testid="maze-ghost"
+                transform={`translate(${colOf(maze, ghostCell) + 0.1} ${rowOf(maze, ghostCell) + 0.1}) scale(${0.8 / 40})`}
+              >
+                <foreignObject width={40} height={40}>
+                  <div style={{ width: '100%', height: '100%', color: ghostColor }}>
+                    <GhostHead />
+                  </div>
+                </foreignObject>
+              </g>
+            )}
             {fogPath && (
               <path d={fogPath} fillRule="evenodd" fill={theme.palette.background.paper} />
             )}
@@ -641,6 +849,25 @@ export default function MazeRunnerWidget({ id }: WidgetProps) {
         )}
 
         {hand.player && <TurnBanner player={hand.player} onSkip={hand.clear} />}
+
+        {raceState === 'counting' && (
+          <Box
+            data-testid="maze-countdown"
+            sx={{
+              position: 'absolute',
+              inset: 0,
+              display: 'grid',
+              placeItems: 'center',
+              bgcolor: 'rgba(0,0,0,0.45)',
+              borderRadius: 1,
+              pointerEvents: 'none',
+            }}
+          >
+            <Typography sx={{ fontSize: '22cqmin', fontWeight: 800, color: 'common.white' }}>
+              {countdown === 0 ? 'GO' : countdown}
+            </Typography>
+          </Box>
+        )}
       </Box>
 
       <Stack
@@ -659,7 +886,19 @@ export default function MazeRunnerWidget({ id }: WidgetProps) {
         ) : (
           <PlayerBadge
             mark={runner}
-            label={won ? 'made it!' : mode === 'duel' ? 'is running' : 'to move'}
+            label={
+              won
+                ? 'made it!'
+                : online
+                  ? raceState === 'counting'
+                    ? 'get ready…'
+                    : raceState === 'lost'
+                      ? 'still going'
+                      : 'racing'
+                  : mode === 'duel'
+                    ? 'is running'
+                    : 'to move'
+            }
             pulse={running}
           />
         )}
@@ -677,6 +916,12 @@ export default function MazeRunnerWidget({ id }: WidgetProps) {
           New maze
         </Button>
       </Stack>
+
+      {online && linkOpen && (
+        <Suspense fallback={null}>
+          <NetplayDialog open onClose={() => setLinkOpen(false)} link={link} />
+        </Suspense>
+      )}
 
       <ConfirmDialog
         open={pending !== null}

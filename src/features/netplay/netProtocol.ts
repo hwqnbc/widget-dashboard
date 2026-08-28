@@ -12,9 +12,17 @@
 import type { Seat } from '../avatars/types'
 import type { NetRole } from './types'
 
-/** Bumped when a message shape changes incompatibly. Peers on different
- * versions refuse to play rather than desync halfway through a game. */
-export const NET_VERSION = 1
+/**
+ * Bumped when a message shape changes incompatibly. Peers on different
+ * versions refuse to play rather than desync halfway through a game.
+ *
+ * **2** added the real-time race messages (`go`/`pos`/`done`). Adding message
+ * types is exactly the kind of change this guard exists for: an older peer
+ * drops what it cannot parse, so a race against one would half-work — both
+ * boards live, no countdown, no ghost, no winner — which is far worse than
+ * refusing to pair.
+ */
+export const NET_VERSION = 2
 
 export type NetMsg =
   /** First message each side sends; carries the version handshake. */
@@ -28,6 +36,18 @@ export type NetMsg =
   | { t: 'sync'; state: unknown }
   /** Restart, with who opens. Either side may call it; both apply it. */
   | { t: 'new'; first: Seat }
+  /** Real-time games only. Start the run NOW — both sides count down from
+   * their own receipt, which on a LAN differ by a millisecond or two. */
+  | { t: 'go' }
+  /** Real-time games only. Where a runner has got to. Sent per committed
+   * move, so it is last-write-wins and needs no sequencing: a stale delivery
+   * is corrected by the next one, and losing the last one costs a marker
+   * position, not the game. */
+  | { t: 'pos'; seat: Seat; cell: number }
+  /** Real-time games only. This seat finished, with its elapsed ms. With a
+   * synchronised start the first `done` is also the lower time, so the winner
+   * needs no arbitration and message ordering cannot change it. */
+  | { t: 'done'; seat: Seat; ms: number }
 
 export const otherSeat = (seat: Seat): Seat => (seat === 'toy' ? 'ninja' : 'toy')
 
@@ -69,6 +89,16 @@ export function decodeMsg(raw: string): NetMsg | null {
       return 'state' in m ? { t: 'sync', state: m.state } : null
     case 'new':
       return isSeat(m.first) ? { t: 'new', first: m.first } : null
+    case 'go':
+      return { t: 'go' }
+    case 'pos':
+      return isSeat(m.seat) && Number.isInteger(m.cell) && (m.cell as number) >= 0
+        ? { t: 'pos', seat: m.seat, cell: m.cell as number }
+        : null
+    case 'done':
+      return isSeat(m.seat) && typeof m.ms === 'number' && Number.isFinite(m.ms) && m.ms >= 0
+        ? { t: 'done', seat: m.seat, ms: m.ms }
+        : null
     default:
       return null
   }

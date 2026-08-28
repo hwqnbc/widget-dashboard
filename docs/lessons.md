@@ -1778,3 +1778,37 @@ carried over; these are the new ones.
      value was just a deterministic sampling point on the easing curve. An
      inference from one number is a hypothesis; three numbers over time is a
      diagnosis.
+
+106. **Two copies of the same widget on one page share `window` key
+     handlers.** Every keyboard widget here listens on `window`, so in a
+     two-widget e2e (the loopback netplay pattern) one arrow key moves BOTH
+     runners — which made the maze race's ghost sit exactly on top of the local
+     marker and look like a rendering bug. It wasn't: the ghost was correct and
+     the *input* was ambiguous. Drive per-widget tests with pointer events,
+     which land on one element, and keep keys for assertions about global
+     handling. The collision is real for users too (a Maze and a Drone Sim on
+     one dashboard both answer the arrows) and is on the backlog.
+
+107. **A synchronised start removes the need to arbitrate a winner.** The
+     obvious design for a two-device race is "whoever's `done` arrives first
+     wins", which makes the result depend on message ordering and on who
+     started their clock when. Counting both devices down from one `go` makes
+     the first finisher necessarily the lower elapsed time — so both devices
+     reach the same verdict independently, with `setResult(prev => prev ?? …)`
+     on both the local finish and the incoming `done`. No arbitration, no host
+     authority, no tie-break protocol.
+
+108. **When a clock's start moves, check what "running" means.** The race
+     starts its clock at GO rather than on the first move, so a player who
+     hesitates is charged for it — correct, but `running` was still derived
+     from "has anything happened", and the timer sat at 0.0s while chargeable
+     time ticked away. A screenshot caught it; no assertion would have. Any
+     time you change when a clock starts, re-check every display and predicate
+     derived from it.
+
+109. **Adding a message type is a breaking protocol change.** New types look
+     purely additive, but an older peer's decoder drops what it cannot parse —
+     so a race against one would half-work: both boards live, no countdown, no
+     ghost, no winner. That is worse than refusing to pair, which is exactly
+     what the version handshake is for. Bump the version when the *set* of
+     messages changes, not only when an existing shape does.

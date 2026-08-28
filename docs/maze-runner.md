@@ -181,6 +181,50 @@ or swapping the maze itself between the two runs would make the times
 incomparable. In solo the rule and the aid switch live, since looking at your
 own board differently destroys nothing.
 
+## 2 Devices (the ghost race)
+Both devices run the **same** maze at once, each showing a faded marker for
+where the other has got to. First to the flag wins. See `docs/netplay.md` for
+the transport and pairing.
+
+This is the netplay layer's first **non-turn-based** consumer, and it sits
+beside `useNetGame` rather than under it. That hook is turn-based by
+construction — ply, turn ownership, one shared board — and none of it applies
+when two runners move at once, so the maze uses `useNetplay` directly and
+speaks three messages the turn-based games never send: `go`, `pos`, `done`.
+(Adding them bumped `NET_VERSION` to 2; an older peer would drop them and the
+race would half-work, which is exactly what the handshake exists to prevent.)
+
+**Only one runner is ever local.** The widget's `pos`, `trail` and `elapsedMs`
+keep their meaning — they are *mine* — and the opponent's position is a
+transient `ghostCell` that is never persisted. That is why race mode is
+additive rather than a rewrite: solo and hot-seat are untouched. Seat identity
+comes from `link.seat`, not `turn`, which keeps its hot-seat meaning.
+
+- **Synchronised start.** Either side taps Start, which broadcasts `go`; both
+  count 3-2-1 from their own receipt (a millisecond or two apart on a LAN) and
+  unlock together. The board is dead until GO.
+- **The clock starts at GO, not on the first move** — unlike every other mode.
+  With a synced start, time spent staring at the maze has to count or the two
+  elapsed times aren't comparable. `running` is therefore derived from the race
+  state in this mode, so the timer reads as ticking before the first move
+  rather than sitting at 0.0s while chargeable time passes.
+- **The winner is whoever finishes first.** With a synced start that is also
+  the lower elapsed time, so no arbitration is needed and message ordering
+  cannot flip the result. `setResult(prev => prev ?? …)` on both the local
+  finish and the incoming `done` makes it first-write-wins.
+- **A losing player may still finish.** `blocked` deliberately excludes
+  `lost` — only *your own* finish ends your run.
+- **The mirror is off.** It exists so a hot-seat player 2 can't retrace what
+  they watched; nobody watched anybody here, and a mirrored board would make
+  the opponent's cell index unplottable.
+- **The host's settings win.** `sync` carries seed, dimensions, size, move rule
+  and aid, so nobody races with fog while the other doesn't.
+- **The ghost is a marker, never a trail**, and is drawn *under* the fog
+  overlay — knowing they are near the flag is fair, knowing their route is not.
+
+Root contract adds `data-net`, `data-seat`, `data-race`
+(`off|idle|counting|running|won|lost`) and `data-ghost`.
+
 ## State model (persisted `data`, via `useWidgetField`)
 `seed`, `cols`, `rows` · `size`, `moveRule`, `aid`, `mode`, `mirror` · `pos`, `trail`
 (deduped visited cells) · `elapsedMs` · `bestSmall`/`bestMedium`/`bestLarge` ·
@@ -253,11 +297,9 @@ actually ended up and re-solves from there.
   zoomed view rather than ever-smaller cells.
 
 **Two players**
-- **Netplay ghost race** — same seed on two devices, each showing a ghost of
-  the other's position. The transport and pairing from `docs/netplay.md` are
-  reusable as-is, but this would be its **first non-turn-based** use: positions
-  stream continuously rather than one message per turn, so it needs a rate limit
-  and a little protocol the current design was never asked for.
+- ~~Netplay ghost race~~ — **shipped**; see *2 Devices* above. Positions turned
+  out not to need a rate limit: maze moves are discrete, so one `pos` per
+  committed move is at most ~11/s under key auto-repeat.
 - **Forfeit / skip turn** — a player who gives up mid-duel currently has no way
   out but New maze.
 - **Best-of-three** — persist a series score across mazes.

@@ -342,6 +342,25 @@ check('the board is mid-run again', (await attr('data-state')) === 'running')
 // Settings and the maze itself survive it; so does the trail.
 const keptSeed = await num('data-seed')
 const keptPos = await num('data-pos')
+// Wait for redux-persist to have actually WRITTEN that position before
+// reloading. Its writes are debounced (lesson #12), so a reload issued
+// straight after a move can beat the store to disk and the runner reappears
+// where it was two moves ago — a flake that predates this suite's netplay
+// work and reproduces on main.
+await page.waitForFunction(
+  (want) => {
+    try {
+      const raw = window.localStorage.getItem('persist:testsite')
+      if (!raw) return false
+      return JSON.parse(JSON.parse(raw).widgets ?? '{}')
+        .instances?.some((w) => w.data?.pos === want)
+    } catch {
+      return false
+    }
+  },
+  keptPos,
+  { timeout: 5000 },
+)
 await page.reload({ waitUntil: 'networkidle' })
 await page.waitForSelector('[data-testid="maze-board"]')
 check('the maze survives a reload', (await num('data-seed')) === keptSeed)

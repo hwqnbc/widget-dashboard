@@ -2,8 +2,9 @@
 
 Design notes for `src/features/netplay/` and `src/components/netplay/`, the
 peer-to-peer link that lets two people play one game from two devices.
-Consumers: the Connect 4 widget (`docs/connect-4.md`) and Tic-Tac-Toe
-(`docs/tic-tac-toe.md`), both through their **2 Devices** mode.
+Consumers: Connect 4 (`docs/connect-4.md`), Tic-Tac-Toe
+(`docs/tic-tac-toe.md`) and Maze Runner (`docs/maze-runner.md`), all through a
+**2 Devices** mode — the first two turn-based, the third a live race.
 
 ## The constraint that shaped everything
 
@@ -171,7 +172,33 @@ it was identical bar a test id.
 
 The claim that the protocol is game-agnostic was, until this point, an
 assertion in this document. A second game now shares the *code*, not just the
-idea — and a third (Dots and Boxes, Reversi) needs the right-hand column only.
+idea — and another turn-based one (Dots and Boxes, Reversi) needs the
+right-hand column only.
+
+### Two consumer shapes
+
+`useNetGame` is turn-based **by construction**: ply, turn ownership, one shared
+board. Maze Runner's ghost race has none of those — two runners move at once on
+their own copies of one maze — so it sits *beside* the hook rather than under
+it, on `useNetplay` directly, and speaks three messages the turn-based games
+never send:
+
+| Message | Meaning |
+|---|---|
+| `go` | start the run now; both sides count down from their own receipt |
+| `pos` | where a runner has got to |
+| `done` | this seat finished, with its elapsed ms |
+
+That is the honest boundary. The transport, the pairing codec, the version
+handshake and the protocol are shared; the *turn wiring* is not, and pretending
+otherwise would have distorted a hook that serves two games well.
+
+Two notes from building it. `pos` needs **no sequencing or rate limit**: maze
+moves are discrete, so it is one message per committed move (~11/s at worst
+under key auto-repeat), it is last-write-wins, and a lost one costs a marker
+position rather than the game. And with a **synchronised start**, the first
+`done` is necessarily the lower time — so the winner needs no arbitration and
+message ordering cannot change the result.
 
 ## Seats
 
@@ -236,7 +263,8 @@ gameplay.
 - **Dots and Boxes / Reversi online** — same shape again, once those widgets
   exist (`docs/` backlogs).
 - **Memory online** — the first game needing more than moves: the card
-  shuffle must be shared. Host sends the seed in `sync`.
+  shuffle must be shared. Host sends the seed in `sync`, exactly as the maze
+  race now sends its maze seed.
 - **Archery online** — first real-valued move (angle + power) rather than an
   index; still one message per turn.
 
