@@ -1714,3 +1714,39 @@ carried over; these are the new ones.
     corridor-following does not have. A 20-line scratch script that printed the
     real attributes settled both in one run — cheaper than re-reading the
     widget looking for a bug that was never there.
+
+99. **The second consumer is where you find out what was actually generic.**
+    Connect 4's netplay wiring looked game-specific while it had one user. Put
+    a second game beside it and the split was obvious: seat assignment, the
+    turn lock, the ply-checked relay, the host's position sync, the broadcast
+    restart and the dialog's lifecycle were all shared, and the only genuinely
+    per-game part was *"apply this move index to this board"* — a column drop
+    versus setting a cell. Both games already derived the turn from
+    `(board, first)` and counted ply as filled cells, which is what made the
+    hook's interface fall out rather than be designed. Resist extracting on
+    the first consumer; extract on the second, when the seam shows itself.
+
+100. **Extract under test, and let the existing suites be the proof.** Moving
+    ~70 lines out of a shipped, working widget is only comfortable because
+    `143-netplay` (48 checks) and `144-netplay-webrtc` (12, through a real
+    `RTCPeerConnection`) already covered the path end to end. Run them
+    *before* the new consumer touches the extraction: green there means the
+    refactor was behaviour-neutral, and anything that breaks afterwards
+    belongs to the new code. Doing it in the other order leaves two suspects.
+
+101. **A hook that owns a message handler needs the caller's state in a ref,
+    not a closure.** `useNetGame` receives board/turn/ply as options and
+    stores the whole options object in a ref updated each render, because the
+    handler runs from a transport callback that outlives any one render. The
+    tempting version — destructuring the options into the callback — captures
+    the board as it was when the link opened, and silently applies remote
+    moves to a stale position. Same reason `useNetplay` keeps its own
+    `handler` ref.
+
+102. **Watch for the assertion that lived inside the block you extracted.**
+    Folding `143`'s pairing dance into a shared helper quietly dropped a check
+    (the host reporting `pairing` before the guest redeems) — the suite went
+    48 → 47 and still passed, which is exactly how coverage evaporates. The
+    fix was an `afterHost` callback so the helper still exposes the one moment
+    that state is observable. Compare check counts before and after any test
+    refactor; a drop is a regression even when everything is green.

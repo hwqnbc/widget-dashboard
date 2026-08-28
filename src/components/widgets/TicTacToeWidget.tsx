@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import {
   Box,
   Button,
@@ -20,12 +20,33 @@ import PlayerBadge from './PlayerBadge'
 import ConfirmDialog from './ConfirmDialog'
 import TurnBanner from './TurnBanner'
 import { useHandoff } from '../../hooks/useHandoff'
+import { useNetGame } from '../../features/netplay/useNetGame'
+import NetplayChip from '../netplay/NetplayChip'
+import { lazyWithReload } from '../../utils/lazyWithReload'
+
+/** The pairing UI pulls in a QR encoder and decoder — kept out of the main
+ * bundle, since most sessions never open it. */
+const NetplayDialog = lazyWithReload(
+  () => import('../netplay/NetplayDialog'),
+  'netplay-dialog',
+)
 
 /** The two players are the toy head and the ninja head instead of X / O. */
 type Mark = 'toy' | 'ninja'
 type Cell = Mark | null
-type Mode = 'pvp' | 'ai'
+/** `online` is 2-player split across two devices on the same wifi. */
+type Mode = 'pvp' | 'ai' | 'online'
 type Difficulty = 'easy' | 'hard'
+
+/** A board is only accepted — from storage or from the other device — when
+ * every cell is one of the three legal values. Persisted data and a network
+ * peer are both outside this component's control. */
+const coerceBoard = (value: unknown): Cell[] | undefined =>
+  Array.isArray(value) &&
+  value.length === 9 &&
+  value.every((c) => c === null || c === 'toy' || c === 'ninja')
+    ? (value as Cell[])
+    : undefined
 
 /** Stable references so the AI effect doesn't loop on a fresh fallback array. */
 const EMPTY_BOARD: Cell[] = Array(9).fill(null)
@@ -165,11 +186,9 @@ export default function TicTacToeWidget({ id }: WidgetProps) {
   // Fullscreen relaxes the fixed px cap so the board fills the larger space.
   const boardMax = fullscreen ? 'min(100cqmin, 88vmin)' : 'min(100cqmin, 340px)'
 
-  const board = useWidgetField<Cell[]>(id, 'board', EMPTY_BOARD, (b) =>
-    Array.isArray(b) && b.length === 9 ? (b as Cell[]) : undefined,
-  )
+  const board = useWidgetField<Cell[]>(id, 'board', EMPTY_BOARD, coerceBoard)
   const mode = useWidgetField<Mode>(id, 'mode', 'pvp', (v) =>
-    v === 'ai' ? 'ai' : 'pvp',
+    v === 'ai' || v === 'online' ? v : 'pvp',
   )
   const difficulty = useWidgetField<Difficulty>(id, 'difficulty', 'easy', (v) =>
     v === 'hard' ? 'hard' : 'easy',
@@ -195,6 +214,28 @@ export default function TicTacToeWidget({ id }: WidgetProps) {
     }>,
   ) => dispatch(updateWidgetData({ id, data: next }))
 
+  // ---------------------------------------------------------------- netplay
+  const online = mode === 'online'
+  const net = useNetGame<Cell[]>({
+    online,
+    board,
+    first,
+    turn,
+    ply: board.filter(Boolean).length,
+    // The only Tic-Tac-Toe-specific part of two-device play: a move is a cell
+    // index, and it lands only on an empty cell.
+    applyMove: (current, cell, seat) => {
+      if (current[cell]) return null
+      const next = current.slice()
+      next[cell] = seat
+      return next
+    },
+    coerceBoard,
+    newBoard: () => Array(9).fill(null),
+    onReplace: () => hand.clear(),
+    setGame,
+  })
+
   // Vs-computer: let the ninja (AI) answer once it's its turn, after a short
   // random "thinking" pause. The timer is cleared if the game state changes
   // (New game, mode/difficulty toggle, Pass) so no stale move lands.
@@ -215,10 +256,13 @@ export default function TicTacToeWidget({ id }: WidgetProps) {
   const play = (i: number) => {
     if (board[i] || winner || isDraw || hand.player) return
     if (mode === 'ai' && turn === 'ninja') return // AI's move — ignore taps
+    if (net.blocked) return // not paired yet, or the other device's turn
     const b = board.slice()
     b[i] = turn
     setGame({ board: b })
+    if (online) net.sendMove(i)
     // 2-player hand-off: announce the next player unless this move ended it.
+    // Online needs none — each device only ever shows its own turn.
     if (mode === 'pvp' && !calcWin(b) && !b.every(Boolean)) {
       hand.announce(turn === 'toy' ? 'ninja' : 'toy')
     }
@@ -236,7 +280,11 @@ export default function TicTacToeWidget({ id }: WidgetProps) {
     else reset(extra)
   }
 
-  const newGame = () => reset()
+  const newGame = () => {
+    reset()
+    // Either side may restart; the other applies the same opening.
+    if (online) net.sendNew('toy')
+  }
   const changeMode = (next: Mode | null) => {
     if (next && next !== mode) requestReset({ mode: next })
   }
@@ -250,6 +298,13 @@ export default function TicTacToeWidget({ id }: WidgetProps) {
       className="widget-no-drag"
       onMouseDown={(e) => e.stopPropagation()}
       onTouchStart={(e) => e.stopPropagation()}
+      data-testid="tictactoe-root"
+      data-mode={mode}
+      data-net={online ? net.link.status : 'off'}
+      data-seat={net.link.seat ?? ''}
+      data-turn={turn}
+      data-ply={board.filter(Boolean).length}
+      data-winner={winner ?? ''}
       sx={{
         height: '100%',
         display: 'flex',
@@ -265,13 +320,36 @@ export default function TicTacToeWidget({ id }: WidgetProps) {
         onChange={(_, v) => changeMode(v as Mode | null)}
         sx={{ alignSelf: 'center' }}
       >
-        <ToggleButton value="pvp" sx={{ textTransform: 'none', py: 0.25 }}>
+        <ToggleButton
+          value="pvp"
+          data-testid="ttt-mode-pvp"
+          sx={{ textTransform: 'none', py: 0.25 }}
+        >
           2-Player
         </ToggleButton>
-        <ToggleButton value="ai" sx={{ textTransform: 'none', py: 0.25 }}>
+        <ToggleButton
+          value="ai"
+          data-testid="ttt-mode-ai"
+          sx={{ textTransform: 'none', py: 0.25 }}
+        >
           vs Computer
         </ToggleButton>
+        <ToggleButton
+          value="online"
+          data-testid="ttt-mode-online"
+          sx={{ textTransform: 'none', py: 0.25 }}
+        >
+          2 Devices
+        </ToggleButton>
       </ToggleButtonGroup>
+
+      {online && (
+        <NetplayChip
+          link={net.link}
+          testId="tictactoe-link"
+          onOpen={() => net.setLinkOpen(true)}
+        />
+      )}
 
       {mode === 'ai' && (
         <Button
@@ -326,7 +404,7 @@ export default function TicTacToeWidget({ id }: WidgetProps) {
                   display: 'grid',
                   placeItems: 'center',
                   cursor:
-                    cell || winner || isDraw ? 'default' : 'pointer',
+                    cell || winner || isDraw || net.blocked ? 'default' : 'pointer',
                   transition: 'background-color 120ms',
                   '&:hover':
                     !cell && !winner && !isDraw
@@ -411,6 +489,12 @@ export default function TicTacToeWidget({ id }: WidgetProps) {
           New game
         </Button>
       </Stack>
+
+      {online && net.linkOpen && (
+        <Suspense fallback={null}>
+          <NetplayDialog open onClose={() => net.setLinkOpen(false)} link={net.link} />
+        </Suspense>
+      )}
 
       <ConfirmDialog
         open={pending !== null}

@@ -1,15 +1,13 @@
-import { Suspense, useEffect, useRef, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import {
   Box,
   Button,
-  Chip,
   Stack,
   ToggleButton,
   ToggleButtonGroup,
   Typography,
   keyframes,
 } from '@mui/material'
-import WifiTetheringIcon from '@mui/icons-material/WifiTethering'
 import { useAppDispatch } from '../../app/hooks'
 import { updateWidgetData } from '../../features/widgets/widgetsSlice'
 import { useWidgetField } from '../../features/widgets/useWidgetField'
@@ -21,7 +19,8 @@ import PlayerBadge from './PlayerBadge'
 import ConfirmDialog from './ConfirmDialog'
 import TurnBanner from './TurnBanner'
 import { useHandoff } from '../../hooks/useHandoff'
-import { useNetplay } from '../../features/netplay/useNetplay'
+import { useNetGame } from '../../features/netplay/useNetGame'
+import NetplayChip from '../netplay/NetplayChip'
 import { lazyWithReload } from '../../utils/lazyWithReload'
 
 /** The pairing UI pulls in a QR encoder and decoder — kept out of the main
@@ -54,9 +53,6 @@ const coerceBoard = (value: unknown): Cell[] | undefined =>
   value.every((c) => c === null || c === 'toy' || c === 'ninja')
     ? (value as Cell[])
     : undefined
-
-const coerceMark = (value: unknown): Mark | undefined =>
-  value === 'toy' || value === 'ninja' ? value : undefined
 
 /** Random delay (ms) before the computer drops, to simulate thinking. */
 const THINK_MIN = 400
@@ -305,72 +301,24 @@ export default function Connect4Widget({ id }: WidgetProps) {
 
   // ---------------------------------------------------------------- netplay
   const online = mode === 'online'
-  const [linkOpen, setLinkOpen] = useState(false)
-  // The handler below runs from a transport callback, before `link` exists in
-  // its own initializer — a ref carries our seat into it.
-  const seatRef = useRef<Mark | null>(null)
-
-  const link = useNetplay((msg) => {
-    const localSeat = seatRef.current
-    if (msg.t === 'move') {
-      // Three independent reasons to ignore a move, all of which mean the two
-      // boards have drifted rather than that the peer is misbehaving: it is
-      // our own move echoed back, it is not that seat's turn, or it belongs to
-      // a different point in the game. Dropping it leaves the position intact.
-      if (!localSeat || msg.seat === localSeat) return
-      if (msg.seat !== turnOf(board, first)) return
-      if (msg.ply !== board.filter(Boolean).length) return
-      const res = dropInto(board, msg.move, msg.seat)
-      if (!res) return
-      setLastDrop(res.index)
-      setGame({ board: res.board })
-      return
-    }
-    if (msg.t === 'sync') {
-      const state = msg.state as { board?: unknown; first?: unknown } | null
-      const synced = coerceBoard(state?.board)
-      if (!synced) return
+  const net = useNetGame<Cell[]>({
+    online,
+    board,
+    first,
+    turn,
+    ply: board.filter(Boolean).length,
+    // The only Connect-4-specific part of two-device play: a move is a column,
+    // and a disc falls to the lowest free slot in it.
+    applyMove: (current, col, seat) => dropInto(current, col, seat)?.board ?? null,
+    coerceBoard,
+    newBoard: () => Array(SIZE).fill(null),
+    onReplace: () => {
       hand.clear()
       setLastDrop(null)
-      setGame({ board: synced, first: coerceMark(state?.first) ?? 'toy' })
-      return
-    }
-    if (msg.t === 'new') {
-      hand.clear()
-      setLastDrop(null)
-      setGame({ board: Array(SIZE).fill(null), first: msg.first })
-    }
+    },
+    setGame,
   })
-  seatRef.current = link.seat
-
-  // On connect the host pushes the position, so a device joining a game
-  // already in progress (or re-pairing after a sleep) lands on the same board.
-  // The version handshake is the link's own business — see `useNetplay`.
-  useEffect(() => {
-    if (!online || !link.connected) return
-    if (link.role === 'host') link.send({ t: 'sync', state: { board, first } })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [online, link.connected, link.role])
-
-  // Leaving online mode drops the link rather than leaving a data channel open
-  // behind a board nobody is playing on.
-  useEffect(() => {
-    if (!online) {
-      link.disconnect()
-      setLinkOpen(false)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [online])
-
-  // Entering online mode with no link yet: open the pairing dialog, since that
-  // is the only thing to do next.
-  useEffect(() => {
-    if (online && link.status === 'idle') setLinkOpen(true)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [online])
-
-  /** In online mode the board is live only on our own turn, once paired. */
-  const netBlocked = online && (!link.connected || turn !== link.seat)
+  const { link } = net
 
   // Vs-computer: the ninja answers on its turn, after a short "thinking" pause.
   useEffect(() => {
@@ -390,16 +338,12 @@ export default function Connect4Widget({ id }: WidgetProps) {
   const playCol = (col: number) => {
     if (winner || isDraw || hand.player) return
     if (mode === 'ai' && turn === 'ninja') return // AI's move
-    if (netBlocked) return // not paired yet, or the other device's turn
+    if (net.blocked) return // not paired yet, or the other device's turn
     const res = dropInto(board, col, turn)
     if (!res) return // column full
     setLastDrop(res.index)
     setGame({ board: res.board })
-    // The ply sent is the position BEFORE this drop — what the other side
-    // checks the move against.
-    if (online) {
-      link.send({ t: 'move', seat: turn, ply: board.filter(Boolean).length, move: col })
-    }
+    if (online) net.sendMove(col)
     // 2-player hand-off: announce the next player unless this move ended it.
     // Online needs none — each device only ever shows its own turn.
     if (mode === 'pvp' && !calcWin(res.board) && legalCols(res.board).length > 0) {
@@ -422,7 +366,7 @@ export default function Connect4Widget({ id }: WidgetProps) {
   const newGame = () => {
     reset()
     // Either side may restart; the other applies the same opening.
-    if (online && link.connected) link.send({ t: 'new', first: 'toy' })
+    if (online) net.sendNew('toy')
   }
   const changeMode = (next: Mode | null) => {
     if (next && next !== mode) requestReset({ mode: next })
@@ -435,7 +379,7 @@ export default function Connect4Widget({ id }: WidgetProps) {
     setGame({ first: 'ninja' })
   }
 
-  const locked = !!winner || isDraw || (mode === 'ai' && turn === 'ninja') || netBlocked
+  const locked = !!winner || isDraw || (mode === 'ai' && turn === 'ninja') || net.blocked
 
   return (
     <Box
@@ -474,22 +418,10 @@ export default function Connect4Widget({ id }: WidgetProps) {
       </ToggleButtonGroup>
 
       {online && (
-        <Chip
-          size="small"
-          icon={<WifiTetheringIcon />}
-          data-testid="connect4-link"
-          data-status={link.status}
-          onClick={() => setLinkOpen(true)}
-          color={link.connected ? 'success' : 'default'}
-          variant={link.connected ? 'filled' : 'outlined'}
-          label={
-            link.connected
-              ? `Linked — you are ${link.seat === 'toy' ? 'Player 1' : 'Player 2'}`
-              : link.status === 'pairing' || link.status === 'connecting'
-                ? 'Pairing…'
-                : 'Tap to connect'
-          }
-          sx={{ alignSelf: 'center' }}
+        <NetplayChip
+          link={link}
+          testId="connect4-link"
+          onOpen={() => net.setLinkOpen(true)}
         />
       )}
 
@@ -650,9 +582,9 @@ export default function Connect4Widget({ id }: WidgetProps) {
         </Button>
       </Stack>
 
-      {online && linkOpen && (
+      {online && net.linkOpen && (
         <Suspense fallback={null}>
-          <NetplayDialog open onClose={() => setLinkOpen(false)} link={link} />
+          <NetplayDialog open onClose={() => net.setLinkOpen(false)} link={link} />
         </Suspense>
       )}
 

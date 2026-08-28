@@ -20,7 +20,7 @@
  * The widget's contract is its root `data-*`: `data-net` (link status),
  * `data-seat` (which seat this device plays), `data-ply`, `data-turn`.
  */
-import { launch, reporter } from './helpers.mjs'
+import { launch, pairLoopback, reporter } from './helpers.mjs'
 import { packSdp, unpackToken, isCompactToken } from './.bundle/sdpCodec.js'
 import {
   decodeMsg,
@@ -158,25 +158,17 @@ const ply = async (w) => parseInt(await attr(w, 'data-ply'), 10)
 
 check('link is off outside online mode', (await attr(A, 'data-net')) === 'off')
 
-// A hosts.
-await A.locator('[data-testid="connect4-mode-online"]').click()
-await page.waitForSelector('[data-testid="netplay-dialog"]')
-await page.locator('[data-testid="netplay-host"]').click()
-await page.waitForSelector('[data-testid="netplay-token"]')
-const code = (await page.locator('[data-testid="netplay-token"]').textContent()).trim()
+// A hosts, B joins — the shared dance, since every net-played widget pairs
+// the same way (see helpers.mjs `pairLoopback`).
+const code = await pairLoopback(page, {
+  host: A,
+  guest: B,
+  modeTestId: 'connect4-mode-online',
+  afterHost: async () => {
+    check('host is waiting to pair', (await attr(A, 'data-net')) === 'pairing')
+  },
+})
 check('host produced a pairing code', code.length > 0)
-await page.locator('[data-testid="netplay-close"]').click()
-await page.waitForSelector('[data-testid="netplay-dialog"]', { state: 'detached' })
-check('host is waiting to pair', (await attr(A, 'data-net')) === 'pairing')
-
-// B joins with it.
-await B.locator('[data-testid="connect4-mode-online"]').click()
-await page.waitForSelector('[data-testid="netplay-dialog"]')
-await page.locator('[data-testid="netplay-code-input"]').fill(code)
-await page.locator('[data-testid="netplay-code-submit"]').click()
-await page.waitForSelector('[data-testid="netplay-connected"]')
-// The dialog bows out on its own once the link is up.
-await page.waitForSelector('[data-testid="netplay-dialog"]', { state: 'detached' })
 
 check('host reports connected', (await attr(A, 'data-net')) === 'connected')
 check('guest reports connected', (await attr(B, 'data-net')) === 'connected')

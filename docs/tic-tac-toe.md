@@ -15,6 +15,8 @@ Toy always corresponds to the "X-like" first-intended player; Ninja is the
 computer in vs-Computer mode.
 
 ## Modes (mode toggle)
+Three positions: **2-Player** (`pvp`), **vs Computer** (`ai`) and **2 Devices**
+(`online` — see below).
 A `ToggleButtonGroup` switches between:
 - **2-Player** (`mode: 'pvp'`) — pass-and-play; taps alternate Toy / Ninja.
 - **vs Computer** (`mode: 'ai'`) — human plays Toy, the computer plays Ninja.
@@ -66,6 +68,48 @@ filled cells from `first`), the winner + winning line (`calcWin`), and draw
 (`board` full with no winner). The AI plays via a `useEffect` that fires when
 it's Ninja's turn in `ai` mode.
 
+## 2 Devices (online mode)
+The netplay layer's **second consumer**, and the one that turns
+`docs/netplay.md`'s "game-agnostic" claim from an assertion into a fact: two
+people on the same wifi play one game from two devices, with no server, pairing
+by QR. See `docs/netplay.md` for the transport, the pairing codec and the wire
+protocol — none of which this widget knows anything about.
+
+What Tic-Tac-Toe supplies is **one function**:
+
+```ts
+applyMove: (board, cell, seat) => {
+  if (board[cell]) return null
+  const next = board.slice(); next[cell] = seat; return next
+}
+```
+
+Everything else comes from `features/netplay/useNetGame` — seat assignment
+(host is Player 1), the turn lock, the ply-checked move relay, the host's
+position sync on connect, the broadcast restart, and the pairing dialog's
+lifecycle. Connect 4 passes a column drop to the same hook; the two games now
+share the code rather than the idea.
+
+Notes specific to this widget:
+
+- **The `board` coercer validates every cell**, not just the array's length. A
+  board arriving in a `sync` payload comes from another device, which is
+  outside this component's control — the same standard persisted data is held
+  to.
+- **No hand-off banner.** `TurnBanner` exists so two people sharing one screen
+  don't mis-tap into each other's move; with two devices each shows only its
+  own turn, so the `mode === 'pvp'` guard on `hand.announce` already excludes
+  online play.
+- **The AI never runs.** Its effect is gated on `mode === 'ai'`, and `online`
+  is a third mode rather than a flag beside it — so there is no way for both
+  peers to each start playing the ninja.
+- The pass button is likewise `mode === 'ai'` only.
+
+Root test contract: `data-mode`, `data-net`, `data-seat`, `data-turn`,
+`data-ply`, `data-winner` on `[data-testid="tictactoe-root"]` — deliberately
+the same attribute names Connect 4 publishes, so one set of e2e readers serves
+both games.
+
 ## Turn hand-off (2-Player)
 In `pvp` mode a non-winning move shows a brief `TurnBanner` overlay ("Ninja's
 turn", tinted to `PLAYER_COLOR`) that locks the board, auto-dismisses after ~1s
@@ -112,7 +156,9 @@ in `WidgetBoard`).
 `winningMove`, `easyMove` all live at module scope in the widget file.
 
 ## Verifying changes
-No test runner is configured. Verify with `npm run build` + `npm run lint`, then
-drive it in a headless browser (Chromium at `/opt/pw-browsers/chromium`):
-add the widget, play both modes, toggle difficulty, use Pass, resize the widget,
-and reload to confirm persistence. Cells expose `data-testid="ttt-cell-<0-8>"`.
+`npm run build` + `npm run lint`, then `npm run e2e ttt` for the online mode
+(`e2e/146-ttt-online`, which pairs two widgets in one document over the
+loopback transport). The offline modes have no suite of their own yet — drive
+those by hand: play both modes, toggle difficulty, use Pass, resize the widget,
+and reload to confirm persistence. Cells expose `data-testid="ttt-cell-<0-8>"`,
+and the root publishes the `data-*` contract listed under *2 Devices*.

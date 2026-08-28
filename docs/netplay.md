@@ -1,8 +1,9 @@
 # Netplay — two devices, one wifi
 
 Design notes for `src/features/netplay/` and `src/components/netplay/`, the
-peer-to-peer link that lets two people play one game from two devices. First
-consumer: the Connect 4 widget's **2 Devices** mode (`docs/connect-4.md`).
+peer-to-peer link that lets two people play one game from two devices.
+Consumers: the Connect 4 widget (`docs/connect-4.md`) and Tic-Tac-Toe
+(`docs/tic-tac-toe.md`), both through their **2 Devices** mode.
 
 ## The constraint that shaped everything
 
@@ -125,8 +126,8 @@ ever needs three things:
 | `sync` | whole position; the host sends one on connect |
 | `new` | restart, with who opens |
 
-Connect 4's move is a column index; Tic-Tac-Toe's would be a cell index, and
-the same envelope carries both. `sync` state is opaque here and validated by
+Connect 4's move is a column index and Tic-Tac-Toe's is a cell index; the same
+envelope carries both, unchanged. `sync` state is opaque here and validated by
 the widget that understands it.
 
 `hello` never reaches the game: `useNetplay` sends it the moment a link opens
@@ -147,6 +148,30 @@ the two boards honest. A move is applied only if it is the other seat's turn
 **and** the ply matches. A duplicated, reordered or stale delivery is dropped
 rather than guessed at: a missed move leaves the position intact, where a
 misapplied one corrupts it.
+
+## The shared seam — `useNetGame`
+
+Connect 4 carried the netplay wiring inline at first. When Tic-Tac-Toe became
+the second consumer, all but one line of it turned out to be generic, so it
+moved to `features/netplay/useNetGame`:
+
+| Supplied by the hook | Supplied by the game |
+|---|---|
+| seat assignment (host is Player 1) | `applyMove(board, move, seat)` |
+| the turn lock (`blocked`) | `coerceBoard` — validating a peer's `sync` |
+| the ply-checked move relay, with all three ignore-reasons | `newBoard()` |
+| the host's position `sync` on connect | `onReplace()` — clearing transient UI |
+| the broadcast restart | `turn` / `ply`, which both games already derive |
+| the pairing dialog's lifecycle | |
+
+Both games derive the turn from `(board, first)`, count ply as filled cells,
+and sync `{ board, first }` — so the only real difference between them is a
+column drop versus setting a cell. `NetplayChip` moved out for the same reason:
+it was identical bar a test id.
+
+The claim that the protocol is game-agnostic was, until this point, an
+assertion in this document. A second game now shares the *code*, not just the
+idea — and a third (Dots and Boxes, Reversi) needs the right-hand column only.
 
 ## Seats
 
@@ -205,9 +230,9 @@ Netplay is infrastructure, so this backlog is about reach rather than
 gameplay.
 
 **More games on the same rails**
-- **Tic-Tac-Toe online** — the smallest possible second consumer; `move` is a
-  cell index and nothing else changes. Would prove the protocol is genuinely
-  game-agnostic.
+- ~~Tic-Tac-Toe online~~ — **shipped**, and it did prove the point: the second
+  game supplies one function (`applyMove`) and inherits everything else. See
+  *The shared seam* above and `docs/tic-tac-toe.md`.
 - **Dots and Boxes / Reversi online** — same shape again, once those widgets
   exist (`docs/` backlogs).
 - **Memory online** — the first game needing more than moves: the card

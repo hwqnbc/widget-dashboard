@@ -118,7 +118,9 @@ src/
   hooks/useViewport   live viewport size + orientation (portrait/landscape)
   features/map/       mapSlice (Map page: 2D/3D choice + dropped pins)
   features/netplay/   two-device play: NetTransport seam (webrtc | loopback),
-                      compact SDP pairing codec, wire protocol, useNetplay
+                      compact SDP pairing codec, wire protocol, useNetplay,
+                      useNetGame (the per-game seam: a widget supplies
+                      applyMove and inherits seats/turn lock/relay/sync)
   components/netplay/ pairing dialog + QR encode/scan (lazy chunk)
   pages/              DashboardPage, SettingsPage, MapPage (+ pages/map/ —
                       the @arcgis/core lazy chunk; see docs/map.md)
@@ -254,7 +256,8 @@ the Drone Strike patrol soldiers.
 Per-feature design notes live in `docs/`. See `docs/tic-tac-toe.md` for the
 Tic-Tac-Toe widget's considerations (difficulty levels incl. the "sane player"
 Easy AI, 2-player vs vs-computer, the pass-opening-move button, board
-responsiveness, and the persisted state model). See `docs/connect-4.md` for the
+responsiveness, the persisted state model, and **2 Devices** mode — the
+netplay layer's second consumer, which supplies only an `applyMove`). See `docs/connect-4.md` for the
 Connect 4 widget (7×6 board, depth-based Easy/Medium/Hard alpha-beta AI,
 animated disc drop; reuses the same modes, latency, pass button and glow —
 plus **2 Devices** mode, the first net-played widget). See `docs/netplay.md`

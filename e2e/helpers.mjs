@@ -80,6 +80,50 @@ export async function addAvatarWidget(page) {
   await page.waitForSelector('[data-testid="avatar-actions"]')
 }
 
+/** Fresh dashboard with `count` Tic-Tac-Toe widgets, loopback transport armed.
+ * `?netloop=1` swaps WebRTC for the in-page transport so two widgets in one
+ * document can pair; everything else is the production path. */
+export async function addTicTacToeWidgets(page, count = 2) {
+  await page.goto(`${BASE_URL}?netloop=1`, { waitUntil: 'networkidle' })
+  for (let i = 0; i < count; i++) {
+    await page.getByRole('button', { name: 'Add widget' }).click()
+    await page.getByRole('menuitem', { name: /Tic-Tac-Toe/ }).click()
+  }
+  await page.locator('[data-testid="tictactoe-root"]').nth(count - 1).waitFor()
+}
+
+/**
+ * Pair two same-page widgets over the in-page `loopback` transport.
+ *
+ * The host publishes a code and the guest redeems it — the same shape as the
+ * real WebRTC handshake, minus the second hop (see docs/netplay.md). Shared
+ * because every net-played widget pairs identically; only the mode toggle's
+ * test id differs.
+ *
+ * The page must have been loaded with `?netloop=1`. `afterHost` runs while the
+ * host is published but unredeemed — the only moment its half-paired state can
+ * be observed.
+ */
+export async function pairLoopback(page, { host, guest, modeTestId, afterHost }) {
+  await host.locator(`[data-testid="${modeTestId}"]`).click()
+  await page.waitForSelector('[data-testid="netplay-dialog"]')
+  await page.locator('[data-testid="netplay-host"]').click()
+  await page.waitForSelector('[data-testid="netplay-token"]')
+  const code = (await page.locator('[data-testid="netplay-token"]').textContent()).trim()
+  await page.locator('[data-testid="netplay-close"]').click()
+  await page.waitForSelector('[data-testid="netplay-dialog"]', { state: 'detached' })
+  if (afterHost) await afterHost(code)
+
+  await guest.locator(`[data-testid="${modeTestId}"]`).click()
+  await page.waitForSelector('[data-testid="netplay-dialog"]')
+  await page.locator('[data-testid="netplay-code-input"]').fill(code)
+  await page.locator('[data-testid="netplay-code-submit"]').click()
+  await page.waitForSelector('[data-testid="netplay-connected"]')
+  // The dialog bows out on its own once the link is up.
+  await page.waitForSelector('[data-testid="netplay-dialog"]', { state: 'detached' })
+  return code
+}
+
 /** Fresh dashboard with one Maze Runner widget. */
 export async function addMazeWidget(page) {
   await page.goto(BASE_URL, { waitUntil: 'networkidle' })
