@@ -238,10 +238,50 @@ On this project's sandboxed dev environment the ArcGIS hosts
 its offline branch there; the online branch runs on a normal network. Full
 visual verification happens on the GitHub Pages deploy.
 
+### Known flake: "panel slides in at the right edge of the map"
+
+One assertion in the suite is unreliable and has not been fixed. It checks
+that `panelBox.x + panelBox.width` lands within 3px of
+`mapBox.x + mapBox.width` after opening the overlays panel.
+
+The reason it is fragile is structural: `map-container` and `OverlaysPanel`
+are **siblings** inside `map-page` (`MapPageBody.tsx:1004` and `:1027`), not
+parent and child. The panel is `position: absolute; right: 0` with a **200ms
+transform transition** (`OverlaysPanel.tsx:152-170`); the container is
+`width: 100%` and is resized by ArcGIS. So the assertion needs *two*
+independent things to have settled — the slide-in **and** the container
+reaching its final width — and it waits a flat `waitForTimeout(350)`, which
+guarantees neither.
+
+Both failure modes were observed. Most failures are **mid-slide**: right
+edges of 1268-1295 against a settled 1256, varying continuously run to run,
+which is the signature of a race rather than a layout bug. A second, distinct
+and repeatable mode reports exactly 1279.1 — there the panel *has* settled,
+flush to the page wrapper, while the container is narrower; that one is a
+width mismatch, not the transition.
+
+**Proposed fix.** Replace the fixed sleep with a wait for the panel's
+`getBoundingClientRect().x` to hold steady across ~3 animation frames. This
+was prototyped and fixed **5 of 6** attempts. It does not address the second
+mode, so a complete fix also has to wait for `map-container`'s width to stop
+changing — or assert against the page wrapper, which is what the panel is
+actually flush to. Note this strengthens the assertion rather than relaxing
+it: it asserts the same alignment, just against a settled layout.
+
+**Caveat for whoever picks this up.** The flake surfaced alongside a commit
+whose diff contains nothing the `/map` route executes (a maze widget's
+internals, two `defaultWidgetData` values, docs). Baselining put `main` at
+4/4 clean while that branch went 2/11 in the same session, and no mechanism
+was ever found linking the two. Re-baseline both commits before trusting
+either number — the correlation may well be an artifact of measurement order.
+
 ## Future work (enhancement backlog)
 
 - ~~Basemap gallery~~ — shipped (panel tile grid over 11 free basemaps +
   Auto, see the basemap section above).
+- **De-flake the overlays-panel geometry assertion** — swap `130-map`'s fixed
+  350ms wait for a settled-layout wait, and handle the container-width mode
+  too (see *Known flake* above; the prototype fixed 5 of 6 attempts).
 - **Live USGS earthquakes overlay** — `GeoJSONLayer` on the public CORS feed
   (`earthquake.usgs.gov/.../all_day.geojson`), magnitude-scaled renderer +
   popups; toggle in the control strip.
