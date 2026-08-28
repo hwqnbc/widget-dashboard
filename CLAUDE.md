@@ -82,6 +82,11 @@ build on (see `docs/drone-sim.md`, `docs/drone-strike.md`,
 new ideas discovered while building. The backlog is what the user picks
 the next round from — never leave a new game without one.
 
+Ideas for widgets that **don't exist yet** have no design note to live in,
+so they go in `docs/widget-ideas.md` — same rule, each entry naming the
+modules it would reuse and the one thing that is genuinely new. Strike an
+entry through when it ships and move the detail into its own design note.
+
 ## Stack
 
 - Vite 8 + React 19 + TypeScript (strict, `verbatimModuleSyntax` — use
@@ -253,7 +258,8 @@ the Drone Strike patrol soldiers.
 
 ## Docs
 
-Per-feature design notes live in `docs/`. See `docs/tic-tac-toe.md` for the
+Per-feature design notes live in `docs/`; `docs/widget-ideas.md` holds the
+backlog of widgets not yet built (Dots and Boxes, Reversi, Snowball Fight, …). See `docs/tic-tac-toe.md` for the
 Tic-Tac-Toe widget's considerations (difficulty levels incl. the "sane player"
 Easy AI, 2-player vs vs-computer, the pass-opening-move button, board
 responsiveness, the persisted state model, and **2 Devices** mode — the
