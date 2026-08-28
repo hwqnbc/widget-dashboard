@@ -284,7 +284,13 @@ gameplay.
 - **Spectator seat** — a third peer receiving `sync` only.
 
 **Beyond turn-based**
-- **Real-time netplay** (Tank Battle, a Drone Strike versus mode) is a
-  different project, not an extension of this one: it needs tick
-  synchronisation, interpolation and authority over hits. The transport and
-  pairing here would be reusable; the protocol would not.
+- **Drone Strike score duel** — the next real-time consumer, designed and
+  waiting in `docs/drone-strike.md`'s backlog (same seeded waves fought
+  privately, synced start, live scoreboard; the ghost/shared-kills fork and
+  the deferred shared-battle option are written up there). The maze race
+  already proved the `go`/`done` pattern it reuses.
+- **Fully shared real-time battles** (Tank Battle, the Drone Strike shared
+  world) remain a different project: host-authoritative entity state,
+  interpolation and authority over hits. The transport and pairing here are
+  reusable; the turn protocol is not — see the strike backlog for the
+  worked-through deferral.

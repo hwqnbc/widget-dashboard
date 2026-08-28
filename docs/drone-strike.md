@@ -997,6 +997,42 @@ Audited and **not** applicable: gate count / course editor / course source
 pilot views (operator-specific). FPV polish is tracked above under Camera &
 visuals.
 
+### Two devices
+- **Score duel (round 1 — the plan of record).** Two devices, same seed and
+  difficulty (the host's settings win via `sync`), a synced countdown start
+  (the maze race's `go` pattern — see `MazeRunnerWidget`), then each player
+  fights their **own private copy** of the identical seeded waves. Kills do
+  not interact; the competition is a live scoreboard chip (both avatars,
+  score, wave, hearts, streamed as tiny score-update messages) and a winner
+  banner once both runs end. Builds on `useNetplay` + `NetplayChip` /
+  `NetplayDialog` + the e2e `pairLoopback` helper, and on `waveLayout`
+  already being seeded and deterministic — it is the maze ghost race minus
+  the hard part. Needs a score-update message; any addition bumps
+  `NET_VERSION` (lesson #109).
+- **Round 2 forks, decided by watching round 1 played.** Either the **ghost
+  drone** — the other pilot rendered live in your world (~10 Hz position +
+  yaw, interpolated, avatar-coloured beacon, render their drone but *not*
+  their fire, so it never visibly shoots at enemies that only exist in their
+  world) — or **shared ground-target kills**: trucks and turrets are static
+  and identically placed in both worlds, so "truck #2 is dead" applies
+  cleanly with no AI sync. The second retroactively gives the ghost a
+  tactical reason to exist ("she's about to take my truck points") where on
+  its own it is presence, not gameplay — a drone's position, unlike a maze
+  runner's, carries no competitive information; the scoreboard does.
+- **A true shared battle — considered and deferred, on purpose.** Both
+  drones fighting the *same* enemies needs host-authoritative enemy state,
+  hit adjudication against interpolated positions, and answers to aggro/loot
+  questions (who does the kamikaze chase? whose crate is it?) that don't
+  exist yet. The rig steps enemies per-frame in mutable refs — the
+  zero-render design — so replication means forking every enemy system into
+  simulate/replicate modes, under ~20 strike e2e suites, and the loopback
+  e2e pattern would put two WebGL rigs in one software-GL document.
+  Estimated 3–5 rounds with real regression risk, against a score duel that
+  delivers most of the felt experience in one. If it is ever wanted, the
+  pragmatic scope is written down here first: guest-authoritative hit
+  claims (family-grade trust), approximate guest visuals, nearest-player
+  aggro — and everything from rounds 1–2 carries over unchanged.
+
 ### Meta
 - ~~Sound~~ — **shipped** (Web Audio, no assets: fire chirp pitched by
   cooldown, target pop, incoming-fire alert, wave-clear sting, crash thud;
