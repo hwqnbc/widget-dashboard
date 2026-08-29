@@ -1842,3 +1842,35 @@ carried over; these are the new ones.
      the moment the mode is left. The test for divergence had to live in the
      two-CONTEXT suite: loopback widgets share one store and one settings
      map, so they can never genuinely disagree (lesson #89's cousin).
+
+113. **A real-valued move becomes deterministic by QUANTIZING it, not by
+     trusting floats.** Archery's shot is a launch vector plus animation
+     phases. Packing it into one integer (vx/vy to 1 unit, phases to ~9ms) and
+     having the SHOOTER fire the quantized values means both devices unpack
+     identical ints and feed identical floats to an identical resolver — what
+     flew on one screen is what the other concludes, bit for bit. The packing
+     also fit the wire protocol's existing `move: number`, so a "richer" move
+     needed no protocol change at all (lesson #111's cousin).
+
+114. **rAF-sampled hit detection is device-local by construction.** Outcomes
+     decided by testing collisions at frame times differ across frame rates,
+     and phases read from a rAF clock differ across devices. The fix is one
+     pure resolver with FIXED-step sampling and every input explicit — then
+     the animation demotes to drawing the same closed-form path until the
+     resolver's `tEnd`. Local play keeps its feel; the outcome just stops
+     depending on who is rendering.
+
+115. **When state commits at release but the arrow flies for a second, decide
+     which moments matter.** Online must commit at release (the wire cannot
+     wait for an animation, or the next move arrives against an unwritten
+     position), so the remote score updates a beat before the replayed arrow
+     lands — a known, documented trade. Local play commits at landing to keep
+     its suspense. One resolver, two commit points, each justified.
+
+116. **CDP touches do not auto-scroll, and `el.dataset` camelCases.** Two test
+     bugs from one round: a below-the-fold widget silently swallowed a
+     synthetic drag (locator clicks scroll into view; raw
+     `Input.dispatchTouchEvent` does not — `scrollIntoViewIfNeeded` first),
+     and `waitForFunction` on `dataset['score-toy']` waited forever because
+     the key is `scoreToy`. Both passed every assertion before them and
+     failed as timeouts far downstream — neither was the widget.

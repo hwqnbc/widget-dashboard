@@ -80,6 +80,53 @@ export async function addAvatarWidget(page) {
   await page.waitForSelector('[data-testid="avatar-actions"]')
 }
 
+/** Fresh dashboard with `count` Archery widgets, loopback transport armed
+ * (see `addTicTacToeWidgets` for why `?netloop=1`). */
+export async function addArcheryWidgets(page, count = 2) {
+  await page.goto(`${BASE_URL}?netloop=1`, { waitUntil: 'networkidle' })
+  for (let i = 0; i < count; i++) {
+    await page.getByRole('button', { name: 'Add widget' }).click()
+    await page.getByRole('menuitem', { name: /Archery/ }).click()
+  }
+  await page.locator('[data-testid="archery-root"]').nth(count - 1).waitFor()
+}
+
+/**
+ * Fire an archery shot on board `index` by dragging opposite the desired
+ * launch vector (the slingshot: drag = -v/K in world units, converted to CSS
+ * pixels off the svg's live bounding box). Starts from the svg centre.
+ */
+export async function dragShot(page, context, { vx, vy, index = 0, k = 6.8 }) {
+  // The scene svg specifically — heads and chip icons are svgs too.
+  const svg = page.locator('[data-testid="archery-root"] svg[data-w]').nth(index)
+  // CDP touches land at absolute viewport coordinates and do NOT auto-scroll
+  // the way locator clicks do — a below-the-fold board would swallow the drag.
+  await svg.scrollIntoViewIfNeeded()
+  await page.waitForTimeout(100)
+  const box = await svg.boundingBox()
+  const w = parseFloat(await svg.getAttribute('data-w'))
+  const scale = box.width / w // CSS px per world unit
+  const startX = box.x + box.width / 2
+  const startY = box.y + box.height / 2
+  const dx = (-vx / k) * scale
+  const dy = (-vy / k) * scale
+  const cdp = await context.newCDPSession(page)
+  await cdp.send('Input.dispatchTouchEvent', {
+    type: 'touchStart',
+    touchPoints: [{ x: startX, y: startY, id: 31 }],
+  })
+  const steps = 6
+  for (let i = 1; i <= steps; i++) {
+    await cdp.send('Input.dispatchTouchEvent', {
+      type: 'touchMove',
+      touchPoints: [{ x: startX + (dx * i) / steps, y: startY + (dy * i) / steps, id: 31 }],
+    })
+    await page.waitForTimeout(25)
+  }
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
+  await cdp.detach()
+}
+
 /** Fresh dashboard with `count` Maze Runner widgets, loopback transport armed
  * (see `addTicTacToeWidgets` for why `?netloop=1`). */
 export async function addMazeWidgets(page, count = 2) {

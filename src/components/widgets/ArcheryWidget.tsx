@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { Suspense, useEffect, useRef, useState } from 'react'
 import {
   alpha,
   Box,
@@ -18,57 +18,112 @@ import TurnBanner from './TurnBanner'
 import WinnerCelebration from './WinnerCelebration'
 import ConfirmDialog from './ConfirmDialog'
 import { avatarMetaById } from '../../features/avatars/avatarCatalog'
-import { useSeatAvatars, useSeatVisual } from '../../features/avatars/useSeatAvatars'
+import {
+  SeatAvatarsOverride,
+  useSeatAvatars,
+  useSeatVisual,
+} from '../../features/avatars/useSeatAvatars'
+import { useNetGame } from '../../features/netplay/useNetGame'
+import NetplayChip from '../netplay/NetplayChip'
+import { lazyWithReload } from '../../utils/lazyWithReload'
+
+/** The pairing UI pulls in a QR encoder and decoder — kept out of the main
+ * bundle, since most sessions never open it. */
+const NetplayDialog = lazyWithReload(
+  () => import('../netplay/NetplayDialog'),
+  'netplay-dialog',
+)
 import { useHandoff } from '../../hooks/useHandoff'
 import { usePresentation } from '../fullscreen/presentation'
 import { useViewport } from '../../hooks/useViewport'
+import {
+  FIG_H,
+  G,
+  GROUND,
+  H,
+  K,
+  OBS_HH,
+  OBS_HW,
+  OBS_PERIOD,
+  PERIOD_P,
+  VMAX,
+  WIN,
+  WIND_MAX,
+  archerX,
+  blockCyAt as blockCyAtPhase,
+  dealHeightsFrom,
+  facing,
+  flightAt,
+  launchOriginAt as launchOriginAtW,
+  packShot,
+  phaseOf,
+  platYAt,
+  resolveShot,
+  unpackShot,
+  windAt,
+  worldW,
+} from './archeryModel'
 
 type Player = 'toy' | 'ninja'
 type Scores = { toy: number; ninja: number }
 type Mode = 'calm' | 'wind' | 'obstacle'
 type Distance = 'short' | 'long'
 type Platform = 'still' | 'both' | 'target'
+/** Local pass-and-play, or two devices on one wifi. A new axis, not a fourth
+ * `Mode` — weather and transport are orthogonal. */
+type Play = 'local' | 'online'
 
-// World = SVG viewBox units. Width depends on the Range setting; height fixed.
-const H = 260
-const GROUND = 238
-const MARGIN = 50 // archer inset from each side
-const FIG_H = 58
-const G = 520 // gravity (units/s²)
-const VMAX = 620
-const K = 6.8 // drag(world) → speed
-const WIN = 5
-const MIN_Y = 84
-const MAX_Y = 206
-const GAP = 32
-const WIND_MIN = 70
-const WIND_MAX = 170
-// Obstacle (bobbing block)
-const OBS_MID = 118
-const OBS_AMP = 58
-const OBS_PERIOD = 2200
-const OBS_HW = 13
-const OBS_HH = 26
-// Moving platforms (archers ride up/down)
-const AMP_P = 34
-const PERIOD_P = 2400
-const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v))
-const phaseOf = (p: Player) => (p === 'toy' ? 0 : Math.PI)
+/**
+ * Everything two devices must agree on, as one object: `useNetGame`'s
+ * "board". The settings ride along because they change the physics (W from
+ * distance, the obstacle from mode) — the host's win, like every game so far.
+ */
+interface NetState {
+  p1y: number
+  p2y: number
+  scores: Scores
+  turn: Player
+  shots: number
+  gameSeed: number
+  mode: Mode
+  distance: Distance
+  platforms: Platform
+}
+
+const isScores = (v: unknown): v is Scores =>
+  !!v &&
+  typeof v === 'object' &&
+  typeof (v as Scores).toy === 'number' &&
+  typeof (v as Scores).ninja === 'number'
+
+/** A peer's sync is outside this component's control — every field checked. */
+const coerceNetState = (v: unknown): NetState | undefined => {
+  if (!v || typeof v !== 'object') return undefined
+  const m = v as Record<string, unknown>
+  return typeof m.p1y === 'number' &&
+    typeof m.p2y === 'number' &&
+    isScores(m.scores) &&
+    (m.turn === 'toy' || m.turn === 'ninja') &&
+    typeof m.shots === 'number' &&
+    typeof m.gameSeed === 'number' &&
+    (m.mode === 'calm' || m.mode === 'wind' || m.mode === 'obstacle') &&
+    (m.distance === 'short' || m.distance === 'long') &&
+    (m.platforms === 'still' || m.platforms === 'both' || m.platforms === 'target')
+    ? (m as unknown as NetState)
+    : undefined
+}
+
+// World geometry and physics live in `archeryModel.ts` (pure, e2e-bundled);
+// what stays here is presentation and the wall-clock↔phase bridges.
 const ZERO: Scores = { toy: 0, ninja: 0 }
-
-const worldW = (d: Distance) => (d === 'long' ? 560 : 400)
 const other = (p: Player): Player => (p === 'toy' ? 'ninja' : 'toy')
-const facing = (p: Player) => (p === 'toy' ? 1 : -1)
+const WIND_MIN = 70
 const randomWind = () =>
   Math.round((WIND_MIN + Math.random() * (WIND_MAX - WIND_MIN)) * (Math.random() < 0.5 ? -1 : 1))
-const blockCyAt = (ts: number) => OBS_MID + OBS_AMP * Math.sin((ts / OBS_PERIOD) * Math.PI * 2)
-const randY = () => MIN_Y + Math.random() * (MAX_Y - MIN_Y)
-function dealHeights() {
-  const a = randY()
-  let b = randY()
-  for (let i = 0; i < 24 && Math.abs(a - b) < GAP; i++) b = randY()
-  return { p1y: Math.round(a), p2y: Math.round(b) }
-}
+/** Animation-clock timestamp → the model's phase (radians). */
+const obsPhaseAt = (ts: number) => (ts / OBS_PERIOD) * Math.PI * 2
+const platPhaseAt = (p: Player, ts: number) => (ts / PERIOD_P) * Math.PI * 2 + phaseOf(p)
+const blockCyAt = (ts: number) => blockCyAtPhase(obsPhaseAt(ts))
 
 /** A stick-figure archer with the character's head, standing on a pillar. */
 function Archer({ player, x, py, hit }: { player: Player; x: number; py: number; hit: boolean }) {
@@ -119,7 +174,6 @@ export default function ArcheryWidget({ id }: WidgetProps) {
   const dispatch = useAppDispatch()
   const hand = useHandoff()
   const seatAvatars = useSeatAvatars()
-  const colorOf = (seat: Player) => avatarMetaById[seatAvatars[seat]].color
   // Full-screen landscape uses an immersive overlay layout (scene fills the area,
   // controls float over the margins); every other presentation keeps the stacked one.
   const { fullscreen } = usePresentation()
@@ -147,22 +201,26 @@ export default function ArcheryWidget({ id }: WidgetProps) {
   const platforms = useWidgetField<Platform>(id, 'platforms', 'still', (v) =>
     v === 'both' || v === 'target' ? v : 'still',
   )
+  const play = useWidgetField<Play>(id, 'play', 'local', (v) =>
+    v === 'online' ? 'online' : 'local',
+  )
+  const shots = useWidgetField<number>(id, 'shots', 0, num)
+  const gameSeed = useWidgetField<number>(id, 'gameSeed', 0, num)
   const [pending, setPending] = useState<{
     mode?: Mode
     distance?: Distance
     platforms?: Platform
+    play?: Play
   } | null>(null)
 
   const W = worldW(distance)
-  const px = (p: Player) => (p === 'toy' ? MARGIN : W - MARGIN)
+  const px = (p: Player) => archerX(p, W)
   const feet = (p: Player) => (p === 'toy' ? p1y : p2y)
-  const launchOriginAt = (p: Player, y: number) => ({ x: px(p) + facing(p) * 6, y: y - 34 })
-  const hitboxAt = (p: Player, y: number) => ({ x0: px(p) - 16, x1: px(p) + 16, y0: y - FIG_H, y1: y })
+  const launchOriginAt = (p: Player, y: number) => launchOriginAtW(p, W, y)
 
-  // Platform movement: the archer's feet Y bobs about its (clamped) dealt height.
-  const platCenter = (p: Player) => clamp(feet(p), MIN_Y + AMP_P, MAX_Y - AMP_P)
-  const platY = (p: Player, ts: number) =>
-    platCenter(p) + AMP_P * Math.sin((ts / PERIOD_P) * Math.PI * 2 + phaseOf(p))
+  // Platform movement: the archer's feet Y bobs about its (clamped) dealt
+  // height — the model's phase form, bridged from the animation clock.
+  const platY = (p: Player, ts: number) => platYAt(feet(p), platPhaseAt(p, ts))
   // In 'target' mode only the shooter's opponent bobs; in 'both' everyone bobs.
   const moves = (p: Player) =>
     platforms === 'both' || (platforms === 'target' && p === other(turn))
@@ -173,19 +231,8 @@ export default function ArcheryWidget({ id }: WidgetProps) {
   const inProgress = !gameOver && (scores.toy > 0 || scores.ninja > 0)
   const nextWind = () => (mode === 'wind' ? randomWind() : 0)
 
-  const setGame = (
-    next: Partial<{
-      p1y: number
-      p2y: number
-      scores: Scores
-      turn: Player
-      first: Player
-      mode: Mode
-      wind: number
-      distance: Distance
-      platforms: Platform
-    }>,
-  ) => dispatch(updateWidgetData({ id, data: next }))
+  const setGame = (next: Record<string, unknown>) =>
+    dispatch(updateWidgetData({ id, data: next }))
 
   // Transient interaction state.
   const svgRef = useRef<SVGSVGElement>(null)
@@ -220,29 +267,199 @@ export default function ArcheryWidget({ id }: WidgetProps) {
 
   // Deal random heights on first mount / when the world changes size.
   useEffect(() => {
-    if (!dealt) setGame(dealHeights())
+    if (!dealt) {
+      const seed = (Math.random() * 0xffffffff) >>> 0
+      setGame({ ...dealHeightsFrom(seed), gameSeed: seed })
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dealt])
 
-  const reset = (opts: { mode?: Mode; distance?: Distance; platforms?: Platform } = {}) => {
+  /**
+   * Play a shot's flight. Pure presentation: the OUTCOME is already decided
+   * by `resolveShot` before the first frame draws — this loop just renders
+   * the same closed-form path until the resolver's `tEnd`, then reports done.
+   * One animator serves the local shooter and an incoming remote shot alike.
+   */
+  const animateShot = (
+    shooter: Player,
+    vx: number,
+    vy: number,
+    shooterY: number,
+    windNow: number,
+    tEnd: number,
+    onDone: () => void,
+  ) => {
+    if (rafRef.current) cancelAnimationFrame(rafRef.current)
+    const origin = launchOriginAt(shooter, shooterY)
+    let start: number | null = null
+    const step = (ts: number) => {
+      if (start === null) start = ts
+      const t = (ts - start) / 1000
+      setAnimTs(ts)
+      if (t >= tEnd) {
+        setArrow(null)
+        onDone()
+        return
+      }
+      const pos = flightAt(origin, vx, vy, windNow, t)
+      setArrow({
+        x: pos.x,
+        y: pos.y,
+        angle: (Math.atan2(vy + G * t, vx + windNow * t) * 180) / Math.PI,
+      })
+      rafRef.current = requestAnimationFrame(step)
+    }
+    rafRef.current = requestAnimationFrame(step)
+  }
+  // Carries the animator into `applyMove`, which runs from a transport
+  // callback — the presentation side-channel of an otherwise pure reducer.
+  const animateRef = useRef(animateShot)
+  animateRef.current = animateShot
+
+  // ---------------------------------------------------------------- netplay
+  const online = play === 'online'
+  const netBoard: NetState = {
+    p1y,
+    p2y,
+    scores,
+    turn,
+    shots,
+    gameSeed,
+    mode,
+    distance,
+    platforms,
+  }
+  const net = useNetGame<NetState>({
+    online,
+    board: netBoard,
+    first: 'toy',
+    turn,
+    ply: shots,
+    // The Archery-specific part of two-device play: unpack the quantized
+    // launch, run the SAME fixed-step resolver the shooter ran, and step the
+    // score/turn. Every input the outcome depends on is either synced state
+    // or packed into the move itself.
+    applyMove: (state, packed, seat) => {
+      const parts = unpackShot(packed)
+      if (!parts) return null
+      const w = worldW(state.distance)
+      const windNow = state.mode === 'wind' ? windAt(state.gameSeed, state.shots) : 0
+      const outcome = resolveShot({
+        w,
+        shooter: seat,
+        vx: parts.vx,
+        vy: parts.vy,
+        shooterY: parts.shooterY,
+        oppFeetY: seat === 'toy' ? state.p2y : state.p1y,
+        oppPhase: parts.oppPhase,
+        wind: windNow,
+        obstaclePhase: parts.obstaclePhase,
+      })
+      // Replay their arrow here. The score has already moved by the time it
+      // lands — a known beat of lost suspense, noted in the doc's backlog.
+      animateRef.current(seat, parts.vx, parts.vy, parts.shooterY, windNow, outcome.tEnd, () => {
+        if (outcome.hit) {
+          setFlash(seat === 'toy' ? 'ninja' : 'toy')
+          window.setTimeout(() => setFlash(null), 500)
+        }
+      })
+      const ns = { ...state.scores }
+      if (outcome.hit) ns[seat] += 1
+      const won = ns[seat] >= WIN
+      return {
+        ...state,
+        scores: ns,
+        shots: state.shots + 1,
+        turn: won ? state.turn : other(seat),
+      }
+    },
+    coerceBoard: coerceNetState,
+    // Only reached if a peer ever sends `new`; archery restarts via sendSync
+    // because a fresh board needs fresh randomness. Deterministic fallback:
+    // same heights, zeroed score.
+    newBoard: () => ({ ...netBoard, scores: { toy: 0, ninja: 0 }, shots: 0, turn: 'toy' }),
+    onReplace: () => {
+      hand.clear()
+      if (rafRef.current) cancelAnimationFrame(rafRef.current)
+      setArrow(null)
+      setAim(null)
+    },
+    setGame: (next) => {
+      // The hook speaks in one `board` object; this widget persists flat
+      // fields — spread it back out.
+      if ('board' in next) {
+        const { board, ...rest } = next
+        setGame({ ...(board as NetState), ...rest })
+      } else {
+        setGame(next)
+      }
+    },
+  })
+
+  // Costume rules as everywhere: a connected guest wears the host's picks.
+  const avatarOverride = online ? net.peerAvatars : null
+  const effectiveAvatars = avatarOverride ?? seatAvatars
+  const colorOf = (seat: Player) => avatarMetaById[effectiveAvatars[seat]].color
+
+  /** Wind this shot flies in. Online derives it from the synced seed so both
+   * devices know every turn's wind without messaging it; local keeps the
+   * persisted roll. */
+  const effWind = online ? (mode === 'wind' ? windAt(gameSeed, shots) : 0) : wind
+
+  const reset = (
+    opts: { mode?: Mode; distance?: Distance; platforms?: Platform; play?: Play } = {},
+  ) => {
     hand.clear()
     if (rafRef.current) cancelAnimationFrame(rafRef.current)
     setArrow(null)
     setAim(null)
     const m = opts.mode ?? mode
-    setGame({
-      ...dealHeights(),
+    const seed = (Math.random() * 0xffffffff) >>> 0
+    // Built, dispatched AND returned: an online restart must send exactly
+    // what it dealt, and dispatches are async.
+    const next = {
+      ...dealHeightsFrom(seed),
       scores: { toy: 0, ninja: 0 },
-      turn: 'toy',
-      first: 'toy',
+      turn: 'toy' as Player,
+      first: 'toy' as Player,
+      shots: 0,
+      gameSeed: seed,
       mode: m,
       distance: opts.distance ?? distance,
       platforms: opts.platforms ?? platforms,
+      play: opts.play ?? play,
       wind: m === 'wind' ? randomWind() : 0,
-    })
+    }
+    setGame(next)
+    return next
   }
-  const newGame = () => reset()
-  const requestReset = (opts: { mode?: Mode; distance?: Distance; platforms?: Platform }) => {
+  const newGame = () => {
+    const next = reset()
+    // A fresh board needs fresh randomness, which `new` cannot carry — so an
+    // online restart is a whole-position sync, from either side.
+    if (online) {
+      net.sendSync(
+        {
+          p1y: next.p1y,
+          p2y: next.p2y,
+          scores: next.scores,
+          turn: next.turn,
+          shots: next.shots,
+          gameSeed: next.gameSeed,
+          mode: next.mode,
+          distance: next.distance,
+          platforms: next.platforms,
+        },
+        'toy',
+      )
+    }
+  }
+  const requestReset = (opts: {
+    mode?: Mode
+    distance?: Distance
+    platforms?: Platform
+    play?: Play
+  }) => {
     if (inProgress) setPending(opts)
     else reset(opts)
   }
@@ -255,8 +472,11 @@ export default function ArcheryWidget({ id }: WidgetProps) {
   const changePlatforms = (next: Platform | null) => {
     if (next && next !== platforms) requestReset({ platforms: next })
   }
+  const changePlay = (next: Play | null) => {
+    if (next && next !== play) requestReset({ play: next })
+  }
 
-  const locked = gameOver || !!hand.player || !!arrow || !dealt
+  const locked = gameOver || !!hand.player || !!arrow || !dealt || net.blocked
 
   const toWorld = (e: React.PointerEvent) => {
     const r = svgRef.current!.getBoundingClientRect()
@@ -284,43 +504,56 @@ export default function ArcheryWidget({ id }: WidgetProps) {
     fire((-dx / dist) * mag, (-dy / dist) * mag)
   }
 
-  const fire = (vx: number, vy: number) => {
+  const fire = (rawVx: number, rawVy: number) => {
     const shooter = turn
     const opp = other(shooter)
-    // Whether each archer is riding a moving platform (captured for this flight).
-    const shooterMoves = moves(shooter)
-    const oppMoves = moves(opp)
-    // The arrow leaves the shooter's platform at its release height.
-    const shooterY = shooterMoves ? platY(shooter, animTs) : feet(shooter)
-    const origin = launchOriginAt(shooter, shooterY)
-    const captured = scores
-    const w = wind
-    const obstacle = mode === 'obstacle'
-    let start: number | null = null
-    const step = (ts: number) => {
-      if (start === null) start = ts
-      const t = (ts - start) / 1000
-      const x = origin.x + vx * t + 0.5 * w * t * t
-      const y = origin.y + vy * t + 0.5 * G * t * t
-      const angle = (Math.atan2(vy + G * t, vx + w * t) * 180) / Math.PI
-      setArrow({ x, y, angle })
-      setAnimTs(ts)
-      // The target rides its platform, so re-evaluate its hitbox each frame.
-      const oppY = oppMoves ? platY(opp, ts) : feet(opp)
-      const target = hitboxAt(opp, oppY)
-      const cy = blockCyAt(ts)
-      const blocked =
-        obstacle && x >= W / 2 - OBS_HW && x <= W / 2 + OBS_HW && y >= cy - OBS_HH && y <= cy + OBS_HH
-      const hitTarget =
-        !blocked && x >= target.x0 && x <= target.x1 && y >= target.y0 && y <= target.y1
-      const out = y > GROUND || x < -12 || x > W + 12 || t > 6
-      if (blocked || hitTarget || out) {
-        resolve(shooter, hitTarget, captured)
-        return
-      }
-      rafRef.current = requestAnimationFrame(step)
+    // Quantize FIRST: what flies on this screen is exactly what the other
+    // device (and the tests) resolve — identical ints, identical floats.
+    const packed = packShot({
+      vx: rawVx,
+      vy: rawVy,
+      shooterY: moves(shooter) ? platY(shooter, animTs) : feet(shooter),
+      oppPhase: moves(opp) ? platPhaseAt(opp, animTs) : null,
+      obstaclePhase: mode === 'obstacle' ? obsPhaseAt(animTs) : null,
+    })
+    const parts = unpackShot(packed)
+    if (!parts) return
+    const windNow = effWind
+    // One physics: the outcome is decided here, before the first frame draws.
+    const outcome = resolveShot({
+      w: W,
+      shooter,
+      vx: parts.vx,
+      vy: parts.vy,
+      shooterY: parts.shooterY,
+      oppFeetY: feet(opp),
+      oppPhase: parts.oppPhase,
+      wind: windNow,
+      obstaclePhase: parts.obstaclePhase,
+    })
+    if (online) {
+      // Commit and relay at release — the wire must not wait for a 1.5s
+      // animation, or the other device's next move would arrive against a
+      // position this one hasn't written yet.
+      net.sendMove(packed)
+      const ns = { ...scores }
+      if (outcome.hit) ns[shooter] += 1
+      const won = ns[shooter] >= WIN
+      setGame({ scores: ns, shots: shots + 1, ...(won ? {} : { turn: opp }) })
+      animateShot(shooter, parts.vx, parts.vy, parts.shooterY, windNow, outcome.tEnd, () => {
+        if (outcome.hit) {
+          setFlash(opp)
+          window.setTimeout(() => setFlash(null), 500)
+        }
+      })
+      return
     }
-    rafRef.current = requestAnimationFrame(step)
+    // Local pass-and-play keeps its suspense: the state lands when the arrow
+    // does.
+    const captured = scores
+    animateShot(shooter, parts.vx, parts.vy, parts.shooterY, windNow, outcome.tEnd, () =>
+      resolve(shooter, outcome.hit, captured),
+    )
   }
 
   const resolve = (shooter: Player, hit: boolean, captured: Scores) => {
@@ -332,12 +565,12 @@ export default function ArcheryWidget({ id }: WidgetProps) {
       setFlash(opp)
       window.setTimeout(() => setFlash(null), 500)
       if (ns >= WIN) {
-        setGame({ scores: { ...captured, [shooter]: ns } })
+        setGame({ scores: { ...captured, [shooter]: ns }, shots: shots + 1 })
         return
       }
-      setGame({ scores: { ...captured, [shooter]: ns }, turn: opp, wind: nextWind() })
+      setGame({ scores: { ...captured, [shooter]: ns }, shots: shots + 1, turn: opp, wind: nextWind() })
     } else {
-      setGame({ turn: opp, wind: nextWind() })
+      setGame({ shots: shots + 1, turn: opp, wind: nextWind() })
     }
     hand.announce(opp)
   }
@@ -384,6 +617,16 @@ export default function ArcheryWidget({ id }: WidgetProps) {
           <ToggleButton value="target" sx={toggleSx}>Target</ToggleButton>
         </ToggleButtonGroup>
       </Box>
+      <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+        <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1, mb: 0.25 }}>Play</Typography>
+        <ToggleButtonGroup size="small" exclusive value={play} onChange={(_, v) => changePlay(v as Play | null)}>
+          <ToggleButton value="local" data-testid="archery-play-local" sx={toggleSx}>Local</ToggleButton>
+          <ToggleButton value="online" data-testid="archery-play-online" sx={toggleSx}>2 Devices</ToggleButton>
+        </ToggleButtonGroup>
+      </Box>
+      {online && (
+        <NetplayChip link={net.link} testId="archery-link" onOpen={() => net.setLinkOpen(true)} />
+      )}
     </>
   )
 
@@ -429,10 +672,23 @@ export default function ArcheryWidget({ id }: WidgetProps) {
   }
 
   return (
+    <SeatAvatarsOverride.Provider value={avatarOverride}>
     <Box
       className="widget-no-drag"
       onMouseDown={(e) => e.stopPropagation()}
       onTouchStart={(e) => e.stopPropagation()}
+      data-testid="archery-root"
+      data-play={play}
+      data-net={online ? net.link.status : 'off'}
+      data-seat={online ? (net.link.seat ?? '') : ''}
+      data-turn={turn}
+      data-shots={shots}
+      data-arrow={arrow ? 'flying' : 'none'}
+      data-score-toy={scores.toy}
+      data-score-ninja={scores.ninja}
+      data-game-seed={gameSeed}
+      data-avatar-toy={effectiveAvatars.toy}
+      data-avatar-ninja={effectiveAvatars.ninja}
       sx={{ height: '100%', display: 'flex', flexDirection: 'column', gap: overlay ? 0 : 0.5, p: overlay ? 0 : 0.5 }}
     >
       {!overlay && (
@@ -459,7 +715,7 @@ export default function ArcheryWidget({ id }: WidgetProps) {
             data-p2y={p2y}
             data-w={W}
             data-mode={mode}
-            data-wind={mode === 'wind' ? wind : 0}
+            data-wind={mode === 'wind' ? effWind : 0}
             data-platforms={platforms}
             style={{ display: 'block', borderRadius: 8, touchAction: 'none', cursor: locked ? 'default' : 'crosshair' }}
             onPointerDown={onDown}
@@ -470,7 +726,7 @@ export default function ArcheryWidget({ id }: WidgetProps) {
             <rect x={0} y={GROUND} width={W} height={H - GROUND} fill="#6bbf59" />
             <rect x={0} y={GROUND} width={W} height={3} fill="#4f9e42" />
 
-            {mode === 'wind' && <WindIndicator wind={wind} cx={W / 2} />}
+            {mode === 'wind' && <WindIndicator wind={effWind} cx={W / 2} />}
 
             {mode === 'obstacle' && (
               <rect
@@ -554,6 +810,12 @@ export default function ArcheryWidget({ id }: WidgetProps) {
         </Stack>
       )}
 
+      {online && net.linkOpen && (
+        <Suspense fallback={null}>
+          <NetplayDialog open onClose={() => net.setLinkOpen(false)} link={net.link} />
+        </Suspense>
+      )}
+
       <ConfirmDialog
         open={pending !== null}
         title="Restart game?"
@@ -565,5 +827,6 @@ export default function ArcheryWidget({ id }: WidgetProps) {
         onCancel={() => setPending(null)}
       />
     </Box>
+    </SeatAvatarsOverride.Provider>
   )
 }

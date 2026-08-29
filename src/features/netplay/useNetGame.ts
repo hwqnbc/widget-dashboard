@@ -35,7 +35,7 @@ export interface NetGameOptions<TBoard> {
   setGame(next: Record<string, unknown>): void
 }
 
-export interface NetGame {
+export interface NetGame<TBoard> {
   link: NetplayLink
   linkOpen: boolean
   setLinkOpen(open: boolean): void
@@ -51,9 +51,18 @@ export interface NetGame {
   peerAvatars: SeatAvatars | null
   sendMove(move: number): void
   sendNew(first: Seat): void
+  /**
+   * Push a whole position, from either side. `new` carries only who opens,
+   * which is enough for games whose fresh board is a constant — a game whose
+   * restart needs fresh RANDOMNESS (Archery re-deals heights and a wind seed)
+   * resets locally and syncs the result instead. Pass the fresh state
+   * explicitly: dispatches are async, so reading it back here would send the
+   * board from BEFORE the restart.
+   */
+  sendSync(state: TBoard, first: Seat): void
 }
 
-export function useNetGame<TBoard>(opts: NetGameOptions<TBoard>): NetGame {
+export function useNetGame<TBoard>(opts: NetGameOptions<TBoard>): NetGame<TBoard> {
   const { online, board, first, turn, ply } = opts
   const [linkOpen, setLinkOpen] = useState(false)
   const [peerAvatars, setPeerAvatars] = useState<SeatAvatars | null>(null)
@@ -103,8 +112,12 @@ export function useNetGame<TBoard>(opts: NetGameOptions<TBoard>): NetGame {
         avatars?: unknown
       } | null
       // Avatars ride the same sync but stand alone: a bad board must not
-      // block the costume, nor a bad costume the board.
-      setPeerAvatars(coerceSeatAvatars(payload?.avatars) ?? null)
+      // block the costume, nor a bad costume the board. Only syncs CARRYING
+      // the field touch it — a guest-sent restart omits it (follow-the-host),
+      // and must not strip the costume it is itself wearing.
+      if (payload && 'avatars' in payload) {
+        setPeerAvatars(coerceSeatAvatars(payload.avatars) ?? null)
+      }
       const synced = coerceBoard(payload?.board)
       if (!synced) return
       onReplace?.()
@@ -164,6 +177,22 @@ export function useNetGame<TBoard>(opts: NetGameOptions<TBoard>): NetGame {
     },
     [link],
   )
+  const sendSync = useCallback(
+    (fresh: TBoard, opening: Seat) => {
+      if (!link.connected) return
+      link.send({
+        t: 'sync',
+        state: {
+          board: fresh,
+          first: opening,
+          // Avatars stay follow-the-host: a guest-sent restart must not put
+          // its own picks on the host's screen.
+          ...(link.role === 'host' ? { avatars: avatarsRef.current } : {}),
+        },
+      })
+    },
+    [link],
+  )
 
   return {
     link,
@@ -175,5 +204,6 @@ export function useNetGame<TBoard>(opts: NetGameOptions<TBoard>): NetGame {
     peerAvatars: link.connected ? peerAvatars : null,
     sendMove,
     sendNew,
+    sendSync,
   }
 }

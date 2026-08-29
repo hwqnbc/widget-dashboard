@@ -3,8 +3,9 @@
 Design notes for `src/features/netplay/` and `src/components/netplay/`, the
 peer-to-peer link that lets two people play one game from two devices.
 Consumers: Connect 4 (`docs/connect-4.md`), Tic-Tac-Toe
-(`docs/tic-tac-toe.md`) and Maze Runner (`docs/maze-runner.md`), all through a
-**2 Devices** mode — the first two turn-based, the third a live race.
+(`docs/tic-tac-toe.md`), Maze Runner (`docs/maze-runner.md`) and Archery
+(`docs/archery.md`), all through a **2 Devices** mode — turn-based, turn-based,
+a live race, and a turn-based game whose move is a real-valued shot.
 
 ## The constraint that shaped everything
 
@@ -128,7 +129,11 @@ ever needs three things:
 | `new` | restart, with who opens |
 
 Connect 4's move is a column index and Tic-Tac-Toe's is a cell index; the same
-envelope carries both, unchanged. `sync` state is opaque here and validated by
+envelope carries both, unchanged. **A real-valued move fits too**: Archery
+quantizes a shot (launch vector, launch height, captured animation phases)
+into one 46-bit integer riding the same `move: number`, and both sides run the
+same pure fixed-step resolver on the identical unpacked ints — determinism by
+quantization, no protocol change (see `docs/archery.md`). `sync` state is opaque here and validated by
 the widget that understands it.
 
 `hello` never reaches the game: `useNetplay` sends it the moment a link opens
@@ -292,8 +297,9 @@ gameplay.
 - **Memory online** — the first game needing more than moves: the card
   shuffle must be shared. Host sends the seed in `sync`, exactly as the maze
   race now sends its maze seed.
-- **Archery online** — first real-valued move (angle + power) rather than an
-  index; still one message per turn.
+- ~~Archery online~~ — **shipped**: the real-valued move, quantized into the
+  integer `move` and resolved by a shared fixed-step resolver; a restart is a
+  `sendSync` because fresh randomness cannot ride `new`. See `docs/archery.md`.
 
 **Pairing UX**
 - **Reconnect on the same code** — hold the last token so a dropped link

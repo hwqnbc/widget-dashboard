@@ -168,6 +168,9 @@ export function defaultWidgetData(type: WidgetType): Record<string, unknown> {
         wind: 0,
         distance: 'short',
         platforms: 'still',
+        play: 'local',
+        shots: 0,
+        gameSeed: 0,
       }
     case 'droneSim':
       return {

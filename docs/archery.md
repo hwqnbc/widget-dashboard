@@ -105,3 +105,71 @@ arrow is `data-testid="arrow"`. To drive a
 deterministic shot, mirror the constants (`G/VMAX/K`, origins, hitbox), solve a
 launch velocity that lands in the opponent hitbox, convert to a drag delta
 (`Δ = −v/K`, world→screen via the svg rect) and dispatch mouse down/move/up.
+
+## 2 Devices (online mode)
+
+The netplay layer's fourth consumer and its first **real-valued move**: a shot
+is a launch vector plus the animation phases its outcome depends on, where
+every earlier game's move was an index. See `docs/netplay.md` for the
+transport and pairing; what Archery adds is the determinism story.
+
+**The problem.** The widget used to decide hits by sampling the closed-form
+flight at rAF frame times, with the obstacle and platform phases read off a
+device-local animation clock. Two devices replaying the same shot would not
+reliably agree — frame rate and clock origin both differ.
+
+**The design.**
+- Physics moved to the pure `archeryModel.ts` (e2e-bundled like every game
+  model): `resolveShot` samples the same closed-form flight at a **fixed
+  1/120s step** with every input explicit. One resolver serves the shooter,
+  the other device, the tests — and local pass-and-play, which now resolves
+  up front too (the rAF loop just draws the path until the resolver's `tEnd`).
+- **Quantize at release**: `packShot` rounds vx/vy to 1 unit, the launch
+  height to 1 unit, and the captured phases to ~9ms, packing the lot into one
+  46-bit integer that rides the protocol's existing `move: number` — no
+  protocol change, no version bump. The shooter fires the *quantized* vector,
+  so what flew on its screen is exactly what the other device resolves.
+- **Wind derives from a synced seed** (`windAt(gameSeed, shot)`), so both
+  devices know every turn's wind without messaging it. Locally the persisted
+  roll remains.
+- **A restart is a `sync`, not a `new`**: fresh heights and a fresh seed
+  cannot ride `new`'s lone `first` field, so an online New game (from either
+  side) resets locally and pushes the whole dealt position via the hook's
+  `sendSync`.
+- **Online commits at release**, not when the arrow lands: the wire must not
+  wait for a 1.5s animation, or the opponent's next move would arrive against
+  an unwritten position. The remote device replays the flight from the packed
+  vector. Local play keeps its suspense — state lands with the arrow.
+- Avatar costume, chip, dialog and the `blocked` turn lock as in the other
+  games; `play: 'local' | 'online'` is a new axis (weather and transport are
+  orthogonal, so `Mode` didn't grow a fourth value).
+
+Root contract: `data-play`, `data-net`, `data-seat`, `data-turn`,
+`data-shots`, `data-arrow` (`flying`/`none` — a drag during a replay is
+refused, so the suite waits on it), `data-score-toy/-ninja`, `data-game-seed`,
+`data-avatar-toy/-ninja` on `[data-testid="archery-root"]`; the scene svg
+keeps its `data-p1y/p2y/w/mode/wind/platforms`.
+
+Suite `e2e/148-archery-online` aims **closed-loop**: it reads the live world
+off the DOM, scans for a shot with the bundled resolver (requiring a ±3-unit
+margin so drag pixel-rounding cannot flip a marginal outcome), inverts it into
+the slingshot drag (drag = −v/K), and fires it for real.
+
+## Future work (enhancement backlog)
+
+- **Land the remote suspense** — online commits state at release, so the score
+  chip updates a beat before the replayed arrow lands on the other device.
+  Holding the *displayed* score until `tEnd` (state already correct
+  underneath) would restore the drama.
+- **Replay phase fidelity** — a remote replay draws its own obstacle/platform
+  animation clock, so the arrow may visually thread a block that "isn't
+  there"; the outcome is authoritative from the packed phases. Offsetting the
+  local clock to the packed phase during a replay would fix the visual.
+- **Best-of-N match** — persist a series score across games, as Connect 4's
+  backlog proposes.
+- **Charged power meter** — an accessibility alternative to drag distance:
+  hold to charge, release to fire at a fixed angle picker.
+- **Sound** — bowstring, whoosh and thunk via `droneSim/webAudio` (no assets).
+- **Obstacle/platform online polish** — supported today (phases ride the
+  packed shot), but the replay-fidelity item above matters most in these
+  modes.

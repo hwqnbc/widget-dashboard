@@ -278,7 +278,10 @@ e2e suites pair through). See
 every avatar head × colour sampled at random, flip animation; reuses PlayerBadge, ConfirmDialog
 and WinnerCelebration). See `docs/archery.md` for the Archery widget (2-player
 projectile game, drag-to-aim slingshot under gravity, random archer heights,
-first to 5 hits; reuses the heads, PlayerBadge, TurnBanner and WinnerCelebration).
+first to 5 hits; reuses the heads, PlayerBadge, TurnBanner and WinnerCelebration —
+plus **2 Devices** mode: the netplay layer's first real-valued move, a shot
+quantized into one integer and resolved by the pure fixed-step
+`archeryModel.resolveShot` on both devices).
 See `docs/drone-sim.md` for the Drone Sim widget (the first WebGL widget —
 three.js/R3F lazy chunk, twin-stick touch joysticks, the altitude-hold flight
 model, 1st/3rd-person camera rig, and the ref-based zero-render input path).

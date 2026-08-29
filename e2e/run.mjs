@@ -140,7 +140,21 @@ const mazeBundle = spawnSync(
 )
 if (mazeBundle.status !== 0) process.exit(mazeBundle.status ?? 1)
 
-// The app-wide console capture store — seventh flat pass, same reasoning.
+// Archery's pure model — seventh flat pass, same reasoning.
+const archeryBundle = spawnSync(
+  'npx',
+  [
+    'esbuild',
+    'src/components/widgets/archeryModel.ts',
+    '--bundle',
+    '--format=esm',
+    `--outdir=${join(here, '.bundle')}`,
+  ],
+  { cwd: root, stdio: 'inherit' },
+)
+if (archeryBundle.status !== 0) process.exit(archeryBundle.status ?? 1)
+
+// The app-wide console capture store — eighth flat pass, same reasoning.
 const consoleBundle = spawnSync(
   'npx',
   [
