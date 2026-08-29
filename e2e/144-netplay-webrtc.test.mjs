@@ -22,11 +22,23 @@ import { launch, reporter, BASE_URL } from './helpers.mjs'
 const { check, finish } = reporter('netplay-webrtc')
 const { browser } = await launch({ args: ['--disable-features=WebRtcHideLocalIpsWithMdns'] })
 
-/** A fresh context (own localStorage) with one online-mode Connect 4. */
-async function device(label) {
+/** A fresh context (own localStorage) with one online-mode Connect 4.
+ * `avatarName` swaps Player 1's avatar on the real Settings page first —
+ * contexts don't share storage, so this is how the two devices genuinely
+ * diverge for the costume-sync assertions below. */
+async function device(label, { avatarName } = {}) {
   const context = await browser.newContext({ viewport: { width: 900, height: 900 } })
   const page = await context.newPage()
   page.on('pageerror', (err) => console.log(`PAGE ERROR (${label}):`, err.message))
+  if (avatarName) {
+    await page.goto(`${BASE_URL}settings`, { waitUntil: 'networkidle' })
+    await page
+      .locator('button')
+      .filter({ hasText: new RegExp(`^${avatarName}$`) })
+      .first()
+      .click()
+    await page.waitForTimeout(300) // let redux-persist flush
+  }
   await page.goto(BASE_URL, { waitUntil: 'networkidle' })
   await page.getByRole('button', { name: 'Add widget' }).click()
   await page.getByRole('menuitem', { name: /Connect 4/ }).click()
@@ -37,7 +49,7 @@ async function device(label) {
   return { page, root }
 }
 
-const one = await device('P1')
+const one = await device('P1', { avatarName: 'DarkArin' })
 const two = await device('P2')
 
 // localhost is a secure context, so the WebRTC APIs are available exactly as
@@ -108,6 +120,43 @@ if (upOne && upTwo) {
   check(
     'the guest sees the turn pass to it',
     (await two.root.getAttribute('data-turn')) === 'ninja',
+  )
+
+  // --- the host's avatars travel with the sync ---------------------------
+  // The two contexts have SEPARATE localStorage — the host picked DarkArin
+  // for Player 1 on its real Settings page, the guest never did. Both
+  // screens must still show the same characters, or "my guy" isn't the same
+  // guy on the two tablets: the guest wears the host's picks as a transient
+  // costume (SeatAvatarsOverride), never as a settings write.
+  check(
+    "the host renders its own pick",
+    (await one.root.getAttribute('data-avatar-toy')) === 'darkarin',
+  )
+  check(
+    "the guest wears the HOST's pick, not its own default",
+    (await two.root.getAttribute('data-avatar-toy')) === 'darkarin',
+  )
+  check(
+    'the second seat agrees on both devices',
+    (await two.root.getAttribute('data-avatar-ninja')) ===
+      (await one.root.getAttribute('data-avatar-ninja')),
+  )
+
+  // The costume comes off with the link: leaving online mode reverts the
+  // guest to its own (default) picks, proving nothing was written to its
+  // settings.
+  // A move is on the board, so the mode change is confirm-guarded first.
+  await two.root.getByRole('button', { name: '2-Player' }).click()
+  await two.page.waitForSelector('.MuiDialog-root')
+  await two.page.getByRole('button', { name: 'Restart' }).click()
+  await two.page.waitForFunction(
+    () => document.querySelector('[data-testid="connect4-root"]')?.dataset.net === 'off',
+    null,
+    { timeout: 5000 },
+  )
+  check(
+    "leaving the mode returns the guest's own avatars",
+    (await two.root.getAttribute('data-avatar-toy')) === 'toy',
   )
 }
 

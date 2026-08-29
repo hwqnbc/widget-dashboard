@@ -13,7 +13,11 @@ import { updateWidgetData } from '../../features/widgets/widgetsSlice'
 import { useWidgetField } from '../../features/widgets/useWidgetField'
 import type { WidgetProps } from '../../registry/widgetRegistry'
 import { avatarMetaById } from '../../features/avatars/avatarCatalog'
-import { useSeatAvatars, useSeatVisual } from '../../features/avatars/useSeatAvatars'
+import {
+  SeatAvatarsOverride,
+  useSeatAvatars,
+  useSeatVisual,
+} from '../../features/avatars/useSeatAvatars'
 import { usePresentation } from '../fullscreen/presentation'
 import WinnerCelebration from './WinnerCelebration'
 import PlayerBadge from './PlayerBadge'
@@ -181,7 +185,6 @@ export default function TicTacToeWidget({ id }: WidgetProps) {
   >(null)
   const hand = useHandoff()
   const seatAvatars = useSeatAvatars()
-  const colorOf = (seat: Mark) => avatarMetaById[seatAvatars[seat]].color
   const { fullscreen } = usePresentation()
   // Fullscreen relaxes the fixed px cap so the board fills the larger space.
   const boardMax = fullscreen ? 'min(100cqmin, 88vmin)' : 'min(100cqmin, 340px)'
@@ -235,6 +238,13 @@ export default function TicTacToeWidget({ id }: WidgetProps) {
     onReplace: () => hand.clear(),
     setGame,
   })
+
+  // Both screens must show the same characters, so a connected guest wears the
+  // HOST's avatar picks — as a costume via `SeatAvatarsOverride`, never as a
+  // settings write, and only while the link is up.
+  const avatarOverride = online ? net.peerAvatars : null
+  const effectiveAvatars = avatarOverride ?? seatAvatars
+  const colorOf = (seat: Mark) => avatarMetaById[effectiveAvatars[seat]].color
 
   // Vs-computer: let the ninja (AI) answer once it's its turn, after a short
   // random "thinking" pause. The timer is cleared if the game state changes
@@ -294,6 +304,7 @@ export default function TicTacToeWidget({ id }: WidgetProps) {
   const passTurn = () => setGame({ first: 'ninja' })
 
   return (
+    <SeatAvatarsOverride.Provider value={avatarOverride}>
     <Box
       className="widget-no-drag"
       onMouseDown={(e) => e.stopPropagation()}
@@ -305,6 +316,8 @@ export default function TicTacToeWidget({ id }: WidgetProps) {
       data-turn={turn}
       data-ply={board.filter(Boolean).length}
       data-winner={winner ?? ''}
+      data-avatar-toy={effectiveAvatars.toy}
+      data-avatar-ninja={effectiveAvatars.ninja}
       sx={{
         height: '100%',
         display: 'flex',
@@ -507,5 +520,6 @@ export default function TicTacToeWidget({ id }: WidgetProps) {
         onCancel={() => setPending(null)}
       />
     </Box>
+    </SeatAvatarsOverride.Provider>
   )
 }

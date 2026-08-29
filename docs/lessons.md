@@ -1812,3 +1812,33 @@ carried over; these are the new ones.
      ghost, no winner. That is worse than refusing to pair, which is exactly
      what the version handshake is for. Bump the version when the *set* of
      messages changes, not only when an existing shape does.
+
+110. **A context override at the resolving hook beats plumbing props — but a
+     widget's own body sits ABOVE its provider.** Syncing avatars across
+     devices needed every seat-resolving consumer (`PlayerBadge`,
+     `TurnBanner`, `WinnerCelebration`, discs, marks, the maze ghost) to
+     follow one override. Because they all already resolve through
+     `useSeatAvatars`, a context consulted there covered the lot from one
+     provider around the widget's subtree — no shared component changed at
+     all. The trap: the widget's own function body executes in its PARENT's
+     context, so its body-level lookups (disc colours, the ghost's head) saw
+     no override. Compute one `effectiveAvatars` map in the body, use it for
+     body-level lookups, and hand the same value to the provider.
+
+111. **An opaque, extensible payload is how you add data without a version
+     bump.** Adding the race messages was a breaking change (lesson #109)
+     because an old peer DROPS an unknown message type. Adding `avatars` to
+     the existing `sync` payload is not: `sync` is opaque by design, each
+     receiver validates only the fields it knows, and an old peer simply
+     ignores the new one — degrading to exactly today's behaviour. When
+     extending a protocol, reach for the extensible envelope first and a new
+     message type only when the peer must ACT for the feature to work at all.
+
+112. **Sync a device-level preference as a costume, never as a write.** The
+     guest's avatar picks serve their whole dashboard; joining a game must
+     not rewrite them. The override lives in transient React state gated on
+     `link.connected`, so it cannot outlive the link or leak into settings —
+     and the e2e proof is precisely that the guest gets its OWN picks back
+     the moment the mode is left. The test for divergence had to live in the
+     two-CONTEXT suite: loopback widgets share one store and one settings
+     map, so they can never genuinely disagree (lesson #89's cousin).

@@ -13,7 +13,11 @@ import { updateWidgetData } from '../../features/widgets/widgetsSlice'
 import { useWidgetField } from '../../features/widgets/useWidgetField'
 import type { WidgetProps } from '../../registry/widgetRegistry'
 import { avatarMetaById } from '../../features/avatars/avatarCatalog'
-import { useSeatAvatars, useSeatVisual } from '../../features/avatars/useSeatAvatars'
+import {
+  SeatAvatarsOverride,
+  useSeatAvatars,
+  useSeatVisual,
+} from '../../features/avatars/useSeatAvatars'
 import WinnerCelebration from './WinnerCelebration'
 import PlayerBadge from './PlayerBadge'
 import ConfirmDialog from './ConfirmDialog'
@@ -287,8 +291,6 @@ export default function Connect4Widget({ id }: WidgetProps) {
   const boardEmpty = board.every((c) => !c)
   const canPass = mode === 'ai' && boardEmpty && !winner && turn === 'toy'
   const seatAvatars = useSeatAvatars()
-  const colorOf = (seat: Mark) => avatarMetaById[seatAvatars[seat]].color
-  const winColor = winner ? colorOf(winner) : undefined
 
   const setGame = (
     next: Partial<{
@@ -319,6 +321,15 @@ export default function Connect4Widget({ id }: WidgetProps) {
     setGame,
   })
   const { link } = net
+
+  // Both screens must show the same characters, so a connected guest wears the
+  // HOST's avatar picks — as a costume via `SeatAvatarsOverride`, never as a
+  // settings write, and only while the link is up. The body's own colour
+  // lookups use the same effective map the provider hands the subtree.
+  const avatarOverride = online ? net.peerAvatars : null
+  const effectiveAvatars = avatarOverride ?? seatAvatars
+  const colorOf = (seat: Mark) => avatarMetaById[effectiveAvatars[seat]].color
+  const winColor = winner ? colorOf(winner) : undefined
 
   // Vs-computer: the ninja answers on its turn, after a short "thinking" pause.
   useEffect(() => {
@@ -382,6 +393,7 @@ export default function Connect4Widget({ id }: WidgetProps) {
   const locked = !!winner || isDraw || (mode === 'ai' && turn === 'ninja') || net.blocked
 
   return (
+    <SeatAvatarsOverride.Provider value={avatarOverride}>
     <Box
       className="widget-no-drag"
       onMouseDown={(e) => e.stopPropagation()}
@@ -393,6 +405,8 @@ export default function Connect4Widget({ id }: WidgetProps) {
       data-turn={turn}
       data-ply={board.filter(Boolean).length}
       data-winner={winner ?? ''}
+      data-avatar-toy={effectiveAvatars.toy}
+      data-avatar-ninja={effectiveAvatars.ninja}
       sx={{ height: '100%', display: 'flex', flexDirection: 'column', gap: 1, p: 0.5 }}
     >
       <ToggleButtonGroup
@@ -599,5 +613,6 @@ export default function Connect4Widget({ id }: WidgetProps) {
         onCancel={() => setPending(null)}
       />
     </Box>
+    </SeatAvatarsOverride.Provider>
   )
 }

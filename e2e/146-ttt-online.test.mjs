@@ -52,6 +52,14 @@ check('host reports connected', (await attr(A, 'data-net')) === 'connected')
 check('guest reports connected', (await attr(B, 'data-net')) === 'connected')
 check('host takes Player 1', (await attr(A, 'data-seat')) === 'toy')
 check('guest takes Player 2', (await attr(B, 'data-seat')) === 'ninja')
+// One document shares one store, so real avatar DIVERGENCE is proven in the
+// two-context suite (144); here we pin the contract: the synced map is
+// published on both roots.
+check(
+  'both roots publish the same avatar map',
+  (await attr(A, 'data-avatar-toy')) === (await attr(B, 'data-avatar-toy')) &&
+    (await attr(A, 'data-avatar-ninja')) === (await attr(B, 'data-avatar-ninja')),
+)
 
 // Toy opens, so the guest's board is dead until the host has played.
 await cell(B, 0).click()

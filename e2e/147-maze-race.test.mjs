@@ -50,6 +50,10 @@ check('host reports connected', (await attr(A, 'data-net')) === 'connected')
 check('guest reports connected', (await attr(B, 'data-net')) === 'connected')
 check('host takes Player 1', (await attr(A, 'data-seat')) === 'toy')
 check('guest takes Player 2', (await attr(B, 'data-seat')) === 'ninja')
+check(
+  'both roots publish the same avatar map (divergence proven in 144)',
+  (await attr(A, 'data-avatar-toy')) === (await attr(B, 'data-avatar-toy')),
+)
 check('both are idle before the start', (await attr(A, 'data-race')) === 'idle')
 
 // The host's setup crosses the link, so both devices race the SAME maze —

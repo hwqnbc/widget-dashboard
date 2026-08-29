@@ -15,7 +15,13 @@ import { useWidgetField } from '../../../features/widgets/useWidgetField'
 import type { WidgetProps } from '../../../registry/widgetRegistry'
 import type { Seat } from '../../../features/avatars/types'
 import { avatarMetaById } from '../../../features/avatars/avatarCatalog'
-import { useSeatAvatars, useSeatVisual } from '../../../features/avatars/useSeatAvatars'
+import {
+  SeatAvatarsOverride,
+  coerceSeatAvatars,
+  useSeatAvatars,
+} from '../../../features/avatars/useSeatAvatars'
+import { avatarVisualById } from '../../../registry/avatarRegistry'
+import type { SeatAvatars } from '../../../features/avatars/types'
 import { useHandoff } from '../../../hooks/useHandoff'
 import { useNow } from '../../../hooks/useNow'
 import { isTypingTarget } from '../../../utils/isTypingTarget'
@@ -217,6 +223,7 @@ export default function MazeRunnerWidget({ id }: WidgetProps) {
   const [countdown, setCountdown] = useState<number | null>(null)
   const [started, setStarted] = useState(false)
   const [result, setResult] = useState<'won' | 'lost' | null>(null)
+  const [peerAvatars, setPeerAvatars] = useState<SeatAvatars | null>(null)
 
   /** Begin this device's run. Called at GO on both sides. */
   const startRun = useCallback(() => {
@@ -231,6 +238,10 @@ export default function MazeRunnerWidget({ id }: WidgetProps) {
     setGame({ pos: from, trail: [from], elapsedMs: 0 })
   }, [p1Maze, setGame])
 
+  const seatAvatars = useSeatAvatars()
+  const avatarsRef = useRef(seatAvatars)
+  avatarsRef.current = seatAvatars
+
   const link = useNetplay((msg) => {
     if (msg.t === 'sync') {
       // The host's settings win, or one device races with fog and the other
@@ -238,6 +249,9 @@ export default function MazeRunnerWidget({ id }: WidgetProps) {
       // same maze regardless of how each card is shaped.
       const setup = msg.state as Record<string, unknown> | null
       if (!setup || typeof setup.seed !== 'number') return
+      // Avatars ride the same sync: both screens must show the same
+      // characters, and the host's picks win like every other race setting.
+      setPeerAvatars(coerceSeatAvatars(setup.avatars) ?? null)
       setGame({
         seed: setup.seed,
         cols: setup.cols,
@@ -290,7 +304,10 @@ export default function MazeRunnerWidget({ id }: WidgetProps) {
   useEffect(() => {
     if (!online || !link.connected) return
     if (link.role === 'host') {
-      link.send({ t: 'sync', state: { seed, cols, rows, size, moveRule, aid } })
+      link.send({
+        t: 'sync',
+        state: { seed, cols, rows, size, moveRule, aid, avatars: avatarsRef.current },
+      })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [online, link.connected, link.role])
@@ -304,6 +321,7 @@ export default function MazeRunnerWidget({ id }: WidgetProps) {
       setStarted(false)
       setResult(null)
       setGhostCell(null)
+      setPeerAvatars(null)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [online])
@@ -353,8 +371,11 @@ export default function MazeRunnerWidget({ id }: WidgetProps) {
   const mySeat: Seat = link.seat ?? 'toy'
   const ghostSeat: Seat = mySeat === 'toy' ? 'ninja' : 'toy'
   const runner: Seat = mode === 'duel' ? turn : online ? mySeat : 'toy'
-  const seatAvatars = useSeatAvatars()
-  const colorOf = (seat: Seat) => avatarMetaById[seatAvatars[seat]].color
+  // Costume rules as in the turn-based games: a connected guest wears the
+  // host's picks, transiently, and reverts the moment the link drops.
+  const avatarOverride = online && link.connected ? peerAvatars : null
+  const effectiveAvatars = avatarOverride ?? seatAvatars
+  const colorOf = (seat: Seat) => avatarMetaById[effectiveAvatars[seat]].color
   const duelWinner: Seat | null = !duelOver
     ? null
     : times.toy < times.ninja
@@ -574,14 +595,15 @@ export default function MazeRunnerWidget({ id }: WidgetProps) {
     return d
   }, [aid, maze, pos, size])
 
-  const { Head } = useSeatVisual(runner)
+  const { Head } = avatarVisualById[effectiveAvatars[runner]]
   const runnerColor = colorOf(runner)
-  const { Head: GhostHead } = useSeatVisual(ghostSeat)
+  const { Head: GhostHead } = avatarVisualById[effectiveAvatars[ghostSeat]]
   const ghostColor = colorOf(ghostSeat)
   const wallColor = theme.palette.text.primary
   const toggleSx = { textTransform: 'none', py: 0.1, px: 0.75 } as const
 
   return (
+    <SeatAvatarsOverride.Provider value={avatarOverride}>
     <Box
       className="widget-no-drag"
       onMouseDown={(e) => e.stopPropagation()}
@@ -606,6 +628,8 @@ export default function MazeRunnerWidget({ id }: WidgetProps) {
       data-state={state}
       data-turn={runner}
       data-trail={trail.length}
+      data-avatar-toy={effectiveAvatars.toy}
+      data-avatar-ninja={effectiveAvatars.ninja}
       sx={{
         height: '100%',
         display: 'flex',
@@ -934,5 +958,6 @@ export default function MazeRunnerWidget({ id }: WidgetProps) {
         onCancel={() => setPending(null)}
       />
     </Box>
+    </SeatAvatarsOverride.Provider>
   )
 }

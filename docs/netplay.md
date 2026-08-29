@@ -200,13 +200,40 @@ position rather than the game. And with a **synchronised start**, the first
 `done` is necessarily the lower time — so the winner needs no arbitration and
 message ordering cannot change the result.
 
-## Seats
+## Seats — and the avatar costume
 
 Host is always Player 1 (`toy`), guest always Player 2 (`ninja`) — decided by
-role, so both sides agree with nothing to negotiate. Which *avatar* those
-seats wear is the usual per-device `ui.avatars` map (`docs/avatars.md`), so
-two players can each see their own chosen character; the seat identity on the
-wire is unaffected.
+role, so both sides agree with nothing to negotiate. The wire only ever speaks
+seats; avatars are rendering.
+
+That used to mean each device rendered its *own* `ui.avatars` picks, which
+looked broken in practice: the same seat wore different characters on the two
+tablets, and "my guy" wasn't the same guy when the kids compared screens. So
+**the host's seat→avatar map now travels in its `sync`** (the payload is
+opaque and extensible, so this needed no new message type and no version
+bump — an older peer just ignores the field) and the guest wears it as a
+**costume**:
+
+- The map lands in `SeatAvatarsOverride` (a React context in
+  `features/avatars/useSeatAvatars`), which every seat-resolving hook consults
+  before redux — so `PlayerBadge`, `TurnBanner`, `WinnerCelebration`, the
+  discs/marks and the maze ghost all follow from one provider around the
+  widget's subtree.
+- It is **never written to the guest's settings**: their picks are a
+  device-level preference used by the whole dashboard, and joining a game must
+  not rewrite them. The override is transient, scoped to the linked widget,
+  and drops the moment the link does (`peerAvatars` is gated on
+  `link.connected`).
+- One React subtlety, for the next consumer: the widget's own function body
+  runs *above* its provider, so body-level lookups (disc colours, the maze's
+  ghost head) use the same `effectiveAvatars` map the provider is handed —
+  context alone only covers descendants.
+
+Proven where it can actually diverge: the two-context WebRTC suite (`144`)
+gives each device its own localStorage, swaps the host's Player 1 on the real
+Settings page, and asserts the guest renders the host's pick — then gets its
+own back when the link drops. Loopback suites share one store, so they pin the
+`data-avatar-toy`/`data-avatar-ninja` contract only.
 
 ## The link is transient
 

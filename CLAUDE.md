@@ -223,7 +223,9 @@ edited on the Settings page) drives only rendering. Resolve a seat's look with
 `avatarRegistry`) and `avatarMetaById[…].color`/`.name` (from `avatarCatalog`).
 Never hardcode `seat === 'toy' ? <ToyHead/> : <NinjaHead/>` — go through the
 registry so a swapped avatar follows everywhere (the chip, colour, turn banner and
-win celebration). `Celebration` is the looping win animation; it's also what the
+win celebration). In two-device play the HOST's map is synced and the guest
+wears it transiently via `SeatAvatarsOverride` (see `docs/netplay.md`) — which
+works precisely because everything resolves through these hooks. `Celebration` is the looping win animation; it's also what the
 **Avatar Actions** widget plays on tap
 (`components/widgets/AvatarActionsWidget.tsx` — pick a character and flip its
 Idle/Celebrate toggle to play the celebration; works for any registered

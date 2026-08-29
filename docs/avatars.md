@@ -333,6 +333,15 @@ Suspense fallback).
 - `useSeatAvatars()` → the `{ toy, ninja }` map from persisted state, with a coerced
   fallback to the identity default (guards pre-field state / removed ids).
 - `useSeatVisual(seat)` → `{ Head, Figure, Celebration }`; `useSeatColor(seat)` → hex.
+- `SeatAvatarsOverride` — a context every hook above consults **before** the
+  persisted map, plus `coerceSeatAvatars` for validating a map that arrived
+  from outside the device. Two-device play uses these to dress the guest in
+  the HOST's picks (both screens must show the same characters), as a
+  transient costume scoped to the linked widget — never a settings write, and
+  it reverts when the link drops. One subtlety: a widget's own function body
+  runs *above* the provider it renders, so body-level lookups (disc colours,
+  the maze ghost's head) take the effective map explicitly; the context covers
+  descendants only. See `docs/netplay.md` § "Seats — and the avatar costume".
 
 In a component that draws many seats (board cells), call `useSeatAvatars()` once and
 resolve per-cell via `avatarMetaById[map[cell]].color` and `useSeatVisual` inside the

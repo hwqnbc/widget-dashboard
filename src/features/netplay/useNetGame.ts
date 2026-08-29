@@ -12,7 +12,8 @@
  * cells, and both sync `{ board, first }`.
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { Seat } from '../avatars/types'
+import type { Seat, SeatAvatars } from '../avatars/types'
+import { coerceSeatAvatars, useSeatAvatars } from '../avatars/useSeatAvatars'
 import { useNetplay, type NetplayLink } from './useNetplay'
 
 export interface NetGameOptions<TBoard> {
@@ -40,6 +41,14 @@ export interface NetGame {
   setLinkOpen(open: boolean): void
   /** The board is dead: not paired yet, or it is the other device's turn. */
   blocked: boolean
+  /**
+   * The HOST's seat→avatar picks, delivered in its `sync` — non-null only on
+   * a connected guest. Both screens must show the same characters, or "my
+   * guy" isn't the same guy on the two devices; the guest feeds this to
+   * `SeatAvatarsOverride` so its widget wears the host's picks as a costume
+   * without its own settings being touched.
+   */
+  peerAvatars: SeatAvatars | null
   sendMove(move: number): void
   sendNew(first: Seat): void
 }
@@ -47,6 +56,12 @@ export interface NetGame {
 export function useNetGame<TBoard>(opts: NetGameOptions<TBoard>): NetGame {
   const { online, board, first, turn, ply } = opts
   const [linkOpen, setLinkOpen] = useState(false)
+  const [peerAvatars, setPeerAvatars] = useState<SeatAvatars | null>(null)
+  // The host's OWN picks (redux — the hook runs above any override provider),
+  // sent with the position so the guest renders the same characters.
+  const seatAvatars = useSeatAvatars()
+  const avatarsRef = useRef(seatAvatars)
+  avatarsRef.current = seatAvatars
 
   // The message handler runs from a transport callback, and needs values that
   // are only known after `useNetplay` returns (our seat) or that would
@@ -82,7 +97,14 @@ export function useNetGame<TBoard>(opts: NetGameOptions<TBoard>): NetGame {
       return
     }
     if (msg.t === 'sync') {
-      const payload = msg.state as { board?: unknown; first?: unknown } | null
+      const payload = msg.state as {
+        board?: unknown
+        first?: unknown
+        avatars?: unknown
+      } | null
+      // Avatars ride the same sync but stand alone: a bad board must not
+      // block the costume, nor a bad costume the board.
+      setPeerAvatars(coerceSeatAvatars(payload?.avatars) ?? null)
       const synced = coerceBoard(payload?.board)
       if (!synced) return
       onReplace?.()
@@ -104,7 +126,9 @@ export function useNetGame<TBoard>(opts: NetGameOptions<TBoard>): NetGame {
   // version handshake is the link's own business — see `useNetplay`.
   useEffect(() => {
     if (!online || !link.connected) return
-    if (link.role === 'host') link.send({ t: 'sync', state: { board, first } })
+    if (link.role === 'host') {
+      link.send({ t: 'sync', state: { board, first, avatars: avatarsRef.current } })
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [online, link.connected, link.role])
 
@@ -114,6 +138,7 @@ export function useNetGame<TBoard>(opts: NetGameOptions<TBoard>): NetGame {
     if (!online) {
       link.disconnect()
       setLinkOpen(false)
+      setPeerAvatars(null)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [online])
@@ -145,6 +170,9 @@ export function useNetGame<TBoard>(opts: NetGameOptions<TBoard>): NetGame {
     linkOpen,
     setLinkOpen,
     blocked: online && (!link.connected || turn !== link.seat),
+    // Costume off the moment the link is down — a stale override would keep
+    // showing the other household's picks on a dead board.
+    peerAvatars: link.connected ? peerAvatars : null,
     sendMove,
     sendNew,
   }
