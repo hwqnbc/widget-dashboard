@@ -199,9 +199,10 @@ export function useNetGame<TBoard>(opts: NetGameOptions<TBoard>): NetGame<TBoard
     linkOpen,
     setLinkOpen,
     blocked: online && (!link.connected || turn !== link.seat),
-    // Costume off the moment the link is down — a stale override would keep
-    // showing the other household's picks on a dead board.
-    peerAvatars: link.connected ? peerAvatars : null,
+    // Costume survives a BLIP (alive covers `reconnecting` — a flicker of
+    // everyone's characters for two seconds of packet loss would be worse
+    // than the stale look), but comes off when the link truly dies.
+    peerAvatars: link.alive ? peerAvatars : null,
     sendMove,
     sendNew,
     sendSync,

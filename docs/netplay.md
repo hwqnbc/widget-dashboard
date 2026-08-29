@@ -127,6 +127,7 @@ ever needs three things:
 | `move` | `{ seat, ply, move }` — a move number, whatever that means to the game |
 | `sync` | whole position; the host sends one on connect |
 | `new` | restart, with who opens |
+| `ping` / `pong` | liveness heartbeat — handled inside `useNetplay` like `hello`; games never see them (see *When the wifi blips*) |
 
 Connect 4's move is a column index and Tic-Tac-Toe's is a cell index; the same
 envelope carries both, unchanged. **A real-valued move fits too**: Archery
@@ -228,7 +229,8 @@ bump — an older peer just ignores the field) and the guest wears it as a
   device-level preference used by the whole dashboard, and joining a game must
   not rewrite them. The override is transient, scoped to the linked widget,
   and drops the moment the link does (`peerAvatars` is gated on
-  `link.connected`).
+  `link.alive`, not strict `connected`, so a wifi blip doesn't flicker the
+  characters mid-game).
 - One React subtlety, for the next consumer: the widget's own function body
   runs *above* its provider, so body-level lookups (disc colours, the maze's
   ghost head) use the same `effectiveAvatars` map the provider is handed —
@@ -247,6 +249,53 @@ redux-persist. A saved "connected" flag would be a lie the moment the page
 reloads — and reloading is exactly what a kid's tablet does when it sleeps.
 The game *position* is persisted as always, so a dropped link and a re-pair
 resumes the board (the host pushes `sync` on connect).
+
+## When the wifi blips — and when it really dies
+
+Field report, verbatim: "sometimes got disconnected til the maze desync". The
+diagnosis mattered more than the fix: on a LAN with a **reliable, ordered**
+data channel, the transport layer *cannot* lose a message — SCTP retransmits
+until delivery or death. The only way a game desyncs is if **we** tear the
+link down while it was still going to recover. Which is exactly what the
+first version did: it mapped `connectionState === 'disconnected'` straight to
+dead, and `disconnected` is a state WebRTC enters for a second or two of
+packet loss that ICE heals on its own.
+
+Three layers now stand between a blip and a dead game:
+
+- **Grace before death** (`webrtcTransport`). pc `'disconnected'` reports the
+  new `reconnecting` status and starts a grace timer
+  (`RECONNECT_GRACE_MS` = 8 s). If ICE recovers, the link reports `connected`
+  again and nothing was lost — the channel kept buffering, so every message
+  arrives late rather than never, and a mid-race ghost simply catches up.
+  Only grace expiry or pc `'failed'` is death; channel `onclose` stays
+  immediately definitive.
+- **Heartbeat** (`useNetplay`, protocol v3). `ping`/`pong` every
+  `PING_MS` = 2.5 s, handled inside the hook like `hello` — games never see
+  them. ANY incoming message refreshes liveness; silence past
+  `QUIET_MS` = 7 s shows `reconnecting`, past `DEAD_MS` = 16 s fails the
+  link. This catches the death that fires **no event at all**: a backgrounded
+  tablet tab stops JS without closing anything. New message types mean a
+  `NET_VERSION` bump (2 → 3, lesson #109): a v2 peer would never pong and
+  would be wrongly declared dead — precisely the half-working state the
+  handshake exists to refuse.
+- **An honest UI for each state.** `link.alive` (= `connected ||
+  reconnecting`) is exposed beside the strict `link.connected`: input locks
+  gate on `connected` (safe — queued moves apply on recovery), cosmetic
+  things like the avatar costume gate on `alive` so a blip doesn't flicker
+  them. The chip distinguishes `Reconnecting…` (warning) from `Connection
+  lost — tap to re-pair` (error) — a dead link and a never-paired link must
+  not both read "Tap to connect". And on `failed`/`closed` the pairing dialog
+  **stops showing the stale token**: the `RTCPeerConnection` behind it is
+  gone, so the only honest offer is a *Pair again* button that mints a fresh
+  code (`netplay-lost`/`netplay-repair`).
+
+Consumers decide what a real death means for *their* game. Turn-based games
+need nothing: the board is persisted, the position is whole, re-pairing
+resumes it via the host's `sync`. The maze race is live, so an unresolved
+race **voids** — see `docs/maze-runner.md`. The timings are exported
+constants, so the suites assert observable transitions rather than
+re-deriving clocks.
 
 ## Camera
 
@@ -273,12 +322,17 @@ device's seat), `data-turn`, `data-ply`, `data-winner`, `data-mode`.
   candidates, size, the raw fallback, garbage rejection), the protocol
   validator, then a full two-seat game over the loopback transport: pairing,
   seat assignment, move relay, the turn lock, out-of-turn rejection, an agreed
-  winner, broadcast new game, and link release on leaving the mode.
+  winner, broadcast new game, and link release on leaving the mode — plus the
+  dead-link UX: the peer leaving closes the survivor's link, whose chip reads
+  lost (not "tap to connect") and whose dialog offers Pair again with the
+  stale token gone.
 - `144-netplay-webrtc` — the same pairing through a real `RTCPeerConnection`
   between two browser contexts, proving a QR-sized token really does open a
   data channel. Separate contexts, not tabs: same-origin tabs share
   localStorage, and the boards would agree through redux-persist rather than
-  through the link. Chromium runs with
+  through the link. Ends with the guest's page closing OUTRIGHT while linked —
+  the real-transport proof of the grace timer + heartbeat: the host notices by
+  itself within the documented windows and offers a re-pair. Chromium runs with
   `--disable-features=WebRtcHideLocalIpsWithMdns`, because a container has no
   mDNS responder to resolve `.local` candidates with; on real devices on real
   wifi mDNS resolution is exactly what makes this work.
@@ -302,16 +356,21 @@ gameplay.
   `sendSync` because fresh randomness cannot ride `new`. See `docs/archery.md`.
 
 **Pairing UX**
-- **Reconnect on the same code** — hold the last token so a dropped link
-  re-pairs without re-scanning; the host's `sync` already restores position.
+- **Reconnect without a fresh scan** — a dropped link now offers *Pair again*
+  honestly (a new QR: the old `RTCPeerConnection` is unusable, so the old
+  token genuinely cannot be reused). True re-scan-free recovery would need a
+  fresh handshake carried some other way — worth designing, not worth faking.
 - **One-hop pairing** — fold the answer into a short numeric code shown by the
   guest, so only one camera scan is needed instead of two.
 - **Nearby-device hints** — remember recently paired devices by fingerprint
   and offer them by name.
 
 **Robustness**
-- **Link health indicator** — ping/pong round-trip time on the chip, so a
-  stalled link is visible before a move goes missing.
+- ~~Blip tolerance + liveness~~ — **shipped**: the grace timer, the
+  `ping`/`pong` heartbeat and the dead-link UX (see *When the wifi blips*).
+- **Link health indicator** — the heartbeat now exists; surfacing its
+  round-trip time on the chip would make a *degrading* link visible before
+  the quiet threshold trips.
 - **Desync detector** — a board hash on every `move`; a mismatch triggers a
   host `sync` instead of two players staring at different boards.
 - **Spectator seat** — a third peer receiving `sync` only.

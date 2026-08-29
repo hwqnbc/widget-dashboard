@@ -21,8 +21,12 @@ import type { NetRole } from './types'
  * drops what it cannot parse, so a race against one would half-work — both
  * boards live, no countdown, no ghost, no winner — which is far worse than
  * refusing to pair.
+ *
+ * **3** added the liveness heartbeat (`ping`/`pong`). Same reasoning, in the
+ * other direction: an older peer would never pong, so this side would wrongly
+ * declare a healthy link dead.
  */
-export const NET_VERSION = 2
+export const NET_VERSION = 3
 
 export type NetMsg =
   /** First message each side sends; carries the version handshake. */
@@ -48,6 +52,11 @@ export type NetMsg =
    * synchronised start the first `done` is also the lower time, so the winner
    * needs no arbitration and message ordering cannot change it. */
   | { t: 'done'; seat: Seat; ms: number }
+  /** Liveness. Handled entirely inside `useNetplay`, like `hello` — games
+   * never see either. A backgrounded tablet tab stops JS without firing any
+   * close event; silence is the only signal, so somebody has to speak. */
+  | { t: 'ping'; n: number }
+  | { t: 'pong'; n: number }
 
 export const otherSeat = (seat: Seat): Seat => (seat === 'toy' ? 'ninja' : 'toy')
 
@@ -99,6 +108,10 @@ export function decodeMsg(raw: string): NetMsg | null {
       return isSeat(m.seat) && typeof m.ms === 'number' && Number.isFinite(m.ms) && m.ms >= 0
         ? { t: 'done', seat: m.seat, ms: m.ms }
         : null
+    case 'ping':
+      return Number.isInteger(m.n) ? { t: 'ping', n: m.n as number } : null
+    case 'pong':
+      return Number.isInteger(m.n) ? { t: 'pong', n: m.n as number } : null
     default:
       return null
   }

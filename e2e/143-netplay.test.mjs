@@ -236,6 +236,43 @@ await page.waitForFunction(
 )
 check('new game clears both boards', (await ply(A)) === 0 && (await ply(B)) === 0)
 
+// ------------------------------------------------- 4. when the link dies
+
+// B walks away (leaves online mode, closing its side). The survivor must be
+// told the game died — a dead link and a never-paired link must not read the
+// same, and the pairing dialog must offer a fresh start, never the stale
+// token (its RTCPeerConnection is gone; re-pairing is honestly a new QR).
+await B.getByRole('button', { name: '2-Player' }).click()
+await page.waitForFunction(
+  () =>
+    document.querySelectorAll('[data-testid="connect4-root"]')[0]?.dataset.net === 'closed',
+  null,
+  { timeout: 3000 },
+)
+check('the peer leaving closes the survivor\'s link', (await attr(A, 'data-net')) === 'closed')
+const chip = A.locator('[data-testid="connect4-link"]')
+check(
+  'the chip says lost, not "tap to connect"',
+  (await chip.textContent()).includes('Connection lost'),
+)
+
+await chip.click()
+await page.waitForSelector('[data-testid="netplay-lost"]')
+check(
+  'the dialog names the lost connection',
+  (await page.locator('[data-testid="netplay-lost"]').count()) === 1,
+)
+check('the stale token is gone', (await page.locator('[data-testid="netplay-token"]').count()) === 0)
+
+// Pair again really is a fresh handshake: a new token, back in `pairing`.
+await page.locator('[data-testid="netplay-repair"]').click()
+await page.waitForSelector('[data-testid="netplay-token"]', { timeout: 3000 })
+check('Pair again mints a fresh code', (await attr(A, 'data-net')) === 'pairing')
+await page.locator('[data-testid="netplay-close"]').click()
+await page.waitForFunction(() => !document.querySelector('.MuiDialog-root'), null, {
+  timeout: 3000,
+})
+
 // Leaving online mode drops the link rather than leaving it half-alive.
 // (Re-tapping the selected toggle is a no-op by design — an exclusive
 // ToggleButtonGroup reports null, and the widget ignores it rather than

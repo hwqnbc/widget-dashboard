@@ -142,21 +142,51 @@ if (upOne && upTwo) {
       (await one.root.getAttribute('data-avatar-ninja')),
   )
 
-  // The costume comes off with the link: leaving online mode reverts the
-  // guest to its own (default) picks, proving nothing was written to its
-  // settings.
-  // A move is on the board, so the mode change is confirm-guarded first.
-  await two.root.getByRole('button', { name: '2-Player' }).click()
-  await two.page.waitForSelector('.MuiDialog-root')
-  await two.page.getByRole('button', { name: 'Restart' }).click()
-  await two.page.waitForFunction(
-    () => document.querySelector('[data-testid="connect4-root"]')?.dataset.net === 'off',
-    null,
-    { timeout: 5000 },
-  )
+  // --- the guest's device dies outright -----------------------------------
+  // Not a graceful mode-leave: the page closes with the link up, the way a
+  // tablet dies when its battery does. No close event is guaranteed to cross,
+  // so this is the real-transport proof of the grace timer + heartbeat — the
+  // host must notice on its own, within the documented windows
+  // (RECONNECT_GRACE_MS 8s / DEAD_MS 16s; generous timeout on top).
+  const guestContext = two.page.context()
+  await two.page.close()
+  const noticed = await one.page
+    .waitForFunction(
+      () =>
+        ['failed', 'closed'].includes(
+          document.querySelector('[data-testid="connect4-root"]')?.dataset.net,
+        ),
+      null,
+      { timeout: 30000 },
+    )
+    .then(
+      () => true,
+      () => false,
+    )
+  check('the host notices the dead device by itself', noticed)
+  const chip = one.root.locator('[data-testid="connect4-link"]')
   check(
-    "leaving the mode returns the guest's own avatars",
-    (await two.root.getAttribute('data-avatar-toy')) === 'toy',
+    'the chip says lost, not "tap to connect"',
+    (await chip.textContent()).includes('Connection lost'),
+  )
+  await chip.click()
+  await one.page.waitForSelector('[data-testid="netplay-lost"]', { timeout: 5000 })
+  check(
+    'the dialog offers Pair again, not the stale token',
+    (await one.page.locator('[data-testid="netplay-repair"]').count()) === 1 &&
+      (await one.page.locator('[data-testid="netplay-token"]').count()) === 0,
+  )
+
+  // The costume was a costume: a fresh page in the guest's context (same
+  // localStorage) renders its OWN picks — nothing was written to settings.
+  const revived = await guestContext.newPage()
+  await revived.goto(BASE_URL, { waitUntil: 'networkidle' })
+  await revived.locator('[data-testid="connect4-root"]').waitFor()
+  check(
+    "the guest's own avatars survive it — the costume was never written",
+    (await revived
+      .locator('[data-testid="connect4-root"]')
+      .getAttribute('data-avatar-toy')) === 'toy',
   )
 }
 

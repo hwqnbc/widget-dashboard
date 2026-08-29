@@ -222,7 +222,7 @@ export default function MazeRunnerWidget({ id }: WidgetProps) {
   const [ghostCell, setGhostCell] = useState<number | null>(null)
   const [countdown, setCountdown] = useState<number | null>(null)
   const [started, setStarted] = useState(false)
-  const [result, setResult] = useState<'won' | 'lost' | null>(null)
+  const [result, setResult] = useState<'won' | 'lost' | 'void' | null>(null)
   const [peerAvatars, setPeerAvatars] = useState<SeatAvatars | null>(null)
 
   /** Begin this device's run. Called at GO on both sides. */
@@ -263,6 +263,7 @@ export default function MazeRunnerWidget({ id }: WidgetProps) {
       return
     }
     if (msg.t === 'go') {
+      setResult(null)
       setCountdown(COUNT_FROM)
       return
     }
@@ -277,6 +278,7 @@ export default function MazeRunnerWidget({ id }: WidgetProps) {
     }
   })
 
+  const linkDead = link.status === 'failed' || link.status === 'closed'
   const raceState = !online
     ? 'off'
     : result !== null
@@ -286,6 +288,20 @@ export default function MazeRunnerWidget({ id }: WidgetProps) {
         : started
           ? 'running'
           : 'idle'
+
+  // A real death voids a live, unresolved race — their `done` can never
+  // arrive, so `running` forever with a frozen ghost (the failure mode from
+  // the field) is replaced by an explicit verdict. Sticky via `result`, so it
+  // stays on screen until a re-paired Start race clears it.
+  useEffect(() => {
+    if (!online || !linkDead) return
+    if (!started && countdown === null) return
+    setResult((prev) => prev ?? 'void')
+    setStarted(false)
+    setCountdown(null)
+    setGhostCell(null)
+    lastMoveAt.current = null
+  }, [online, linkDead, started, countdown])
 
   // Tick the countdown down, then start both runs.
   useEffect(() => {
@@ -334,6 +350,7 @@ export default function MazeRunnerWidget({ id }: WidgetProps) {
   /** Either side may start; the sender counts down too. */
   const startRace = () => {
     link.send({ t: 'go' })
+    setResult(null)
     setCountdown(COUNT_FROM)
   }
 
@@ -372,8 +389,9 @@ export default function MazeRunnerWidget({ id }: WidgetProps) {
   const ghostSeat: Seat = mySeat === 'toy' ? 'ninja' : 'toy'
   const runner: Seat = mode === 'duel' ? turn : online ? mySeat : 'toy'
   // Costume rules as in the turn-based games: a connected guest wears the
-  // host's picks, transiently, and reverts the moment the link drops.
-  const avatarOverride = online && link.connected ? peerAvatars : null
+  // host's picks, transiently, and reverts the moment the link drops. `alive`
+  // (not strict `connected`) so a wifi blip doesn't flicker the characters.
+  const avatarOverride = online && link.alive ? peerAvatars : null
   const effectiveAvatars = avatarOverride ?? seatAvatars
   const colorOf = (seat: Seat) => avatarMetaById[effectiveAvatars[seat]].color
   const duelWinner: Seat | null = !duelOver
@@ -393,9 +411,10 @@ export default function MazeRunnerWidget({ id }: WidgetProps) {
     duelOver ||
     pending !== null ||
     hand.player !== null ||
-    // Dead before the countdown ends. Deliberately NOT blocked on `lost`: a
-    // trailing player should still get to finish their own run.
-    (online && (raceState === 'idle' || raceState === 'counting'))
+    // Dead before the countdown ends, and once the race is void. Deliberately
+    // NOT blocked on `lost`: a trailing player still finishes their own run —
+    // but nobody runs a race the link has already killed.
+    (online && (raceState === 'idle' || raceState === 'counting' || raceState === 'void'))
 
   const reset = useCallback(
     (extra: Record<string, unknown> = {}) => {
@@ -807,9 +826,9 @@ export default function MazeRunnerWidget({ id }: WidgetProps) {
             {/* The other runner. Drawn BEFORE the fog so a fogged race hides a
                 ghost you have no business seeing, and with no trail — knowing
                 they are near the flag is fair, knowing their route is not. */}
-            {online && ghostCell !== null && ghostCell !== pos && (
+            {online && ghostCell !== null && ghostCell !== pos && !linkDead && (
               <g
-                opacity={0.45}
+                opacity={link.status === 'reconnecting' ? 0.2 : 0.45}
                 data-testid="maze-ghost"
                 transform={`translate(${colOf(maze, ghostCell) + 0.1} ${rowOf(maze, ghostCell) + 0.1}) scale(${0.8 / 40})`}
               >
@@ -873,6 +892,29 @@ export default function MazeRunnerWidget({ id }: WidgetProps) {
         )}
 
         {hand.player && <TurnBanner player={hand.player} onSkip={hand.clear} />}
+
+        {raceState === 'void' && (
+          <Box
+            data-testid="maze-race-void"
+            sx={{
+              position: 'absolute',
+              inset: 0,
+              display: 'grid',
+              placeItems: 'center',
+              bgcolor: 'rgba(0,0,0,0.45)',
+              borderRadius: 1,
+              pointerEvents: 'none',
+            }}
+          >
+            <Typography
+              sx={{ fontSize: '7cqmin', fontWeight: 700, color: 'common.white', textAlign: 'center', px: 2 }}
+            >
+              Connection lost — race void.
+              <br />
+              Re-pair to race again.
+            </Typography>
+          </Box>
+        )}
 
         {raceState === 'counting' && (
           <Box

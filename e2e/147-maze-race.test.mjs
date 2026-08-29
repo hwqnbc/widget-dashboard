@@ -147,14 +147,52 @@ check(
 )
 check('the loser may still finish its run', (await attr(B, 'data-state')) !== 'won')
 
-// ----------------------------------------------------------- housekeeping
+// ------------------------------------------------------- a link that dies
 
 // A finished run counts as in-progress, so the mode change is confirm-guarded
-// like every other destructive setting change.
+// like every other destructive setting change — check the guard, then stay.
 await A.locator('[data-testid="maze-mode-solo"]').click()
 await page.waitForSelector('.MuiDialog-root')
 check('leaving mid-race asks first', (await attr(A, 'data-mode')) === 'online')
+await page.getByRole('button', { name: 'Keep playing' }).click()
+await page.waitForFunction(() => !document.querySelector('.MuiDialog-root'), null, {
+  timeout: 3000,
+})
+check('keep playing keeps the mode', (await attr(A, 'data-mode')) === 'online')
+
+// Rematch, then B's device walks away mid-race: leaving the mode closes its
+// side of the link outright — the loopback stand-in for a tablet whose wifi
+// really died (the WebRTC timing path is 144's job).
+await A.locator('[data-testid="maze-start-race"]').click()
+await until(0, 'race', 'running')
+await until(1, 'race', 'running')
+
+await B.locator('[data-testid="maze-mode-solo"]').click()
+await page.waitForSelector('.MuiDialog-root')
 await page.getByRole('button', { name: 'Restart' }).click()
+
+// The field failure this guards against: a dead link used to leave the race
+// `running` forever with a frozen ghost. Now it is an explicit verdict.
+await until(0, 'race', 'void')
+check('a dead link voids the live race', (await attr(A, 'data-race')) === 'void')
+check(
+  'the overlay names the lost connection',
+  (await A.locator('[data-testid="maze-race-void"]').count()) === 1,
+)
+check('the stale ghost is gone', (await A.locator('[data-testid="maze-ghost"]').count()) === 0)
+check(
+  'no Start race until re-paired',
+  (await A.locator('[data-testid="maze-start-race"]').count()) === 0,
+)
+check(
+  "the survivor's chip reads lost, not never-paired",
+  (await A.locator('[data-testid="maze-link"]').getAttribute('data-status')) === 'closed',
+)
+
+// ----------------------------------------------------------- housekeeping
+
+// A voided race is over, not in progress — leaving the mode needs no confirm.
+await A.locator('[data-testid="maze-mode-solo"]').click()
 await page.waitForTimeout(300)
 check('leaving the mode releases the link', (await attr(A, 'data-net')) === 'off')
 check('and clears the race', (await attr(A, 'data-race')) === 'off')

@@ -28,6 +28,14 @@ const GATHER_TIMEOUT_MS = 4000
 
 const CHANNEL_LABEL = 'widget-netplay'
 
+/**
+ * How long a recoverable ICE `disconnected` may last before it is treated as
+ * a real failure. Wifi blips of a second or two are normal; ICE usually heals
+ * them by itself, and the reliable ordered channel buffers through — so the
+ * only way to LOSE messages on a LAN is to tear the session down early.
+ */
+export const RECONNECT_GRACE_MS = 8000
+
 /** Resolve once the browser has finished gathering candidates (or we give up
  * waiting and ship the ones already in the description). */
 function gatheringComplete(pc: RTCPeerConnection): Promise<void> {
@@ -66,10 +74,26 @@ export function createWebrtcTransport(handlers: TransportHandlers): NetTransport
   const pc = new RTCPeerConnection({ iceServers: [] })
   let channel: RTCDataChannel | null = null
   let closed = false
+  let graceTimer: ReturnType<typeof setTimeout> | null = null
+  /** Whether the channel ever opened — a failure BEFORE it is "could not
+   * reach", a failure after is "connection lost", and the two need different
+   * advice (re-scan vs re-pair). */
+  let everOpen = false
+
+  const clearGrace = () => {
+    if (graceTimer !== null) {
+      clearTimeout(graceTimer)
+      graceTimer = null
+    }
+  }
 
   const bindChannel = (dc: RTCDataChannel) => {
     channel = dc
-    dc.onopen = () => handlers.onStatus('connected')
+    dc.onopen = () => {
+      everOpen = true
+      clearGrace()
+      handlers.onStatus('connected')
+    }
     dc.onmessage = (e) => {
       if (typeof e.data === 'string') handlers.onMessage(e.data)
     }
@@ -82,12 +106,36 @@ export function createWebrtcTransport(handlers: TransportHandlers): NetTransport
   pc.onconnectionstatechange = () => {
     if (closed) return
     // The data channel's own `onopen` is what says "you can play now", so a
-    // `connected` peer connection is not promoted here — only the failure
-    // states, which the channel would otherwise never report.
+    // `connected` peer connection is not promoted here except when RECOVERING
+    // from a blip — the channel never re-fires `onopen`.
     if (pc.connectionState === 'failed') {
-      handlers.onStatus('failed', 'Could not reach the other device.')
-    } else if (pc.connectionState === 'disconnected') {
-      handlers.onStatus('closed')
+      clearGrace()
+      handlers.onStatus(
+        'failed',
+        everOpen ? 'Connection lost.' : 'Could not reach the other device.',
+      )
+      return
+    }
+    if (pc.connectionState === 'disconnected') {
+      // Frequently RECOVERABLE: a couple of seconds of packet loss that ICE
+      // heals on its own while the channel buffers. The first version of this
+      // treated it as `closed` and tore the session down for a wifi hiccup —
+      // the field report was "sometimes got disconnected til the maze
+      // desync". Report a blip, and only declare death if the grace expires.
+      handlers.onStatus('reconnecting')
+      if (graceTimer === null) {
+        graceTimer = setTimeout(() => {
+          graceTimer = null
+          if (!closed && pc.connectionState !== 'connected') {
+            handlers.onStatus('failed', 'Connection lost.')
+          }
+        }, RECONNECT_GRACE_MS)
+      }
+      return
+    }
+    if (pc.connectionState === 'connected') {
+      clearGrace()
+      if (channel?.readyState === 'open') handlers.onStatus('connected')
     }
   }
 
@@ -142,6 +190,7 @@ export function createWebrtcTransport(handlers: TransportHandlers): NetTransport
     close() {
       if (closed) return
       closed = true
+      clearGrace()
       try {
         channel?.close()
         pc.close()

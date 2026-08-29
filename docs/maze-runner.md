@@ -221,9 +221,22 @@ comes from `link.seat`, not `turn`, which keeps its hot-seat meaning.
   and aid, so nobody races with fog while the other doesn't.
 - **The ghost is a marker, never a trail**, and is drawn *under* the fog
   overlay — knowing they are near the flag is fair, knowing their route is not.
+  It dims while the link is `reconnecting` (its position is stale by
+  definition) and disappears when the link dies.
+- **A dead link voids a live race.** The field failure this replaces: the
+  opponent's `done` can never arrive over a dead link, so the race used to sit
+  in `running` forever with a frozen ghost. Now a link `failed`/`closed` while
+  a race is counting or running sets `result: 'void'` — an overlay names the
+  lost connection, the clock stops, and Start race is gone until re-paired
+  (the button needs `link.connected` anyway). A wifi *blip* (`reconnecting`)
+  changes nothing: the reliable channel buffers `pos`/`done` through it and
+  the race self-heals. Void is sticky via `result` (cleared by the next
+  `startRace`/incoming `go`), not derived from live flags — deriving it from
+  `started` while the same effect clears `started` would flash it away.
 
 Root contract adds `data-net`, `data-seat`, `data-race`
-(`off|idle|counting|running|won|lost`) and `data-ghost`.
+(`off|idle|counting|running|won|lost|void`) and `data-ghost`; the void overlay
+is `maze-race-void`.
 
 ## State model (persisted `data`, via `useWidgetField`)
 `seed`, `cols`, `rows` · `size`, `moveRule`, `aid`, `mode`, `mirror` · `pos`, `trail`

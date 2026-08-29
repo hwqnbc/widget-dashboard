@@ -19,8 +19,22 @@ import {
 import { transportFactory } from './transportFactory'
 import type { NetRole, NetStatus, NetTransport } from './types'
 
+/**
+ * Liveness cadence. A ping goes out every PING_MS while connected; ANY
+ * incoming traffic counts as life. Silence past QUIET_MS reads as a blip
+ * (`reconnecting` — the channel usually still buffers); past DEAD_MS the link
+ * is declared failed. Catches the death that fires no event at all: a
+ * backgrounded tablet tab whose JS has simply stopped.
+ */
+export const PING_MS = 2500
+export const QUIET_MS = 7000
+export const DEAD_MS = 16000
+
 export interface NetplayLink {
   status: NetStatus
+  /** Connected, or blipping but expected back — the state a costume or a
+   * running race should survive. Input gating stays on `connected`. */
+  alive: boolean
   role: NetRole | null
   /** The seat this device plays, once a role is chosen. */
   seat: Seat | null
@@ -50,6 +64,8 @@ export function useNetplay(onMessage: (msg: NetMsg) => void): NetplayLink {
   const [error, setError] = useState<string | null>(null)
 
   const transport = useRef<NetTransport | null>(null)
+  const lastSeen = useRef(0)
+  const pingN = useRef(0)
   /** One greeting per link — `connected` can be reported more than once. */
   const greeted = useRef(false)
   // Held in a ref so a re-rendered handler never leaves the transport wired to
@@ -73,10 +89,17 @@ export function useNetplay(onMessage: (msg: NetMsg) => void): NetplayLink {
     const created = transportFactory()({
       onMessage: (raw) => {
         if (!alive.current) return
+        lastSeen.current = performance.now()
         const msg = decodeMsg(raw)
         // A message we cannot parse is dropped rather than guessed at: better
         // a missed move (the position resyncs) than a corrupted board.
         if (!msg) return
+        if (msg.t === 'ping') {
+          // Liveness is the link's business, like `hello` — games never see it.
+          transport.current?.send(encodeMsg({ t: 'pong', n: msg.n }))
+          return
+        }
+        if (msg.t === 'pong') return
         if (msg.t === 'hello') {
           // Protocol-level, so it is handled here and never reaches the game.
           // A version mismatch is caught NOW, while the boards are still
@@ -95,6 +118,7 @@ export function useNetplay(onMessage: (msg: NetMsg) => void): NetplayLink {
       },
       onStatus: (next, detail) => {
         if (!alive.current) return
+        if (next === 'connected') lastSeen.current = performance.now()
         setStatus(next)
         if (detail) setError(detail)
         else if (next === 'connected') setError(null)
@@ -107,6 +131,33 @@ export function useNetplay(onMessage: (msg: NetMsg) => void): NetplayLink {
     transport.current = created
     return created
   }, [])
+
+  // Heartbeat: speak every PING_MS while the link is up, and read silence.
+  // The loopback transport answers synchronously, so in tests this simply
+  // keeps `lastSeen` fresh. Runs only in the two live-ish states — a link
+  // that is idle/pairing/dead has nothing to measure.
+  useEffect(() => {
+    if (status !== 'connected' && status !== 'reconnecting') return
+    const timer = setInterval(() => {
+      const quiet = performance.now() - lastSeen.current
+      if (quiet > DEAD_MS) {
+        setError('Connection lost.')
+        setStatus('failed')
+        transport.current?.close()
+        return
+      }
+      if (quiet > QUIET_MS) {
+        // Downgrade only — the next incoming message upgrades us back via
+        // the watchdog's own next tick seeing fresh `lastSeen`.
+        setStatus((s) => (s === 'connected' ? 'reconnecting' : s))
+      } else {
+        setStatus((s) => (s === 'reconnecting' ? 'connected' : s))
+      }
+      pingN.current += 1
+      transport.current?.send(encodeMsg({ t: 'ping', n: pingN.current }))
+    }, PING_MS)
+    return () => clearInterval(timer)
+  }, [status])
 
   const run = useCallback(async (work: () => Promise<void>) => {
     setBusy(true)
@@ -172,6 +223,7 @@ export function useNetplay(onMessage: (msg: NetMsg) => void): NetplayLink {
 
   return {
     status,
+    alive: status === 'connected' || status === 'reconnecting',
     role,
     seat: role ? seatForRole(role) : null,
     token,

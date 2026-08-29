@@ -1874,3 +1874,32 @@ carried over; these are the new ones.
      and `waitForFunction` on `dataset['score-toy']` waited forever because
      the key is `scoreToy`. Both passed every assertion before them and
      failed as timeouts far downstream — neither was the widget.
+
+117. **WebRTC `disconnected` is a weather report, not a death certificate.**
+     `connectionState: 'disconnected'` is a state ICE routinely enters for a
+     second or two of packet loss and heals on its own; mapping it straight to
+     "closed" turned every wifi blip into a torn-down game — the field's
+     "sometimes got disconnected". Grace it (~8s) and report a distinct
+     `reconnecting`; only grace expiry, pc `failed`, or channel `onclose` is
+     real. Corollary that made the maze desync make sense: on a reliable
+     ordered channel the network CANNOT lose a message — retransmission runs
+     until delivery or death — so premature teardown by our own code was the
+     only possible loss mode on a LAN.
+
+118. **Liveness needs a heartbeat, because the worst death fires no event.**
+     A backgrounded tablet tab stops JS without closing anything; the other
+     side waits forever on a link that looks open. App-level ping/pong (any
+     traffic refreshes liveness; quiet → `reconnecting`, long-quiet → dead)
+     is the only detector for it. New message types mean a NET_VERSION bump
+     (lesson #109 held: a v2 peer would never pong and be wrongly declared
+     dead) — and export the timing constants so tests assert transitions
+     instead of re-deriving clocks.
+
+119. **A live multiplayer state must resolve on link death, and sticky beats
+     derived.** The maze race sat in `running` forever when the link died —
+     the opponent's `done` can never arrive, and nothing else ended it. Every
+     live state needs an explicit link-death verdict (here `void`). First cut
+     derived void from `linkDead && started` while the same effect cleared
+     `started`: a one-frame flash. Park the verdict in the same sticky
+     `result` the real outcomes use (`setResult(prev => prev ?? 'void')`),
+     cleared only by the next start.

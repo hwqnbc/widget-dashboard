@@ -17,9 +17,19 @@ export type NetRole = 'host' | 'guest'
  * - `pairing` — a token has been produced and we are waiting on the other side.
  * - `connecting` — both descriptions exchanged, ICE / channel coming up.
  * - `connected` — the data channel is open; play.
+ * - `reconnecting` — the link is blipping (a recoverable ICE `disconnected`,
+ *   or the heartbeat has gone quiet). The channel usually still buffers, so
+ *   messages arrive late rather than never; a grace period decides which.
  * - `failed` / `closed` — link gone; the UI offers a fresh pairing.
  */
-export type NetStatus = 'idle' | 'pairing' | 'connecting' | 'connected' | 'failed' | 'closed'
+export type NetStatus =
+  | 'idle'
+  | 'pairing'
+  | 'connecting'
+  | 'connected'
+  | 'reconnecting'
+  | 'failed'
+  | 'closed'
 
 export interface TransportHandlers {
   onMessage(data: string): void

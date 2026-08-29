@@ -146,6 +146,27 @@ export default function NetplayDialog({
       )
     }
 
+    // A dead link first: the stale token must never be shown, because the
+    // RTCPeerConnection behind it is gone — a re-pair is honestly a fresh QR.
+    if (link.role !== null && (link.status === 'failed' || link.status === 'closed')) {
+      return (
+        <Stack spacing={2}>
+          <Alert severity="error" data-testid="netplay-lost">
+            The connection was lost. Pair again to keep playing — your game is
+            saved on this device.
+          </Alert>
+          <Button
+            variant="contained"
+            size="large"
+            data-testid="netplay-repair"
+            onClick={link.role === 'host' ? link.host : link.disconnect}
+          >
+            {link.role === 'host' ? 'Pair again (show a new code)' : 'Start over'}
+          </Button>
+        </Stack>
+      )
+    }
+
     if (link.role === null) {
       return (
         <Stack spacing={2}>
