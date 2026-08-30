@@ -7,6 +7,7 @@ export type WidgetType =
   | 'avatarActions'
   | 'ticTacToe'
   | 'connect4'
+  | 'othello'
   | 'memory'
   | 'archery'
   | 'droneSim'

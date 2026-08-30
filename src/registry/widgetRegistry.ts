@@ -8,6 +8,7 @@ import ImageToggleWidget from '../components/widgets/ImageToggleWidget'
 import AvatarActionsWidget from '../components/widgets/AvatarActionsWidget'
 import TicTacToeWidget from '../components/widgets/TicTacToeWidget'
 import Connect4Widget from '../components/widgets/Connect4Widget'
+import OthelloWidget from '../components/widgets/OthelloWidget'
 import MemoryWidget from '../components/widgets/MemoryWidget'
 import ArcheryWidget from '../components/widgets/ArcheryWidget'
 import DroneSimWidget from '../components/widgets/droneSim/DroneSimWidget'
@@ -31,6 +32,7 @@ export const widgetComponents: Record<WidgetType, ComponentType<WidgetProps>> = 
   avatarActions: AvatarActionsWidget,
   ticTacToe: TicTacToeWidget,
   connect4: Connect4Widget,
+  othello: OthelloWidget,
   memory: MemoryWidget,
   archery: ArcheryWidget,
   droneSim: DroneSimWidget,

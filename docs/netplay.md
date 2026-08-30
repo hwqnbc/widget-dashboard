@@ -178,8 +178,15 @@ it was identical bar a test id.
 
 The claim that the protocol is game-agnostic was, until this point, an
 assertion in this document. A second game now shares the *code*, not just the
-idea — and another turn-based one (Dots and Boxes, Reversi) needs the
-right-hand column only.
+idea — and another turn-based one (Dots and Boxes) needs the right-hand
+column only.
+
+Othello, the fourth consumer, stretched the seam one notch without changing
+it: its turn is not derivable from the board (a forced pass breaks disc
+parity), so its `TBoard` is a whole position `{ cells, turn }` and its
+`applyMove` computes the pass-aware next mover — the hook is generic over
+`TBoard` and never needed to know (see `docs/othello.md`). A pass never
+crosses the wire: both devices derive it in the same pure function.
 
 ### Two consumer shapes
 
@@ -346,8 +353,12 @@ gameplay.
 - ~~Tic-Tac-Toe online~~ — **shipped**, and it did prove the point: the second
   game supplies one function (`applyMove`) and inherits everything else. See
   *The shared seam* above and `docs/tic-tac-toe.md`.
-- **Dots and Boxes / Reversi online** — same shape again, once those widgets
-  exist (`docs/` backlogs).
+- ~~Reversi online~~ — **shipped** with the Othello widget itself: online was
+  a first-class mode from day one, and its position-shaped `TBoard` proved
+  the seam stretches to games whose turn isn't parity (see *The shared seam*
+  and `docs/othello.md`).
+- **Dots and Boxes online** — same shape again, once the widget exists
+  (`docs/widget-ideas.md`).
 - **Memory online** — the first game needing more than moves: the card
   shuffle must be shared. Host sends the seed in `sync`, exactly as the maze
   race now sends its maze seed.

@@ -64,10 +64,11 @@ AI ladder, which falls out naturally:
 
 ## Cheap — they reuse the two-player board kit almost entirely
 
-- **Reversi / Othello** — the Connect 4 alpha-beta engine with a different move
-  generator; the disc flip reuses Memory's card-flip animation. Note it shares
-  Dots and Boxes' wrinkle in miniature: a player with no legal move is skipped,
-  so turn is not pure parity.
+- ~~Reversi / Othello~~ — **shipped** as the Othello widget: see
+  `docs/othello.md`. The predicted wrinkle was real — turn is not parity —
+  and the answer was to store the mover inside the position and let the
+  netplay `TBoard` be that whole object; the shared `useNetGame` seam needed
+  no change.
 - **Battleship** — hidden grids, tap to fire, hit/miss through the
   `droneSim/webAudio` engine. Adds a placement phase none of the current games
   have, and is a natural netplay consumer (a move is a cell index) — though the

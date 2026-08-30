@@ -138,6 +138,17 @@ export async function addMazeWidgets(page, count = 2) {
   await page.locator('[data-testid="maze-root"]').nth(count - 1).waitFor()
 }
 
+/** Fresh dashboard with `count` Othello widgets, loopback transport armed
+ * (see `addTicTacToeWidgets` for why `?netloop=1`). */
+export async function addOthelloWidgets(page, count = 2) {
+  await page.goto(`${BASE_URL}?netloop=1`, { waitUntil: 'networkidle' })
+  for (let i = 0; i < count; i++) {
+    await page.getByRole('button', { name: 'Add widget' }).click()
+    await page.getByRole('menuitem', { name: /Othello/ }).click()
+  }
+  await page.locator('[data-testid="othello-root"]').nth(count - 1).waitFor()
+}
+
 /** Fresh dashboard with `count` Tic-Tac-Toe widgets, loopback transport armed.
  * `?netloop=1` swaps WebRTC for the in-page transport so two widgets in one
  * document can pair; everything else is the production path. */

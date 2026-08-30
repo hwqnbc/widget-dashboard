@@ -3,6 +3,7 @@ import type { WidgetType } from './types'
 import { DEFAULT_SEED } from '../../components/widgets/droneSim/worldLayout'
 import { DEFAULT_TANK_SEED } from '../../components/widgets/tankBattle/terrain'
 import { DEFAULT_MAZE_SEED } from '../../components/widgets/mazeRunner/mazeModel'
+import { initialPosition } from '../../components/widgets/othelloModel'
 
 /**
  * Static metadata about each widget type. Kept free of component imports so
@@ -67,6 +68,12 @@ export const WIDGET_CATALOG: WidgetMeta[] = [
     title: 'Connect 4',
     description: 'Drop discs — Toy vs Ninja',
     defaultSize: { w: 5, h: 5, minW: 4, minH: 5 },
+  },
+  {
+    type: 'othello',
+    title: 'Othello',
+    description: 'Flip discs — corners are gold',
+    defaultSize: { w: 5, h: 6, minW: 4, minH: 5 },
   },
   {
     type: 'memory',
@@ -143,6 +150,15 @@ export function defaultWidgetData(type: WidgetType): Record<string, unknown> {
     case 'connect4':
       return {
         board: Array(42).fill(null),
+        mode: 'pvp',
+        difficulty: 'medium',
+        first: 'toy',
+      }
+    case 'othello':
+      return {
+        // Turn lives inside the position — Othello's forced pass means it
+        // cannot be derived from disc parity (see othelloModel).
+        board: initialPosition('toy'),
         mode: 'pvp',
         difficulty: 'medium',
         first: 'toy',

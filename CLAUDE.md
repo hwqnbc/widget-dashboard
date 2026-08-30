@@ -261,14 +261,19 @@ the Drone Strike patrol soldiers.
 ## Docs
 
 Per-feature design notes live in `docs/`; `docs/widget-ideas.md` holds the
-backlog of widgets not yet built (Dots and Boxes, Reversi, Snowball Fight, …). See `docs/tic-tac-toe.md` for the
+backlog of widgets not yet built (Dots and Boxes, Snowball Fight, …). See `docs/tic-tac-toe.md` for the
 Tic-Tac-Toe widget's considerations (difficulty levels incl. the "sane player"
 Easy AI, 2-player vs vs-computer, the pass-opening-move button, board
 responsiveness, the persisted state model, and **2 Devices** mode — the
 netplay layer's second consumer, which supplies only an `applyMove`). See `docs/connect-4.md` for the
 Connect 4 widget (7×6 board, depth-based Easy/Medium/Hard alpha-beta AI,
 animated disc drop; reuses the same modes, latency, pass button and glow —
-plus **2 Devices** mode, the first net-played widget). See `docs/netplay.md`
+plus **2 Devices** mode, the first net-played widget). See `docs/othello.md`
+for the Othello widget (8×8 flipping discs on the pure `othelloModel` —
+turn stored INSIDE the position because forced passes break disc parity,
+weight-table alpha-beta AI with a corner-sane Easy, flip/pop animations,
+legal-move hints, and **2 Devices** mode whose `TBoard` is the whole
+position object). See `docs/netplay.md`
 for two-device play (peer-to-peer WebRTC on one wifi with **no server** —
 `iceServers: []` so traffic never leaves the LAN, QR codes as the signaling
 channel, a compact SDP codec that gets a pairing token down to ~120

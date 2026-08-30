@@ -1903,3 +1903,22 @@ carried over; these are the new ones.
      `started`: a one-frame flash. Park the verdict in the same sticky
      `result` the real outcomes use (`setResult(prev => prev ?? 'void')`),
      cleared only by the next start.
+
+120. **When turn isn't derivable, make the netplay board the whole position.**
+     Othello's forced pass breaks disc parity, so `turnOf(board, first)` — the
+     derivation Connect 4 and Tic-Tac-Toe share — cannot exist. The seam
+     didn't need changing: `useNetGame` is generic over `TBoard` and only
+     ever writes `{ board }` back, so a game whose mover is state simply
+     hands the hook `{ cells, turn }` as its board and computes the
+     pass-aware next mover inside the same pure `applyMove` both devices
+     run. Corollary: a forced pass never needs to cross the wire, and ply
+     ("discs beyond the start") still works because a pass adds no disc.
+
+121. **Calibrate search depth per game, not per convention.** Connect 4's
+     depth-6 hard was fine; copying it to Othello peaked at 2.5s a move in
+     node (≈ twice the branching, and an evaluate that walks legal-move
+     scans) — on a tablet that reads as a hang. Measure with a node
+     self-play script over the e2e bundle BEFORE wiring the widget; depth 5
+     kept a strict easy<medium<hard ladder at ~1s worst. The same script
+     doubles as the suite's determinism harness: inject a seeded rand into
+     the random AI and ladder games stop being flaky.
