@@ -102,7 +102,12 @@ disc circle each is cheap DOM.
   player's turn, so neither the AI nor the other device can move.
 - **Animations**: a placed disc pops in (`scale` 0→1); flipped discs squash
   through their edge (`scaleX` 1→0.08→1) already wearing their new owner —
-  reads as a turn-over without a 3D rig.
+  reads as a turn-over without a 3D rig. The squashes **cascade**: each
+  captured disc waits `FLIP_STAGGER_MS` (70ms) per ring of Chebyshev
+  distance from the placed cell (pure CSS `animation-delay`; the 0% frame is
+  `scaleX(1)`, so the wait is invisible), selling a long capture as a sweep
+  down the ray. Each cell publishes its `data-flip-delay` so the suite
+  asserts the gradient without reading computed styles.
 - Score strip: both seats' live disc counts as `PlayerBadge`s, plus the
   usual turn/winner/draw badge and confirm-guarded restarts (`ConfirmDialog`
   on mode/difficulty changes mid-game).
@@ -122,7 +127,8 @@ On `[data-testid="othello-root"]`: `data-mode`, `data-net`, `data-seat`,
 skipped, or empty), `data-winner` (`toy|ninja|draw|`empty), `data-score-toy`,
 `data-score-ninja`, `data-avatar-toy`, `data-avatar-ninja`, `data-preview`
 (the held cell, or empty). Each cell is
-`oth-cell-N` with `data-disc`, `data-hint` and `data-preview-flip`. The pass caption is
+`oth-cell-N` with `data-disc`, `data-hint`, `data-preview-flip` and
+`data-flip-delay` (ms, on just-captured discs). The pass caption is
 `othello-pass-note`; the online toggle `othello-mode-online`, the chip
 `othello-link`.
 
@@ -154,8 +160,7 @@ bundled model).
 
 **Board & feel**
 - ~~Capture preview on press-hold~~ — **shipped**: see *Board and rendering*.
-- **Flip cascade stagger** — delay each flipped disc's squash by distance
-  from the placed cell, selling the ray sweep; pure CSS `animation-delay`.
+- ~~Flip cascade stagger~~ — **shipped**: see *Board and rendering*.
 - **Sound** — place/flip/skip cues through `droneSim/webAudio`, the
   no-asset synth every game reuses.
 

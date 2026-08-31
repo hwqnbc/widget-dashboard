@@ -238,6 +238,52 @@ check('the captured disc turned over', (await cellAt(27).getAttribute('data-disc
 check('the score moved to 4–1', (await num('data-score-toy')) === 4 && (await num('data-score-ninja')) === 1)
 check('the turn passed', (await attr('data-turn')) === 'ninja')
 
+// ---- flip cascade stagger ------------------------------------------------
+// Captured discs squash in a wave: each waits FLIP_STAGGER_MS per ring of
+// Chebyshev distance from the placed cell (published as data-flip-delay).
+// Closed-loop: keep playing first-legal until a move that captures at
+// distance ≥2 is available (a handful of plies at most), play THAT, and
+// assert the gradient — the adjacent capture at 0ms, the distant one later.
+{
+  const cheb = (a, b) =>
+    Math.max(Math.abs(Math.floor(a / 8) - Math.floor(b / 8)), Math.abs((a % 8) - (b % 8)))
+  let shadow = applyMove(start, 19).pos
+  let played = 1
+  let found = null
+  for (let step = 0; step < 12 && !found; step++) {
+    const moves = legalMoves(shadow)
+    const far = moves.find((m) =>
+      flipsFor(shadow.cells, m, shadow.turn).some((f) => cheb(m, f) >= 2),
+    )
+    const m = far ?? moves[0]
+    const res = applyMove(shadow, m)
+    if (far !== undefined) found = { cell: m, flips: res.flipped }
+    shadow = res.pos
+    // The hot-seat hand-off banner locks the board for a beat after each move.
+    await page.waitForFunction(
+      () => !document.querySelector('[data-testid="turn-banner"]'),
+      null,
+      { timeout: 4000 },
+    )
+    await cellAt(m).click()
+    played++
+    await until('ply', String(played))
+  }
+  check('a distance-2 capture arose within the opening', found !== null)
+  const near = found.flips.find((f) => cheb(found.cell, f) === 1)
+  const far = found.flips.find((f) => cheb(found.cell, f) >= 2)
+  check(
+    'the adjacent capture flips immediately',
+    (await cellAt(near).getAttribute('data-flip-delay')) === '0',
+  )
+  const delay = parseInt(await cellAt(far).getAttribute('data-flip-delay'), 10)
+  check(`the distant capture waits its ring (${delay}ms)`, delay >= 70)
+  check(
+    'undisturbed discs carry no delay',
+    (await cellAt(found.cell).getAttribute('data-flip-delay')) === '',
+  )
+}
+
 // vs Computer: the change is confirm-guarded mid-game, then the ninja replies
 // on its own.
 await root.getByRole('button', { name: 'vs Computer' }).click()

@@ -85,12 +85,16 @@ const BOARD_FRAME = '#1b5e20'
 const CELL_FELT = '#2e7d32'
 
 /** A freshly flipped disc squashes through its edge and back — the disc
- * already wears its new owner, the squash is what sells the turn-over. */
+ * already wears its new owner, the squash is what sells the turn-over.
+ * Discs further from the placed cell start later (`FLIP_STAGGER_MS` per ring
+ * of Chebyshev distance), so a long capture reads as a sweep down the ray;
+ * the 0% frame is scaleX(1), so the wait itself is invisible. */
 const flipAnim = keyframes`
   0%   { transform: scaleX(1); }
   50%  { transform: scaleX(0.08); }
   100% { transform: scaleX(1); }
 `
+const FLIP_STAGGER_MS = 70
 /** A newly placed disc pops in. */
 const popAnim = keyframes`
   0%   { transform: scale(0); }
@@ -403,6 +407,17 @@ export default function OthelloWidget({ id }: WidgetProps) {
           {position.cells.map((cell: Cell, i: number) => {
             const hint = !locked && legal.includes(i)
             const previewFlip = preview?.flips.includes(i) ?? false
+            // Cascade: each captured disc's squash starts later by its
+            // Chebyshev distance from the placed cell (adjacent = 0ms).
+            const flipDelay =
+              lastPlaced !== null && flipped.includes(i)
+                ? (Math.max(
+                    Math.abs(Math.floor(i / SIZE) - Math.floor(lastPlaced / SIZE)),
+                    Math.abs((i % SIZE) - (lastPlaced % SIZE)),
+                  ) -
+                    1) *
+                  FLIP_STAGGER_MS
+                : null
             return (
               <Box
                 key={i}
@@ -410,6 +425,7 @@ export default function OthelloWidget({ id }: WidgetProps) {
                 data-disc={cell ?? ''}
                 data-hint={hint ? '1' : '0'}
                 data-preview-flip={previewFlip ? '1' : '0'}
+                data-flip-delay={flipDelay ?? ''}
                 onClick={() => playCell(i)}
                 onPointerDown={() => startHold(i)}
                 onPointerUp={clearHold}
@@ -446,8 +462,8 @@ export default function OthelloWidget({ id }: WidgetProps) {
                       animation:
                         i === lastPlaced
                           ? `${popAnim} 0.35s ease-out`
-                          : flipped.includes(i)
-                            ? `${flipAnim} 0.45s ease-in-out`
+                          : flipDelay !== null
+                            ? `${flipAnim} 0.45s ease-in-out ${flipDelay}ms`
                             : undefined,
                     }}
                   >
