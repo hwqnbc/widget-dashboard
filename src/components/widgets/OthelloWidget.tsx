@@ -1,4 +1,4 @@
-import { Suspense, useEffect, useState } from 'react'
+import { Suspense, useEffect, useRef, useState } from 'react'
 import {
   Box,
   Button,
@@ -31,6 +31,7 @@ import {
   SIZE,
   applyMove,
   counts,
+  flipsFor,
   initialPosition,
   isOver,
   legalMoves,
@@ -75,6 +76,11 @@ const coercePosition = (value: unknown): Position | undefined => {
 const THINK_MIN = 400
 const THINK_MAX = 1200
 
+/** How long a finger must rest on a legal cell before the capture preview
+ * appears. Long enough that an ordinary tap never flashes it, short enough
+ * that a curious hold feels answered. */
+const HOLD_MS = 200
+
 const BOARD_FRAME = '#1b5e20'
 const CELL_FELT = '#2e7d32'
 
@@ -91,6 +97,11 @@ const popAnim = keyframes`
   70%  { transform: scale(1.12); }
   100% { transform: scale(1); }
 `
+/** Pulsing ring on discs the held move would capture. */
+const previewGlow = keyframes`
+  0%, 100% { box-shadow: 0 0 0 2px currentColor, 0 0 6px 1px currentColor; }
+  50%      { box-shadow: 0 0 0 4px currentColor, 0 0 14px 3px currentColor; }
+`
 
 function Disc({ mark }: { mark: Mark }) {
   const { Head } = useSeatVisual(mark)
@@ -104,6 +115,11 @@ export default function OthelloWidget({ id }: WidgetProps) {
   const [lastPlaced, setLastPlaced] = useState<number | null>(null)
   const [flipped, setFlipped] = useState<number[]>([])
   const [passed, setPassed] = useState<Mark | null>(null)
+  /** Press-hold capture preview: the held cell and the discs the move would
+   * flip. Purely a visual — the commit stays on the ordinary tap/click, and
+   * dragging off the cell before release aborts both. */
+  const [preview, setPreview] = useState<{ cell: number; flips: number[] } | null>(null)
+  const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [pending, setPending] = useState<
     { mode?: Mode; difficulty?: Difficulty } | null
   >(null)
@@ -176,6 +192,7 @@ export default function OthelloWidget({ id }: WidgetProps) {
       setLastPlaced(null)
       setFlipped([])
       setPassed(null)
+      setPreview(null)
     },
     setGame,
   })
@@ -205,7 +222,39 @@ export default function OthelloWidget({ id }: WidgetProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [position, mode, difficulty, over, turn])
 
+  /** End any press-hold: the pending timer and the preview itself. */
+  const clearHold = () => {
+    if (holdTimer.current !== null) {
+      clearTimeout(holdTimer.current)
+      holdTimer.current = null
+    }
+    setPreview(null)
+  }
+  useEffect(
+    () => () => {
+      if (holdTimer.current !== null) clearTimeout(holdTimer.current)
+    },
+    [],
+  )
+
+  /** Press-hold on a legal cell arms the capture preview. The flips can't go
+   * stale while held: it is this player's turn, so neither the AI nor the
+   * other device can change the position under the finger. */
+  const startHold = (idx: number) => {
+    if (over || hand.player) return
+    if (mode === 'ai' && turn === 'ninja') return
+    if (net.blocked) return
+    const flips = flipsFor(position.cells, idx, turn)
+    if (flips.length === 0) return
+    if (holdTimer.current !== null) clearTimeout(holdTimer.current)
+    holdTimer.current = setTimeout(() => {
+      holdTimer.current = null
+      setPreview({ cell: idx, flips })
+    }, HOLD_MS)
+  }
+
   const playCell = (idx: number) => {
+    clearHold()
     if (over || hand.player) return
     if (mode === 'ai' && turn === 'ninja') return // AI's move
     if (net.blocked) return // not paired yet, or the other device's turn
@@ -223,6 +272,7 @@ export default function OthelloWidget({ id }: WidgetProps) {
 
   const reset = (extra: Partial<{ mode: Mode; difficulty: Difficulty }> = {}) => {
     hand.clear()
+    clearHold()
     setLastPlaced(null)
     setFlipped([])
     setPassed(null)
@@ -267,6 +317,7 @@ export default function OthelloWidget({ id }: WidgetProps) {
       data-turn={turn}
       data-ply={ply}
       data-legal={legal.length}
+      data-preview={preview?.cell ?? ''}
       data-pass={passed ?? ''}
       data-winner={winner ?? (isDraw ? 'draw' : '')}
       data-score-toy={score.toy}
@@ -343,17 +394,27 @@ export default function OthelloWidget({ id }: WidgetProps) {
             p: '1.5%',
             bgcolor: BOARD_FRAME,
             borderRadius: 2,
+            // A held finger must preview, not select text or pop a callout.
+            userSelect: 'none',
+            WebkitUserSelect: 'none',
+            touchAction: 'manipulation',
           }}
         >
           {position.cells.map((cell: Cell, i: number) => {
             const hint = !locked && legal.includes(i)
+            const previewFlip = preview?.flips.includes(i) ?? false
             return (
               <Box
                 key={i}
                 data-testid={`oth-cell-${i}`}
                 data-disc={cell ?? ''}
                 data-hint={hint ? '1' : '0'}
+                data-preview-flip={previewFlip ? '1' : '0'}
                 onClick={() => playCell(i)}
+                onPointerDown={() => startHold(i)}
+                onPointerUp={clearHold}
+                onPointerLeave={clearHold}
+                onPointerCancel={clearHold}
                 sx={{
                   minWidth: 0,
                   minHeight: 0,
@@ -362,6 +423,12 @@ export default function OthelloWidget({ id }: WidgetProps) {
                   bgcolor: CELL_FELT,
                   borderRadius: '12%',
                   cursor: hint ? 'pointer' : 'default',
+                  // The would-be captures ring in the MOVER's colour: these
+                  // discs are about to become theirs.
+                  ...(previewFlip && {
+                    color: colorOf(turn),
+                    animation: `${previewGlow} 0.8s ease-in-out infinite`,
+                  }),
                 }}
               >
                 {cell ? (
@@ -386,6 +453,25 @@ export default function OthelloWidget({ id }: WidgetProps) {
                   >
                     <Box sx={{ width: '78%', height: '78%' }}>
                       <Disc mark={cell} />
+                    </Box>
+                  </Box>
+                ) : preview?.cell === i ? (
+                  // A ghost of the disc the hold would place.
+                  <Box
+                    sx={{
+                      width: '84%',
+                      aspectRatio: '1 / 1',
+                      maxHeight: '84%',
+                      borderRadius: '50%',
+                      display: 'grid',
+                      placeItems: 'center',
+                      bgcolor: 'background.paper',
+                      opacity: 0.55,
+                      color: colorOf(turn),
+                    }}
+                  >
+                    <Box sx={{ width: '78%', height: '78%' }}>
+                      <Disc mark={turn} />
                     </Box>
                   </Box>
                 ) : (

@@ -90,6 +90,16 @@ disc circle each is cheap DOM.
 - **Hints**: translucent dots on the current mover's legal cells (kids need
   to see where flipping is possible); suppressed while the board is locked
   (AI thinking, not this device's turn, game over).
+- **Capture preview on press-hold**: resting a finger on a legal cell for
+  `HOLD_MS` (200ms) shows what the move wins — a ghost disc on the held cell
+  and a pulsing ring, in the MOVER's colour, on every disc it would flip
+  (straight off `flipsFor`). Purely visual: the commit stays on the ordinary
+  tap (release on the cell plays it, exactly as before), and dragging off
+  the cell before release aborts both preview and move. The delay keeps a
+  normal tap from flashing it; the board carries `user-select: none` /
+  `touch-action: manipulation` so a long-press never triggers selection or
+  a callout instead. The flips cannot go stale under the finger — it is this
+  player's turn, so neither the AI nor the other device can move.
 - **Animations**: a placed disc pops in (`scale` 0→1); flipped discs squash
   through their edge (`scaleX` 1→0.08→1) already wearing their new owner —
   reads as a turn-over without a 3D rig.
@@ -110,8 +120,9 @@ component state and never persists.
 On `[data-testid="othello-root"]`: `data-mode`, `data-net`, `data-seat`,
 `data-turn`, `data-ply`, `data-legal` (count), `data-pass` (seat just
 skipped, or empty), `data-winner` (`toy|ninja|draw|`empty), `data-score-toy`,
-`data-score-ninja`, `data-avatar-toy`, `data-avatar-ninja`. Each cell is
-`oth-cell-N` with `data-disc` and `data-hint`. The pass caption is
+`data-score-ninja`, `data-avatar-toy`, `data-avatar-ninja`, `data-preview`
+(the held cell, or empty). Each cell is
+`oth-cell-N` with `data-disc`, `data-hint` and `data-preview-flip`. The pass caption is
 `othello-pass-note`; the online toggle `othello-mode-online`, the chip
 `othello-link`.
 
@@ -142,8 +153,7 @@ bundled model).
   learning kid, off by default.
 
 **Board & feel**
-- **Capture preview on press-hold** — highlight the discs a tap would flip
-  before committing, straight off `flipsFor`.
+- ~~Capture preview on press-hold~~ — **shipped**: see *Board and rendering*.
 - **Flip cascade stagger** — delay each flipped disc's squash by distance
   from the placed cell, selling the ray sweep; pure CSS `animation-delay`.
 - **Sound** — place/flip/skip cues through `droneSim/webAudio`, the

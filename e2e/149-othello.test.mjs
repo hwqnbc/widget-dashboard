@@ -172,9 +172,67 @@ await cellAt(0).click()
 await page.waitForTimeout(150)
 check('an illegal tap is refused', (await num('data-ply')) === 0)
 
-// d3: the disc lands AND d4 turns over.
-await cellAt(19).click()
+// ---- capture preview on press-hold --------------------------------------
+// Holding a legal cell previews what the move wins BEFORE committing: a
+// ghost disc on the held cell, a ring on every disc the move would flip
+// (exactly the model's flipsFor), and no state change while held. Releasing
+// on the cell commits the move via the ordinary click — so this press-hold
+// doubles as the suite's d3 move.
+const centre = async (i) => {
+  const box = await cellAt(i).boundingBox()
+  return { x: box.x + box.width / 2, y: box.y + box.height / 2 }
+}
+{
+  const at = await centre(19)
+  await page.mouse.move(at.x, at.y)
+  await page.mouse.down()
+  await until('preview', '19')
+  const expectFlips = flipsFor(start.cells, 19, 'toy')
+  check(
+    'the held cell publishes the preview',
+    (await attr('data-preview')) === '19',
+  )
+  for (const f of expectFlips) {
+    check(`the would-be capture ${f} rings`, (await cellAt(f).getAttribute('data-preview-flip')) === '1')
+  }
+  check(
+    'nothing else rings',
+    (await root.locator('[data-preview-flip="1"]').count()) === expectFlips.length,
+  )
+  check('the position is untouched while held', (await num('data-ply')) === 0)
+  await page.mouse.up()
+}
 await until('ply', '1')
+check('releasing on the cell commits the move', (await num('data-ply')) === 1)
+check('the preview clears with the commit', (await attr('data-preview')) === '')
+
+// Dragging OFF the cell before release aborts: no move, no preview.
+await page.waitForFunction(
+  () => !document.querySelector('[data-testid="turn-banner"]'),
+  null,
+  { timeout: 4000 },
+)
+{
+  const afterD3 = applyMove(start, 19).pos
+  const ninjaCell = legalMoves(afterD3)[0]
+  const at = await centre(ninjaCell)
+  await page.mouse.move(at.x, at.y)
+  await page.mouse.down()
+  await until('preview', String(ninjaCell))
+  const away = await centre(0)
+  await page.mouse.move(away.x, away.y)
+  await page.waitForFunction(
+    () => document.querySelector('[data-testid="othello-root"]')?.dataset.preview === '',
+    null,
+    { timeout: 3000 },
+  )
+  await page.mouse.up()
+  await page.waitForTimeout(150)
+  check('dragging off the cell cancels the preview', (await attr('data-preview')) === '')
+  check('and plays nothing', (await num('data-ply')) === 1)
+}
+
+// d3 landed above: the disc AND d4 turned over.
 check('the placed disc is toy', (await cellAt(19).getAttribute('data-disc')) === 'toy')
 check('the captured disc turned over', (await cellAt(27).getAttribute('data-disc')) === 'toy')
 check('the score moved to 4–1', (await num('data-score-toy')) === 4 && (await num('data-score-ninja')) === 1)
