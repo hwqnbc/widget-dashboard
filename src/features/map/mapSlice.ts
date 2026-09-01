@@ -79,6 +79,8 @@ export interface MapState {
    * from pages/map basemapCatalog (kept a plain string so the slice never
    * depends on pages/ — the catalog validates and falls back on read). */
   basemap: string
+  /** Drone flight tool: cruise height above ground, meters. */
+  flightCruise: number
 }
 
 const initialState: MapState = {
@@ -94,6 +96,7 @@ const initialState: MapState = {
   activeOverlayId: null,
   showPins: true,
   basemap: 'auto',
+  flightCruise: 60,
 }
 
 /** Map-page state (persisted): the 2D/3D choice and the dropped pins. */
@@ -221,6 +224,9 @@ const mapSlice = createSlice({
     setBasemap(state, action: PayloadAction<string>) {
       state.basemap = action.payload
     },
+    setFlightCruise(state, action: PayloadAction<number>) {
+      state.flightCruise = action.payload
+    },
   },
 })
 
@@ -247,5 +253,6 @@ export const {
   adoptOrphanDrawings,
   setShowPins,
   setBasemap,
+  setFlightCruise,
 } = mapSlice.actions
 export default mapSlice.reducer

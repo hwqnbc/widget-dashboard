@@ -30,6 +30,7 @@ import PushPinIcon from '@mui/icons-material/PushPin'
 import StraightenIcon from '@mui/icons-material/Straighten'
 import SquareFootIcon from '@mui/icons-material/SquareFoot'
 import RouteIcon from '@mui/icons-material/Route'
+import FlightTakeoffIcon from '@mui/icons-material/FlightTakeoff'
 import DeleteSweepIcon from '@mui/icons-material/DeleteSweep'
 import esriConfig from '@arcgis/core/config'
 import EsriMap from '@arcgis/core/Map'
@@ -67,6 +68,7 @@ import {
   setActiveOverlay,
   setBasemap,
   setBuildings,
+  setFlightCruise,
   setOverlayVisible,
   setShowPins,
   setTrees,
@@ -83,6 +85,9 @@ import {
   type SavedViewpoint,
 } from '../../features/map/mapSlice'
 import BookmarksControl from './BookmarksControl'
+import FlightBinding, { type FlightAnim, type FlightGroundPoint } from './FlightBinding'
+import FlightControl from './FlightControl'
+import { buildFlightPath } from './flightPathModel'
 import ConfirmDialog from '../../components/widgets/ConfirmDialog'
 import CoordinateReadout from './CoordinateReadout'
 import OverlaysPanel from './OverlaysPanel'
@@ -128,7 +133,7 @@ if (import.meta.env.DEV) {
 
 export type AnyView = MapView | SceneView
 type MapStatus = 'loading' | 'ready' | 'error'
-type Tool = 'none' | 'pins' | 'measure-line' | 'measure-area' | 'route'
+type Tool = 'none' | 'pins' | 'measure-line' | 'measure-area' | 'route' | 'flight'
 
 /** Waypoint list + undo history (every edit pushes the previous list). */
 interface RouteEdit {
@@ -138,6 +143,8 @@ interface RouteEdit {
 
 /** Public-OSRM politeness cap; also keeps the URL well under limits. */
 const MAX_WAYPOINTS = 25
+/** Flight plans stay small: a drone start + up to 11 waypoints. */
+const FLIGHT_MAX_POINTS = 12
 const ROUTE_HISTORY_LIMIT = 20
 
 /** Where the map opens when nothing is persisted yet: Singapore, city-wide
@@ -266,6 +273,7 @@ export default function MapPageBody() {
   const activeOverlayIdRef = useRef(activeOverlayId)
   activeOverlayIdRef.current = activeOverlayId
   const showPins = useAppSelector((state) => state.map.showPins) ?? true
+  const flightCruise = useAppSelector((state) => state.map.flightCruise) ?? 60
 
   // Sweep any shapes from before overlay groups existed into an "Imported"
   // overlay (no-op on clean state).
@@ -282,6 +290,7 @@ export default function MapPageBody() {
   const locateLayerRef = useRef<GraphicsLayer | null>(null)
   const drawingsLayerRef = useRef<GraphicsLayer | null>(null)
   const sketchLayerRef = useRef<GraphicsLayer | null>(null)
+  const flightLayerRef = useRef<GraphicsLayer | null>(null)
   const viewpointRef = useRef<Viewpoint | null>(null)
   const basemapIdRef = useRef(basemapId)
 
@@ -307,6 +316,12 @@ export default function MapPageBody() {
   const [drawMode, setDrawMode] = useState<DrawMode>('none')
   const [routeEdit, setRouteEdit] = useState<RouteEdit>({ points: [], history: [] })
   const [routeProfile, setRouteProfile] = useState<RouteProfile>('drive')
+  // Drone flight plan (transient, like the route waypoints): start + waypoints
+  // with their sampled ground elevations, and the animation transport.
+  const [flightPoints, setFlightPoints] = useState<FlightGroundPoint[]>([])
+  const [flightAnim, setFlightAnim] = useState<FlightAnim>('idle')
+  const [flightProgress, setFlightProgress] = useState(0)
+  const [flightResetToken, setFlightResetToken] = useState(0)
 
   // Click dispatch reads the live tool through a ref so the view's click
   // handler (registered once per view) never needs re-registering.
@@ -493,6 +508,8 @@ export default function MapPageBody() {
       drawingsLayerRef.current = new GraphicsLayer({ elevationInfo: { mode: 'on-the-ground' } })
       // scratch layer for in-progress sketches only — never mirrored
       sketchLayerRef.current = new GraphicsLayer({ elevationInfo: { mode: 'on-the-ground' } })
+      // flight graphics carry real z values — the one absolute-height layer
+      flightLayerRef.current = new GraphicsLayer({ elevationInfo: { mode: 'absolute-height' } })
       mapRef.current = new EsriMap({
         basemap: createBasemap(basemapIdRef.current),
         ground: 'world-elevation',
@@ -502,6 +519,7 @@ export default function MapPageBody() {
           pinsLayerRef.current,
           locateLayerRef.current,
           sketchLayerRef.current,
+          flightLayerRef.current,
         ],
       })
     }
@@ -521,6 +539,7 @@ export default function MapPageBody() {
       locateLayerRef.current = null
       drawingsLayerRef.current = null
       sketchLayerRef.current = null
+      flightLayerRef.current = null
       document.getElementById('arcgis-theme')?.remove()
     }
   }, [])
@@ -736,6 +755,48 @@ export default function MapPageBody() {
 
       // 3. Anywhere else: append as the new destination.
       updateRoute((points) => (points.length >= MAX_WAYPOINTS ? points : [...points, p]))
+    } else if (activeTool === 'flight') {
+      if (event.mapPoint?.longitude == null || event.mapPoint.latitude == null) return
+
+      // Clicking a flight marker removes it; anywhere else plants the drone
+      // (first click) or appends a waypoint.
+      const hit = await v.hitTest({ x: event.x, y: event.y })
+      const fHit = hit.results.find(
+        (r) =>
+          r.type === 'graphic' &&
+          r.layer === flightLayerRef.current &&
+          typeof r.graphic.attributes?.flightIndex === 'number',
+      )
+      if (fHit && fHit.type === 'graphic') {
+        const index = fHit.graphic.attributes.flightIndex as number
+        setFlightPoints((points) => points.filter((_, i) => i !== index))
+        return
+      }
+      const lon = event.mapPoint.longitude
+      const lat = event.mapPoint.latitude
+      const ground = await groundElevationAt(lon, lat)
+      setFlightPoints((points) =>
+        points.length >= FLIGHT_MAX_POINTS ? points : [...points, { lon, lat, ground }],
+      )
+    }
+  }
+
+  /** Ground elevation for a flight point, meters — from the free
+   * world-elevation ground already on the map. Offline (or slow) the sample
+   * falls back to 0 so the tool keeps working with heights above sea level
+   * treated as heights above ground. */
+  async function groundElevationAt(lon: number, lat: number): Promise<number> {
+    try {
+      const ground = mapRef.current?.ground
+      if (!ground) return 0
+      const result = await Promise.race([
+        ground.queryElevation(new Point({ longitude: lon, latitude: lat })),
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000)),
+      ])
+      const z = (result.geometry as Point).z
+      return typeof z === 'number' && Number.isFinite(z) ? z : 0
+    } catch {
+      return 0
     }
   }
 
@@ -851,6 +912,23 @@ export default function MapPageBody() {
     if (t !== 'none') setDrawMode('none')
   }
 
+  // Flight length (pure math — render-computed, so the contract attr and the
+  // control chip assert offline too).
+  const flightKm =
+    buildFlightPath(
+      flightPoints.map((p) => ({ lon: p.lon, lat: p.lat, z: p.ground + flightCruise })),
+    ).total / 1000
+
+  // The flight tool is 3D-only: switching to 2D releases it (and pauses any
+  // running animation); the absolute-height graphics only show in 3D.
+  useEffect(() => {
+    if (viewMode !== '3d') {
+      setTool((t) => (t === 'flight' ? 'none' : t))
+      setFlightAnim((a) => (a === 'playing' ? 'paused' : a))
+    }
+    if (flightLayerRef.current) flightLayerRef.current.visible = viewMode === '3d'
+  }, [viewMode])
+
   return (
     <Box
       data-testid="map-page"
@@ -882,6 +960,11 @@ export default function MapPageBody() {
         drawings.filter((d) => overlays.some((o) => o.id === d.overlayId && o.visible)).length
       }
       data-pins-visible={showPins ? 'on' : 'off'}
+      data-flight-points={flightPoints.length}
+      data-flight-anim={flightAnim}
+      data-flight-km={flightPoints.length >= 2 ? flightKm.toFixed(2) : ''}
+      data-flight-cruise={flightCruise}
+      data-drone-t={flightProgress.toFixed(3)}
       sx={{
         display: 'flex',
         flexDirection: 'column',
@@ -949,6 +1032,16 @@ export default function MapPageBody() {
               <RouteIcon fontSize="small" />
             </Tooltip>
           </ToggleButton>
+          <ToggleButton
+            value="flight"
+            data-testid="map-tool-flight"
+            aria-label="Drone flight"
+            disabled={viewMode !== '3d'}
+          >
+            <Tooltip title={viewMode === '3d' ? 'Drone flight (plant, add waypoints, fly)' : 'Drone flight — switch to 3D'}>
+              <FlightTakeoffIcon fontSize="small" />
+            </Tooltip>
+          </ToggleButton>
         </ToggleButtonGroup>
         <LocateControl viewRef={viewRef} viewRevision={viewRevision} layerRef={locateLayerRef} />
         <BookmarksControl
@@ -982,6 +1075,23 @@ export default function MapPageBody() {
             onSave={saveCurrentRoute}
             onLoad={loadSavedRoute}
             onDelete={(id) => dispatch(deleteRoute(id))}
+          />
+        )}
+        {tool === 'flight' && (
+          <FlightControl
+            cruise={flightCruise}
+            onCruise={(m) => dispatch(setFlightCruise(m))}
+            pointCount={flightPoints.length}
+            km={flightKm}
+            anim={flightAnim}
+            onPlay={() => setFlightAnim('playing')}
+            onPause={() => setFlightAnim('paused')}
+            onReset={() => {
+              setFlightAnim('idle')
+              setFlightProgress(0)
+              setFlightResetToken((n) => n + 1)
+            }}
+            onClear={() => setFlightPoints([])}
           />
         )}
         <Tooltip title={fullscreen ? 'Exit full screen' : 'Full screen'}>
@@ -1059,6 +1169,15 @@ export default function MapPageBody() {
         )}
       </Box>
       <MeasureBinding viewRef={viewRef} viewRevision={viewRevision} tool={tool} />
+      <FlightBinding
+        layerRef={flightLayerRef}
+        points={flightPoints}
+        cruise={flightCruise}
+        anim={flightAnim}
+        resetToken={flightResetToken}
+        onAnimChange={setFlightAnim}
+        onProgress={setFlightProgress}
+      />
       <SketchBinding
         viewRef={viewRef}
         viewRevision={viewRevision}

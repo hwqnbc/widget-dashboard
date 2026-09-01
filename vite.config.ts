@@ -33,6 +33,8 @@ export default defineConfig(({ command, mode }) => ({
       '@arcgis/core/symbols/SimpleMarkerSymbol',
       '@arcgis/core/symbols/SimpleLineSymbol',
       '@arcgis/core/symbols/SimpleFillSymbol',
+      '@arcgis/core/symbols/PointSymbol3D',
+      '@arcgis/core/symbols/ObjectSymbol3DLayer',
       '@arcgis/core/geometry/Polygon',
       '@arcgis/core/geometry/support/webMercatorUtils',
       '@arcgis/core/widgets/Sketch/SketchViewModel',

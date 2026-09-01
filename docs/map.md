@@ -209,6 +209,28 @@ on it works without a backend server or API key.
   and flies to the route's extent) and per-item delete. One fetch per edit
   with abort-on-change — well inside the fair-use policy (attribution +
   ≤1 req/s). Esri's own routing service needs an API key, hence OSRM.
+- **Drone flight** (`FlightBinding.tsx` + `FlightControl.tsx` + the pure
+  `flightPathModel.ts`) — a **3D-only** tool (the strip button disables in
+  2D; switching to 2D releases the tool, pauses the animation and hides the
+  layer). First click **plants the drone** ("D" marker), further clicks add
+  numbered waypoints (cap 12); clicking a marker removes it. Each point
+  samples ground elevation via `map.ground.queryElevation` (free
+  world-elevation; 3s-raced, offline falls back to 0) and flies at a
+  settable **cruise height above ground** (persisted `map.flightCruise`,
+  default 60 m). Graphics live on the map's one
+  `elevationInfo: absolute-height` GraphicsLayer: ground-tether dashes,
+  billboard markers, the hasZ path polyline, and the drone — a quadcopter
+  composed from `ObjectSymbol3DLayer` primitives (body puck + four rotor
+  spheres + beacon), deliberately **rotation-symmetric so the animation
+  never re-assigns a symbol** (symbols are immutable; per-tick symbol swaps
+  would rebuild WebGL resources — only `graphic.geometry` moves). The
+  Play/Pause/Reset transport drives a 33 ms interval advancing wall-clock
+  `dt × 20 m/s` through the pure `sampleFlight` (never rAF-gated,
+  lessons.md #73); progress reaches React only via a 250 ms-throttled
+  callback (`data-drone-t`) and the terminal `done`. Path length is pure
+  math (`buildFlightPath`, 3D distances), so `data-flight-km` asserts
+  offline. Round 2 (building-aware climb/detour off Overpass data) is in
+  the backlog.
 
 ## Test contract & offline-tolerant e2e
 
@@ -291,6 +313,20 @@ two.
   Auto, see the basemap section above).
 - ~~De-flake the overlays-panel geometry assertion~~ — shipped; the wait is now
   on the transform settling to `none` (see the test-contract section above).
+- **Drone flight round 2: building-aware routing** — per-leg obstruction
+  analysis over building footprints + heights fetched from the free
+  **Overpass API** (`way["building"]` in the plan's corridor bbox; `height`
+  tag, else `building:levels`×3 m, else ~10 m default — the same OSM source
+  the visual 3D buildings layer is built from; OSRM-style thin client +
+  echo-mock in e2e). Pure `flightPlanModel.ts` decides per leg:
+  **climb over** (when an allow-climb switch is on and top+clearance fits
+  under a max-ceiling setting), else **detour** (visibility-graph corner
+  hops around clearance-inflated footprints), else a **blocked** leg drawn
+  dashed red. Builds on `FlightBinding`'s path rendering + `sampleFlight`
+  animation unchanged; settings join `flightCruise` in the slice.
+- **Drone flight extras** — speed setting, camera follow mode (chase the
+  drone via `view.goTo` per tick), per-waypoint altitudes, saved flight
+  plans (the `SavedRoute` pattern).
 - **Live USGS earthquakes overlay** — `GeoJSONLayer` on the public CORS feed
   (`earthquake.usgs.gov/.../all_day.geojson`), magnitude-scaled renderer +
   popups; toggle in the control strip.

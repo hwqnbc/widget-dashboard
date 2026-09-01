@@ -9,7 +9,9 @@
  *    gallery (12 tiles, explicit pick beats the theme, CARTO WebTileLayer
  *    path, persistence, back to Auto + pure resolver units), 2D/3D toggle +
  *    persistence, tool toggles, pure routeGeometry unit checks (bundled
- *    module: insert index, nearest-distance, tap threshold), undo-disabled
+ *    module: insert index, nearest-distance, tap threshold), pure
+ *    flightPathModel checks (3D lengths, sampling, heading, done) + the
+ *    flight tool's 3D-only enable and contract defaults, undo-disabled
  *    state, deep-link render.
  *  - online only: data-map-status reaches "ready" (from view.when, never
  *    networkidle), attribution + zoom UI present, click-driven pins with
@@ -17,8 +19,10 @@
  *    mock (returns a line through the requested coords): A→B distance,
  *    insert by clicking the line, remove by clicking a marker, undo of
  *    remove/insert/clear, drag-to-move a marker (re-routes with the moved
- *    coordinate), and saved routes (save dialog, load from the menu,
- *    persistence across reload, delete).
+ *    coordinate), saved routes (save dialog, load from the menu,
+ *    persistence across reload, delete), and the drone flight flow in 3D
+ *    (plant + waypoints via clicks, play/pause/reset animation, clear,
+ *    2D switch releases the tool).
  */
 import { BASE_URL, launch, reporter } from './helpers.mjs'
 import {
@@ -34,6 +38,7 @@ import {
   dragStep,
 } from './.bundle/dragModel.js'
 import { BASEMAP_DEFS, resolveBasemapId } from './.bundle/basemapCatalog.js'
+import { buildFlightPath, sampleFlight } from './.bundle/flightPathModel.js'
 
 const { check, finish } = reporter('map')
 const { browser, context, page } = await launch()
@@ -202,6 +207,54 @@ await page.route('**/routing.openstreetmap.de/**', (route) => {
     BASEMAP_DEFS.length === 11 &&
       BASEMAP_DEFS.every((d) => Boolean(d.esriId) !== Boolean(d.cartoUrl)),
   )
+
+  // Flight-path model: 3D distances, sampling, heading, done semantics.
+  {
+    // 0.001° of latitude ≈ 111.32 m, due north, constant z.
+    const north = buildFlightPath([
+      { lon: 103.8, lat: 1.35, z: 60 },
+      { lon: 103.8, lat: 1.351, z: 60 },
+    ])
+    check('flight path length ~111 m for 0.001° north', Math.abs(north.total - 111.3) < 1, `total=${north.total.toFixed(1)}`)
+    const mid = sampleFlight(north, north.total / 2)
+    check(
+      'mid-flight sample: halfway position, heading north, not done',
+      mid != null &&
+        Math.abs(mid.lat - 1.3505) < 1e-6 &&
+        Math.abs(mid.headingDeg) < 0.5 &&
+        !mid.done,
+      JSON.stringify(mid),
+    )
+    const past = sampleFlight(north, north.total + 5)
+    check(
+      'sampling past the end clamps to the last point and reports done',
+      past != null && Math.abs(past.lat - 1.351) < 1e-9 && past.done,
+    )
+    check(
+      'negative distance clamps to the start',
+      Math.abs((sampleFlight(north, -10)?.lat ?? 0) - 1.35) < 1e-9,
+    )
+
+    // A purely vertical hop still has length (the z term).
+    const climb = buildFlightPath([
+      { lon: 103.8, lat: 1.35, z: 0 },
+      { lon: 103.8, lat: 1.35, z: 100 },
+    ])
+    check('vertical climb contributes 3D length', Math.abs(climb.total - 100) < 1e-6)
+
+    // Heading east is 90° clockwise from north.
+    const east = buildFlightPath([
+      { lon: 103.8, lat: 0, z: 60 },
+      { lon: 103.801, lat: 0, z: 60 },
+    ])
+    check(
+      'eastward leg reports heading 90',
+      Math.abs((sampleFlight(east, 1)?.headingDeg ?? 0) - 90) < 0.5,
+    )
+
+    check('single-point path is done where it stands', sampleFlight(buildFlightPath([{ lon: 1, lat: 2, z: 3 }]), 0)?.done === true)
+    check('empty path samples to null', sampleFlight(buildFlightPath([]), 0) === null)
+  }
 }
 
 // ---- dashboard first: the arcgis chunk must NOT load with the app shell ----
@@ -496,9 +549,25 @@ check(
   'trees switch hidden in 2D',
   (await page.locator('[data-testid="map-trees"]').count()) === 0,
 )
+// Drone flight is a 3D-only tool; its contract attrs render offline.
+check(
+  'flight tool disabled in 2D',
+  await page.locator('[data-testid="map-tool-flight"]').isDisabled(),
+)
+check(
+  'flight contract defaults (no points, idle, cruise 60)',
+  (await root().getAttribute('data-flight-points')) === '0' &&
+    (await root().getAttribute('data-flight-anim')) === 'idle' &&
+    (await root().getAttribute('data-flight-cruise')) === '60' &&
+    (await root().getAttribute('data-drone-t')) === '0.000',
+)
 await page.locator('[data-testid="map-mode-3d"]').click()
 await page.waitForTimeout(500)
 check('3D mode selected', (await root().getAttribute('data-view-mode')) === '3d')
+check(
+  'flight tool enables in 3D',
+  !(await page.locator('[data-testid="map-tool-flight"]').isDisabled()),
+)
 if (online) {
   const status3d = await waitForAttr('data-map-status', (v) => v === 'ready', 60000)
   check('scene view becomes ready', status3d === 'ready', `status=${status3d}`)
@@ -1077,6 +1146,65 @@ check(
     )
     await page.locator('[data-testid="map-overlays-toggle"]').click()
     await page.waitForTimeout(350)
+
+    // ---- drone flight: plant in 3D, add waypoints, fly the animation ----
+    await page.locator('[data-testid="map-mode-3d"]').click()
+    const flightReady =
+      (await waitForAttr('data-map-status', (v) => v === 'ready', 60000)) === 'ready'
+    if (flightReady) {
+      await page.locator('[data-testid="map-tool-flight"]').click()
+      await page.waitForTimeout(300)
+      check('flight tool activates in 3D', (await root().getAttribute('data-tool')) === 'flight')
+      // Plant the drone + two waypoints (each click awaits an async ground
+      // elevation sample before the point lands).
+      await page.mouse.click(box.x + box.width * 0.4, box.y + box.height * 0.5)
+      await waitForAttr('data-flight-points', (v) => v === '1', 10000)
+      check('first click plants the drone', (await root().getAttribute('data-flight-points')) === '1')
+      await page.mouse.click(box.x + box.width * 0.5, box.y + box.height * 0.4)
+      await waitForAttr('data-flight-points', (v) => v === '2', 10000)
+      await page.mouse.click(box.x + box.width * 0.6, box.y + box.height * 0.55)
+      await waitForAttr('data-flight-points', (v) => v === '3', 10000)
+      const flightKm = parseFloat((await root().getAttribute('data-flight-km')) ?? '')
+      check('flight path has a length', Number.isFinite(flightKm) && flightKm > 0, `km=${flightKm}`)
+
+      await page.locator('[data-testid="map-flight-play"]').click()
+      await page.waitForTimeout(200)
+      check('flight animation starts', (await root().getAttribute('data-flight-anim')) === 'playing')
+      const t1 = parseFloat((await waitForAttr('data-drone-t', (v) => parseFloat(v ?? '0') > 0, 5000)) ?? '0')
+      check('drone progresses along the path', t1 > 0, `t=${t1}`)
+      await page.locator('[data-testid="map-flight-pause"]').click()
+      await page.waitForTimeout(400)
+      check('flight pauses', (await root().getAttribute('data-flight-anim')) === 'paused')
+      const tPaused = (await root().getAttribute('data-drone-t')) ?? ''
+      await page.waitForTimeout(500)
+      check(
+        'paused drone holds position',
+        ((await root().getAttribute('data-drone-t')) ?? '') === tPaused,
+      )
+      await page.locator('[data-testid="map-flight-reset"]').click()
+      await page.waitForTimeout(200)
+      check(
+        'reset parks the drone at the start',
+        (await root().getAttribute('data-flight-anim')) === 'idle' &&
+          (await root().getAttribute('data-drone-t')) === '0.000',
+      )
+      await page.locator('[data-testid="map-flight-clear"]').click()
+      await page.waitForTimeout(200)
+      check('clear empties the flight plan', (await root().getAttribute('data-flight-points')) === '0')
+      // Switching to 2D releases the 3D-only tool.
+      await page.locator('[data-testid="map-flight-play"]').isDisabled() // settle
+      await page.locator('[data-testid="map-mode-2d"]').click()
+      await page.waitForTimeout(400)
+      check(
+        '2D switch releases the flight tool',
+        (await root().getAttribute('data-tool')) === 'none' &&
+          (await page.locator('[data-testid="map-tool-flight"]').isDisabled()),
+      )
+    } else {
+      console.log('SKIP: 3D view never settled — flight interactive checks skipped')
+      await page.locator('[data-testid="map-mode-2d"]').click()
+      await page.waitForTimeout(400)
+    }
   } else if (online) {
     check('online but view never ready', false, 'ready wait timed out')
   } else {
