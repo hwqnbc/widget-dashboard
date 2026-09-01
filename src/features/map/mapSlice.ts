@@ -81,6 +81,10 @@ export interface MapState {
   basemap: string
   /** Drone flight tool: cruise height above ground, meters. */
   flightCruise: number
+  /** Drone flight: may the planner raise the height over buildings? */
+  flightAllowClimb: boolean
+  /** Drone flight: max height above ground when climbing, meters. */
+  flightCeiling: number
 }
 
 const initialState: MapState = {
@@ -97,6 +101,8 @@ const initialState: MapState = {
   showPins: true,
   basemap: 'auto',
   flightCruise: 60,
+  flightAllowClimb: true,
+  flightCeiling: 120,
 }
 
 /** Map-page state (persisted): the 2D/3D choice and the dropped pins. */
@@ -227,6 +233,12 @@ const mapSlice = createSlice({
     setFlightCruise(state, action: PayloadAction<number>) {
       state.flightCruise = action.payload
     },
+    setFlightAllowClimb(state, action: PayloadAction<boolean>) {
+      state.flightAllowClimb = action.payload
+    },
+    setFlightCeiling(state, action: PayloadAction<number>) {
+      state.flightCeiling = action.payload
+    },
   },
 })
 
@@ -254,5 +266,7 @@ export const {
   setShowPins,
   setBasemap,
   setFlightCruise,
+  setFlightAllowClimb,
+  setFlightCeiling,
 } = mapSlice.actions
 export default mapSlice.reducer

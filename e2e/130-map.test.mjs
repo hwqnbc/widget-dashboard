@@ -10,9 +10,10 @@
  *    path, persistence, back to Auto + pure resolver units), 2D/3D toggle +
  *    persistence, tool toggles, pure routeGeometry unit checks (bundled
  *    module: insert index, nearest-distance, tap threshold), pure
- *    flightPathModel checks (3D lengths, sampling, heading, done) + the
- *    flight tool's 3D-only enable and contract defaults, undo-disabled
- *    state, deep-link render.
+ *    flightPathModel checks (3D lengths, sampling, heading, done), pure
+ *    flightPlanModel checks (OSM parsing, geometry, climb/detour/blocked
+ *    decisions) + the flight tool's 3D-only enable, contract and settings
+ *    defaults, undo-disabled state, deep-link render.
  *  - online only: data-map-status reaches "ready" (from view.when, never
  *    networkidle), attribution + zoom UI present, click-driven pins with
  *    reload persistence, and the waypoint-editing flow against an ECHO OSRM
@@ -21,8 +22,9 @@
  *    remove/insert/clear, drag-to-move a marker (re-routes with the moved
  *    coordinate), saved routes (save dialog, load from the menu,
  *    persistence across reload, delete), and the drone flight flow in 3D
- *    (plant + waypoints via clicks, play/pause/reset animation, clear,
- *    2D switch releases the tool).
+ *    (plant + waypoints via clicks, the bbox-driven Overpass mock's
+ *    building making legs climb — and detour once climbing is disallowed —
+ *    play/pause/reset animation, clear, 2D switch releases the tool).
  */
 import { BASE_URL, launch, reporter } from './helpers.mjs'
 import {
@@ -39,6 +41,13 @@ import {
 } from './.bundle/dragModel.js'
 import { BASEMAP_DEFS, resolveBasemapId } from './.bundle/basemapCatalog.js'
 import { buildFlightPath, sampleFlight } from './.bundle/flightPathModel.js'
+import {
+  estimateHeight,
+  inflateRing,
+  parseOverpassBuildings,
+  planFlight,
+  segmentThroughPolygon,
+} from './.bundle/flightPlanModel.js'
 
 const { check, finish } = reporter('map')
 const { browser, context, page } = await launch()
@@ -87,6 +96,44 @@ await page.route('**/routing.openstreetmap.de/**', (route) => {
         },
       ],
       waypoints: coords.map((c) => ({ location: c })),
+    }),
+  })
+})
+
+// Mock Overpass the same way: the flight planner's building data must be
+// deterministic wherever the clicks land. The mock reads the requested bbox
+// out of the query and answers with ONE large square building centered in
+// it (40% of the bbox span), so at least one leg of any 3-point plan
+// crosses it. Height is suite-controlled.
+const mockBuildingHeight = 80
+await page.route('**overpass-api.de/**', (route) => {
+  const body = decodeURIComponent(route.request().postData() ?? '')
+  const m = body.match(/\(([-\d.]+),([-\d.]+),([-\d.]+),([-\d.]+)\)/)
+  if (!m) return route.fulfill({ status: 400, body: 'bad query' })
+  const [s, w, n, e] = m.slice(1).map(Number)
+  const cy = (s + n) / 2
+  const cx = (w + e) / 2
+  const hy = (n - s) * 0.2
+  const hx = (e - w) * 0.2
+  const corners = [
+    [cy - hy, cx - hx],
+    [cy - hy, cx + hx],
+    [cy + hy, cx + hx],
+    [cy + hy, cx - hx],
+    [cy - hy, cx - hx],
+  ]
+  return route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      elements: [
+        {
+          type: 'way',
+          id: 1,
+          tags: { building: 'yes', height: String(mockBuildingHeight) },
+          geometry: corners.map(([lat, lon]) => ({ lat, lon })),
+        },
+      ],
     }),
   })
 })
@@ -254,6 +301,137 @@ await page.route('**/routing.openstreetmap.de/**', (route) => {
 
     check('single-point path is done where it stands', sampleFlight(buildFlightPath([{ lon: 1, lat: 2, z: 3 }]), 0)?.done === true)
     check('empty path samples to null', sampleFlight(buildFlightPath([]), 0) === null)
+  }
+
+  // Flight planner: OSM parsing + the climb / detour / blocked decisions.
+  {
+    check(
+      'estimateHeight: tag, levels ×3, default',
+      estimateHeight({ height: '25 m' }) === 25 &&
+        estimateHeight({ height: '12,5' }) === 12.5 &&
+        estimateHeight({ 'building:levels': '10' }) === 30 &&
+        estimateHeight({}) === 10 &&
+        estimateHeight(undefined) === 10,
+    )
+    const parsed = parseOverpassBuildings({
+      elements: [
+        {
+          type: 'way',
+          tags: { height: '50' },
+          geometry: [
+            { lat: 1, lon: 2 },
+            { lat: 1.001, lon: 2 },
+            { lat: 1.001, lon: 2.001 },
+          ],
+        },
+        { type: 'way', tags: {} }, // no geometry — dropped
+        { type: 'node' },
+      ],
+    })
+    check('parseOverpassBuildings keeps valid ways only', parsed.length === 1 && parsed[0].height === 50)
+    check('parseOverpassBuildings survives junk', parseOverpassBuildings(null).length === 0 && parseOverpassBuildings({ elements: 'x' }).length === 0)
+
+    const squareXY = [
+      [40, -10],
+      [60, -10],
+      [60, 10],
+      [40, 10],
+    ]
+    const through = segmentThroughPolygon([0, 0], [100, 0], squareXY)
+    check(
+      'segment through a square reports the crossing interval',
+      through != null && Math.abs(through[0] - 0.4) < 1e-9 && Math.abs(through[1] - 0.6) < 1e-9,
+      JSON.stringify(through),
+    )
+    check(
+      'segment missing the square reports null',
+      segmentThroughPolygon([0, 20], [100, 20], squareXY) === null,
+    )
+    check(
+      'endpoint inside the square counts from t=0',
+      segmentThroughPolygon([50, 0], [200, 0], squareXY)?.[0] === 0,
+    )
+    const inflated = inflateRing(squareXY, 5)
+    check(
+      'inflateRing pushes corners outward by the clearance',
+      Math.hypot(inflated[0][0] - 50, inflated[0][1]) > Math.hypot(squareXY[0][0] - 50, squareXY[0][1]) + 4,
+    )
+
+    // A 222 m northward leg with a ~110 m square building astride its middle.
+    const A = { lon: 103.8, lat: 1.35, ground: 0 }
+    const B = { lon: 103.8, lat: 1.352, ground: 0 }
+    const building = (height) => ({
+      height,
+      ring: [
+        [103.7995, 1.3505],
+        [103.8005, 1.3505],
+        [103.8005, 1.3515],
+        [103.7995, 1.3515],
+      ],
+    })
+    const opts = { cruise: 60, allowClimb: true, ceiling: 120 }
+
+    const low = planFlight([A, B], [building(30)], opts)
+    check('leg over a low building flies direct', low.legs[0].mode === 'direct' && low.climbs === 0)
+
+    const over = planFlight([A, B], [building(100)], opts)
+    check(
+      'tall building climbs to top + clearance',
+      over.legs[0].mode === 'climb' &&
+        over.climbs === 1 &&
+        Math.max(...over.legs[0].path.map((p) => p.z)) === 105,
+      JSON.stringify(over.legs[0].path),
+    )
+
+    const overCeiling = planFlight([A, B], [building(200)], opts)
+    check(
+      'ceiling overflow falls back to a detour',
+      overCeiling.legs[0].mode === 'detour' && overCeiling.detours === 1,
+    )
+
+    const noClimb = planFlight([A, B], [building(100)], { ...opts, allowClimb: false })
+    check(
+      'climb disallowed detours at cruise height',
+      noClimb.legs[0].mode === 'detour' &&
+        noClimb.legs[0].path.length > 2 &&
+        noClimb.legs[0].path.every((p) => p.z === 60),
+      JSON.stringify(noClimb.legs[0].path.map((p) => p.z)),
+    )
+    // The detour must actually clear the footprint: no sub-segment may pass
+    // through the (uninflated) building ring.
+    {
+      const M = 111320
+      const cos = Math.cos((1.35 * Math.PI) / 180)
+      const ringXY = building(100).ring.map(([lon, lat]) => [lon * M * cos, lat * M])
+      const pathXY = noClimb.legs[0].path.map((p) => [p.lon * M * cos, p.lat * M])
+      let crosses = false
+      for (let i = 0; i < pathXY.length - 1; i++) {
+        if (segmentThroughPolygon(pathXY[i], pathXY[i + 1], ringXY) != null) crosses = true
+      }
+      check('detour path clears the building footprint', !crosses)
+    }
+
+    // Start point surrounded by a building it cannot out-climb: blocked.
+    const trap = {
+      height: 500,
+      ring: [
+        [103.798, 1.348],
+        [103.802, 1.348],
+        [103.802, 1.3515],
+        [103.798, 1.3515],
+      ],
+    }
+    const blockedPlan = planFlight([A, B], [trap], { ...opts, allowClimb: false })
+    check(
+      'inescapable start reports a blocked leg and no flyable path',
+      blockedPlan.legs[0].mode === 'blocked' && blockedPlan.blocked === 1 && blockedPlan.path.length === 0,
+    )
+
+    const mixed = planFlight([A, B, { lon: 103.8, lat: 1.354, ground: 0 }], [building(100)], opts)
+    check(
+      'multi-leg plan counts modes per leg',
+      mixed.legs.length === 2 && mixed.legs[0].mode === 'climb' && mixed.legs[1].mode === 'direct',
+    )
   }
 }
 
@@ -561,6 +739,13 @@ check(
     (await root().getAttribute('data-flight-cruise')) === '60' &&
     (await root().getAttribute('data-drone-t')) === '0.000',
 )
+check(
+  'flight plan defaults (idle, no climbs/detours/blocked)',
+  (await root().getAttribute('data-flight-status')) === 'idle' &&
+    (await root().getAttribute('data-flight-climbs')) === '0' &&
+    (await root().getAttribute('data-flight-detours')) === '0' &&
+    (await root().getAttribute('data-flight-blocked')) === '0',
+)
 await page.locator('[data-testid="map-mode-3d"]').click()
 await page.waitForTimeout(500)
 check('3D mode selected', (await root().getAttribute('data-view-mode')) === '3d')
@@ -568,6 +753,25 @@ check(
   'flight tool enables in 3D',
   !(await page.locator('[data-testid="map-tool-flight"]').isDisabled()),
 )
+// The settings render with their defaults (activating the tool is pure
+// state — no view readiness needed).
+await page.locator('[data-testid="map-tool-flight"]').click()
+await page.waitForTimeout(200)
+check(
+  'flight settings render (climb on, ceiling 120)',
+  (await page.locator('[data-testid="map-flight-climb"] input').isChecked()) &&
+    (await page.locator('[data-testid="map-flight-ceiling"]').inputValue()) === '120',
+)
+await page.locator('[data-testid="map-flight-climb"]').click()
+await page.waitForTimeout(200)
+check(
+  'ceiling input hides when climbing is off',
+  (await page.locator('[data-testid="map-flight-ceiling"]').count()) === 0,
+)
+await page.locator('[data-testid="map-flight-climb"]').click()
+await page.waitForTimeout(200)
+await page.locator('[data-testid="map-tool-flight"]').click() // release the tool
+await page.waitForTimeout(200)
 if (online) {
   const status3d = await waitForAttr('data-map-status', (v) => v === 'ready', 60000)
   check('scene view becomes ready', status3d === 'ready', `status=${status3d}`)
@@ -1167,6 +1371,18 @@ check(
       const flightKm = parseFloat((await root().getAttribute('data-flight-km')) ?? '')
       check('flight path has a length', Number.isFinite(flightKm) && flightKm > 0, `km=${flightKm}`)
 
+      // The mocked Overpass building (80 m, astride the plan's center) makes
+      // at least one leg climb under the default 120 m ceiling.
+      await waitForAttr('data-flight-status', (v) => v === 'ready', 15000)
+      const climbs = parseInt((await root().getAttribute('data-flight-climbs')) ?? '0', 10)
+      check(
+        'plan climbs over the mocked building',
+        (await root().getAttribute('data-flight-status')) === 'ready' &&
+          climbs >= 1 &&
+          (await root().getAttribute('data-flight-blocked')) === '0',
+        `climbs=${climbs}`,
+      )
+
       await page.locator('[data-testid="map-flight-play"]').click()
       await page.waitForTimeout(200)
       check('flight animation starts', (await root().getAttribute('data-flight-anim')) === 'playing')
@@ -1188,6 +1404,25 @@ check(
         (await root().getAttribute('data-flight-anim')) === 'idle' &&
           (await root().getAttribute('data-drone-t')) === '0.000',
       )
+
+      // Disallow climbing: the same legs must re-plan as detours (the 80 m
+      // building still stands, so nothing may stay a climb).
+      await page.locator('[data-testid="map-flight-climb"]').click()
+      await waitForAttr('data-flight-climbs', (v) => v === '0', 15000)
+      const detours = parseInt((await root().getAttribute('data-flight-detours')) ?? '0', 10)
+      const blockedCount = parseInt((await root().getAttribute('data-flight-blocked')) ?? '0', 10)
+      check(
+        'climb off re-plans the legs as detours',
+        (await root().getAttribute('data-flight-climbs')) === '0' && detours + blockedCount >= 1,
+        `detours=${detours} blocked=${blockedCount}`,
+      )
+      await page.locator('[data-testid="map-flight-climb"]').click()
+      await waitForAttr('data-flight-climbs', (v) => parseInt(v ?? '0', 10) >= 1, 15000)
+      check(
+        'climb back on restores the climbing plan',
+        parseInt((await root().getAttribute('data-flight-climbs')) ?? '0', 10) >= 1,
+      )
+
       await page.locator('[data-testid="map-flight-clear"]').click()
       await page.waitForTimeout(200)
       check('clear empties the flight plan', (await root().getAttribute('data-flight-points')) === '0')

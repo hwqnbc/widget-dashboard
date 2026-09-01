@@ -68,6 +68,8 @@ import {
   setActiveOverlay,
   setBasemap,
   setBuildings,
+  setFlightAllowClimb,
+  setFlightCeiling,
   setFlightCruise,
   setOverlayVisible,
   setShowPins,
@@ -88,6 +90,7 @@ import BookmarksControl from './BookmarksControl'
 import FlightBinding, { type FlightAnim, type FlightGroundPoint } from './FlightBinding'
 import FlightControl from './FlightControl'
 import { buildFlightPath } from './flightPathModel'
+import { useFlightPlan } from './useFlightPlan'
 import ConfirmDialog from '../../components/widgets/ConfirmDialog'
 import CoordinateReadout from './CoordinateReadout'
 import OverlaysPanel from './OverlaysPanel'
@@ -274,6 +277,8 @@ export default function MapPageBody() {
   activeOverlayIdRef.current = activeOverlayId
   const showPins = useAppSelector((state) => state.map.showPins) ?? true
   const flightCruise = useAppSelector((state) => state.map.flightCruise) ?? 60
+  const flightAllowClimb = useAppSelector((state) => state.map.flightAllowClimb) ?? true
+  const flightCeiling = useAppSelector((state) => state.map.flightCeiling) ?? 120
 
   // Sweep any shapes from before overlay groups existed into an "Imported"
   // overlay (no-op on clean state).
@@ -912,11 +917,20 @@ export default function MapPageBody() {
     if (t !== 'none') setDrawMode('none')
   }
 
-  // Flight length (pure math — render-computed, so the contract attr and the
-  // control chip assert offline too).
+  // The building-aware plan (Overpass-fed; falls back to direct legs when
+  // the service is unreachable). Length is pure math over the planned path;
+  // a blocked plan reports the straight-line length instead.
+  const { plan: flightPlan, status: flightPlanStatus } = useFlightPlan(
+    flightPoints,
+    flightCruise,
+    flightAllowClimb,
+    flightCeiling,
+  )
   const flightKm =
     buildFlightPath(
-      flightPoints.map((p) => ({ lon: p.lon, lat: p.lat, z: p.ground + flightCruise })),
+      flightPlan.path.length >= 2
+        ? flightPlan.path
+        : flightPoints.map((p) => ({ lon: p.lon, lat: p.lat, z: p.ground + flightCruise })),
     ).total / 1000
 
   // The flight tool is 3D-only: switching to 2D releases it (and pauses any
@@ -964,6 +978,10 @@ export default function MapPageBody() {
       data-flight-anim={flightAnim}
       data-flight-km={flightPoints.length >= 2 ? flightKm.toFixed(2) : ''}
       data-flight-cruise={flightCruise}
+      data-flight-status={flightPlanStatus}
+      data-flight-climbs={flightPlan.climbs}
+      data-flight-detours={flightPlan.detours}
+      data-flight-blocked={flightPlan.blocked}
       data-drone-t={flightProgress.toFixed(3)}
       sx={{
         display: 'flex',
@@ -1081,8 +1099,14 @@ export default function MapPageBody() {
           <FlightControl
             cruise={flightCruise}
             onCruise={(m) => dispatch(setFlightCruise(m))}
+            allowClimb={flightAllowClimb}
+            onAllowClimb={(on) => dispatch(setFlightAllowClimb(on))}
+            ceiling={flightCeiling}
+            onCeiling={(m) => dispatch(setFlightCeiling(m))}
             pointCount={flightPoints.length}
             km={flightKm}
+            plan={flightPlan}
+            planStatus={flightPlanStatus}
             anim={flightAnim}
             onPlay={() => setFlightAnim('playing')}
             onPause={() => setFlightAnim('paused')}
@@ -1173,6 +1197,7 @@ export default function MapPageBody() {
         layerRef={flightLayerRef}
         points={flightPoints}
         cruise={flightCruise}
+        plan={flightPlan}
         anim={flightAnim}
         resetToken={flightResetToken}
         onAnimChange={setFlightAnim}

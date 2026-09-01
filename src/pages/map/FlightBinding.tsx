@@ -9,6 +9,7 @@ import PointSymbol3D from '@arcgis/core/symbols/PointSymbol3D'
 import ObjectSymbol3DLayer from '@arcgis/core/symbols/ObjectSymbol3DLayer'
 import type GraphicsLayer from '@arcgis/core/layers/GraphicsLayer'
 import { buildFlightPath, sampleFlight, type FlightPath } from './flightPathModel'
+import type { FlightPlan, LegMode } from './flightPlanModel'
 
 /** A planted flight waypoint: position + the sampled ground elevation
  * (0 when the elevation service is unreachable). */
@@ -27,7 +28,14 @@ export const FLIGHT_SPEED = 20
  * itself never touches React state per tick. */
 const PROGRESS_PUBLISH_MS = 250
 
-const PATH_SYMBOL = new SimpleLineSymbol({ color: [25, 118, 210, 0.9], width: 3 })
+/** Per-mode leg colors: the plan should be readable at a glance — blue
+ * flies straight, green climbed, orange went around, red couldn't fly. */
+const LEG_SYMBOLS: Record<LegMode, SimpleLineSymbol> = {
+  direct: new SimpleLineSymbol({ color: [25, 118, 210, 0.9], width: 3 }),
+  climb: new SimpleLineSymbol({ color: [46, 125, 50, 0.9], width: 3 }),
+  detour: new SimpleLineSymbol({ color: [239, 108, 0, 0.9], width: 3 }),
+  blocked: new SimpleLineSymbol({ color: [211, 47, 47, 0.9], width: 3, style: 'dash' }),
+}
 const TETHER_SYMBOL = new SimpleLineSymbol({
   color: [25, 118, 210, 0.5],
   width: 1,
@@ -87,6 +95,7 @@ export default function FlightBinding({
   layerRef,
   points,
   cruise,
+  plan,
   anim,
   resetToken,
   onAnimChange,
@@ -95,16 +104,17 @@ export default function FlightBinding({
   layerRef: RefObject<GraphicsLayer | null>
   points: FlightGroundPoint[]
   cruise: number
+  /** The building-aware plan (per-leg modes + the flyable path). */
+  plan: FlightPlan
   anim: FlightAnim
   /** Bumping this parks the drone back at the start with progress 0. */
   resetToken: number
   onAnimChange: (anim: FlightAnim) => void
   onProgress: (t: number) => void
 }) {
-  const path: FlightPath = useMemo(
-    () => buildFlightPath(points.map((p) => ({ lon: p.lon, lat: p.lat, z: p.ground + cruise }))),
-    [points, cruise],
-  )
+  // The drone flies the PLANNED path (climbs and detours included); it is
+  // empty while a leg is blocked, which parks the drone at the start.
+  const path: FlightPath = useMemo(() => buildFlightPath(plan.path), [plan])
   const pathRef = useRef(path)
   pathRef.current = path
 
@@ -168,29 +178,36 @@ export default function FlightBinding({
       )
     }
 
-    if (points.length >= 2) {
-      // line under the markers (collection order = draw order)
+    // Planned legs under the markers, one line per leg colored by its mode
+    // (collection order = draw order).
+    for (const leg of plan.legs) {
       layer.graphics.add(
         new Graphic({
           geometry: new Polyline({
             hasZ: true,
-            paths: [path.points.map((p) => [p.lon, p.lat, p.z])],
+            paths: [leg.path.map((p) => [p.lon, p.lat, p.z])],
           }),
-          symbol: PATH_SYMBOL,
+          symbol: LEG_SYMBOLS[leg.mode],
         }),
         0,
       )
     }
 
-    const start = path.points[0]
+    // Park the drone at the planned start — or on the first marker while
+    // the plan is empty (single point, or a blocked leg).
+    const start = path.points[0] ?? {
+      lon: points[0].lon,
+      lat: points[0].lat,
+      z: points[0].ground + cruise,
+    }
     const drone = new Graphic({
       geometry: new Point({ longitude: start.lon, latitude: start.lat, z: start.z }),
       symbol: droneSymbol(),
     })
     droneRef.current = drone
     layer.add(drone)
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- path derives from points+cruise; onProgress/onAnimChange are stable handlers
-  }, [layerRef, points, cruise])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- path derives from plan; onProgress/onAnimChange are stable handlers
+  }, [layerRef, points, cruise, plan])
 
   // External reset: park at the start.
   useEffect(() => {

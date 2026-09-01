@@ -229,8 +229,29 @@ on it works without a backend server or API key.
   lessons.md #73); progress reaches React only via a 250 ms-throttled
   callback (`data-drone-t`) and the terminal `done`. Path length is pure
   math (`buildFlightPath`, 3D distances), so `data-flight-km` asserts
-  offline. Round 2 (building-aware climb/detour off Overpass data) is in
-  the backlog.
+  offline.
+  **Building-aware routing** (round 2): the pure `flightPlanModel.ts` plans
+  every leg against building footprints + heights fetched by `overpass.ts`
+  (free Overpass API, `way["building"]` over the plan's bbox — the same OSM
+  source the visual 3D buildings layer is built from; one cached corridor
+  per session, ≥1 s between requests, `out geom qt 400` cap). Heights are
+  estimates when untagged (`height` tag → `building:levels`×3 m → 10 m),
+  and building tops sit on the leg's interpolated ground line (flat-terrain
+  approximation). Per leg, in order: **direct** (nothing tall crosses),
+  **climb** — only when the "Climb" switch allows raising the flight height
+  and top+5 m clearance fits under the **Max (m)** AGL ceiling (persisted
+  `flightAllowClimb`/`flightCeiling`, defaults on/120) — a trapezoid
+  profile up/over/down; else **detour** — Dijkstra over a visibility graph
+  of clearance-inflated footprint corners in the leg corridor, flown at
+  cruise; else **blocked** — drawn dashed red, Play disabled until the user
+  allows climbing, raises the ceiling, or moves a waypoint. Legs render
+  color-coded (blue/green/orange/red), the drone animates over the planned
+  path unchanged (`sampleFlight`), and `useFlightPlan.ts` debounces
+  re-plans (400 ms, abort-on-change) — when Overpass is unreachable the
+  plan falls back to direct legs with `data-flight-status='error'` and the
+  control saying so. The e2e Overpass mock is bbox-driven: it reads the
+  requested bbox and answers with one large square building centered in
+  it, deterministic wherever the 3D clicks land.
 
 ## Test contract & offline-tolerant e2e
 
@@ -313,17 +334,8 @@ two.
   Auto, see the basemap section above).
 - ~~De-flake the overlays-panel geometry assertion~~ — shipped; the wait is now
   on the transform settling to `none` (see the test-contract section above).
-- **Drone flight round 2: building-aware routing** — per-leg obstruction
-  analysis over building footprints + heights fetched from the free
-  **Overpass API** (`way["building"]` in the plan's corridor bbox; `height`
-  tag, else `building:levels`×3 m, else ~10 m default — the same OSM source
-  the visual 3D buildings layer is built from; OSRM-style thin client +
-  echo-mock in e2e). Pure `flightPlanModel.ts` decides per leg:
-  **climb over** (when an allow-climb switch is on and top+clearance fits
-  under a max-ceiling setting), else **detour** (visibility-graph corner
-  hops around clearance-inflated footprints), else a **blocked** leg drawn
-  dashed red. Builds on `FlightBinding`'s path rendering + `sampleFlight`
-  animation unchanged; settings join `flightCruise` in the slice.
+- ~~Drone flight round 2: building-aware routing~~ — shipped (Overpass
+  footprints + climb/detour/blocked planner, see the drone flight bullet).
 - **Drone flight extras** — speed setting, camera follow mode (chase the
   drone via `view.goTo` per tick), per-waypoint altitudes, saved flight
   plans (the `SavedRoute` pattern).

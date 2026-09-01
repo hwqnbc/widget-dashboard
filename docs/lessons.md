@@ -1922,3 +1922,17 @@ carried over; these are the new ones.
      kept a strict easy<medium<hard ladder at ~1s worst. The same script
      doubles as the suite's determinism harness: inject a seeded rand into
      the random AI and ladder games stop being flaky.
+
+122. **When a mock can't know the coordinates, key it on what the request
+     DOES carry.** The flight planner's e2e problem: interactive clicks
+     land at unknowable lon/lats (they depend on the live 3D camera), so a
+     canned Overpass fixture can't be placed to block them. The echo-mock
+     idea (#69) generalizes: the bbox in the Overpass query IS derived from
+     the clicks, so the mock answers with a square building centered in
+     the requested bbox, sized as a fraction of it — guaranteed astride
+     whatever legs produced that bbox, deterministic on every run. A
+     sibling trap surfaced while sizing that square: the planner's corridor
+     filter accepted buildings with a *corner* near the leg, so a huge
+     footprint crossing mid-leg with all corners far away escaped — a
+     proximity filter over vertices needs an "or the segment passes
+     through it" clause whenever shapes can outsize the corridor.
