@@ -78,6 +78,12 @@ on it works without a backend server or API key.
   across via a saved `viewpoint` — pins and route lines survive the toggle
   because they live on the map, not the view. StrictMode's dev double-mount
   (create → destroy → create) is the supported ArcGIS pattern.
+  **Detach before destroy** (lesson #124): `view.destroy()` destroys
+  `view.map` in 4.x, so the swap cleanup sets `view.map = null` first —
+  without it the first toggle killed the shared map and every later view
+  rendered blank ("tiles don't load"). `ensureMap` also self-heals by
+  rebuilding if it ever finds the map destroyed, and suite 130 fails on any
+  "map is already destroyed" console warning.
 - **The live view never enters React state or props** (lessons.md #67):
   ArcGIS `Accessor` objects are getter minefields, and React 19's dev-mode
   render instrumentation deep-walks changed props — reading `zoom` on a

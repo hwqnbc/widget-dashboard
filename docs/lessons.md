@@ -1951,3 +1951,19 @@ carried over; these are the new ones.
      Esri CDN is filtered, so is every Esri basemap — the ladder must hop
      to OSMF/CARTO hosts, and a banner must say what happened, or the next
      report is again just "tiles don't load".
+
+124. **ArcGIS `view.destroy()` destroys `view.map` — detach the shared map
+     first.** In 4.x, View.js literally ends destroy() with
+     `this.map = destroyMaybe(this.map)`. The Map page shares ONE EsriMap
+     (basemap + ground + every graphics layer) across its 2D/3D view swap,
+     so the first toggle silently destroyed all of it; the next view's map
+     setter warns "The provided map is already destroyed", sets map = null,
+     and renders blank forever — reported from a phone as "tiles don't
+     load", reproducible headlessly by watching for that exact console
+     warning. Fix: `view.map = null` before `view.destroy()` in the swap
+     cleanup (plus a destroyed-map rebuild guard in ensureMap). Fallout
+     worth knowing: lesson #74's "views re-created after swaps may never
+     settle offline" was mostly THIS bug — post-fix, offline views settle
+     ready even after swaps, which unmasked that the suite's click-driven
+     branch really is online-only (insert thresholds off view.scale,
+     SketchVM drawing) and must be gated on `online`, not readiness alone.

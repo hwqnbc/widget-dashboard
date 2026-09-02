@@ -553,6 +553,22 @@ export default function MapPageBody() {
   // view. Ground only matters to the SceneView; world-elevation is the free
   // legacy Esri elevation service (no API key).
   function ensureMap(): EsriMap {
+    // Self-heal: should any teardown path still destroy the shared map (the
+    // detach-before-destroy above prevents the known one), rebuild instead
+    // of handing a destroyed map to the next view — that renders blank
+    // forever. Graphics mirrors repopulate via their own effects.
+    if (mapRef.current?.destroyed) {
+      console.warn('Map: shared EsriMap was destroyed — rebuilding it')
+      mapRef.current = null
+      buildingsLayerRef.current = null
+      treesLayerRef.current = null
+      pinsLayerRef.current = null
+      routeLayerRef.current = null
+      locateLayerRef.current = null
+      drawingsLayerRef.current = null
+      sketchLayerRef.current = null
+      flightLayerRef.current = null
+    }
     if (!mapRef.current) {
       pinsLayerRef.current = new GraphicsLayer({ elevationInfo: { mode: 'on-the-ground' } })
       routeLayerRef.current = new GraphicsLayer({ elevationInfo: { mode: 'on-the-ground' } })
@@ -740,6 +756,17 @@ export default function MapPageBody() {
         // keep the previous viewpoint
       }
       viewRef.current = null
+      // DETACH the shared map before destroying the view: in 4.x
+      // `view.destroy()` destroys `view.map` (View.js ends destroy() with
+      // `this.map = destroyMaybe(this.map)`), so without this the FIRST
+      // 2D/3D toggle killed the basemap, ground and every graphics layer —
+      // the next view then warned "map is already destroyed" and rendered
+      // blank forever (the real face of the phone's "tiles don't load").
+      try {
+        if (nextView) nextView.map = null
+      } catch {
+        // view already broken — destroy is best-effort anyway
+      }
       safeDestroy(nextView)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

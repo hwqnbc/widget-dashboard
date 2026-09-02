@@ -61,6 +61,15 @@ const { browser, context, page } = await launch()
 
 const root = () => page.locator('[data-testid="map-page"]')
 
+// Regression guard for the 4.x footgun (lesson #124): view.destroy()
+// destroys view.map unless the map is detached first. If any view swap
+// leaks ArcGIS's "map is already destroyed" warning, the shared map died
+// and every later view renders blank.
+const destroyedMapWarnings = []
+page.on('console', (m) => {
+  if (m.text().includes('map is already destroyed')) destroyedMapWarnings.push(m.text())
+})
+
 async function waitForAttr(attr, pred, timeout = 30000) {
   const deadline = Date.now() + timeout
   let last = null
@@ -887,6 +896,11 @@ check('panel closes', (await root().getAttribute('data-panel')) === 'closed')
 await page.locator('[data-testid="map-mode-2d"]').click()
 await page.waitForTimeout(500)
 check('back to 2D', (await root().getAttribute('data-view-mode')) === '2d')
+check(
+  'view swaps never destroy the shared map',
+  destroyedMapWarnings.length === 0,
+  destroyedMapWarnings[0] ?? '',
+)
 
 // ---- tool strip contract ----
 check('no tool active initially', (await root().getAttribute('data-tool')) === 'none')
@@ -1012,12 +1026,14 @@ check(
 // settles ready with a broken basemap, and clicks/toMap/goTo/SketchVM all
 // work against the view transform. OSRM is mocked either way.
 {
-  // Offline this is opportunistic: the first view settles ready fast, but a
-  // view re-created after the 2D/3D swaps waits on the failed scene layers
-  // and may never settle — then this branch skips, same as tile checks.
+  // ONLINE-gated: since the detach-before-destroy fix (lesson #124) the
+  // view reliably reaches ready offline too — which unmasked that several
+  // click-driven flows (insert-on-line thresholds off view.scale, SketchVM
+  // drawing) genuinely need the online environment. The branch was always
+  // documented online-only; the readiness wait guards flaky networks.
   const interactive =
-    (await waitForAttr('data-map-status', (v) => v === 'ready', online ? 45000 : 15000)) ===
-    'ready'
+    online &&
+    (await waitForAttr('data-map-status', (v) => v === 'ready', 45000)) === 'ready'
   if (interactive) {
     const box = await page.locator('[data-testid="map-container"]').boundingBox()
     const at = (fx, fy) => [box.x + box.width * fx, box.y + box.height * fy]
@@ -1505,7 +1521,7 @@ check(
   } else if (online) {
     check('online but view never ready', false, 'ready wait timed out')
   } else {
-    console.log('SKIP: view never settled ready offline — click-driven checks skipped')
+    console.log('SKIP: offline — click-driven checks are online-only')
   }
 }
 
@@ -1513,5 +1529,13 @@ check(
 await page.goto(`${BASE_URL}map`, { waitUntil: 'networkidle' })
 const deepLinkOk = (await page.locator('[data-testid="map-page"]').count()) === 1
 check('deep link /map renders the page', deepLinkOk)
+
+// Every view swap in the whole suite (toggle section, flight branch,
+// reloads) must have left the shared map alive.
+check(
+  'no destroyed-map warnings across the whole suite',
+  destroyedMapWarnings.length === 0,
+  destroyedMapWarnings[0] ?? '',
+)
 
 await finish(browser)
