@@ -7,7 +7,9 @@
  *    page is visited), theme-follow (data-basemap + injected ArcGIS CSS flip
  *    with the app toggle — render-computed, works offline), the basemap
  *    gallery (12 tiles, explicit pick beats the theme, CARTO WebTileLayer
- *    path, persistence, back to Auto + pure resolver units), 2D/3D toggle +
+ *    path, persistence, back to Auto + pure resolver units), the basemap
+ *    health watchdog (offline: fallback ladder exhausts → failed + banner;
+ *    online: ok, no banner), 2D/3D toggle +
  *    persistence, tool toggles, pure routeGeometry unit checks (bundled
  *    module: insert index, nearest-distance, tap threshold), pure
  *    flightPathModel checks (3D lengths, sampling, heading, done), pure
@@ -39,7 +41,12 @@ import {
   dragPointerUp,
   dragStep,
 } from './.bundle/dragModel.js'
-import { BASEMAP_DEFS, resolveBasemapId } from './.bundle/basemapCatalog.js'
+import {
+  BASEMAP_DEFS,
+  nextBasemapFallback,
+  probeTileUrls,
+  resolveBasemapId,
+} from './.bundle/basemapCatalog.js'
 import { buildFlightPath, sampleFlight } from './.bundle/flightPathModel.js'
 import {
   estimateHeight,
@@ -253,6 +260,21 @@ await page.route('**overpass-api.de/**', (route) => {
     'catalog entries each construct one way (esriId xor cartoUrl)',
     BASEMAP_DEFS.length === 11 &&
       BASEMAP_DEFS.every((d) => Boolean(d.esriId) !== Boolean(d.cartoUrl)),
+  )
+  check(
+    'probeTileUrls: template layers get a tile probe, esri styles none',
+    probeTileUrls('osm')[0] === 'https://a.tile.openstreetmap.org/3/4/3.png' &&
+      probeTileUrls('carto-voyager')[0] ===
+        'https://a.basemaps.cartocdn.com/rastertiles/voyager/3/4/3.png' &&
+      probeTileUrls('gray-vector').length === 0 &&
+      probeTileUrls('satellite').length === 0,
+  )
+  check(
+    'nextBasemapFallback walks the provider ladder',
+    nextBasemapFallback('gray-vector', []) === 'osm' &&
+      nextBasemapFallback('osm', []) === 'carto-voyager' &&
+      nextBasemapFallback('gray-vector', ['gray-vector', 'osm']) === 'carto-voyager' &&
+      nextBasemapFallback('gray-vector', ['gray-vector', 'osm', 'carto-voyager']) === null,
   )
 
   // Flight-path model: 3D distances, sampling, heading, done semantics.
@@ -475,6 +497,8 @@ if (!online) {
   }
   // CARTO raster tiles (a–d.basemaps.cartocdn.com) — same fail-fast reasoning.
   await page.route('**://*.cartocdn.com/**', (r) => r.abort())
+  // OSMF tile servers (the watchdog's first fallback probe).
+  await page.route('**://*.tile.openstreetmap.org/**', (r) => r.abort())
 }
 
 check(
@@ -546,6 +570,44 @@ check('arcgis css swapped with theme', cssLenDark > 1000 && cssLenDark !== cssLe
 await page.getByRole('button', { name: 'Switch to light mode' }).click()
 await page.waitForTimeout(300)
 check('toggle back restores gray-vector', (await root().getAttribute('data-basemap')) === 'gray-vector')
+
+// ---- basemap health watchdog: view-ready says nothing about tiles, so the
+// page checks the basemap itself and falls back across providers ----
+if (online) {
+  const health = await waitForAttr('data-basemap-health', (v) => v === 'ok', 30000)
+  check('basemap health reaches ok online', health === 'ok', `health=${health}`)
+  check(
+    'no basemap warning online',
+    (await page.locator('[data-testid="map-basemap-warning"]').count()) === 0,
+  )
+  check(
+    'active basemap matches the choice',
+    (await root().getAttribute('data-basemap-active')) ===
+      (await root().getAttribute('data-basemap')),
+  )
+} else {
+  // Every tile provider is abort-routed: the watchdog must walk the ladder
+  // and end on fallback/failed with the warning banner up — while the
+  // choice-derived contract attr stays untouched.
+  const health = await waitForAttr(
+    'data-basemap-health',
+    (v) => v === 'fallback' || v === 'failed',
+    40000,
+  )
+  check(
+    'offline: watchdog reports fallback/failed',
+    health === 'fallback' || health === 'failed',
+    `health=${health}`,
+  )
+  check(
+    'offline: basemap warning banner shows',
+    (await page.locator('[data-testid="map-basemap-warning"]').count()) === 1,
+  )
+  check(
+    'offline: data-basemap contract unchanged by fallback',
+    (await root().getAttribute('data-basemap')) === 'gray-vector',
+  )
+}
 
 // ---- overlays panel: slide-out at the map's right edge ----
 check('panel starts closed', (await root().getAttribute('data-panel')) === 'closed')

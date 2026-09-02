@@ -1936,3 +1936,18 @@ carried over; these are the new ones.
      footprint crossing mid-leg with all corners far away escaped — a
      proximity filter over vertices needs an "or the segment passes
      through it" clause whenever shapes can outsize the corridor.
+
+123. **A ready view is not a drawn map — and template layers "load" without
+     the network.** A phone consistently showed an empty map: every chunk
+     loaded, `view.when` resolved, `data-map-status` said ready — while the
+     basemap tile CDN was blocked on that device. Nothing in the app knew.
+     Two traps stack: ArcGIS resolves `view.when` with a dead basemap, and
+     `Basemap.load()` on a `fromId` basemap assembles client-side — even
+     loading succeeds with an unreachable CDN. Health-checking a basemap
+     means loading its base LAYERS (a vector/tile layer fetches real
+     metadata there and rejects) AND, for URL-template layers (WebTileLayer,
+     the osm raster — no metadata at all), no-cors fetching one sample tile.
+     Then a failure needs a cross-PROVIDER fallback, not a retry: if the
+     Esri CDN is filtered, so is every Esri basemap — the ladder must hop
+     to OSMF/CARTO hosts, and a banner must say what happened, or the next
+     report is again just "tiles don't load".

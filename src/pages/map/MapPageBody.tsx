@@ -102,7 +102,13 @@ import { useOsrmRoute } from './useOsrmRoute'
 import { insertIndexFor, nearestOnPath, pathDistanceThresholdMeters } from './routeGeometry'
 import { armDrag, createDragState, dragPointerDown, dragPointerUp, dragStep } from './dragModel'
 import type { LonLat, RouteProfile } from './osrm'
-import { basemapDefById, CARTO_COPYRIGHT, resolveBasemapId } from './basemapCatalog'
+import {
+  basemapDefById,
+  CARTO_COPYRIGHT,
+  nextBasemapFallback,
+  probeTileUrls,
+  resolveBasemapId,
+} from './basemapCatalog'
 
 /** Gallery id → an ArcGIS Basemap: Esri legacy styles via fromId, the CARTO
  * raster styles via a WebTileLayer basemap (see basemapCatalog for the
@@ -124,6 +130,40 @@ function createBasemap(id: string): Basemap {
   // fromId types as nullable (unknown ids) — an empty Basemap beats a crash.
   return Basemap.fromId(def?.esriId ?? id) ?? new Basemap({ title: id })
 }
+
+const basemapLabel = (id: string) => basemapDefById[id]?.label ?? id
+
+/**
+ * Is this basemap actually going to draw tiles? `view.when` resolving says
+ * NOTHING about the basemap (a dead one still yields status 'ready' with an
+ * empty map — verified), and template-based layers (CARTO, the osm raster)
+ * even "load" without touching the network. So: load the basemap (Esri
+ * styles/metadata reject here when their CDN is blocked), then no-cors
+ * probe a sample tile for the template providers — a rejected fetch means
+ * the tile host is unreachable or filtered on this device.
+ */
+async function basemapReachable(basemap: Basemap, id: string): Promise<boolean> {
+  const raced = <T,>(p: Promise<T>) =>
+    Promise.race([
+      p,
+      new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), 8000)),
+    ])
+  try {
+    // Basemap.load() alone can resolve while its layers are dead (fromId
+    // basemaps assemble client-side) — load the base LAYERS: a vector/tiled
+    // layer fetches its style/metadata here and rejects when blocked.
+    await raced(basemap.load())
+    await raced(Promise.all(basemap.baseLayers.toArray().map((layer) => layer.load())))
+    for (const url of probeTileUrls(id)) {
+      await raced(fetch(url, { mode: 'no-cors', cache: 'no-store' }))
+    }
+    return true
+  } catch {
+    return false
+  }
+}
+
+type BasemapHealth = 'checking' | 'ok' | 'fallback' | 'failed'
 
 // Production keeps the 4.x default: runtime assets (workers, fonts, widget
 // locale bundles) come from the ArcGIS CDN, which sidesteps the GitHub Pages
@@ -316,6 +356,13 @@ export default function MapPageBody() {
   // (lessons.md #72), which is why the widgets' FullscreenProvider isn't
   // reused here.
   const [fullscreen, setFullscreen] = useState(false)
+  // Basemap health watchdog (strings only — never ArcGIS objects, #67).
+  // `activeBasemapId` is what the map is LIVE-showing (fallbacks included);
+  // `data-basemap` stays derived from the persisted choice.
+  const [basemapHealth, setBasemapHealth] = useState<BasemapHealth>('checking')
+  const [activeBasemapId, setActiveBasemapId] = useState(basemapId)
+  const [basemapWarningDismissed, setBasemapWarningDismissed] = useState(false)
+  const basemapEpochRef = useRef(0)
   // Overlays panel visibility (transient) + active drawing mode.
   const [panelOpen, setPanelOpen] = useState(false)
   const [drawMode, setDrawMode] = useState<DrawMode>('none')
@@ -805,18 +852,48 @@ export default function MapPageBody() {
     }
   }
 
-  // Follow the app theme and the gallery choice: swap the injected ArcGIS
-  // CSS and the basemap in place — no view re-create.
+  // Follow the app theme and the gallery choice — and watch the basemap's
+  // HEALTH. Swap the injected ArcGIS CSS and the basemap in place (no view
+  // re-create), then verify the chosen basemap can actually draw
+  // (basemapReachable). On failure walk the provider-diverse fallback
+  // ladder (OSMF → CARTO → Esri) so a device that blocks one tile CDN still
+  // gets a map, and surface a banner naming what failed. The persisted
+  // choice and `data-basemap` never change — only the map's live basemap.
   useEffect(() => {
     applyArcgisTheme(mode)
-    if (basemapIdRef.current !== basemapId && mapRef.current) {
-      basemapIdRef.current = basemapId
+    const epoch = ++basemapEpochRef.current
+    setBasemapHealth('checking')
+    setActiveBasemapId(basemapId)
+    setBasemapWarningDismissed(false)
+    const tried: string[] = []
+    const applyAndCheck = async (id: string, isFallback: boolean) => {
+      const map = mapRef.current
+      if (!map || epoch !== basemapEpochRef.current) return
       try {
-        mapRef.current.basemap = createBasemap(basemapId)
+        if (basemapIdRef.current !== id || !map.basemap) {
+          map.basemap = createBasemap(id)
+          basemapIdRef.current = id
+        }
       } catch (e) {
-        console.warn('Basemap swap failed', e)
+        console.warn('Basemap create failed', e)
+      }
+      setActiveBasemapId(id)
+      const ok = map.basemap ? await basemapReachable(map.basemap, id) : false
+      if (epoch !== basemapEpochRef.current) return
+      if (ok) {
+        setBasemapHealth(isFallback ? 'fallback' : 'ok')
+        return
+      }
+      tried.push(id)
+      const next = nextBasemapFallback(basemapId, tried)
+      if (next) {
+        setBasemapHealth('fallback')
+        void applyAndCheck(next, true)
+      } else {
+        setBasemapHealth('failed')
       }
     }
+    void applyAndCheck(basemapId, false)
   }, [mode, basemapId])
 
   // OSM 3D Buildings: created lazily the first time the 3D view wants them
@@ -974,6 +1051,8 @@ export default function MapPageBody() {
         drawings.filter((d) => overlays.some((o) => o.id === d.overlayId && o.visible)).length
       }
       data-pins-visible={showPins ? 'on' : 'off'}
+      data-basemap-active={activeBasemapId}
+      data-basemap-health={basemapHealth}
       data-flight-points={flightPoints.length}
       data-flight-anim={flightAnim}
       data-flight-km={flightPoints.length >= 2 ? flightKm.toFixed(2) : ''}
@@ -1191,6 +1270,23 @@ export default function MapPageBody() {
             tiles won&apos;t work until it recovers.
           </Alert>
         )}
+        {status !== 'error' &&
+          (basemapHealth === 'fallback' || basemapHealth === 'failed') &&
+          !basemapWarningDismissed && (
+            <Alert
+              severity="warning"
+              data-testid="map-basemap-warning"
+              onClose={() => setBasemapWarningDismissed(true)}
+              // zIndex 1: BELOW the overlays panel (2) and its toggle (3),
+              // so an open panel paints over the banner instead of the
+              // banner intercepting the gallery tiles' clicks.
+              sx={{ position: 'absolute', top: 8, left: 8, right: 56, zIndex: 1 }}
+            >
+              {basemapHealth === 'fallback'
+                ? `Basemap "${basemapLabel(basemapId)}" isn't loading on this network — showing "${basemapLabel(activeBasemapId)}" instead. A content blocker or private DNS on this device may be filtering map tile servers.`
+                : 'No basemap tile server is reachable — check the connection, or a content blocker / private DNS filtering map tiles on this device.'}
+            </Alert>
+          )}
       </Box>
       <MeasureBinding viewRef={viewRef} viewRevision={viewRevision} tool={tool} />
       <FlightBinding

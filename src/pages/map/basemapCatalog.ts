@@ -69,3 +69,41 @@ export function resolveBasemapId(choice: unknown, themeMode: 'light' | 'dark'): 
   if (typeof choice === 'string' && choice !== 'auto' && isKnownBasemap(choice)) return choice
   return BASEMAP_BY_MODE[themeMode]
 }
+
+/**
+ * Sample tile URLs for the basemap health check. Template-based layers
+ * (CARTO WebTileLayer, the `osm` raster) "load" without ever touching the
+ * network — their metadata is client-side — so a health check must probe an
+ * actual tile (no-cors fetch: rejection = host blocked/unreachable). Esri
+ * vector/tiled basemaps return [] because `Basemap.load()` already fetches
+ * their style/metadata from the CDN and rejects when it is unreachable.
+ */
+export function probeTileUrls(id: string): string[] {
+  if (id === 'osm') return ['https://a.tile.openstreetmap.org/3/4/3.png']
+  const def = basemapDefById[id]
+  if (def?.cartoUrl) {
+    return [
+      def.cartoUrl
+        .replace('{subDomain}', 'a')
+        .replace('{level}', '3')
+        .replace('{col}', '4')
+        .replace('{row}', '3'),
+    ]
+  }
+  return []
+}
+
+/**
+ * The tile-failure fallback ladder: three INDEPENDENT providers, so a
+ * device that blocks one tile CDN (content blocker, private DNS) still gets
+ * a map — OSMF's own tile servers, CARTO's CDN, Esri's CDN. Returns the
+ * next candidate that isn't the failing basemap and hasn't been tried, or
+ * null when every provider is exhausted.
+ */
+const FALLBACK_LADDER = ['osm', 'carto-voyager', 'gray-vector']
+export function nextBasemapFallback(effectiveId: string, tried: string[]): string | null {
+  for (const id of FALLBACK_LADDER) {
+    if (id !== effectiveId && !tried.includes(id)) return id
+  }
+  return null
+}

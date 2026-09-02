@@ -44,6 +44,24 @@ on it works without a backend server or API key.
   `map.basemap = createBasemap(id)` in place; no view re-create. Esri
   sunsets the legacy styles in Mar 2028 / Dec 2029 — the CARTO entries in
   this same catalog are the migration path (flip what `'auto'` maps to).
+- **Basemap health watchdog** (from a real phone report: tiles silently
+  never drew). `view.when` resolving says NOTHING about the basemap — a
+  dead one still yields `data-map-status='ready'` over an empty map — and
+  template-based layers (CARTO `WebTileLayer`, the `osm` raster) even
+  "load" without touching the network. So after every basemap apply the
+  page verifies it can actually draw: `basemap.load()` **plus loading every
+  base layer** (a vector/tiled layer fetches its style/metadata there and
+  rejects when its CDN is blocked) plus, for template providers, a no-cors
+  fetch of a sample tile from `probeTileUrls(id)` (pure, in the catalog) —
+  each step raced against an 8 s timeout. On failure it walks
+  `nextBasemapFallback`'s provider-diverse ladder (`osm` → OSMF servers,
+  `carto-voyager` → CARTO CDN, `gray-vector` → Esri CDN) so a device whose
+  content blocker / private DNS filters one tile host still gets a map, and
+  shows a dismissible banner naming what failed and what it is showing
+  instead. The persisted choice and `data-basemap` never change — the live
+  state is published as `data-basemap-active` + `data-basemap-health`
+  (`checking|ok|fallback|failed`), and an epoch counter discards stale
+  async results when the choice or theme changes mid-check.
 - ArcGIS widget chrome CSS ships as two separate stylesheets. Both are
   imported **`?inline`** (strings, typed by the `*.css?inline` shim in
   `src/vite-env.d.ts`) and the matching one is held in a single swapped
