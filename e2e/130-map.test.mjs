@@ -463,6 +463,94 @@ await page.route('**overpass-api.de/**', (route) => {
       'multi-leg plan counts modes per leg',
       mixed.legs.length === 2 && mixed.legs[0].mode === 'climb' && mixed.legs[1].mode === 'direct',
     )
+
+    // ---- exhaustive detour: blocked must mean ENCLOSED, never "search gave
+    // up early". Fixtures in meter offsets around A. ----
+    {
+      const M = 111320
+      const cosB = Math.cos((1.35 * Math.PI) / 180)
+      const at = (xm, ym) => [103.8 + xm / (M * cosB), 1.35 + ym / M]
+      const rect = (cx, cy, w, h) => ({
+        height: 200,
+        ring: [
+          at(cx - w / 2, cy - h / 2),
+          at(cx + w / 2, cy - h / 2),
+          at(cx + w / 2, cy + h / 2),
+          at(cx - w / 2, cy + h / 2),
+        ],
+      })
+      const start = { lon: 103.8, lat: 1.35, ground: 0 }
+      const goal = { lon: 103.8, lat: 1.35 + 600 / M, ground: 0 } // 600 m north
+      const noClimb = { cruise: 60, allowClimb: false, ceiling: 120 }
+      const clearsAll = (leg, rects) => {
+        const toXY = ([lon, lat]) => [lon * M * cosB, lat * M]
+        const pathXY = leg.path.map((p) => toXY([p.lon, p.lat]))
+        for (let i = 0; i < pathXY.length - 1; i++) {
+          for (const r of rects) {
+            if (segmentThroughPolygon(pathXY[i], pathXY[i + 1], r.ring.map(toXY)) != null) {
+              return false
+            }
+          }
+        }
+        return true
+      }
+
+      // A 1.5 km wall across the leg: its ends are ~750 m out — far beyond
+      // the old 400 m corner corridor, which mislabeled this "blocked".
+      const wall = [rect(0, 300, 1500, 20)]
+      const wide = planFlight([start, goal], wall, noClimb)
+      check(
+        'long wall gets a wide detour, not blocked',
+        wide.legs[0].mode === 'detour' && clearsAll(wide.legs[0], wall),
+        wide.legs[0].mode,
+      )
+
+      // Courtyard walls sealing the start on all four sides: truly blocked.
+      const courtyard = [
+        rect(0, 100, 220, 20),
+        rect(0, -100, 220, 20),
+        rect(100, 0, 20, 220),
+        rect(-100, 0, 20, 220),
+      ]
+      const sealed = planFlight([start, goal], courtyard, noClimb)
+      check(
+        'sealed courtyard is genuinely blocked',
+        sealed.legs[0].mode === 'blocked' && sealed.path.length === 0,
+      )
+
+      // Same courtyard, but the EAST wall has a 70 m opening — off the
+      // leg's own line (the north wall still blocks straight ahead), so the
+      // ONLY way out is threading that side gap.
+      const gapped = [
+        rect(0, 100, 220, 20),
+        rect(0, -100, 220, 20),
+        rect(100, -72.5, 20, 75),
+        rect(100, 72.5, 20, 75),
+        rect(-100, 0, 20, 220),
+      ]
+      const escape = planFlight([start, goal], gapped, noClimb)
+      check(
+        'courtyard with a wide gap detours through it',
+        escape.legs[0].mode === 'detour' && clearsAll(escape.legs[0], gapped),
+        escape.legs[0].mode,
+      )
+
+      // An 8 m opening is narrower than 2×clearance (10 m): the inflated
+      // footprints seal it — blocked is the CORRECT verdict.
+      const slit = [
+        rect(0, 100, 220, 20),
+        rect(0, -100, 220, 20),
+        rect(100, -57, 20, 106),
+        rect(100, 57, 20, 106),
+        rect(-100, 0, 20, 220),
+      ]
+      const tooNarrow = planFlight([start, goal], slit, noClimb)
+      check(
+        'gap narrower than 2×clearance stays blocked',
+        tooNarrow.legs[0].mode === 'blocked',
+        tooNarrow.legs[0].mode,
+      )
+    }
   }
 }
 

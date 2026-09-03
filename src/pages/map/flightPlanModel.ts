@@ -11,9 +11,12 @@
  *
  * Per leg the planner picks, in order: DIRECT (nothing tall crosses the
  * leg), CLIMB (allowed and the required altitude fits under the ceiling —
- * a trapezoid profile over the whole leg), DETOUR (shortest path through a
- * visibility graph over clearance-inflated footprint corners, flown at
- * cruise), else BLOCKED (drawn, not flown).
+ * a trapezoid profile over the whole leg), DETOUR (best feasible path via
+ * an A* visibility graph over clearance-inflated footprint corners of the
+ * WHOLE data bbox, searched in widening tiers, flown at cruise), else
+ * BLOCKED — which now genuinely means enclosed: an endpoint sealed inside
+ * an inflated footprint, or every gap narrower than 2×clearance, with the
+ * full corner graph exhausted (never a truncated search).
  */
 
 import type { FlightPoint } from './flightPathModel'
@@ -65,11 +68,19 @@ export interface PlanPoint {
 
 const EARTH_M_PER_DEG = 111_320
 const DEFAULT_CLEARANCE = 5
-/** Only footprint corners within this range of a leg join its detour
- * graph — bounds the Dijkstra while letting detours swing wide. */
+/** Perf-only pre-filter for the DIRECT-line obstruction test (a building
+ * can only block the straight leg when it's near it or crossed by it). The
+ * detour search deliberately uses the FULL building set instead. */
 const CORRIDOR_M = 400
-/** Corner cap for the visibility graph (plus the two endpoints). */
-const MAX_CORNERS = 80
+/**
+ * The detour search widens progressively: first only corners near the
+ * direct leg (cheap, catches the common case), then wider rings, then
+ * every corner in the data bbox — so "no detour" means the FULL graph was
+ * exhausted, not that the search was truncated. The final hard cap keeps
+ * the worst dense-city case bounded (nearest-to-leg corners win).
+ */
+const DETOUR_TIERS_M = [400, 1600, Infinity]
+const MAX_CORNERS = 320
 
 // ---------------------------------------------------------------- parsing
 
@@ -201,41 +212,39 @@ function pointToSegment(p: XY, a: XY, b: XY): number {
   return distXY(p, [a[0] + ab[0] * t, a[1] + ab[1] * t])
 }
 
-/** Shortest polyline a→b around the blockers via a visibility graph over
- * their inflated corners. Returns intermediate corners only (may be []),
- * or null when no path exists. */
-function detourAround(a: XY, b: XY, blockers: MeterBuilding[]): XY[] | null {
-  const crossesAny = (p: XY, q: XY) =>
-    blockers.some((bl) => segmentThroughPolygon(p, q, bl.inflated) != null)
-
-  // Corner nodes, slightly re-inflated so graph edges don't graze the very
-  // polygon their endpoint sits on.
-  let corners: XY[] = []
-  for (const bl of blockers) corners.push(...inflateRing(bl.inflated, 0.5))
-  corners = corners.filter((c) => !blockers.some((bl) => insidePolygon(c, bl.inflated)))
-  if (corners.length > MAX_CORNERS) {
-    corners.sort((c1, c2) => pointToSegment(c1, a, b) - pointToSegment(c2, a, b))
-    corners = corners.slice(0, MAX_CORNERS)
-  }
-  const nodes: XY[] = [a, b, ...corners]
-
-  // Dijkstra over the visibility edges (n is small; O(n²) edge tests).
-  const n = nodes.length
-  const dist = new Array<number>(n).fill(Infinity)
+/** A* over the first `n` nodes of the visibility graph (node 0 = start,
+ * 1 = goal; euclid heuristic is consistent, so closed-set A* is exact).
+ * Edges are validated lazily through `crosses` — only when they would
+ * improve a node — which is what keeps the full-graph tier affordable. */
+function shortestPath(
+  nodes: XY[],
+  n: number,
+  crosses: (u: number, v: number) => boolean,
+): XY[] | null {
+  const g = new Array<number>(n).fill(Infinity)
   const prev = new Array<number>(n).fill(-1)
   const done = new Array<boolean>(n).fill(false)
-  dist[0] = 0
+  g[0] = 0
   for (;;) {
     let u = -1
-    for (let i = 0; i < n; i++) if (!done[i] && (u === -1 || dist[i] < dist[u])) u = i
-    if (u === -1 || dist[u] === Infinity) return null
+    let best = Infinity
+    for (let i = 0; i < n; i++) {
+      if (!done[i] && g[i] !== Infinity) {
+        const f = g[i] + distXY(nodes[i], nodes[1])
+        if (f < best) {
+          best = f
+          u = i
+        }
+      }
+    }
+    if (u === -1) return null // open set empty — the graph is exhausted
     if (u === 1) break
     done[u] = true
     for (let v = 0; v < n; v++) {
       if (done[v]) continue
-      const d = dist[u] + distXY(nodes[u], nodes[v])
-      if (d < dist[v] && !crossesAny(nodes[u], nodes[v])) {
-        dist[v] = d
+      const d = g[u] + distXY(nodes[u], nodes[v])
+      if (d < g[v] && !crosses(u, v)) {
+        g[v] = d
         prev[v] = u
       }
     }
@@ -243,6 +252,52 @@ function detourAround(a: XY, b: XY, blockers: MeterBuilding[]): XY[] | null {
   const out: XY[] = []
   for (let v = prev[1]; v > 0; v = prev[v]) out.unshift(nodes[v])
   return out
+}
+
+/**
+ * Best feasible polyline a→b around the blockers: a visibility graph over
+ * their inflated corners, searched in progressively wider tiers so the
+ * common case stays cheap while a long wall or dense cluster still gets a
+ * wide swing. Returns intermediate corners only (may be []), or null ONLY
+ * when the full graph is exhausted — i.e. every gap is narrower than
+ * 2×clearance (inflated footprints seal it) or an endpoint is walled in.
+ */
+function detourAround(a: XY, b: XY, blockers: MeterBuilding[]): XY[] | null {
+  // Corner nodes, slightly re-inflated so graph edges don't graze the very
+  // polygon their endpoint sits on; corners buried inside a NEIGHBOURING
+  // inflated footprint are unusable (that's how too-narrow gaps seal).
+  let corners: XY[] = []
+  for (const bl of blockers) corners.push(...inflateRing(bl.inflated, 0.5))
+  corners = corners.filter((c) => !blockers.some((bl) => insidePolygon(c, bl.inflated)))
+  // Nearest-to-the-leg corners first: the tier prefixes below slice this
+  // order, and the hard cap drops only the farthest corners.
+  corners.sort((c1, c2) => pointToSegment(c1, a, b) - pointToSegment(c2, a, b))
+  if (corners.length > MAX_CORNERS) corners = corners.slice(0, MAX_CORNERS)
+  const nodes: XY[] = [a, b, ...corners]
+
+  // Edge tests are the cost — cache them across tiers (node indices are
+  // stable because tiers are prefixes of one sorted list).
+  const crossCache = new Map<number, boolean>()
+  const crosses = (u: number, v: number) => {
+    const key = u < v ? u * nodes.length + v : v * nodes.length + u
+    let hit = crossCache.get(key)
+    if (hit === undefined) {
+      hit = blockers.some((bl) => segmentThroughPolygon(nodes[u], nodes[v], bl.inflated) != null)
+      crossCache.set(key, hit)
+    }
+    return hit
+  }
+
+  let lastN = 0
+  for (const tier of DETOUR_TIERS_M) {
+    let n = 2
+    while (n - 2 < corners.length && pointToSegment(corners[n - 2], a, b) <= tier) n++
+    if (n <= lastN) continue // tier adds no new corners — same graph
+    lastN = n
+    const via = shortestPath(nodes, n, crosses)
+    if (via) return via
+  }
+  return null
 }
 
 /**
@@ -327,14 +382,22 @@ export function planFlight(
       continue
     }
 
-    // Detour at cruise: avoid every corridor building taller than the leg's
-    // lower altitude (conservative — the drone may dip toward the lower end).
+    // Detour at cruise around every building in the DATA BBOX taller than
+    // the leg's lower altitude (conservative — the drone may dip toward the
+    // lower end). Deliberately NOT corridor-limited: a wide swing must both
+    // see distant corners and be checked against distant obstacles, or
+    // "blocked" would just mean "didn't look far enough".
     const zMin = Math.min(zA, zB)
-    const tallEnough = corridor.filter((mb) => {
-      const nearestGround = Math.min(A.ground, B.ground)
-      return nearestGround + mb.height + clearance > zMin
-    })
-    const via = detourAround(a, b, tallEnough)
+    const nearestGround = Math.min(A.ground, B.ground)
+    const tallEnough = meterBuildings.filter(
+      (mb) => nearestGround + mb.height + clearance > zMin,
+    )
+    // Truly hopeless fast path: an endpoint standing inside an inflated
+    // footprint has no legal position at this altitude at all.
+    const endpointSealed = tallEnough.some(
+      (mb) => insidePolygon(a, mb.inflated) || insidePolygon(b, mb.inflated),
+    )
+    const via = endpointSealed ? null : detourAround(a, b, tallEnough)
     if (via) {
       // z interpolates along the detour's cumulative distance.
       const pts: XY[] = [a, ...via, b]

@@ -1967,3 +1967,17 @@ carried over; these are the new ones.
      ready even after swaps, which unmasked that the suite's click-driven
      branch really is online-only (insert thresholds off view.scale,
      SketchVM drawing) and must be gated on `online`, not readiness alone.
+
+125. **"Blocked" must mean exhausted, not truncated.** The flight detour's
+     first cut pruned its visibility graph to corners within 400 m of the
+     leg (capped at 80) — so a 1.5 km wall, whose ends were the only way
+     around, came back "no path" and rendered as blocked when a perfectly
+     good detour existed. Any search that prunes for speed converts its
+     cap into a false verdict at the boundary. Fix shape: keep the prune as
+     a FAST TIER, then widen progressively to the full data set before
+     concluding impossibility (A* + lazily-validated cached edges keeps the
+     full tier affordable; tiers as prefixes of one sorted node list lets
+     the cache carry across). The truly-impossible cases get cheap fast
+     paths instead (endpoint inside an inflated footprint) — and the tests
+     must pin BOTH sides: the wide detour found, and a genuinely sealed
+     courtyard (plus a gap narrower than 2×clearance) still blocked.

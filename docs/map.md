@@ -265,10 +265,17 @@ on it works without a backend server or API key.
   **climb** — only when the "Climb" switch allows raising the flight height
   and top+5 m clearance fits under the **Max (m)** AGL ceiling (persisted
   `flightAllowClimb`/`flightCeiling`, defaults on/120) — a trapezoid
-  profile up/over/down; else **detour** — Dijkstra over a visibility graph
-  of clearance-inflated footprint corners in the leg corridor, flown at
-  cruise; else **blocked** — drawn dashed red, Play disabled until the user
-  allows climbing, raises the ceiling, or moves a waypoint. Legs render
+  profile up/over/down; else **detour** — the best feasible route around
+  the buildings: A* over a visibility graph of clearance-inflated footprint
+  corners spanning the WHOLE data bbox (not just a leg corridor), searched
+  in widening tiers (400 m → 1600 m → everything, corner cap 320 nearest
+  the leg) with lazily validated, cached edges — so long walls get a wide
+  swing and dense clusters get threaded through their gaps; else
+  **blocked** — which genuinely means enclosed: an endpoint sealed inside
+  an inflated footprint, or every gap narrower than 2×clearance, with the
+  full corner graph exhausted (never a truncated search). Blocked legs draw
+  dashed red with Play disabled until the user allows climbing, raises the
+  ceiling, or moves a waypoint. Legs render
   color-coded (blue/green/orange/red), the drone animates over the planned
   path unchanged (`sampleFlight`), and `useFlightPlan.ts` debounces
   re-plans (400 ms, abort-on-change) — when Overpass is unreachable the
