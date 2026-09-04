@@ -11,6 +11,7 @@ import PlayArrowIcon from '@mui/icons-material/PlayArrow'
 import PauseIcon from '@mui/icons-material/Pause'
 import ReplayIcon from '@mui/icons-material/Replay'
 import DeleteSweepIcon from '@mui/icons-material/DeleteSweep'
+import VideocamIcon from '@mui/icons-material/Videocam'
 import type { FlightAnim } from './FlightBinding'
 import type { FlightPlan } from './flightPlanModel'
 import type { FlightPlanStatus } from './useFlightPlan'
@@ -41,6 +42,8 @@ export default function FlightControl({
   plan,
   planStatus,
   anim,
+  follow,
+  onFollow,
   onPlay,
   onPause,
   onReset,
@@ -57,6 +60,9 @@ export default function FlightControl({
   plan: FlightPlan
   planStatus: FlightPlanStatus
   anim: FlightAnim
+  /** Chase-camera follow toggle (persisted). */
+  follow: boolean
+  onFollow: (on: boolean) => void
   onPlay: () => void
   onPause: () => void
   onReset: () => void
@@ -133,6 +139,17 @@ export default function FlightControl({
           </span>
         </Tooltip>
       )}
+      <Tooltip title={follow ? 'Stop following the drone' : 'Follow the drone (3D chase camera)'}>
+        <IconButton
+          size="small"
+          data-testid="map-flight-follow"
+          aria-label={follow ? 'Stop following the drone' : 'Follow the drone'}
+          color={follow ? 'primary' : 'default'}
+          onClick={() => onFollow(!follow)}
+        >
+          <VideocamIcon fontSize="small" />
+        </IconButton>
+      </Tooltip>
       <Tooltip title="Back to start">
         <span>
           <IconButton

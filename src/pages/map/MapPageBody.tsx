@@ -71,6 +71,7 @@ import {
   setFlightAllowClimb,
   setFlightCeiling,
   setFlightCruise,
+  setFlightFollow,
   setOverlayVisible,
   setShowPins,
   setTrees,
@@ -319,6 +320,7 @@ export default function MapPageBody() {
   const flightCruise = useAppSelector((state) => state.map.flightCruise) ?? 60
   const flightAllowClimb = useAppSelector((state) => state.map.flightAllowClimb) ?? true
   const flightCeiling = useAppSelector((state) => state.map.flightCeiling) ?? 120
+  const flightFollow = useAppSelector((state) => state.map.flightFollow) ?? false
 
   // Sweep any shapes from before overlay groups existed into an "Imported"
   // overlay (no-op on clean state).
@@ -1084,6 +1086,7 @@ export default function MapPageBody() {
       data-flight-anim={flightAnim}
       data-flight-km={flightPoints.length >= 2 ? flightKm.toFixed(2) : ''}
       data-flight-cruise={flightCruise}
+      data-flight-follow={flightFollow ? 'on' : 'off'}
       data-flight-status={flightPlanStatus}
       data-flight-climbs={flightPlan.climbs}
       data-flight-detours={flightPlan.detours}
@@ -1214,6 +1217,8 @@ export default function MapPageBody() {
             plan={flightPlan}
             planStatus={flightPlanStatus}
             anim={flightAnim}
+            follow={flightFollow}
+            onFollow={(on) => dispatch(setFlightFollow(on))}
             onPlay={() => setFlightAnim('playing')}
             onPause={() => setFlightAnim('paused')}
             onReset={() => {
@@ -1318,10 +1323,13 @@ export default function MapPageBody() {
       <MeasureBinding viewRef={viewRef} viewRevision={viewRevision} tool={tool} />
       <FlightBinding
         layerRef={flightLayerRef}
+        viewRef={viewRef}
+        viewRevision={viewRevision}
         points={flightPoints}
         cruise={flightCruise}
         plan={flightPlan}
         anim={flightAnim}
+        follow={flightFollow}
         resetToken={flightResetToken}
         onAnimChange={setFlightAnim}
         onProgress={setFlightProgress}

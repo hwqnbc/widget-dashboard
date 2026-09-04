@@ -85,6 +85,8 @@ export interface MapState {
   flightAllowClimb: boolean
   /** Drone flight: max height above ground when climbing, meters. */
   flightCeiling: number
+  /** Drone flight: chase-camera follows the drone while it flies. */
+  flightFollow: boolean
 }
 
 const initialState: MapState = {
@@ -103,6 +105,7 @@ const initialState: MapState = {
   flightCruise: 60,
   flightAllowClimb: true,
   flightCeiling: 120,
+  flightFollow: false,
 }
 
 /** Map-page state (persisted): the 2D/3D choice and the dropped pins. */
@@ -239,6 +242,9 @@ const mapSlice = createSlice({
     setFlightCeiling(state, action: PayloadAction<number>) {
       state.flightCeiling = action.payload
     },
+    setFlightFollow(state, action: PayloadAction<boolean>) {
+      state.flightFollow = action.payload
+    },
   },
 })
 
@@ -268,5 +274,6 @@ export const {
   setFlightCruise,
   setFlightAllowClimb,
   setFlightCeiling,
+  setFlightFollow,
 } = mapSlice.actions
 export default mapSlice.reducer

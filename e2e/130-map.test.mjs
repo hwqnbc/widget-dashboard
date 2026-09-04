@@ -47,7 +47,7 @@ import {
   probeTileUrls,
   resolveBasemapId,
 } from './.bundle/basemapCatalog.js'
-import { buildFlightPath, sampleFlight } from './.bundle/flightPathModel.js'
+import { buildFlightPath, chaseCamera, sampleFlight } from './.bundle/flightPathModel.js'
 import {
   estimateHeight,
   inflateRing,
@@ -332,6 +332,33 @@ await page.route('**overpass-api.de/**', (route) => {
 
     check('single-point path is done where it stands', sampleFlight(buildFlightPath([{ lon: 1, lat: 2, z: 3 }]), 0)?.done === true)
     check('empty path samples to null', sampleFlight(buildFlightPath([]), 0) === null)
+
+    // Chase camera: behind along the travel heading, above, aimed down.
+    {
+      const northbound = { lon: 103.8, lat: 1.35, z: 60, headingDeg: 0, done: false }
+      const cam = chaseCamera(northbound)
+      check(
+        'chase cam sits 80 m south of a northbound drone, 40 m above',
+        cam.lat < northbound.lat &&
+          Math.abs((northbound.lat - cam.lat) * 111320 - 80) < 0.5 &&
+          Math.abs(cam.lon - northbound.lon) < 1e-9 &&
+          cam.z === 100 &&
+          cam.headingDeg === 0,
+        JSON.stringify(cam),
+      )
+      check(
+        'chase cam tilt aims at the drone (atan2(back, up))',
+        Math.abs(cam.tiltDeg - (Math.atan2(80, 40) * 180) / Math.PI) < 1e-9,
+      )
+      const eastbound = chaseCamera({ lon: 103.8, lat: 0, z: 60, headingDeg: 90, done: false }, 100, 50)
+      check(
+        'chase cam sits west of an eastbound drone with custom back/up',
+        eastbound.lon < 103.8 &&
+          Math.abs((103.8 - eastbound.lon) * 111320 - 100) < 0.5 &&
+          eastbound.z === 110,
+        JSON.stringify(eastbound),
+      )
+    }
   }
 
   // Flight planner: OSM parsing + the climb / detour / blocked decisions.
@@ -929,6 +956,18 @@ check(
 )
 await page.locator('[data-testid="map-flight-climb"]').click()
 await page.waitForTimeout(200)
+// Camera follow: renders, defaults off, toggles the contract attr.
+check(
+  'follow toggle renders defaulted off',
+  (await page.locator('[data-testid="map-flight-follow"]').count()) === 1 &&
+    (await root().getAttribute('data-flight-follow')) === 'off',
+)
+await page.locator('[data-testid="map-flight-follow"]').click()
+await page.waitForTimeout(200)
+check('follow toggles on', (await root().getAttribute('data-flight-follow')) === 'on')
+await page.locator('[data-testid="map-flight-follow"]').click()
+await page.waitForTimeout(200)
+check('follow toggles back off', (await root().getAttribute('data-flight-follow')) === 'off')
 await page.locator('[data-testid="map-tool-flight"]').click() // release the tool
 await page.waitForTimeout(200)
 if (online) {
@@ -1549,6 +1588,12 @@ check(
         `climbs=${climbs}`,
       )
 
+      // Fly under the chase camera — its per-tick camera writes must not
+      // break the loop (the camera pose itself has no data-attr contract;
+      // the pure chaseCamera checks cover the math).
+      await page.locator('[data-testid="map-flight-follow"]').click()
+      await page.waitForTimeout(200)
+      check('follow on for the flight', (await root().getAttribute('data-flight-follow')) === 'on')
       await page.locator('[data-testid="map-flight-play"]').click()
       await page.waitForTimeout(200)
       check('flight animation starts', (await root().getAttribute('data-flight-anim')) === 'playing')
@@ -1592,6 +1637,9 @@ check(
       await page.locator('[data-testid="map-flight-clear"]').click()
       await page.waitForTimeout(200)
       check('clear empties the flight plan', (await root().getAttribute('data-flight-points')) === '0')
+      // follow is persisted — leave it off
+      await page.locator('[data-testid="map-flight-follow"]').click()
+      await page.waitForTimeout(200)
       // Switching to 2D releases the 3D-only tool.
       await page.locator('[data-testid="map-flight-play"]').isDisabled() // settle
       await page.locator('[data-testid="map-mode-2d"]').click()

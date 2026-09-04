@@ -67,6 +67,34 @@ export function buildFlightPath(points: FlightPoint[]): FlightPath {
  * `done` flips once dist reaches the total (a path with fewer than two
  * points is done immediately, parked on its only point if any).
  */
+export interface ChaseCamera {
+  lon: number
+  lat: number
+  z: number
+  headingDeg: number
+  tiltDeg: number
+}
+
+/**
+ * Chase-cam pose for a flight sample: `back` meters behind the drone along
+ * its travel heading, `up` meters above it, heading matching travel and
+ * tilt aimed at the drone (atan2(back, up) from straight-down).
+ */
+export function chaseCamera(sample: FlightSample, back = 80, up = 40): ChaseCamera {
+  const rad = (sample.headingDeg * Math.PI) / 180
+  const cosLat = Math.cos((sample.lat * Math.PI) / 180)
+  // Heading is clockwise from north: forward = (sin h, cos h) in (x=east, y=north).
+  const dxM = -Math.sin(rad) * back
+  const dyM = -Math.cos(rad) * back
+  return {
+    lon: sample.lon + dxM / (EARTH_M_PER_DEG * cosLat),
+    lat: sample.lat + dyM / EARTH_M_PER_DEG,
+    z: sample.z + up,
+    headingDeg: sample.headingDeg,
+    tiltDeg: (Math.atan2(back, up) * 180) / Math.PI,
+  }
+}
+
 export function sampleFlight(path: FlightPath, dist: number): FlightSample | null {
   const { points, cum, total } = path
   if (points.length === 0) return null

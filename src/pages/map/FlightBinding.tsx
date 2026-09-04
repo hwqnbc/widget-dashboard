@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, type RefObject } from 'react'
+import Camera from '@arcgis/core/Camera'
 import Graphic from '@arcgis/core/Graphic'
 import Point from '@arcgis/core/geometry/Point'
 import Polyline from '@arcgis/core/geometry/Polyline'
@@ -8,8 +9,15 @@ import TextSymbol from '@arcgis/core/symbols/TextSymbol'
 import PointSymbol3D from '@arcgis/core/symbols/PointSymbol3D'
 import ObjectSymbol3DLayer from '@arcgis/core/symbols/ObjectSymbol3DLayer'
 import type GraphicsLayer from '@arcgis/core/layers/GraphicsLayer'
-import { buildFlightPath, sampleFlight, type FlightPath } from './flightPathModel'
+import {
+  buildFlightPath,
+  chaseCamera,
+  sampleFlight,
+  type FlightPath,
+  type FlightSample,
+} from './flightPathModel'
 import type { FlightPlan, LegMode } from './flightPlanModel'
+import type { AnyView } from './MapPageBody'
 
 /** A planted flight waypoint: position + the sampled ground elevation
  * (0 when the elevation service is unreachable). */
@@ -93,20 +101,27 @@ function droneSymbol(): PointSymbol3D {
  */
 export default function FlightBinding({
   layerRef,
+  viewRef,
+  viewRevision,
   points,
   cruise,
   plan,
   anim,
+  follow,
   resetToken,
   onAnimChange,
   onProgress,
 }: {
   layerRef: RefObject<GraphicsLayer | null>
+  viewRef: RefObject<AnyView | null>
+  viewRevision: number
   points: FlightGroundPoint[]
   cruise: number
   /** The building-aware plan (per-leg modes + the flyable path). */
   plan: FlightPlan
   anim: FlightAnim
+  /** Chase-camera follows the drone (3D view only). */
+  follow: boolean
   /** Bumping this parks the drone back at the start with progress 0. */
   resetToken: number
   onAnimChange: (anim: FlightAnim) => void
@@ -120,6 +135,26 @@ export default function FlightBinding({
 
   const droneRef = useRef<Graphic | null>(null)
   const distRef = useRef(0)
+  const followRef = useRef(follow)
+  followRef.current = follow
+
+  // Chase-cam write: direct camera assignment each tick (a per-tick goTo
+  // would queue animations), 3D only, guarded — the view can be
+  // mid-teardown when a swap lands during a tick.
+  const placeCamera = (sample: FlightSample) => {
+    const view = viewRef.current
+    if (!view || view.type !== '3d') return
+    try {
+      const cam = chaseCamera(sample)
+      view.camera = new Camera({
+        position: new Point({ longitude: cam.lon, latitude: cam.lat, z: cam.z }),
+        heading: cam.headingDeg,
+        tilt: cam.tiltDeg,
+      })
+    } catch {
+      /* view mid-teardown — skip this frame */
+    }
+  }
 
   // Rebuild the layer's graphics whenever the plan changes; the drone parks
   // at the start and any running animation resets to idle.
@@ -221,6 +256,15 @@ export default function FlightBinding({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- fires on the token only
   }, [resetToken])
 
+  // Toggling follow on (or replanning / swapping views while on) snaps the
+  // camera to the drone right away — feedback before Play is pressed.
+  useEffect(() => {
+    if (!follow) return
+    const s = sampleFlight(pathRef.current, distRef.current)
+    if (s) placeCamera(s)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- snap on toggle/plan/view swap only
+  }, [follow, plan, viewRevision])
+
   // The animation loop — runs only while playing.
   useEffect(() => {
     if (anim !== 'playing') return
@@ -237,6 +281,7 @@ export default function FlightBinding({
       const s = sampleFlight(flightPath, distRef.current)
       if (!s || !droneRef.current) return
       droneRef.current.geometry = new Point({ longitude: s.lon, latitude: s.lat, z: s.z })
+      if (followRef.current) placeCamera(s)
       const t = flightPath.total > 0 ? Math.min(distRef.current / flightPath.total, 1) : 1
       if (s.done) {
         onProgress(1)

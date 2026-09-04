@@ -23,6 +23,7 @@ export default defineConfig(({ command, mode }) => ({
     include: [
       '@arcgis/core/Map',
       '@arcgis/core/Basemap',
+      '@arcgis/core/Camera',
       '@arcgis/core/layers/WebTileLayer',
       '@arcgis/core/Graphic',
       '@arcgis/core/views/MapView',

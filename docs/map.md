@@ -251,7 +251,15 @@ on it works without a backend server or API key.
   Play/Pause/Reset transport drives a 33 ms interval advancing wall-clock
   `dt × 20 m/s` through the pure `sampleFlight` (never rAF-gated,
   lessons.md #73); progress reaches React only via a 250 ms-throttled
-  callback (`data-drone-t`) and the terminal `done`. Path length is pure
+  callback (`data-drone-t`) and the terminal `done`.
+  A **camera follow** toggle (persisted `flightFollow`, Videocam button,
+  `data-flight-follow`) chases the drone with a 3D chase-cam: the pure
+  `chaseCamera(sample)` puts the camera 80 m behind along the travel
+  heading and 40 m above, tilted onto the drone, and the animation tick
+  assigns `view.camera` directly (a per-tick `goTo` would queue
+  animations); toggling it on snaps the camera to the parked drone
+  immediately. While following, the camera overrides manual navigation —
+  toggle it off to pan freely. Path length is pure
   math (`buildFlightPath`, 3D distances), so `data-flight-km` asserts
   offline.
   **Building-aware routing** (round 2): the pure `flightPlanModel.ts` plans
@@ -367,9 +375,10 @@ two.
   on the transform settling to `none` (see the test-contract section above).
 - ~~Drone flight round 2: building-aware routing~~ — shipped (Overpass
   footprints + climb/detour/blocked planner, see the drone flight bullet).
-- **Drone flight extras** — speed setting, camera follow mode (chase the
-  drone via `view.goTo` per tick), per-waypoint altitudes, saved flight
-  plans (the `SavedRoute` pattern).
+- **Drone flight extras** — speed setting, per-waypoint altitudes, saved
+  flight plans (the `SavedRoute` pattern), auto-release follow on a manual
+  pan gesture. ~~Camera follow mode~~ — shipped (chase-cam toggle, see the
+  drone flight bullet).
 - **Live USGS earthquakes overlay** — `GeoJSONLayer` on the public CORS feed
   (`earthquake.usgs.gov/.../all_day.geojson`), magnitude-scaled renderer +
   popups; toggle in the control strip.
