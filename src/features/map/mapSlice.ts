@@ -36,6 +36,29 @@ export interface SavedRoute {
   points: [number, number][]
 }
 
+/** One saved flight waypoint (WGS84 + the ground elevation sampled when it
+ * was planted; `alt` is this point's cruise override, meters above ground).
+ * Structurally identical to pages/map FlightGroundPoint — the slice owns
+ * the shape so pages/map can depend on features/map, never the reverse. */
+export interface SavedFlightPoint {
+  lon: number
+  lat: number
+  ground: number
+  alt?: number
+}
+
+/** A named, persisted drone flight: the waypoints plus the settings that
+ * shape the plan. The plan itself (climbs/detours) is recomputed on load —
+ * building data comes from Overpass, not storage. */
+export interface SavedFlight {
+  id: string
+  name: string
+  points: SavedFlightPoint[]
+  cruise: number
+  allowClimb: boolean
+  ceiling: number
+}
+
 /** A named, persisted camera view — same shape the viewport memory uses. */
 export interface MapBookmark {
   id: string
@@ -87,6 +110,7 @@ export interface MapState {
   flightCeiling: number
   /** Drone flight: chase-camera follows the drone while it flies. */
   flightFollow: boolean
+  savedFlights: SavedFlight[]
 }
 
 const initialState: MapState = {
@@ -106,6 +130,7 @@ const initialState: MapState = {
   flightAllowClimb: true,
   flightCeiling: 120,
   flightFollow: false,
+  savedFlights: [],
 }
 
 /** Map-page state (persisted): the 2D/3D choice and the dropped pins. */
@@ -245,6 +270,18 @@ const mapSlice = createSlice({
     setFlightFollow(state, action: PayloadAction<boolean>) {
       state.flightFollow = action.payload
     },
+    saveFlight: {
+      prepare(flight: Omit<SavedFlight, 'id'>) {
+        return { payload: { ...flight, id: nanoid() } }
+      },
+      reducer(state, action: PayloadAction<SavedFlight>) {
+        if (!state.savedFlights) state.savedFlights = []
+        state.savedFlights.push(action.payload)
+      },
+    },
+    deleteFlight(state, action: PayloadAction<string>) {
+      state.savedFlights = (state.savedFlights ?? []).filter((f) => f.id !== action.payload)
+    },
   },
 })
 
@@ -275,5 +312,7 @@ export const {
   setFlightAllowClimb,
   setFlightCeiling,
   setFlightFollow,
+  saveFlight,
+  deleteFlight,
 } = mapSlice.actions
 export default mapSlice.reducer

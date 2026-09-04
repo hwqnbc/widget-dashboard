@@ -26,7 +26,9 @@
  *    persistence across reload, delete), and the drone flight flow in 3D
  *    (plant + waypoints via clicks, the bbox-driven Overpass mock's
  *    building making legs climb — and detour once climbing is disallowed —
- *    play/pause/reset animation, clear, 2D switch releases the tool).
+ *    saved flight plans (save dialog, clear, load restores waypoints +
+ *    altitudes + settings, delete), play/pause/reset animation, clear,
+ *    2D switch releases the tool).
  */
 import { BASE_URL, launch, reporter } from './helpers.mjs'
 import {
@@ -992,6 +994,14 @@ check(
   (await page.locator('[data-testid="map-flight-waypoints"]').isDisabled()) &&
     (await root().getAttribute('data-flight-alts')) === '',
 )
+// Saved flight plans: both buttons render, disabled while there is nothing
+// to save (< 2 points) and nothing saved.
+check(
+  'flight save/load disabled when empty',
+  (await page.locator('[data-testid="map-flight-save"]').isDisabled()) &&
+    (await page.locator('[data-testid="map-flights-open"]').isDisabled()) &&
+    (await root().getAttribute('data-saved-flights')) === '0',
+)
 await page.locator('[data-testid="map-tool-flight"]').click() // release the tool
 await page.waitForTimeout(200)
 if (online) {
@@ -1632,6 +1642,68 @@ check(
       )
       await page.keyboard.press('Escape')
       await page.waitForTimeout(300)
+      await waitForAttr('data-flight-status', (v) => v === 'ready', 15000)
+
+      // Saved flight plans: re-apply the waypoint-1 override so the full
+      // waypoint shape (alt included) round-trips through save → clear →
+      // load, then delete the entry through the menu.
+      await page.locator('[data-testid="map-flight-waypoints"]').click()
+      await page.waitForTimeout(300)
+      await page.locator('[data-testid="map-flight-wp-alt"]').nth(1).fill('150')
+      await page.waitForTimeout(200)
+      await page.keyboard.press('Escape')
+      await page.waitForTimeout(400)
+      await waitForAttr('data-flight-status', (v) => v === 'ready', 15000)
+      const kmBeforeSave = (await root().getAttribute('data-flight-km')) ?? ''
+      await page.locator('[data-testid="map-flight-save"]').click()
+      await page.waitForTimeout(300)
+      await page.locator('[data-testid="map-flight-save-name"]').fill('Test flight')
+      await page.locator('[data-testid="map-flight-save-confirm"]').click()
+      await page.waitForTimeout(300)
+      check('flight saved', (await root().getAttribute('data-saved-flights')) === '1')
+      await page.locator('[data-testid="map-flight-clear"]').click()
+      await page.waitForTimeout(200)
+      check(
+        'cleared flight leaves the saved one loadable',
+        (await root().getAttribute('data-flight-points')) === '0' &&
+          (await page.locator('[data-testid="map-flight-save"]').isDisabled()) &&
+          !(await page.locator('[data-testid="map-flights-open"]').isDisabled()),
+      )
+      await page.locator('[data-testid="map-flights-open"]').click()
+      await page.waitForTimeout(300)
+      check(
+        'saved flight listed by name',
+        ((await page.locator('[data-testid="map-flight-item"]').textContent()) ?? '').includes(
+          'Test flight',
+        ),
+      )
+      await page.locator('[data-testid="map-flight-item"]').click()
+      await page.waitForTimeout(600) // past the replan debounce
+      await waitForAttr('data-flight-status', (v) => v === 'ready', 15000)
+      check(
+        'loading restores waypoints, altitudes, settings and length',
+        (await root().getAttribute('data-flight-points')) === '3' &&
+          (await root().getAttribute('data-flight-alts')) === ',150,' &&
+          (await root().getAttribute('data-flight-cruise')) === '60' &&
+          ((await root().getAttribute('data-flight-km')) ?? '') === kmBeforeSave,
+        `km=${await root().getAttribute('data-flight-km')} saved=${kmBeforeSave}`,
+      )
+      await page.locator('[data-testid="map-flights-open"]').click()
+      await page.waitForTimeout(300)
+      await page.locator('[data-testid="map-flight-delete"]').click()
+      await page.waitForTimeout(300)
+      check(
+        'deleting the saved flight empties the list',
+        (await root().getAttribute('data-saved-flights')) === '0' &&
+          (await page.locator('[data-testid="map-flights-open"]').isDisabled()),
+      )
+      // Back to the no-override plan for the follow/play checks below.
+      await page.locator('[data-testid="map-flight-waypoints"]').click()
+      await page.waitForTimeout(300)
+      await page.locator('[data-testid="map-flight-wp-alt"]').nth(1).fill('')
+      await page.waitForTimeout(200)
+      await page.keyboard.press('Escape')
+      await page.waitForTimeout(400)
       await waitForAttr('data-flight-status', (v) => v === 'ready', 15000)
 
       // Fly under the chase camera — its per-tick camera writes must not

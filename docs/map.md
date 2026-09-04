@@ -302,6 +302,17 @@ on it works without a backend server or API key.
   control saying so. The e2e Overpass mock is bbox-driven: it reads the
   requested bbox and answers with one large square building centered in
   it, deterministic wherever the 3D clicks land.
+  **Saved flight plans**: the bookmark-add button on the flight controls
+  (`map-flight-save`, enabled from 2 waypoints) names and saves the current
+  flight — waypoints with their sampled ground + altitude overrides, plus
+  the plan-shaping settings (cruise, allow-climb, ceiling) — to the
+  persisted `map.savedFlights` (`SavedFlight` in the slice, which owns the
+  shape like it does `RouteProfile`; contract `data-saved-flights`). The
+  bookmarks menu (`map-flights-open` → `map-flight-item` rows with delete
+  buttons) loads one back: waypoints and settings restore, the view flies
+  to the route, and the plan itself **recomputes** via `useFlightPlan`
+  (building data comes from Overpass, not storage — same rule as saved
+  routes re-fetching OSRM).
 
 ## Test contract & offline-tolerant e2e
 
@@ -386,8 +397,8 @@ two.
   on the transform settling to `none` (see the test-contract section above).
 - ~~Drone flight round 2: building-aware routing~~ — shipped (Overpass
   footprints + climb/detour/blocked planner, see the drone flight bullet).
-- **Drone flight extras** — speed setting, saved flight plans (the
-  `SavedRoute` pattern). ~~Camera follow mode~~, ~~per-waypoint
+- **Drone flight extras** — speed setting. ~~Saved flight plans~~ (the
+  `SavedRoute` pattern), ~~camera follow mode~~, ~~per-waypoint
   altitudes~~ and ~~auto-release follow on a manual gesture~~ — shipped
   (see the drone flight bullet).
 - **Live USGS earthquakes overlay** — `GeoJSONLayer` on the public CORS feed

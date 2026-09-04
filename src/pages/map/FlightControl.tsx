@@ -1,8 +1,16 @@
 import { useState } from 'react'
 import {
   Box,
+  Button,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   FormControlLabel,
   IconButton,
+  ListItemText,
+  Menu,
+  MenuItem,
   Popover,
   Stack,
   Switch,
@@ -13,9 +21,13 @@ import {
 import PlayArrowIcon from '@mui/icons-material/PlayArrow'
 import PauseIcon from '@mui/icons-material/Pause'
 import ReplayIcon from '@mui/icons-material/Replay'
+import DeleteIcon from '@mui/icons-material/Delete'
 import DeleteSweepIcon from '@mui/icons-material/DeleteSweep'
 import VideocamIcon from '@mui/icons-material/Videocam'
 import FormatListNumberedIcon from '@mui/icons-material/FormatListNumbered'
+import BookmarkAddIcon from '@mui/icons-material/BookmarkAdd'
+import BookmarksIcon from '@mui/icons-material/Bookmarks'
+import type { SavedFlight } from '../../features/map/mapSlice'
 import type { FlightAnim, FlightGroundPoint } from './FlightBinding'
 import type { FlightPlan } from './flightPlanModel'
 import type { FlightPlanStatus } from './useFlightPlan'
@@ -33,7 +45,8 @@ function planSummary(plan: FlightPlan, status: FlightPlanStatus): string {
 
 /** Tool-strip controls for the drone flight tool: cruise height, the
  * building-avoidance settings (allow climb + max ceiling), the
- * play/pause/reset animation transport, clear, and the plan readout. */
+ * play/pause/reset animation transport, save/load of named flight plans,
+ * clear, and the plan readout. */
 export default function FlightControl({
   cruise,
   onCruise,
@@ -49,6 +62,10 @@ export default function FlightControl({
   anim,
   follow,
   onFollow,
+  savedFlights,
+  onSave,
+  onLoad,
+  onDelete,
   onPlay,
   onPause,
   onReset,
@@ -71,6 +88,11 @@ export default function FlightControl({
   /** Chase-camera follow toggle (persisted). */
   follow: boolean
   onFollow: (on: boolean) => void
+  /** Saved flight plans (persisted): save the current one, load or delete. */
+  savedFlights: SavedFlight[]
+  onSave: (name: string) => void
+  onLoad: (flight: SavedFlight) => void
+  onDelete: (id: string) => void
   onPlay: () => void
   onPause: () => void
   onReset: () => void
@@ -79,6 +101,18 @@ export default function FlightControl({
   const pointCount = points.length
   const canFly = pointCount >= 2 && plan.blocked === 0 && planStatus !== 'planning'
   const [wpAnchor, setWpAnchor] = useState<HTMLElement | null>(null)
+  const [saveOpen, setSaveOpen] = useState(false)
+  const [saveName, setSaveName] = useState('')
+  const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null)
+
+  const openSave = () => {
+    setSaveName(`Flight ${savedFlights.length + 1}`)
+    setSaveOpen(true)
+  }
+  const confirmSave = () => {
+    onSave(saveName)
+    setSaveOpen(false)
+  }
   return (
     <Stack direction="row" spacing={0.5} useFlexGap sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
       <TextField
@@ -217,6 +251,87 @@ export default function FlightControl({
           </Typography>
         </Box>
       </Popover>
+      <Tooltip title="Save flight plan">
+        <span>
+          <IconButton
+            size="small"
+            data-testid="map-flight-save"
+            aria-label="Save flight plan"
+            disabled={pointCount < 2}
+            onClick={openSave}
+          >
+            <BookmarkAddIcon fontSize="small" />
+          </IconButton>
+        </span>
+      </Tooltip>
+      <Tooltip title="Saved flight plans">
+        <span>
+          <IconButton
+            size="small"
+            data-testid="map-flights-open"
+            aria-label="Saved flight plans"
+            disabled={savedFlights.length === 0}
+            onClick={(e) => setMenuAnchor(e.currentTarget)}
+          >
+            <BookmarksIcon fontSize="small" />
+          </IconButton>
+        </span>
+      </Tooltip>
+      <Menu anchorEl={menuAnchor} open={menuAnchor != null} onClose={() => setMenuAnchor(null)}>
+        {savedFlights.map((flight) => (
+          <MenuItem
+            key={flight.id}
+            data-testid="map-flight-item"
+            onClick={() => {
+              setMenuAnchor(null)
+              onLoad(flight)
+            }}
+          >
+            <ListItemText
+              primary={flight.name}
+              secondary={`${flight.points.length} pts · ${flight.cruise} m`}
+            />
+            <IconButton
+              size="small"
+              edge="end"
+              aria-label={`Delete ${flight.name}`}
+              data-testid="map-flight-delete"
+              sx={{ ml: 2 }}
+              onClick={(e) => {
+                e.stopPropagation()
+                onDelete(flight.id)
+                if (savedFlights.length <= 1) setMenuAnchor(null)
+              }}
+            >
+              <DeleteIcon fontSize="small" />
+            </IconButton>
+          </MenuItem>
+        ))}
+      </Menu>
+      <Dialog open={saveOpen} onClose={() => setSaveOpen(false)} maxWidth="xs" fullWidth>
+        <DialogTitle>Save flight plan</DialogTitle>
+        <DialogContent>
+          <TextField
+            autoFocus
+            fullWidth
+            size="small"
+            margin="dense"
+            label="Name"
+            value={saveName}
+            onChange={(e) => setSaveName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') confirmSave()
+            }}
+            slotProps={{ htmlInput: { 'data-testid': 'map-flight-save-name' } }}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setSaveOpen(false)}>Cancel</Button>
+          <Button variant="contained" data-testid="map-flight-save-confirm" onClick={confirmSave}>
+            Save
+          </Button>
+        </DialogActions>
+      </Dialog>
       <Tooltip title="Back to start">
         <span>
           <IconButton

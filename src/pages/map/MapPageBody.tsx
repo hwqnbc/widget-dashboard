@@ -59,11 +59,13 @@ import {
   clearPins,
   deleteBookmark,
   deleteDrawing,
+  deleteFlight,
   deleteOverlay,
   deleteRoute,
   removePin,
   renameOverlay,
   saveBookmark,
+  saveFlight,
   saveRoute,
   setActiveOverlay,
   setBasemap,
@@ -84,6 +86,7 @@ import {
   type MapPin,
   type MapViewMode,
   type NewMapDrawing,
+  type SavedFlight,
   type SavedRoute,
   type SavedViewpoint,
 } from '../../features/map/mapSlice'
@@ -258,6 +261,7 @@ function safeDestroy(target: { destroy(): void } | null | undefined) {
 // dependencies (docs/lessons.md — stable fallbacks).
 const NO_PINS: MapPin[] = []
 const NO_ROUTES: SavedRoute[] = []
+const NO_FLIGHTS: SavedFlight[] = []
 const NO_BOOKMARKS: MapBookmark[] = []
 const NO_DRAWINGS: MapDrawing[] = []
 const NO_OVERLAYS: MapOverlay[] = []
@@ -321,6 +325,7 @@ export default function MapPageBody() {
   const flightAllowClimb = useAppSelector((state) => state.map.flightAllowClimb) ?? true
   const flightCeiling = useAppSelector((state) => state.map.flightCeiling) ?? 120
   const flightFollow = useAppSelector((state) => state.map.flightFollow) ?? false
+  const savedFlights = useAppSelector((state) => state.map.savedFlights) ?? NO_FLIGHTS
 
   // Sweep any shapes from before overlay groups existed into an "Imported"
   // overlay (no-op on clean state).
@@ -542,6 +547,40 @@ export default function MapPageBody() {
       void (view as MapView).goTo(target).catch(() => {})
     } catch {
       // view not ready — the route still loads, just without the fly-to
+    }
+  }
+
+  const saveCurrentFlight = (name: string) => {
+    if (flightPoints.length < 2) return
+    dispatch(
+      saveFlight({
+        name: name.trim() || `Flight ${savedFlights.length + 1}`,
+        points: flightPoints,
+        cruise: flightCruise,
+        allowClimb: flightAllowClimb,
+        ceiling: flightCeiling,
+      }),
+    )
+  }
+
+  // Restores the waypoints AND the plan-shaping settings, then flies to the
+  // route. The plan itself (climbs/detours) recomputes via useFlightPlan;
+  // the graphics effect parks the drone at the new start on its own.
+  const loadSavedFlight = (flight: SavedFlight) => {
+    setFlightPoints(flight.points)
+    dispatch(setFlightCruise(flight.cruise))
+    dispatch(setFlightAllowClimb(flight.allowClimb))
+    dispatch(setFlightCeiling(flight.ceiling))
+    const view = viewRef.current
+    if (!view || flight.points.length === 0) return
+    try {
+      const target =
+        flight.points.length === 1
+          ? new Point({ longitude: flight.points[0].lon, latitude: flight.points[0].lat })
+          : new Polyline({ paths: [flight.points.map((p) => [p.lon, p.lat])] })
+      void (view as MapView).goTo(target).catch(() => {})
+    } catch {
+      // view not ready — the flight still loads, just without the fly-to
     }
   }
 
@@ -1071,6 +1110,7 @@ export default function MapPageBody() {
       data-center-lat={focus.lat.toFixed(4)}
       data-scale={Math.round(focus.scale)}
       data-saved-routes={savedRoutes.length}
+      data-saved-flights={savedFlights.length}
       data-bookmarks={bookmarks.length}
       data-buildings={buildings ? 'on' : 'off'}
       data-trees={trees ? 'on' : 'off'}
@@ -1227,6 +1267,10 @@ export default function MapPageBody() {
             anim={flightAnim}
             follow={flightFollow}
             onFollow={(on) => dispatch(setFlightFollow(on))}
+            savedFlights={savedFlights}
+            onSave={saveCurrentFlight}
+            onLoad={loadSavedFlight}
+            onDelete={(id) => dispatch(deleteFlight(id))}
             onPlay={() => setFlightAnim('playing')}
             onPause={() => setFlightAnim('paused')}
             onReset={() => {
