@@ -111,6 +111,7 @@ export default function FlightBinding({
   plan,
   anim,
   follow,
+  onFollowRelease,
   resetToken,
   onAnimChange,
   onProgress,
@@ -125,6 +126,8 @@ export default function FlightBinding({
   anim: FlightAnim
   /** Chase-camera follows the drone (3D view only). */
   follow: boolean
+  /** A manual navigation gesture released the chase-cam (turn follow off). */
+  onFollowRelease: () => void
   /** Bumping this parks the drone back at the start with progress 0. */
   resetToken: number
   onAnimChange: (anim: FlightAnim) => void
@@ -267,6 +270,40 @@ export default function FlightBinding({
     if (s) placeCamera(s)
     // eslint-disable-next-line react-hooks/exhaustive-deps -- snap on toggle/plan/view swap only
   }, [follow, plan, viewRevision])
+
+  // Any manual navigation gesture takes the camera back: while following,
+  // watch the view for drags (touch pan/pinch and mouse alike), wheel
+  // zooms, double-click zooms and the navigation keys, and release follow
+  // on the first one. Observation only — nothing is stopped or swallowed;
+  // plain clicks stay waypoint interactions and do NOT release.
+  useEffect(() => {
+    const view = viewRef.current
+    if (!follow || !view) return
+    const NAV_KEYS = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', '+', '-'])
+    const handles: { remove(): void }[] = []
+    try {
+      handles.push(
+        view.on('drag', () => onFollowRelease()),
+        view.on('mouse-wheel', () => onFollowRelease()),
+        view.on('double-click', () => onFollowRelease()),
+        view.on('key-down', (e: { key: string }) => {
+          if (NAV_KEYS.has(e.key)) onFollowRelease()
+        }),
+      )
+    } catch {
+      /* view mid-teardown — no handles to release */
+    }
+    return () => {
+      for (const h of handles) {
+        try {
+          h.remove()
+        } catch {
+          /* already gone */
+        }
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- re-arm on toggle/view swap; the callback is a stable dispatch
+  }, [follow, viewRevision])
 
   // The animation loop — runs only while playing.
   useEffect(() => {

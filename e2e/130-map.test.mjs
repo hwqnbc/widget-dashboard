@@ -1640,6 +1640,27 @@ check(
       await page.locator('[data-testid="map-flight-follow"]').click()
       await page.waitForTimeout(200)
       check('follow on for the flight', (await root().getAttribute('data-flight-follow')) === 'on')
+
+      // A manual pan gesture must auto-release the chase-cam.
+      await page.mouse.move(box.x + box.width * 0.47, box.y + box.height * 0.65)
+      await page.mouse.down()
+      for (let i = 1; i <= 5; i++) {
+        await page.mouse.move(
+          box.x + box.width * (0.47 + 0.01 * i),
+          box.y + box.height * (0.65 + 0.008 * i),
+        )
+        await page.waitForTimeout(50)
+      }
+      await page.mouse.up()
+      await waitForAttr('data-flight-follow', (v) => v === 'off', 5000)
+      check(
+        'manual pan releases the follow cam',
+        (await root().getAttribute('data-flight-follow')) === 'off',
+      )
+      await page.locator('[data-testid="map-flight-follow"]').click()
+      await page.waitForTimeout(200)
+      check('follow re-enabled for the flight', (await root().getAttribute('data-flight-follow')) === 'on')
+
       await page.locator('[data-testid="map-flight-play"]').click()
       await page.waitForTimeout(200)
       check('flight animation starts', (await root().getAttribute('data-flight-anim')) === 'playing')

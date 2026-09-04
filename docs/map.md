@@ -267,8 +267,10 @@ on it works without a backend server or API key.
   heading and 40 m above, tilted onto the drone, and the animation tick
   assigns `view.camera` directly (a per-tick `goTo` would queue
   animations); toggling it on snaps the camera to the parked drone
-  immediately. While following, the camera overrides manual navigation —
-  toggle it off to pan freely. Path length is pure
+  immediately. Any manual navigation gesture (drag/pinch, wheel or
+  double-click zoom, navigation keys — never a plain click, which stays a
+  waypoint interaction) **auto-releases** follow so the camera is instantly
+  yours again; the Videocam button dims and the flight keeps playing. Path length is pure
   math (`buildFlightPath`, 3D distances), so `data-flight-km` asserts
   offline.
   **Building-aware routing** (round 2): the pure `flightPlanModel.ts` plans
@@ -385,9 +387,9 @@ two.
 - ~~Drone flight round 2: building-aware routing~~ — shipped (Overpass
   footprints + climb/detour/blocked planner, see the drone flight bullet).
 - **Drone flight extras** — speed setting, saved flight plans (the
-  `SavedRoute` pattern), auto-release follow on a manual pan gesture.
-  ~~Camera follow mode~~ and ~~per-waypoint altitudes~~ — shipped (see the
-  drone flight bullet).
+  `SavedRoute` pattern). ~~Camera follow mode~~, ~~per-waypoint
+  altitudes~~ and ~~auto-release follow on a manual gesture~~ — shipped
+  (see the drone flight bullet).
 - **Live USGS earthquakes overlay** — `GeoJSONLayer` on the public CORS feed
   (`earthquake.usgs.gov/.../all_day.geojson`), magnitude-scaled renderer +
   popups; toggle in the control strip.

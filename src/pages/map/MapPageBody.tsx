@@ -1338,6 +1338,7 @@ export default function MapPageBody() {
         plan={flightPlan}
         anim={flightAnim}
         follow={flightFollow}
+        onFollowRelease={() => dispatch(setFlightFollow(false))}
         resetToken={flightResetToken}
         onAnimChange={setFlightAnim}
         onProgress={setFlightProgress}
