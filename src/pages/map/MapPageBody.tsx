@@ -1036,7 +1036,11 @@ export default function MapPageBody() {
     buildFlightPath(
       flightPlan.path.length >= 2
         ? flightPlan.path
-        : flightPoints.map((p) => ({ lon: p.lon, lat: p.lat, z: p.ground + flightCruise })),
+        : flightPoints.map((p) => ({
+            lon: p.lon,
+            lat: p.lat,
+            z: p.ground + (p.alt ?? flightCruise),
+          })),
     ).total / 1000
 
   // The flight tool is 3D-only: switching to 2D releases it (and pauses any
@@ -1087,6 +1091,7 @@ export default function MapPageBody() {
       data-flight-km={flightPoints.length >= 2 ? flightKm.toFixed(2) : ''}
       data-flight-cruise={flightCruise}
       data-flight-follow={flightFollow ? 'on' : 'off'}
+      data-flight-alts={flightPoints.map((p) => p.alt ?? '').join(',')}
       data-flight-status={flightPlanStatus}
       data-flight-climbs={flightPlan.climbs}
       data-flight-detours={flightPlan.detours}
@@ -1212,7 +1217,10 @@ export default function MapPageBody() {
             onAllowClimb={(on) => dispatch(setFlightAllowClimb(on))}
             ceiling={flightCeiling}
             onCeiling={(m) => dispatch(setFlightCeiling(m))}
-            pointCount={flightPoints.length}
+            points={flightPoints}
+            onAltChange={(index, alt) =>
+              setFlightPoints((points) => points.map((p, i) => (i === index ? { ...p, alt } : p)))
+            }
             km={flightKm}
             plan={flightPlan}
             planStatus={flightPlanStatus}

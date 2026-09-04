@@ -491,6 +491,25 @@ await page.route('**overpass-api.de/**', (route) => {
       mixed.legs.length === 2 && mixed.legs[0].mode === 'climb' && mixed.legs[1].mode === 'direct',
     )
 
+    // Per-waypoint altitude: an explicit high altitude at B slopes the leg
+    // clear over the building — no climb decision needed, and the endpoint
+    // z values honour alt (B) vs cruise (A).
+    const highB = planFlight([A, { ...B, alt: 300 }], [building(100)], opts)
+    check(
+      'per-waypoint altitude slopes the leg direct over the building',
+      highB.legs[0].mode === 'direct' &&
+        highB.legs[0].path[0].z === 60 &&
+        highB.legs[0].path[1].z === 300,
+      JSON.stringify(highB.legs[0]),
+    )
+    // A LOW override at B keeps the leg obstructed → still climbs.
+    const lowB = planFlight([A, { ...B, alt: 20 }], [building(100)], opts)
+    check(
+      'low per-waypoint altitude still climbs over the building',
+      lowB.legs[0].mode === 'climb' &&
+        lowB.legs[0].path[lowB.legs[0].path.length - 1].z === 20,
+    )
+
     // ---- exhaustive detour: blocked must mean ENCLOSED, never "search gave
     // up early". Fixtures in meter offsets around A. ----
     {
@@ -968,6 +987,11 @@ check('follow toggles on', (await root().getAttribute('data-flight-follow')) ===
 await page.locator('[data-testid="map-flight-follow"]').click()
 await page.waitForTimeout(200)
 check('follow toggles back off', (await root().getAttribute('data-flight-follow')) === 'off')
+check(
+  'waypoint-altitudes button disabled with no points',
+  (await page.locator('[data-testid="map-flight-waypoints"]').isDisabled()) &&
+    (await root().getAttribute('data-flight-alts')) === '',
+)
 await page.locator('[data-testid="map-tool-flight"]').click() // release the tool
 await page.waitForTimeout(200)
 if (online) {
@@ -1587,6 +1611,28 @@ check(
           (await root().getAttribute('data-flight-blocked')) === '0',
         `climbs=${climbs}`,
       )
+
+      // Per-waypoint altitude: set an override on waypoint 1 through the
+      // popover, watch the contract attr, clear it back to cruise. (Path-
+      // length deltas are meters against multi-km legs — not assertable
+      // through the 2-decimal km attr; the pure checks own the z math.)
+      await page.locator('[data-testid="map-flight-waypoints"]').click()
+      await page.waitForTimeout(300)
+      await page.locator('[data-testid="map-flight-wp-alt"]').nth(1).fill('150')
+      await page.waitForTimeout(200)
+      check(
+        'altitude override lands in the contract',
+        (await root().getAttribute('data-flight-alts')) === ',150,',
+      )
+      await page.locator('[data-testid="map-flight-wp-alt"]').nth(1).fill('')
+      await page.waitForTimeout(200)
+      check(
+        'clearing the override returns the waypoint to cruise',
+        (await root().getAttribute('data-flight-alts')) === ',,',
+      )
+      await page.keyboard.press('Escape')
+      await page.waitForTimeout(300)
+      await waitForAttr('data-flight-status', (v) => v === 'ready', 15000)
 
       // Fly under the chase camera — its per-tick camera writes must not
       // break the loop (the camera pose itself has no data-attr contract;

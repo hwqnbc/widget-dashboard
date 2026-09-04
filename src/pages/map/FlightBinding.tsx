@@ -20,11 +20,14 @@ import type { FlightPlan, LegMode } from './flightPlanModel'
 import type { AnyView } from './MapPageBody'
 
 /** A planted flight waypoint: position + the sampled ground elevation
- * (0 when the elevation service is unreachable). */
+ * (0 when the elevation service is unreachable). `alt` overrides the
+ * global cruise height for THIS waypoint (meters above ground); absent =
+ * fly at cruise. */
 export interface FlightGroundPoint {
   lon: number
   lat: number
   ground: number
+  alt?: number
 }
 
 export type FlightAnim = 'idle' | 'playing' | 'paused' | 'done'
@@ -170,7 +173,7 @@ export default function FlightBinding({
 
     for (let i = 0; i < points.length; i++) {
       const p = points[i]
-      const z = p.ground + cruise
+      const z = p.ground + (p.alt ?? cruise)
       const geometry = new Point({ longitude: p.lon, latitude: p.lat, z })
       const attributes = { flightIndex: i }
       layer.add(
@@ -233,7 +236,7 @@ export default function FlightBinding({
     const start = path.points[0] ?? {
       lon: points[0].lon,
       lat: points[0].lat,
-      z: points[0].ground + cruise,
+      z: points[0].ground + (points[0].alt ?? cruise),
     }
     const drone = new Graphic({
       geometry: new Point({ longitude: start.lon, latitude: start.lat, z: start.z }),

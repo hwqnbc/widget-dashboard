@@ -59,12 +59,18 @@ export interface FlightPlan {
   blocked: number
 }
 
-/** A planner input point: where the user clicked plus its ground z. */
+/** A planner input point: where the user clicked plus its ground z, and an
+ * optional per-waypoint altitude (meters above ground) overriding the
+ * global cruise height at this point. */
 export interface PlanPoint {
   lon: number
   lat: number
   ground: number
+  alt?: number
 }
+
+/** A point's flight altitude: its own alt when set, else the cruise. */
+export const pointAgl = (p: PlanPoint, cruise: number): number => p.alt ?? cruise
 
 const EARTH_M_PER_DEG = 111_320
 const DEFAULT_CLEARANCE = 5
@@ -312,7 +318,13 @@ export function planFlight(
   const clearance = opts.clearance ?? DEFAULT_CLEARANCE
   const legs: PlannedLeg[] = []
   if (points.length < 2) {
-    return { legs, path: points.map((p) => ({ lon: p.lon, lat: p.lat, z: p.ground + opts.cruise })), climbs: 0, detours: 0, blocked: 0 }
+    return {
+      legs,
+      path: points.map((p) => ({ lon: p.lon, lat: p.lat, z: p.ground + pointAgl(p, opts.cruise) })),
+      climbs: 0,
+      detours: 0,
+      blocked: 0,
+    }
   }
 
   const f = frameFor(points[0].lat)
@@ -326,8 +338,11 @@ export function planFlight(
     const B = points[i + 1]
     const a = toM([A.lon, A.lat], f)
     const b = toM([B.lon, B.lat], f)
-    const zA = A.ground + opts.cruise
-    const zB = B.ground + opts.cruise
+    // Per-waypoint altitudes override cruise at their end of the leg; an
+    // explicit altitude may exceed the ceiling (the ceiling only caps the
+    // planner's OWN climbs).
+    const zA = A.ground + pointAgl(A, opts.cruise)
+    const zB = B.ground + pointAgl(B, opts.cruise)
     const groundAt = (t: number) => A.ground + (B.ground - A.ground) * t
     const zAt = (t: number) => zA + (zB - zA) * t
 

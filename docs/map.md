@@ -252,6 +252,15 @@ on it works without a backend server or API key.
   `dt × 20 m/s` through the pure `sampleFlight` (never rAF-gated,
   lessons.md #73); progress reaches React only via a 250 ms-throttled
   callback (`data-drone-t`) and the terminal `done`.
+  **Per-waypoint altitudes**: every waypoint carries an optional `alt`
+  (meters above ground) overriding the cruise height at that point — edited
+  in a numbered-list popover on the flight controls
+  (`map-flight-waypoints` → `map-flight-wp-alt` inputs, blank = cruise;
+  contract `data-flight-alts`), since tapping a marker on the map already
+  means "remove". Legs slope between differing endpoint altitudes and the
+  planner checks obstructions against the actual interpolated z (a high
+  waypoint can clear a building with no climb; an explicit altitude may
+  exceed the ceiling — the ceiling only caps the planner's own climbs).
   A **camera follow** toggle (persisted `flightFollow`, Videocam button,
   `data-flight-follow`) chases the drone with a 3D chase-cam: the pure
   `chaseCamera(sample)` puts the camera 80 m behind along the travel
@@ -375,9 +384,9 @@ two.
   on the transform settling to `none` (see the test-contract section above).
 - ~~Drone flight round 2: building-aware routing~~ — shipped (Overpass
   footprints + climb/detour/blocked planner, see the drone flight bullet).
-- **Drone flight extras** — speed setting, per-waypoint altitudes, saved
-  flight plans (the `SavedRoute` pattern), auto-release follow on a manual
-  pan gesture. ~~Camera follow mode~~ — shipped (chase-cam toggle, see the
+- **Drone flight extras** — speed setting, saved flight plans (the
+  `SavedRoute` pattern), auto-release follow on a manual pan gesture.
+  ~~Camera follow mode~~ and ~~per-waypoint altitudes~~ — shipped (see the
   drone flight bullet).
 - **Live USGS earthquakes overlay** — `GeoJSONLayer` on the public CORS feed
   (`earthquake.usgs.gov/.../all_day.geojson`), magnitude-scaled renderer +

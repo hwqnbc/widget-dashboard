@@ -1,6 +1,9 @@
+import { useState } from 'react'
 import {
+  Box,
   FormControlLabel,
   IconButton,
+  Popover,
   Stack,
   Switch,
   TextField,
@@ -12,7 +15,8 @@ import PauseIcon from '@mui/icons-material/Pause'
 import ReplayIcon from '@mui/icons-material/Replay'
 import DeleteSweepIcon from '@mui/icons-material/DeleteSweep'
 import VideocamIcon from '@mui/icons-material/Videocam'
-import type { FlightAnim } from './FlightBinding'
+import FormatListNumberedIcon from '@mui/icons-material/FormatListNumbered'
+import type { FlightAnim, FlightGroundPoint } from './FlightBinding'
 import type { FlightPlan } from './flightPlanModel'
 import type { FlightPlanStatus } from './useFlightPlan'
 
@@ -37,7 +41,8 @@ export default function FlightControl({
   onAllowClimb,
   ceiling,
   onCeiling,
-  pointCount,
+  points,
+  onAltChange,
   km,
   plan,
   planStatus,
@@ -55,7 +60,10 @@ export default function FlightControl({
   onAllowClimb: (on: boolean) => void
   ceiling: number
   onCeiling: (m: number) => void
-  pointCount: number
+  /** The planted waypoints (for the per-waypoint altitude list). */
+  points: FlightGroundPoint[]
+  /** Set (or clear, with undefined) one waypoint's altitude override. */
+  onAltChange: (index: number, alt: number | undefined) => void
   km: number
   plan: FlightPlan
   planStatus: FlightPlanStatus
@@ -68,7 +76,9 @@ export default function FlightControl({
   onReset: () => void
   onClear: () => void
 }) {
+  const pointCount = points.length
   const canFly = pointCount >= 2 && plan.blocked === 0 && planStatus !== 'planning'
+  const [wpAnchor, setWpAnchor] = useState<HTMLElement | null>(null)
   return (
     <Stack direction="row" spacing={0.5} useFlexGap sx={{ alignItems: 'center', flexWrap: 'wrap' }}>
       <TextField
@@ -150,6 +160,63 @@ export default function FlightControl({
           <VideocamIcon fontSize="small" />
         </IconButton>
       </Tooltip>
+      <Tooltip title="Waypoint altitudes">
+        <span>
+          <IconButton
+            size="small"
+            data-testid="map-flight-waypoints"
+            aria-label="Waypoint altitudes"
+            disabled={pointCount === 0}
+            onClick={(e) => setWpAnchor(e.currentTarget)}
+          >
+            <FormatListNumberedIcon fontSize="small" />
+          </IconButton>
+        </span>
+      </Tooltip>
+      <Popover
+        open={wpAnchor != null}
+        anchorEl={wpAnchor}
+        onClose={() => setWpAnchor(null)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+      >
+        <Box sx={{ p: 1.5, display: 'flex', flexDirection: 'column', gap: 1 }}>
+          <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+            Waypoint altitudes (m above ground)
+          </Typography>
+          {points.map((p, i) => (
+            <Stack
+              key={i}
+              direction="row"
+              spacing={1}
+              data-testid="map-flight-wp-row"
+              sx={{ alignItems: 'center' }}
+            >
+              <Typography variant="body2" sx={{ fontWeight: 600, minWidth: 24 }}>
+                {i === 0 ? 'D' : String(i)}
+              </Typography>
+              <TextField
+                size="small"
+                type="number"
+                placeholder={String(cruise)}
+                value={p.alt ?? ''}
+                onChange={(e) => {
+                  if (e.target.value === '') {
+                    onAltChange(i, undefined)
+                    return
+                  }
+                  const v = Number(e.target.value)
+                  if (Number.isFinite(v)) onAltChange(i, Math.max(10, Math.min(500, Math.round(v))))
+                }}
+                sx={{ width: 110 }}
+                slotProps={{ htmlInput: { 'data-testid': 'map-flight-wp-alt', min: 10, max: 500 } }}
+              />
+            </Stack>
+          ))}
+          <Typography variant="caption" color="text.secondary">
+            Blank = fly at cruise ({cruise} m)
+          </Typography>
+        </Box>
+      </Popover>
       <Tooltip title="Back to start">
         <span>
           <IconButton
