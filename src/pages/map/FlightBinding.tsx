@@ -32,8 +32,9 @@ export interface FlightGroundPoint {
 
 export type FlightAnim = 'idle' | 'playing' | 'paused' | 'done'
 
-/** Drone cruise speed along the path, m/s (a speed setting is backlog). */
-export const FLIGHT_SPEED = 20
+/** Default drone speed along the path, m/s (the live value is the persisted
+ * `flightSpeed` setting, passed in as the `speed` prop). */
+export const DEFAULT_FLIGHT_SPEED = 20
 
 /** Publish animation progress to the parent at most this often — the loop
  * itself never touches React state per tick. */
@@ -108,6 +109,7 @@ export default function FlightBinding({
   viewRevision,
   points,
   cruise,
+  speed,
   plan,
   anim,
   follow,
@@ -121,6 +123,8 @@ export default function FlightBinding({
   viewRevision: number
   points: FlightGroundPoint[]
   cruise: number
+  /** Drone speed along the path, m/s — effective live, mid-flight. */
+  speed: number
   /** The building-aware plan (per-leg modes + the flyable path). */
   plan: FlightPlan
   anim: FlightAnim
@@ -143,6 +147,10 @@ export default function FlightBinding({
   const distRef = useRef(0)
   const followRef = useRef(follow)
   followRef.current = follow
+  // The loop reads speed through a ref so a mid-flight change takes effect
+  // on the next tick without restarting the [anim] effect.
+  const speedRef = useRef(speed)
+  speedRef.current = speed
 
   // Chase-cam write: direct camera assignment each tick (a per-tick goTo
   // would queue animations), 3D only, guarded — the view can be
@@ -317,7 +325,7 @@ export default function FlightBinding({
       const dt = (now - last) / 1000
       last = now
       const flightPath = pathRef.current
-      distRef.current += FLIGHT_SPEED * dt
+      distRef.current += speedRef.current * dt
       const s = sampleFlight(flightPath, distRef.current)
       if (!s || !droneRef.current) return
       droneRef.current.geometry = new Point({ longitude: s.lon, latitude: s.lat, z: s.z })

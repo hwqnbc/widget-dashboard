@@ -32,6 +32,12 @@ import type { FlightAnim, FlightGroundPoint } from './FlightBinding'
 import type { FlightPlan } from './flightPlanModel'
 import type { FlightPlanStatus } from './useFlightPlan'
 
+/** Flight time at the set speed, as m:ss (rates are meters and m/s). */
+function etaLabel(km: number, speed: number): string {
+  const sec = Math.round((km * 1000) / Math.max(speed, 1))
+  return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`
+}
+
 /** Human-readable plan summary: which legs climbed / detoured / blocked. */
 function planSummary(plan: FlightPlan, status: FlightPlanStatus): string {
   if (status === 'planning') return 'planning…'
@@ -50,6 +56,8 @@ function planSummary(plan: FlightPlan, status: FlightPlanStatus): string {
 export default function FlightControl({
   cruise,
   onCruise,
+  speed,
+  onSpeed,
   allowClimb,
   onAllowClimb,
   ceiling,
@@ -73,6 +81,9 @@ export default function FlightControl({
 }: {
   cruise: number
   onCruise: (m: number) => void
+  /** Drone speed, m/s (persisted). */
+  speed: number
+  onSpeed: (ms: number) => void
   allowClimb: boolean
   onAllowClimb: (on: boolean) => void
   ceiling: number
@@ -126,6 +137,18 @@ export default function FlightControl({
         }}
         sx={{ width: 96 }}
         slotProps={{ htmlInput: { 'data-testid': 'map-flight-cruise', min: 10, max: 500 } }}
+      />
+      <TextField
+        size="small"
+        type="number"
+        label="Speed (m/s)"
+        value={speed}
+        onChange={(e) => {
+          const v = Number(e.target.value)
+          if (Number.isFinite(v)) onSpeed(Math.max(1, Math.min(200, Math.round(v))))
+        }}
+        sx={{ width: 96 }}
+        slotProps={{ htmlInput: { 'data-testid': 'map-flight-speed', min: 1, max: 200 } }}
       />
       <Tooltip title="Allow the route to fly higher over buildings (otherwise it detours around them)">
         <FormControlLabel
@@ -360,7 +383,7 @@ export default function FlightControl({
       </Tooltip>
       <Typography variant="caption" color="text.secondary" data-testid="map-flight-info">
         {pointCount >= 2
-          ? `${km.toFixed(2)} km · ${planSummary(plan, planStatus)}`
+          ? `${km.toFixed(2)} km · ${etaLabel(km, speed)} · ${planSummary(plan, planStatus)}`
           : pointCount === 1
             ? 'Tap the map to add waypoints'
             : 'Tap the map to plant the drone'}

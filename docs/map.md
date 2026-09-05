@@ -249,9 +249,13 @@ on it works without a backend server or API key.
   never re-assigns a symbol** (symbols are immutable; per-tick symbol swaps
   would rebuild WebGL resources — only `graphic.geometry` moves). The
   Play/Pause/Reset transport drives a 33 ms interval advancing wall-clock
-  `dt × 20 m/s` through the pure `sampleFlight` (never rAF-gated,
+  `dt × speed` through the pure `sampleFlight` (never rAF-gated,
   lessons.md #73); progress reaches React only via a 250 ms-throttled
-  callback (`data-drone-t`) and the terminal `done`.
+  callback (`data-drone-t`) and the terminal `done`. The **speed** is a
+  settable `Speed (m/s)` input (persisted `flightSpeed`, default 20, clamp
+  1–200, contract `data-flight-speed`) read by the loop through a ref, so
+  changing it mid-flight takes effect on the next tick; the control strip's
+  info line shows the flight time at the current speed (`km · m:ss · plan`).
   **Per-waypoint altitudes**: every waypoint carries an optional `alt`
   (meters above ground) overriding the cruise height at that point — edited
   in a numbered-list popover on the flight controls
@@ -305,7 +309,7 @@ on it works without a backend server or API key.
   **Saved flight plans**: the bookmark-add button on the flight controls
   (`map-flight-save`, enabled from 2 waypoints) names and saves the current
   flight — waypoints with their sampled ground + altitude overrides, plus
-  the plan-shaping settings (cruise, allow-climb, ceiling) — to the
+  the flight settings (cruise, allow-climb, ceiling, speed) — to the
   persisted `map.savedFlights` (`SavedFlight` in the slice, which owns the
   shape like it does `RouteProfile`; contract `data-saved-flights`). The
   bookmarks menu (`map-flights-open` → `map-flight-item` rows with delete
@@ -397,7 +401,9 @@ two.
   on the transform settling to `none` (see the test-contract section above).
 - ~~Drone flight round 2: building-aware routing~~ — shipped (Overpass
   footprints + climb/detour/blocked planner, see the drone flight bullet).
-- **Drone flight extras** — speed setting. ~~Saved flight plans~~ (the
+- **Drone flight extras** — export/import saved flight plans as GeoJSON
+  (share a plan between devices; `savedFlights` already holds the full
+  serializable shape). ~~Speed setting~~, ~~saved flight plans~~ (the
   `SavedRoute` pattern), ~~camera follow mode~~, ~~per-waypoint
   altitudes~~ and ~~auto-release follow on a manual gesture~~ — shipped
   (see the drone flight bullet).

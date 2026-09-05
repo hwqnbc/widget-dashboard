@@ -15,7 +15,7 @@
  *    flightPathModel checks (3D lengths, sampling, heading, done), pure
  *    flightPlanModel checks (OSM parsing, geometry, climb/detour/blocked
  *    decisions) + the flight tool's 3D-only enable, contract and settings
- *    defaults, undo-disabled state, deep-link render.
+ *    defaults (speed input included), undo-disabled state, deep-link render.
  *  - online only: data-map-status reaches "ready" (from view.when, never
  *    networkidle), attribution + zoom UI present, click-driven pins with
  *    reload persistence, and the waypoint-editing flow against an ECHO OSRM
@@ -27,7 +27,8 @@
  *    (plant + waypoints via clicks, the bbox-driven Overpass mock's
  *    building making legs climb — and detour once climbing is disallowed —
  *    saved flight plans (save dialog, clear, load restores waypoints +
- *    altitudes + settings, delete), play/pause/reset animation, clear,
+ *    altitudes + settings, delete), play/pause/reset animation, the speed
+ *    setting advancing progress faster over a fixed window, clear,
  *    2D switch releases the tool).
  */
 import { BASE_URL, launch, reporter } from './helpers.mjs'
@@ -940,10 +941,11 @@ check(
   await page.locator('[data-testid="map-tool-flight"]').isDisabled(),
 )
 check(
-  'flight contract defaults (no points, idle, cruise 60)',
+  'flight contract defaults (no points, idle, cruise 60, speed 20)',
   (await root().getAttribute('data-flight-points')) === '0' &&
     (await root().getAttribute('data-flight-anim')) === 'idle' &&
     (await root().getAttribute('data-flight-cruise')) === '60' &&
+    (await root().getAttribute('data-flight-speed')) === '20' &&
     (await root().getAttribute('data-drone-t')) === '0.000',
 )
 check(
@@ -977,6 +979,18 @@ check(
 )
 await page.locator('[data-testid="map-flight-climb"]').click()
 await page.waitForTimeout(200)
+// Speed input: renders with the default, edits land in the contract
+// (persisted redux state — pure UI, no view readiness needed).
+check(
+  'speed input renders the default',
+  (await page.locator('[data-testid="map-flight-speed"]').inputValue()) === '20',
+)
+await page.locator('[data-testid="map-flight-speed"]').fill('45')
+await page.waitForTimeout(200)
+check('speed edit lands in the contract', (await root().getAttribute('data-flight-speed')) === '45')
+await page.locator('[data-testid="map-flight-speed"]').fill('20')
+await page.waitForTimeout(200)
+check('speed back to default', (await root().getAttribute('data-flight-speed')) === '20')
 // Camera follow: renders, defaults off, toggles the contract attr.
 check(
   'follow toggle renders defaulted off',
@@ -1753,6 +1767,45 @@ check(
         'reset parks the drone at the start',
         (await root().getAttribute('data-flight-anim')) === 'idle' &&
           (await root().getAttribute('data-drone-t')) === '0.000',
+      )
+
+      // Speed setting: sample progress over the same fixed window at the
+      // default 20 m/s and at 200 m/s — the 10× rate must show through
+      // (wide 2× margin; both runs start from a reset drone).
+      await page.locator('[data-testid="map-flight-play"]').click()
+      await page.waitForTimeout(1200)
+      const tSlow = parseFloat((await root().getAttribute('data-drone-t')) ?? '0')
+      await page.locator('[data-testid="map-flight-pause"]').click()
+      await page.waitForTimeout(200)
+      await page.locator('[data-testid="map-flight-reset"]').click()
+      await page.waitForTimeout(200)
+      await page.locator('[data-testid="map-flight-speed"]').fill('200')
+      await page.waitForTimeout(200)
+      check(
+        'speed setting lands in the contract',
+        (await root().getAttribute('data-flight-speed')) === '200',
+      )
+      await page.locator('[data-testid="map-flight-play"]').click()
+      await page.waitForTimeout(1200)
+      const tFast = parseFloat((await root().getAttribute('data-drone-t')) ?? '0')
+      check(
+        '10× speed flies markedly farther in the same window',
+        tFast > tSlow * 2,
+        `slow=${tSlow} fast=${tFast}`,
+      )
+      // The fast run may have finished the whole path — pause only if it is
+      // still playing, then park and restore the default speed.
+      if ((await root().getAttribute('data-flight-anim')) === 'playing') {
+        await page.locator('[data-testid="map-flight-pause"]').click()
+        await page.waitForTimeout(200)
+      }
+      await page.locator('[data-testid="map-flight-reset"]').click()
+      await page.waitForTimeout(200)
+      await page.locator('[data-testid="map-flight-speed"]').fill('20')
+      await page.waitForTimeout(200)
+      check(
+        'speed restored to default',
+        (await root().getAttribute('data-flight-speed')) === '20',
       )
 
       // Disallow climbing: the same legs must re-plan as detours (the 80 m

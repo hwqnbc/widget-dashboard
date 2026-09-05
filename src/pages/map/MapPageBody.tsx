@@ -74,6 +74,7 @@ import {
   setFlightCeiling,
   setFlightCruise,
   setFlightFollow,
+  setFlightSpeed,
   setOverlayVisible,
   setShowPins,
   setTrees,
@@ -325,6 +326,7 @@ export default function MapPageBody() {
   const flightAllowClimb = useAppSelector((state) => state.map.flightAllowClimb) ?? true
   const flightCeiling = useAppSelector((state) => state.map.flightCeiling) ?? 120
   const flightFollow = useAppSelector((state) => state.map.flightFollow) ?? false
+  const flightSpeed = useAppSelector((state) => state.map.flightSpeed) ?? 20
   const savedFlights = useAppSelector((state) => state.map.savedFlights) ?? NO_FLIGHTS
 
   // Sweep any shapes from before overlay groups existed into an "Imported"
@@ -559,6 +561,7 @@ export default function MapPageBody() {
         cruise: flightCruise,
         allowClimb: flightAllowClimb,
         ceiling: flightCeiling,
+        speed: flightSpeed,
       }),
     )
   }
@@ -571,6 +574,7 @@ export default function MapPageBody() {
     dispatch(setFlightCruise(flight.cruise))
     dispatch(setFlightAllowClimb(flight.allowClimb))
     dispatch(setFlightCeiling(flight.ceiling))
+    if (flight.speed != null) dispatch(setFlightSpeed(flight.speed))
     const view = viewRef.current
     if (!view || flight.points.length === 0) return
     try {
@@ -1130,6 +1134,7 @@ export default function MapPageBody() {
       data-flight-anim={flightAnim}
       data-flight-km={flightPoints.length >= 2 ? flightKm.toFixed(2) : ''}
       data-flight-cruise={flightCruise}
+      data-flight-speed={flightSpeed}
       data-flight-follow={flightFollow ? 'on' : 'off'}
       data-flight-alts={flightPoints.map((p) => p.alt ?? '').join(',')}
       data-flight-status={flightPlanStatus}
@@ -1253,6 +1258,8 @@ export default function MapPageBody() {
           <FlightControl
             cruise={flightCruise}
             onCruise={(m) => dispatch(setFlightCruise(m))}
+            speed={flightSpeed}
+            onSpeed={(ms) => dispatch(setFlightSpeed(ms))}
             allowClimb={flightAllowClimb}
             onAllowClimb={(on) => dispatch(setFlightAllowClimb(on))}
             ceiling={flightCeiling}
@@ -1379,6 +1386,7 @@ export default function MapPageBody() {
         viewRevision={viewRevision}
         points={flightPoints}
         cruise={flightCruise}
+        speed={flightSpeed}
         plan={flightPlan}
         anim={flightAnim}
         follow={flightFollow}

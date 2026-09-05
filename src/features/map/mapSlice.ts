@@ -57,6 +57,9 @@ export interface SavedFlight {
   cruise: number
   allowClimb: boolean
   ceiling: number
+  /** Drone speed, m/s (optional: flights saved before the speed setting
+   * existed keep the speed the user has dialed in). */
+  speed?: number
 }
 
 /** A named, persisted camera view — same shape the viewport memory uses. */
@@ -110,6 +113,8 @@ export interface MapState {
   flightCeiling: number
   /** Drone flight: chase-camera follows the drone while it flies. */
   flightFollow: boolean
+  /** Drone flight: cruise speed along the path, m/s. */
+  flightSpeed: number
   savedFlights: SavedFlight[]
 }
 
@@ -130,6 +135,7 @@ const initialState: MapState = {
   flightAllowClimb: true,
   flightCeiling: 120,
   flightFollow: false,
+  flightSpeed: 20,
   savedFlights: [],
 }
 
@@ -270,6 +276,9 @@ const mapSlice = createSlice({
     setFlightFollow(state, action: PayloadAction<boolean>) {
       state.flightFollow = action.payload
     },
+    setFlightSpeed(state, action: PayloadAction<number>) {
+      state.flightSpeed = action.payload
+    },
     saveFlight: {
       prepare(flight: Omit<SavedFlight, 'id'>) {
         return { payload: { ...flight, id: nanoid() } }
@@ -312,6 +321,7 @@ export const {
   setFlightAllowClimb,
   setFlightCeiling,
   setFlightFollow,
+  setFlightSpeed,
   saveFlight,
   deleteFlight,
 } = mapSlice.actions
