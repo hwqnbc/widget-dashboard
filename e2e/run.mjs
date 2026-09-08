@@ -105,6 +105,7 @@ const mapBundle = spawnSync(
     'src/pages/map/basemapCatalog.ts',
     'src/pages/map/flightPathModel.ts',
     'src/pages/map/flightPlanModel.ts',
+    'src/pages/map/terminatorModel.ts',
     '--bundle',
     '--format=esm',
     `--outdir=${join(here, '.bundle')}`,

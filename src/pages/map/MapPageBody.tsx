@@ -77,6 +77,7 @@ import {
   setFlightSpeed,
   setOverlayVisible,
   setShowPins,
+  setTerminator,
   setTrees,
   setViewMode,
   setViewpoint,
@@ -105,6 +106,7 @@ import MeasureBinding from './MeasureControls'
 import RouteControl from './RouteControl'
 import { useOsrmRoute } from './useOsrmRoute'
 import { insertIndexFor, nearestOnPath, pathDistanceThresholdMeters } from './routeGeometry'
+import { nightRing } from './terminatorModel'
 import { armDrag, createDragState, dragPointerDown, dragPointerUp, dragStep } from './dragModel'
 import type { LonLat, RouteProfile } from './osrm'
 import {
@@ -263,6 +265,12 @@ function safeDestroy(target: { destroy(): void } | null | undefined) {
 const NO_PINS: MapPin[] = []
 const NO_ROUTES: SavedRoute[] = []
 const NO_FLIGHTS: SavedFlight[] = []
+
+/** Night-side shading for the day/night terminator overlay. */
+const NIGHT_SYMBOL = new SimpleFillSymbol({
+  color: [4, 8, 28, 0.3],
+  outline: { color: [0, 0, 0, 0], width: 0 },
+})
 const NO_BOOKMARKS: MapBookmark[] = []
 const NO_DRAWINGS: MapDrawing[] = []
 const NO_OVERLAYS: MapOverlay[] = []
@@ -316,6 +324,7 @@ export default function MapPageBody() {
   const bookmarks = useAppSelector((state) => state.map.bookmarks) ?? NO_BOOKMARKS
   const buildings = useAppSelector((state) => state.map.buildings) ?? true
   const trees = useAppSelector((state) => state.map.trees) ?? true
+  const terminator = useAppSelector((state) => state.map.terminator) ?? false
   const drawings = useAppSelector((state) => state.map.drawings) ?? NO_DRAWINGS
   const overlays = useAppSelector((state) => state.map.overlays) ?? NO_OVERLAYS
   const activeOverlayId = useAppSelector((state) => state.map.activeOverlayId) ?? null
@@ -345,6 +354,7 @@ export default function MapPageBody() {
   const drawingsLayerRef = useRef<GraphicsLayer | null>(null)
   const sketchLayerRef = useRef<GraphicsLayer | null>(null)
   const flightLayerRef = useRef<GraphicsLayer | null>(null)
+  const terminatorLayerRef = useRef<GraphicsLayer | null>(null)
   const viewpointRef = useRef<Viewpoint | null>(null)
   const basemapIdRef = useRef(basemapId)
 
@@ -613,8 +623,11 @@ export default function MapPageBody() {
       drawingsLayerRef.current = null
       sketchLayerRef.current = null
       flightLayerRef.current = null
+      terminatorLayerRef.current = null
     }
     if (!mapRef.current) {
+      // Night shading sits UNDER every other overlay (list order = draw order).
+      terminatorLayerRef.current = new GraphicsLayer({ elevationInfo: { mode: 'on-the-ground' } })
       pinsLayerRef.current = new GraphicsLayer({ elevationInfo: { mode: 'on-the-ground' } })
       routeLayerRef.current = new GraphicsLayer({ elevationInfo: { mode: 'on-the-ground' } })
       locateLayerRef.current = new GraphicsLayer({ elevationInfo: { mode: 'on-the-ground' } })
@@ -627,6 +640,7 @@ export default function MapPageBody() {
         basemap: createBasemap(basemapIdRef.current),
         ground: 'world-elevation',
         layers: [
+          terminatorLayerRef.current,
           drawingsLayerRef.current,
           routeLayerRef.current,
           pinsLayerRef.current,
@@ -653,6 +667,7 @@ export default function MapPageBody() {
       drawingsLayerRef.current = null
       sketchLayerRef.current = null
       flightLayerRef.current = null
+      terminatorLayerRef.current = null
       document.getElementById('arcgis-theme')?.remove()
     }
   }, [])
@@ -1054,6 +1069,39 @@ export default function MapPageBody() {
     if (pinsLayerRef.current) pinsLayerRef.current.visible = showPins
   }, [showPins])
 
+  // Day/night terminator: one night-hemisphere polygon, recomputed every
+  // minute (pure math, no network). Geometry mutation only — the graphic and
+  // symbol never change, so nothing rebuilds per tick. viewRevision re-runs
+  // this after a view swap in case the shared map was self-heal rebuilt.
+  useEffect(() => {
+    const layer = terminatorLayerRef.current
+    if (!layer) return
+    if (!terminator) {
+      layer.removeAll()
+      return
+    }
+    const night = new Graphic({
+      geometry: new Polygon({ rings: [nightRing(new Date())] }),
+      symbol: NIGHT_SYMBOL,
+    })
+    layer.add(night)
+    const id = setInterval(() => {
+      try {
+        night.geometry = new Polygon({ rings: [nightRing(new Date())] })
+      } catch {
+        /* layer torn down mid-tick */
+      }
+    }, 60000)
+    return () => {
+      clearInterval(id)
+      try {
+        layer.removeAll()
+      } catch {
+        /* map already destroyed on unmount */
+      }
+    }
+  }, [terminator, viewRevision])
+
   const route = useOsrmRoute(routeLayerRef, routeEdit.points, routeProfile)
   // The fetched route geometry, readable from the long-lived click handler.
   const routeDataRef = useRef(route)
@@ -1118,6 +1166,7 @@ export default function MapPageBody() {
       data-bookmarks={bookmarks.length}
       data-buildings={buildings ? 'on' : 'off'}
       data-trees={trees ? 'on' : 'off'}
+      data-terminator={terminator ? 'on' : 'off'}
       data-fullscreen={fullscreen ? 'on' : 'off'}
       data-panel={panelOpen ? 'open' : 'closed'}
       data-draw-mode={drawMode}
@@ -1337,6 +1386,8 @@ export default function MapPageBody() {
           onBuildings={(on) => dispatch(setBuildings(on))}
           trees={trees}
           onTrees={(on) => dispatch(setTrees(on))}
+          terminator={terminator}
+          onTerminator={(on) => dispatch(setTerminator(on))}
           showPins={showPins}
           onShowPins={(on) => dispatch(setShowPins(on))}
           canDraw={status === 'ready'}

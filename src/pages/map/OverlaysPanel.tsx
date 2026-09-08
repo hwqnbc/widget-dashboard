@@ -75,6 +75,8 @@ export default function OverlaysPanel({
   onBuildings,
   trees,
   onTrees,
+  terminator,
+  onTerminator,
   showPins,
   onShowPins,
   canDraw,
@@ -99,6 +101,9 @@ export default function OverlaysPanel({
   onBuildings: (on: boolean) => void
   trees: boolean
   onTrees: (on: boolean) => void
+  /** Shade the night half of the world (works in 2D and 3D alike). */
+  terminator: boolean
+  onTerminator: (on: boolean) => void
   showPins: boolean
   onShowPins: (on: boolean) => void
   canDraw: boolean
@@ -224,6 +229,7 @@ export default function OverlaysPanel({
       <List dense disablePadding>
         {is3d && overlayRow('3D buildings', buildings, onBuildings, 'map-buildings')}
         {is3d && overlayRow('3D trees', trees, onTrees, 'map-trees')}
+        {overlayRow('Day/night', terminator, onTerminator, 'map-terminator')}
         {overlayRow('Pins', showPins, onShowPins, 'map-pins-visible')}
       </List>
 

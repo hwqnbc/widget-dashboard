@@ -98,8 +98,8 @@ on it works without a backend server or API key.
   it works in fullscreen; `translateX` transition; transient open state,
   `data-panel`). It hosts the basemap gallery (see the basemap section),
   the overlay visibility switches (3D buildings, 3D trees — 3D mode only —
-  plus Pins and Drawings layer visibility, `showPins`/`showDrawings` in the
-  slice), the drawing tools and the drawings list.
+  plus the Day/night terminator and Pins/Drawings layer visibility), the
+  drawing tools and the drawings list.
 - **Drawing into overlay groups** (`SketchBinding.tsx` + the panel's "My
   overlays" list) — an **overlay** is a named group of shapes
   (`MapOverlay {id, name, visible}`); the **active** overlay (highlighted,
@@ -139,6 +139,21 @@ on it works without a backend server or API key.
   degrades silently), lives on the shared map (the 2D MapView just doesn't
   render scene layers) and is driven by `visible` afterwards. Contract:
   `data-buildings` / `data-trees` on the root.
+- **Day/night terminator** — a "Day/night" switch in the overlays panel
+  (persisted `map.terminator`, default off, contract `data-terminator`)
+  shades the night half of the world, in 2D and on the 3D globe alike.
+  Entirely client-side math, **no network**: the pure `terminatorModel.ts`
+  (e2e-bundled) computes the subsolar point from the clock (Astronomical
+  Almanac low-precision ephemeris — mean longitude/anomaly → ecliptic
+  longitude → declination, plus the equation of time for the longitude;
+  validated against almanac facts in suite 130) and traces the terminator
+  (`tan lat = -cos H / tan decl`, declination clamped off exact zero at the
+  equinox instant) into one closed night-hemisphere ring, sealed along the
+  dark pole's edge at ±89.99° so every edge stays inside [-180, 180] — no
+  dateline split needed. The binding is a dedicated bottom-most
+  `GraphicsLayer` (night shading under every other overlay) holding ONE
+  graphic whose geometry is re-assigned each minute (symbol and graphic
+  never rebuild); toggling off empties the layer and stops the interval.
 - **Fullscreen** — a strip button (`data-testid="map-fullscreen"`, Escape or
   the button exits) fixes the page root over the viewport (`position: fixed;
   inset: 0` at modal z-index) plus best-effort native `requestFullscreen`.
@@ -410,8 +425,7 @@ two.
 - **Live USGS earthquakes overlay** — `GeoJSONLayer` on the public CORS feed
   (`earthquake.usgs.gov/.../all_day.geojson`), magnitude-scaled renderer +
   popups; toggle in the control strip.
-- **Day/night terminator** — client-computed solar position polygon on a
-  GraphicsLayer, refreshed each minute.
+- ~~Day/night terminator~~ — shipped (see its bullet above).
 - **Bundled GeoJSON overlays** — country borders / timezones / plate
   boundaries shipped in the repo, no network.
 - **Client-side search** — bundled gazetteer (top ~1k cities) + MUI

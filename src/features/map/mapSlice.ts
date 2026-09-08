@@ -94,6 +94,8 @@ export interface MapState {
   buildings: boolean
   /** Show the OSM 3D Trees scene layer (visible effect in 3D only). */
   trees: boolean
+  /** Shade the night half of the world (live day/night terminator). */
+  terminator: boolean
   bookmarks: MapBookmark[]
   drawings: MapDrawing[]
   /** The named drawing groups; new shapes land in the active one. */
@@ -125,6 +127,7 @@ const initialState: MapState = {
   savedRoutes: [],
   buildings: true,
   trees: true,
+  terminator: false,
   bookmarks: [],
   drawings: [],
   overlays: [],
@@ -177,6 +180,9 @@ const mapSlice = createSlice({
     },
     setTrees(state, action: PayloadAction<boolean>) {
       state.trees = action.payload
+    },
+    setTerminator(state, action: PayloadAction<boolean>) {
+      state.terminator = action.payload
     },
     saveBookmark: {
       prepare(bookmark: Omit<MapBookmark, 'id'>) {
@@ -304,6 +310,7 @@ export const {
   deleteRoute,
   setBuildings,
   setTrees,
+  setTerminator,
   saveBookmark,
   deleteBookmark,
   addDrawing,

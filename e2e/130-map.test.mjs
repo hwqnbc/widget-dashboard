@@ -15,7 +15,10 @@
  *    flightPathModel checks (3D lengths, sampling, heading, done), pure
  *    flightPlanModel checks (OSM parsing, geometry, climb/detour/blocked
  *    decisions) + the flight tool's 3D-only enable, contract and settings
- *    defaults (speed input included), undo-disabled state, deep-link render.
+ *    defaults (speed input included), pure terminatorModel checks (subsolar
+ *    point vs the almanac, terminator fixed points, night-ring shape) + the
+ *    day/night overlay toggle with reload persistence (pure math — asserts
+ *    offline), undo-disabled state, deep-link render.
  *  - online only: data-map-status reaches "ready" (from view.when, never
  *    networkidle), attribution + zoom UI present, click-driven pins with
  *    reload persistence, and the waypoint-editing flow against an ECHO OSRM
@@ -58,6 +61,7 @@ import {
   planFlight,
   segmentThroughPolygon,
 } from './.bundle/flightPlanModel.js'
+import { nightRing, subsolarPoint, terminatorLatitude } from './.bundle/terminatorModel.js'
 
 const { check, finish } = reporter('map')
 const { browser, context, page } = await launch()
@@ -603,6 +607,67 @@ await page.route('**overpass-api.de/**', (route) => {
   }
 }
 
+// Terminator model: the subsolar point against almanac facts, the
+// terminator curve's fixed points, and the night ring's shape.
+{
+  const jun = subsolarPoint(new Date('2026-06-21T12:00:00Z'))
+  check(
+    'June solstice noon: subsolar point on the tropic of Cancer near Greenwich',
+    Math.abs(jun.lat - 23.43) < 0.1 && Math.abs(jun.lon) < 2,
+    `lat=${jun.lat.toFixed(2)} lon=${jun.lon.toFixed(2)}`,
+  )
+  const dec = subsolarPoint(new Date('2026-12-21T12:00:00Z'))
+  check(
+    'December solstice: tropic of Capricorn',
+    Math.abs(dec.lat + 23.43) < 0.1,
+    `lat=${dec.lat.toFixed(2)}`,
+  )
+  const equinox = subsolarPoint(new Date('2026-03-20T14:46:00Z'))
+  check(
+    'March equinox instant: declination ~0',
+    Math.abs(equinox.lat) < 0.1,
+    `lat=${equinox.lat.toFixed(3)}`,
+  )
+  const midnight = subsolarPoint(new Date('2026-06-21T00:00:00Z'))
+  check(
+    'at 00:00 UTC the sun stands over the anti-meridian',
+    Math.abs(Math.abs(midnight.lon) - 180) < 2,
+    `lon=${midnight.lon.toFixed(2)}`,
+  )
+  const eotMax = subsolarPoint(new Date('2026-11-03T12:00:00Z'))
+  check(
+    'equation of time shows: early-November noon sun ~4.1° west of Greenwich',
+    Math.abs(eotMax.lon + 4.1) < 1,
+    `lon=${eotMax.lon.toFixed(2)}`,
+  )
+  check(
+    'terminator grazes the arctic circle at June-solstice midnight',
+    Math.abs(terminatorLatitude(jun.lon + 180, jun) - 66.56) < 0.3,
+    `lat=${terminatorLatitude(jun.lon + 180, jun).toFixed(2)}`,
+  )
+  check(
+    'terminator dips to the antarctic circle under the June-solstice sun',
+    Math.abs(terminatorLatitude(jun.lon, jun) + 66.56) < 0.3,
+    `lat=${terminatorLatitude(jun.lon, jun).toFixed(2)}`,
+  )
+  const ring = nightRing(new Date('2026-06-21T12:00:00Z'))
+  const closed =
+    ring[0][0] === ring[ring.length - 1][0] && ring[0][1] === ring[ring.length - 1][1]
+  check(
+    'June night ring: closed, all vertices in range, caps the SOUTH pole',
+    closed &&
+      ring.every(([lo, la]) => lo >= -180 && lo <= 180 && la >= -90 && la <= 90) &&
+      ring.some(([, la]) => la < -89) &&
+      !ring.some(([, la]) => la > 89),
+    `vertices=${ring.length}`,
+  )
+  const decRing = nightRing(new Date('2026-12-21T12:00:00Z'))
+  check(
+    'December night ring caps the NORTH pole instead',
+    decRing.some(([, la]) => la > 89) && !decRing.some(([, la]) => la < -89),
+  )
+}
+
 // ---- dashboard first: the arcgis chunk must NOT load with the app shell ----
 await page.goto(BASE_URL, { waitUntil: 'networkidle' })
 const resourcesBefore = await page.evaluate(() =>
@@ -849,6 +914,19 @@ await page.waitForTimeout(200)
 check('pins overlay toggles off', (await root().getAttribute('data-pins-visible')) === 'off')
 await page.locator('[data-testid="map-pins-visible"]').click()
 await page.waitForTimeout(200)
+// Day/night terminator: renders in 2D, defaults off; drawing is pure math
+// (no network), so toggling it on works offline. It stays ON from here so
+// the rest of the suite (2D/3D swaps included) runs with the layer live —
+// the suite-end destroyed-map sweep covers it; the later reload asserts
+// persistence and switches it back off.
+check(
+  'terminator switch renders, off by default',
+  (await page.locator('[data-testid="map-terminator"]').count()) === 1 &&
+    (await root().getAttribute('data-terminator')) === 'off',
+)
+await page.locator('[data-testid="map-terminator"]').click()
+await page.waitForTimeout(300)
+check('terminator toggles on', (await root().getAttribute('data-terminator')) === 'on')
 check('no drawings initially', (await root().getAttribute('data-drawings')) === '0')
 check('draw mode starts none', (await root().getAttribute('data-draw-mode')) === 'none')
 
@@ -1055,6 +1133,10 @@ check(
   'trees choice persists across reload',
   (await root().getAttribute('data-trees')) === 'off',
 )
+check(
+  'terminator choice persists across reload',
+  (await root().getAttribute('data-terminator')) === 'on',
+)
 // panel open state is transient — reopen to reach the switches
 check('panel closed after reload (transient)', (await root().getAttribute('data-panel')) === 'closed')
 await page.locator('[data-testid="map-overlays-toggle"]').click()
@@ -1065,6 +1147,9 @@ check('buildings back on', (await root().getAttribute('data-buildings')) === 'on
 await page.locator('[data-testid="map-trees"]').click()
 await page.waitForTimeout(300)
 check('trees back on', (await root().getAttribute('data-trees')) === 'on')
+await page.locator('[data-testid="map-terminator"]').click()
+await page.waitForTimeout(300)
+check('terminator back off', (await root().getAttribute('data-terminator')) === 'off')
 await page.locator('[data-testid="map-overlays-toggle"]').click()
 await page.waitForTimeout(350)
 check('panel closes', (await root().getAttribute('data-panel')) === 'closed')
