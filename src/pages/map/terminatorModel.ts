@@ -35,6 +35,38 @@ export function subsolarPoint(date: Date): { lon: number; lat: number } {
   return { lon, lat }
 }
 
+/** Today at the given local wall-clock time of day (fractional hours). */
+export function sunDate(hour: number): Date {
+  const d = new Date()
+  d.setHours(Math.floor(hour), Math.round((hour - Math.floor(hour)) * 60), 0, 0)
+  return d
+}
+
+/**
+ * The sun as seen from a point: azimuth (degrees clockwise from north,
+ * 90 = east) and elevation above the horizon (negative = below). Standard
+ * spherical astronomy off the same subsolar point the terminator uses —
+ * the hour angle here is measured from the observer's meridian westward.
+ */
+export function sunPosition(
+  date: Date,
+  lon: number,
+  lat: number,
+): { azimuth: number; elevation: number } {
+  const sun = subsolarPoint(date)
+  const H = (lon - sun.lon) * DEG // hour angle (0 = local solar noon)
+  const phi = lat * DEG
+  const decl = sun.lat * DEG
+  const sinEl = Math.sin(phi) * Math.sin(decl) + Math.cos(phi) * Math.cos(decl) * Math.cos(H)
+  const elevation = Math.asin(Math.max(-1, Math.min(1, sinEl))) / DEG
+  const azimuth =
+    Math.atan2(
+      -Math.sin(H) * Math.cos(decl),
+      Math.sin(decl) * Math.cos(phi) - Math.cos(decl) * Math.sin(phi) * Math.cos(H),
+    ) / DEG
+  return { azimuth: normDeg(azimuth), elevation }
+}
+
 /**
  * Latitude of the terminator at a given longitude: solving solar
  * elevation = 0 gives tan(lat) = -cos(H) / tan(declination), with H the

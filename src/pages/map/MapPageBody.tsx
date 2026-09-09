@@ -31,6 +31,7 @@ import StraightenIcon from '@mui/icons-material/Straighten'
 import SquareFootIcon from '@mui/icons-material/SquareFoot'
 import RouteIcon from '@mui/icons-material/Route'
 import FlightTakeoffIcon from '@mui/icons-material/FlightTakeoff'
+import WbSunnyIcon from '@mui/icons-material/WbSunny'
 import DeleteSweepIcon from '@mui/icons-material/DeleteSweep'
 import esriConfig from '@arcgis/core/config'
 import EsriMap from '@arcgis/core/Map'
@@ -106,7 +107,8 @@ import MeasureBinding from './MeasureControls'
 import RouteControl from './RouteControl'
 import { useOsrmRoute } from './useOsrmRoute'
 import { insertIndexFor, nearestOnPath, pathDistanceThresholdMeters } from './routeGeometry'
-import { nightRing } from './terminatorModel'
+import { nightRing, sunDate } from './terminatorModel'
+import SunControl from './SunControl'
 import { armDrag, createDragState, dragPointerDown, dragPointerUp, dragStep } from './dragModel'
 import type { LonLat, RouteProfile } from './osrm'
 import {
@@ -183,7 +185,7 @@ if (import.meta.env.DEV) {
 
 export type AnyView = MapView | SceneView
 type MapStatus = 'loading' | 'ready' | 'error'
-type Tool = 'none' | 'pins' | 'measure-line' | 'measure-area' | 'route' | 'flight'
+type Tool = 'none' | 'pins' | 'measure-line' | 'measure-area' | 'route' | 'flight' | 'sun'
 
 /** Waypoint list + undo history (every edit pushes the previous list). */
 interface RouteEdit {
@@ -393,6 +395,13 @@ export default function MapPageBody() {
   const [flightAnim, setFlightAnim] = useState<FlightAnim>('idle')
   const [flightProgress, setFlightProgress] = useState(0)
   const [flightResetToken, setFlightResetToken] = useState(0)
+  // Sun tool (transient): local wall-clock time of day driving the 3D
+  // scene lighting, and the day-sweep animation flag.
+  const [sunHour, setSunHour] = useState(() => {
+    const n = new Date()
+    return Math.round((n.getHours() + n.getMinutes() / 60) * 4) / 4
+  })
+  const [sunAnim, setSunAnim] = useState(false)
 
   // Click dispatch reads the live tool through a ref so the view's click
   // handler (registered once per view) never needs re-registering.
@@ -1110,6 +1119,7 @@ export default function MapPageBody() {
   const handleTool = (next: Tool | null) => {
     const t = next ?? 'none'
     setTool(t)
+    if (t !== 'sun') setSunAnim(false)
     if (t !== 'route') clearRoute()
     if (t !== 'none') setDrawMode('none')
   }
@@ -1134,15 +1144,62 @@ export default function MapPageBody() {
           })),
     ).total / 1000
 
-  // The flight tool is 3D-only: switching to 2D releases it (and pauses any
-  // running animation); the absolute-height graphics only show in 3D.
+  // The flight and sun tools are 3D-only: switching to 2D releases them (and
+  // pauses/stops their animations); the absolute-height graphics only show
+  // in 3D.
   useEffect(() => {
     if (viewMode !== '3d') {
-      setTool((t) => (t === 'flight' ? 'none' : t))
+      setTool((t) => (t === 'flight' || t === 'sun' ? 'none' : t))
       setFlightAnim((a) => (a === 'playing' ? 'paused' : a))
+      setSunAnim(false)
     }
     if (flightLayerRef.current) flightLayerRef.current.visible = viewMode === '3d'
   }, [viewMode])
+
+  // Sun tool: drive the scene's native sun lighting from the slider. The
+  // date write re-runs per hour change; shadows + fixed (non-camera-tracked)
+  // sun are flipped on while the tool is active and restored on release.
+  // All writes are try/catch view-side — the view can be mid-teardown.
+  const sunActive = tool === 'sun'
+  useEffect(() => {
+    const view = viewRef.current
+    if (!sunActive || !view || view.type !== '3d') return
+    try {
+      const lighting = (view as SceneView).environment.lighting
+      if (lighting?.type === 'sun') {
+        lighting.date = sunDate(sunHour)
+        lighting.cameraTrackingEnabled = false
+        lighting.directShadowsEnabled = true
+      }
+    } catch {
+      /* view mid-teardown — skip */
+    }
+  }, [sunActive, sunHour, viewRevision])
+  useEffect(() => {
+    if (!sunActive) return
+    return () => {
+      const view = viewRef.current
+      if (!view || view.type !== '3d') return
+      try {
+        const lighting = (view as SceneView).environment.lighting
+        if (lighting?.type === 'sun') {
+          lighting.date = new Date()
+          lighting.cameraTrackingEnabled = true
+          lighting.directShadowsEnabled = false
+        }
+      } catch {
+        /* view already gone — the next view starts with default lighting */
+      }
+    }
+  }, [sunActive])
+
+  // The day sweep: ~12 s per full day, wrapping at midnight. Slider state
+  // only — no ArcGIS objects — so plain state ticks are fine here.
+  useEffect(() => {
+    if (!sunAnim) return
+    const id = setInterval(() => setSunHour((h) => Math.round(((h + 0.1) % 24) * 100) / 100), 50)
+    return () => clearInterval(id)
+  }, [sunAnim])
 
   return (
     <Box
@@ -1191,6 +1248,8 @@ export default function MapPageBody() {
       data-flight-detours={flightPlan.detours}
       data-flight-blocked={flightPlan.blocked}
       data-drone-t={flightProgress.toFixed(3)}
+      data-sun-hour={sunHour.toFixed(2)}
+      data-sun-anim={sunAnim ? 'on' : 'off'}
       sx={{
         display: 'flex',
         flexDirection: 'column',
@@ -1268,6 +1327,16 @@ export default function MapPageBody() {
               <FlightTakeoffIcon fontSize="small" />
             </Tooltip>
           </ToggleButton>
+          <ToggleButton
+            value="sun"
+            data-testid="map-tool-sun"
+            aria-label="Sun and shadows"
+            disabled={viewMode !== '3d'}
+          >
+            <Tooltip title={viewMode === '3d' ? 'Sun & shadows (time-of-day slider)' : 'Sun & shadows — switch to 3D'}>
+              <WbSunnyIcon fontSize="small" />
+            </Tooltip>
+          </ToggleButton>
         </ToggleButtonGroup>
         <LocateControl viewRef={viewRef} viewRevision={viewRevision} layerRef={locateLayerRef} />
         <BookmarksControl
@@ -1335,6 +1404,16 @@ export default function MapPageBody() {
               setFlightResetToken((n) => n + 1)
             }}
             onClear={() => setFlightPoints([])}
+          />
+        )}
+        {tool === 'sun' && (
+          <SunControl
+            hour={sunHour}
+            onHour={setSunHour}
+            anim={sunAnim}
+            onAnim={setSunAnim}
+            lon={focus.lon}
+            lat={focus.lat}
           />
         )}
         <Tooltip title={fullscreen ? 'Exit full screen' : 'Full screen'}>

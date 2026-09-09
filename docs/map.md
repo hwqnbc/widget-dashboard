@@ -154,6 +154,22 @@ on it works without a backend server or API key.
   `GraphicsLayer` (night shading under every other overlay) holding ONE
   graphic whose geometry is re-assigned each minute (symbol and graphic
   never rebuild); toggling off empties the layer and stops the interval.
+- **Sun & shadows tool** (`SunControl.tsx`) — a 3D-only strip tool
+  (`map-tool-sun`, WbSunny icon; 2D releases it like the flight tool): a
+  time-of-day slider (0–24 h local wall-clock, 15-min steps,
+  `data-sun-hour`), a play button sweeping the whole day in ~12 s
+  (`data-sun-anim`), and a "now" reset. It drives the SceneView's NATIVE
+  sun: `view.environment.lighting.date` (SunLighting), with
+  `directShadowsEnabled` on — real building shadows from the OSM 3D
+  buildings — and `cameraTrackingEnabled` off so the slider owns the sun
+  absolutely; releasing the tool restores the clock, camera tracking, and
+  shadows-off. All lighting writes are view-side try/catch (never React
+  state, #67). The caption shows a pure-math sun readout for the view
+  focus — `sunPosition(date, lon, lat)` in `terminatorModel.ts` (azimuth
+  clockwise from north / elevation, same validated ephemeris as the
+  terminator; "sun below horizon" at night) — so suite 130 asserts the
+  whole tool offline: the lighting itself is Esri-rendered and eyeballed
+  on deploy.
 - **Fullscreen** — a strip button (`data-testid="map-fullscreen"`, Escape or
   the button exits) fixes the page root over the viewport (`position: fixed;
   inset: 0` at modal z-index) plus best-effort native `requestFullscreen`.
@@ -426,6 +442,11 @@ two.
   (`earthquake.usgs.gov/.../all_day.geojson`), magnitude-scaled renderer +
   popups; toggle in the control strip.
 - ~~Day/night terminator~~ — shipped (see its bullet above).
+- ~~Sun & shadows time-of-day tool~~ — shipped (see its bullet above).
+  Extras to build on it: a **date/season picker** (compare solstice vs
+  equinox shadows — `SunControl` just needs a second input into `sunDate`),
+  and a **shadow-accumulation view** (Esri's ShadowCast widget shows
+  cumulative shadow hours — heavy, assess before adopting).
 - **Bundled GeoJSON overlays** — country borders / timezones / plate
   boundaries shipped in the repo, no network.
 - **Client-side search** — bundled gazetteer (top ~1k cities) + MUI

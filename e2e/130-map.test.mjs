@@ -18,7 +18,9 @@
  *    defaults (speed input included), pure terminatorModel checks (subsolar
  *    point vs the almanac, terminator fixed points, night-ring shape) + the
  *    day/night overlay toggle with reload persistence (pure math — asserts
- *    offline), undo-disabled state, deep-link render.
+ *    offline), the sun tool (3D-only; slider/sweep/now drive data-sun-hour,
+ *    pure sunPosition units, the lighting write is view-side try/catch —
+ *    asserts offline), undo-disabled state, deep-link render.
  *  - online only: data-map-status reaches "ready" (from view.when, never
  *    networkidle), attribution + zoom UI present, click-driven pins with
  *    reload persistence, and the waypoint-editing flow against an ECHO OSRM
@@ -61,7 +63,12 @@ import {
   planFlight,
   segmentThroughPolygon,
 } from './.bundle/flightPlanModel.js'
-import { nightRing, subsolarPoint, terminatorLatitude } from './.bundle/terminatorModel.js'
+import {
+  nightRing,
+  subsolarPoint,
+  sunPosition,
+  terminatorLatitude,
+} from './.bundle/terminatorModel.js'
 
 const { check, finish } = reporter('map')
 const { browser, context, page } = await launch()
@@ -666,6 +673,30 @@ await page.route('**overpass-api.de/**', (route) => {
     'December night ring caps the NORTH pole instead',
     decRing.some(([, la]) => la > 89) && !decRing.some(([, la]) => la < -89),
   )
+
+  // Observer-side sun position (drives the sun tool's readout).
+  const zenith = sunPosition(new Date('2026-06-21T12:00:00Z'), jun.lon, jun.lat)
+  check(
+    'sun at the zenith over the subsolar point',
+    Math.abs(zenith.elevation - 90) < 0.01,
+    `el=${zenith.elevation.toFixed(2)}`,
+  )
+  const greenwichNoon = sunPosition(new Date('2026-06-21T12:00:00Z'), 0, 51.48)
+  check(
+    'June noon from Greenwich: sun due south at 90° − lat + declination',
+    Math.abs(greenwichNoon.azimuth - 180) < 3 && Math.abs(greenwichNoon.elevation - 61.95) < 1,
+    `az=${greenwichNoon.azimuth.toFixed(1)} el=${greenwichNoon.elevation.toFixed(1)}`,
+  )
+  check(
+    'midnight sun below the horizon at 51°N',
+    sunPosition(new Date('2026-06-21T00:00:00Z'), 0, 51.48).elevation < 0,
+  )
+  const equinoxSunrise = sunPosition(new Date('2026-03-20T06:00:00Z'), 0, 51.48)
+  check(
+    'equinox sunrise: sun due east on the horizon',
+    Math.abs(equinoxSunrise.azimuth - 90) < 3 && Math.abs(equinoxSunrise.elevation) < 3,
+    `az=${equinoxSunrise.azimuth.toFixed(1)} el=${equinoxSunrise.elevation.toFixed(1)}`,
+  )
 }
 
 // ---- dashboard first: the arcgis chunk must NOT load with the app shell ----
@@ -1019,6 +1050,10 @@ check(
   await page.locator('[data-testid="map-tool-flight"]').isDisabled(),
 )
 check(
+  'sun tool disabled in 2D',
+  await page.locator('[data-testid="map-tool-sun"]').isDisabled(),
+)
+check(
   'flight contract defaults (no points, idle, cruise 60, speed 20)',
   (await root().getAttribute('data-flight-points')) === '0' &&
     (await root().getAttribute('data-flight-anim')) === 'idle' &&
@@ -1096,6 +1131,69 @@ check(
 )
 await page.locator('[data-testid="map-tool-flight"]').click() // release the tool
 await page.waitForTimeout(200)
+
+// ---- sun tool (3D-only, offline: pure state + view-side try/catch) ----
+await page.locator('[data-testid="map-tool-sun"]').click()
+await page.waitForTimeout(200)
+const sunHour0 = parseFloat((await root().getAttribute('data-sun-hour')) ?? '')
+check(
+  'sun tool activates with a valid time-of-day',
+  (await root().getAttribute('data-tool')) === 'sun' &&
+    Number.isFinite(sunHour0) &&
+    sunHour0 >= 0 &&
+    sunHour0 <= 24 &&
+    (await page.locator('[data-testid="map-sun-slider"]').count()) === 1 &&
+    ((await page.locator('[data-testid="map-sun-info"]').textContent()) ?? '') !== '',
+  `hour=${sunHour0}`,
+)
+// MUI Slider keyboard: one ArrowRight moves a step (0.25 h).
+await page.locator('[data-testid="map-sun-slider"] input').first().press('ArrowRight')
+await page.waitForTimeout(200)
+check(
+  'slider step lands in the contract',
+  parseFloat((await root().getAttribute('data-sun-hour')) ?? '') ===
+    Math.min(sunHour0 + 0.25, 24),
+  `hour=${await root().getAttribute('data-sun-hour')}`,
+)
+await page.locator('[data-testid="map-sun-play"]').click()
+await page.waitForTimeout(500)
+const sweptTo = (await root().getAttribute('data-sun-hour')) ?? ''
+check(
+  'day sweep runs (anim on, hour advancing)',
+  (await root().getAttribute('data-sun-anim')) === 'on' &&
+    parseFloat(sweptTo) !== Math.min(sunHour0 + 0.25, 24),
+  `hour=${sweptTo}`,
+)
+await page.locator('[data-testid="map-sun-pause"]').click()
+await page.waitForTimeout(300)
+const pausedAt = (await root().getAttribute('data-sun-hour')) ?? ''
+await page.waitForTimeout(300)
+check(
+  'pause holds the time',
+  (await root().getAttribute('data-sun-anim')) === 'off' &&
+    ((await root().getAttribute('data-sun-hour')) ?? '') === pausedAt,
+)
+await page.locator('[data-testid="map-sun-now"]').click()
+await page.waitForTimeout(200)
+const nowHour = parseFloat((await root().getAttribute('data-sun-hour')) ?? '')
+const clockNow = new Date()
+const clockHour = clockNow.getHours() + clockNow.getMinutes() / 60
+check(
+  '"now" snaps back to the clock',
+  Math.abs(nowHour - clockHour) < 0.5 || Math.abs(nowHour - clockHour) > 23.5,
+  `hour=${nowHour} clock=${clockHour.toFixed(2)}`,
+)
+// 2D releases the sun tool like it does the flight tool.
+await page.locator('[data-testid="map-mode-2d"]').click()
+await page.waitForTimeout(500)
+check(
+  '2D switch releases the sun tool',
+  (await root().getAttribute('data-tool')) === 'none' &&
+    (await page.locator('[data-testid="map-tool-sun"]').isDisabled()),
+)
+await page.locator('[data-testid="map-mode-3d"]').click()
+await page.waitForTimeout(500)
+check('back in 3D for the interactive branch', (await root().getAttribute('data-view-mode')) === '3d')
 if (online) {
   const status3d = await waitForAttr('data-map-status', (v) => v === 'ready', 60000)
   check('scene view becomes ready', status3d === 'ready', `status=${status3d}`)
