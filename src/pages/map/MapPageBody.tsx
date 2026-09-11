@@ -268,6 +268,14 @@ const NO_PINS: MapPin[] = []
 const NO_ROUTES: SavedRoute[] = []
 const NO_FLIGHTS: SavedFlight[] = []
 
+/** Today as a local ISO calendar day (the date input's value format). */
+function todayIso(): string {
+  const n = new Date()
+  return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(
+    n.getDate(),
+  ).padStart(2, '0')}`
+}
+
 /** Night-side shading for the day/night terminator overlay. */
 const NIGHT_SYMBOL = new SimpleFillSymbol({
   color: [4, 8, 28, 0.3],
@@ -402,6 +410,8 @@ export default function MapPageBody() {
     return Math.round((n.getHours() + n.getMinutes() / 60) * 4) / 4
   })
   const [sunAnim, setSunAnim] = useState(false)
+  // The calendar day the sun stands on (local ISO) — season comparisons.
+  const [sunDay, setSunDay] = useState(todayIso)
 
   // Click dispatch reads the live tool through a ref so the view's click
   // handler (registered once per view) never needs re-registering.
@@ -1167,14 +1177,14 @@ export default function MapPageBody() {
     try {
       const lighting = (view as SceneView).environment.lighting
       if (lighting?.type === 'sun') {
-        lighting.date = sunDate(sunHour)
+        lighting.date = sunDate(sunHour, sunDay)
         lighting.cameraTrackingEnabled = false
         lighting.directShadowsEnabled = true
       }
     } catch {
       /* view mid-teardown — skip */
     }
-  }, [sunActive, sunHour, viewRevision])
+  }, [sunActive, sunHour, sunDay, viewRevision])
   useEffect(() => {
     if (!sunActive) return
     return () => {
@@ -1250,6 +1260,7 @@ export default function MapPageBody() {
       data-drone-t={flightProgress.toFixed(3)}
       data-sun-hour={sunHour.toFixed(2)}
       data-sun-anim={sunAnim ? 'on' : 'off'}
+      data-sun-day={sunDay}
       sx={{
         display: 'flex',
         flexDirection: 'column',
@@ -1410,6 +1421,8 @@ export default function MapPageBody() {
           <SunControl
             hour={sunHour}
             onHour={setSunHour}
+            day={sunDay}
+            onDay={setSunDay}
             anim={sunAnim}
             onAnim={setSunAnim}
             lon={focus.lon}

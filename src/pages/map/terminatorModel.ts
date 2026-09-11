@@ -35,9 +35,13 @@ export function subsolarPoint(date: Date): { lon: number; lat: number } {
   return { lon, lat }
 }
 
-/** Today at the given local wall-clock time of day (fractional hours). */
-export function sunDate(hour: number): Date {
-  const d = new Date()
+/**
+ * The given local calendar day (ISO `YYYY-MM-DD`; absent or malformed →
+ * today) at the given local wall-clock time of day (fractional hours).
+ */
+export function sunDate(hour: number, dayIso?: string): Date {
+  let d = dayIso ? new Date(`${dayIso}T00:00:00`) : new Date() // local midnight
+  if (Number.isNaN(d.getTime())) d = new Date()
   d.setHours(Math.floor(hour), Math.round((hour - Math.floor(hour)) * 60), 0, 0)
   return d
 }

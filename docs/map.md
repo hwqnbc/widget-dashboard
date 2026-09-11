@@ -157,8 +157,11 @@ on it works without a backend server or API key.
 - **Sun & shadows tool** (`SunControl.tsx`) — a 3D-only strip tool
   (`map-tool-sun`, WbSunny icon; 2D releases it like the flight tool): a
   time-of-day slider (0–24 h local wall-clock, 15-min steps,
-  `data-sun-hour`), a play button sweeping the whole day in ~12 s
-  (`data-sun-anim`), and a "now" reset. It drives the SceneView's NATIVE
+  `data-sun-hour`), a **date input + season quick-jump chips** (Today /
+  Mar 20 / Jun 21 / Sep 22 / Dec 21 — `map-sun-day`, `map-sun-season`,
+  contract `data-sun-day`; compare a building's June vs December shadow in
+  two taps), a play button sweeping the whole day in ~12 s
+  (`data-sun-anim`), and a "now" reset (time AND day). It drives the SceneView's NATIVE
   sun: `view.environment.lighting.date` (SunLighting), with
   `directShadowsEnabled` on — real building shadows from the OSM 3D
   buildings — and `cameraTrackingEnabled` off so the slider owns the sun
@@ -442,11 +445,10 @@ two.
   (`earthquake.usgs.gov/.../all_day.geojson`), magnitude-scaled renderer +
   popups; toggle in the control strip.
 - ~~Day/night terminator~~ — shipped (see its bullet above).
-- ~~Sun & shadows time-of-day tool~~ — shipped (see its bullet above).
-  Extras to build on it: a **date/season picker** (compare solstice vs
-  equinox shadows — `SunControl` just needs a second input into `sunDate`),
-  and a **shadow-accumulation view** (Esri's ShadowCast widget shows
-  cumulative shadow hours — heavy, assess before adopting).
+- ~~Sun & shadows time-of-day tool~~ and its ~~date/season picker~~ —
+  shipped (see the bullet above). Remaining extra: a
+  **shadow-accumulation view** (Esri's ShadowCast widget shows cumulative
+  shadow hours — heavy, assess before adopting).
 - **Bundled GeoJSON overlays** — country borders / timezones / plate
   boundaries shipped in the repo, no network.
 - **Client-side search** — bundled gazetteer (top ~1k cities) + MUI

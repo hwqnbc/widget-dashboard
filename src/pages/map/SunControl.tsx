@@ -1,4 +1,4 @@
-import { IconButton, Slider, Stack, Tooltip, Typography } from '@mui/material'
+import { Chip, IconButton, Slider, Stack, TextField, Tooltip, Typography } from '@mui/material'
 import PlayArrowIcon from '@mui/icons-material/PlayArrow'
 import PauseIcon from '@mui/icons-material/Pause'
 import RestoreIcon from '@mui/icons-material/Restore'
@@ -13,6 +13,27 @@ function hourLabel(hour: number): string {
 
 const MARKS = [0, 6, 12, 18, 24].map((value) => ({ value, label: String(value) }))
 
+/** Today as a local ISO calendar day. */
+function todayIso(): string {
+  const n = new Date()
+  return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(
+    n.getDate(),
+  ).padStart(2, '0')}`
+}
+
+/** Season quick-jumps: this year's (approximate) equinoxes and solstices —
+ * where the shadow contrast is at its extremes. */
+function seasonJumps(): { id: string; label: string; iso: string }[] {
+  const year = new Date().getFullYear()
+  return [
+    { id: 'today', label: 'Today', iso: todayIso() },
+    { id: 'mar', label: 'Mar 20', iso: `${year}-03-20` },
+    { id: 'jun', label: 'Jun 21', iso: `${year}-06-21` },
+    { id: 'sep', label: 'Sep 22', iso: `${year}-09-22` },
+    { id: 'dec', label: 'Dec 21', iso: `${year}-12-21` },
+  ]
+}
+
 /**
  * Tool-strip controls for the sun tool: the time-of-day slider driving the
  * scene lighting, a day-sweep play/pause, a "now" reset, and a pure-math
@@ -21,6 +42,8 @@ const MARKS = [0, 6, 12, 18, 24].map((value) => ({ value, label: String(value) }
 export default function SunControl({
   hour,
   onHour,
+  day,
+  onDay,
   anim,
   onAnim,
   lon,
@@ -29,6 +52,9 @@ export default function SunControl({
   /** Local wall-clock time of day, fractional hours 0–24. */
   hour: number
   onHour: (hour: number) => void
+  /** Local ISO calendar day the sun stands on (season comparisons). */
+  day: string
+  onDay: (iso: string) => void
   /** Day-sweep animation running. */
   anim: boolean
   onAnim: (on: boolean) => void
@@ -36,7 +62,7 @@ export default function SunControl({
   lon: number
   lat: number
 }) {
-  const sun = sunPosition(sunDate(hour), lon, lat)
+  const sun = sunPosition(sunDate(hour, day), lon, lat)
   const nowHour = () => {
     const n = new Date()
     return Math.round((n.getHours() + n.getMinutes() / 60) * 4) / 4
@@ -60,6 +86,29 @@ export default function SunControl({
         data-testid="map-sun-slider"
         sx={{ width: { xs: 140, sm: 200 }, mx: 1 }}
       />
+      <TextField
+        size="small"
+        type="date"
+        label="Date"
+        value={day}
+        onChange={(e) => onDay(e.target.value || todayIso())}
+        sx={{ width: 150 }}
+        slotProps={{
+          htmlInput: { 'data-testid': 'map-sun-day' },
+          inputLabel: { shrink: true },
+        }}
+      />
+      {seasonJumps().map((s) => (
+        <Chip
+          key={s.id}
+          size="small"
+          label={s.label}
+          data-testid="map-sun-season"
+          data-id={s.id}
+          color={day === s.iso ? 'primary' : 'default'}
+          onClick={() => onDay(s.iso)}
+        />
+      ))}
       {anim ? (
         <Tooltip title="Pause the day sweep">
           <IconButton size="small" data-testid="map-sun-pause" aria-label="Pause the day sweep" onClick={() => onAnim(false)}>
@@ -81,6 +130,7 @@ export default function SunControl({
           onClick={() => {
             onAnim(false)
             onHour(nowHour())
+            onDay(todayIso())
           }}
         >
           <RestoreIcon fontSize="small" />

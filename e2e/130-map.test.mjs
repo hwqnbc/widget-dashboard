@@ -19,7 +19,9 @@
  *    point vs the almanac, terminator fixed points, night-ring shape) + the
  *    day/night overlay toggle with reload persistence (pure math — asserts
  *    offline), the sun tool (3D-only; slider/sweep/now drive data-sun-hour,
- *    pure sunPosition units, the lighting write is view-side try/catch —
+ *    the date input + season chips drive data-sun-day, pure
+ *    sunPosition/sunDate units incl. the Singapore seasonal azimuth flip,
+ *    the lighting write is view-side try/catch —
  *    asserts offline), undo-disabled state, deep-link render.
  *  - online only: data-map-status reaches "ready" (from view.when, never
  *    networkidle), attribution + zoom UI present, click-driven pins with
@@ -66,6 +68,7 @@ import {
 import {
   nightRing,
   subsolarPoint,
+  sunDate,
   sunPosition,
   terminatorLatitude,
 } from './.bundle/terminatorModel.js'
@@ -697,6 +700,41 @@ await page.route('**overpass-api.de/**', (route) => {
     Math.abs(equinoxSunrise.azimuth - 90) < 3 && Math.abs(equinoxSunrise.elevation) < 3,
     `az=${equinoxSunrise.azimuth.toFixed(1)} el=${equinoxSunrise.elevation.toFixed(1)}`,
   )
+
+  // Date-aware sunDate (the season picker's seam) + the seasonal flip it
+  // exposes. sunDate is local-clock on purpose, so assert via local getters.
+  const winter = sunDate(13.5, '2026-12-21')
+  check(
+    'sunDate maps ISO day + fractional hour to the local wall clock',
+    winter.getFullYear() === 2026 &&
+      winter.getMonth() === 11 &&
+      winter.getDate() === 21 &&
+      winter.getHours() === 13 &&
+      winter.getMinutes() === 30,
+  )
+  const rolled = sunDate(24, '2026-12-21')
+  check(
+    'hour 24 rolls into next-day midnight',
+    rolled.getDate() === 22 && rolled.getHours() === 0,
+  )
+  const bad = sunDate(6, 'not-a-date')
+  check(
+    'malformed day falls back to today',
+    bad.getDate() === new Date().getDate() && bad.getHours() === 6,
+  )
+  // ~1 pm in Singapore (05:00 UTC): the June sun stands NORTH of 1.35°N,
+  // the December sun SOUTH — the shadow flip the season chips demo.
+  const sgJun = sunPosition(new Date('2026-06-21T05:00:00Z'), 103.82, 1.35)
+  const sgDec = sunPosition(new Date('2026-12-21T05:00:00Z'), 103.82, 1.35)
+  check(
+    'Singapore seasonal flip: June sun north, December sun south, both high',
+    (sgJun.azimuth < 90 || sgJun.azimuth > 270) &&
+      sgDec.azimuth > 90 &&
+      sgDec.azimuth < 270 &&
+      sgJun.elevation > 50 &&
+      sgDec.elevation > 50,
+    `jun az=${sgJun.azimuth.toFixed(0)} dec az=${sgDec.azimuth.toFixed(0)}`,
+  )
 }
 
 // ---- dashboard first: the arcgis chunk must NOT load with the app shell ----
@@ -1183,6 +1221,30 @@ check(
   Math.abs(nowHour - clockHour) < 0.5 || Math.abs(nowHour - clockHour) > 23.5,
   `hour=${nowHour} clock=${clockHour.toFixed(2)}`,
 )
+// Date/season picker: the day defaults to today, the date input and the
+// season chips drive data-sun-day, and "now" resets the day too.
+const isoToday = (() => {
+  const n = new Date()
+  return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(
+    n.getDate(),
+  ).padStart(2, '0')}`
+})()
+check('sun day defaults to today', (await root().getAttribute('data-sun-day')) === isoToday)
+await page.locator('[data-testid="map-sun-day"]').fill('2026-12-21')
+await page.waitForTimeout(200)
+check(
+  'date input lands in the contract',
+  (await root().getAttribute('data-sun-day')) === '2026-12-21',
+)
+await page.locator('[data-testid="map-sun-season"][data-id="jun"]').click()
+await page.waitForTimeout(200)
+check(
+  'season chip jumps to the June solstice',
+  (await root().getAttribute('data-sun-day')) === `${new Date().getFullYear()}-06-21`,
+)
+await page.locator('[data-testid="map-sun-now"]').click()
+await page.waitForTimeout(200)
+check('"now" resets the day to today', (await root().getAttribute('data-sun-day')) === isoToday)
 // 2D releases the sun tool like it does the flight tool.
 await page.locator('[data-testid="map-mode-2d"]').click()
 await page.waitForTimeout(500)
