@@ -32,6 +32,7 @@ import SquareFootIcon from '@mui/icons-material/SquareFoot'
 import RouteIcon from '@mui/icons-material/Route'
 import FlightTakeoffIcon from '@mui/icons-material/FlightTakeoff'
 import WbSunnyIcon from '@mui/icons-material/WbSunny'
+import LinkedCameraIcon from '@mui/icons-material/LinkedCamera'
 import DeleteSweepIcon from '@mui/icons-material/DeleteSweep'
 import esriConfig from '@arcgis/core/config'
 import EsriMap from '@arcgis/core/Map'
@@ -45,6 +46,7 @@ import Graphic from '@arcgis/core/Graphic'
 import Point from '@arcgis/core/geometry/Point'
 import Polygon from '@arcgis/core/geometry/Polygon'
 import Polyline from '@arcgis/core/geometry/Polyline'
+import PictureMarkerSymbol from '@arcgis/core/symbols/PictureMarkerSymbol'
 import SimpleFillSymbol from '@arcgis/core/symbols/SimpleFillSymbol'
 import SimpleMarkerSymbol from '@arcgis/core/symbols/SimpleMarkerSymbol'
 import type Viewpoint from '@arcgis/core/Viewpoint'
@@ -109,6 +111,9 @@ import { useOsrmRoute } from './useOsrmRoute'
 import { insertIndexFor, nearestOnPath, pathDistanceThresholdMeters } from './routeGeometry'
 import { nightRing, sunDate } from './terminatorModel'
 import SunControl from './SunControl'
+import TrafficControl, { TrafficDialog, type TrafficStatus } from './TrafficControl'
+import { fetchTrafficCameras } from './trafficApi'
+import { CCTV_ICON, type TrafficCam } from './trafficModel'
 import { armDrag, createDragState, dragPointerDown, dragPointerUp, dragStep } from './dragModel'
 import type { LonLat, RouteProfile } from './osrm'
 import {
@@ -185,7 +190,15 @@ if (import.meta.env.DEV) {
 
 export type AnyView = MapView | SceneView
 type MapStatus = 'loading' | 'ready' | 'error'
-type Tool = 'none' | 'pins' | 'measure-line' | 'measure-area' | 'route' | 'flight' | 'sun'
+type Tool =
+  | 'none'
+  | 'pins'
+  | 'measure-line'
+  | 'measure-area'
+  | 'route'
+  | 'flight'
+  | 'sun'
+  | 'traffic'
 
 /** Waypoint list + undo history (every edit pushes the previous list). */
 interface RouteEdit {
@@ -276,6 +289,9 @@ function todayIso(): string {
   ).padStart(2, '0')}`
 }
 
+/** CCTV badge for traffic-camera markers (inline SVG — offline-safe). */
+const CCTV_SYMBOL = new PictureMarkerSymbol({ url: CCTV_ICON, width: 22, height: 22 })
+
 /** Night-side shading for the day/night terminator overlay. */
 const NIGHT_SYMBOL = new SimpleFillSymbol({
   color: [4, 8, 28, 0.3],
@@ -365,6 +381,7 @@ export default function MapPageBody() {
   const sketchLayerRef = useRef<GraphicsLayer | null>(null)
   const flightLayerRef = useRef<GraphicsLayer | null>(null)
   const terminatorLayerRef = useRef<GraphicsLayer | null>(null)
+  const trafficLayerRef = useRef<GraphicsLayer | null>(null)
   const viewpointRef = useRef<Viewpoint | null>(null)
   const basemapIdRef = useRef(basemapId)
 
@@ -412,6 +429,15 @@ export default function MapPageBody() {
   const [sunAnim, setSunAnim] = useState(false)
   // The calendar day the sun stands on (local ISO) — season comparisons.
   const [sunDay, setSunDay] = useState(todayIso)
+  // Traffic cameras (transient): the fetched list, load status, last-load
+  // time, and the camera whose snapshot dialog is open.
+  const [trafficCams, setTrafficCams] = useState<TrafficCam[]>([])
+  const [trafficStatus, setTrafficStatus] = useState<TrafficStatus>('idle')
+  const [trafficAt, setTrafficAt] = useState('')
+  const [trafficCam, setTrafficCam] = useState<TrafficCam | null>(null)
+  const trafficCamsRef = useRef(trafficCams)
+  trafficCamsRef.current = trafficCams
+  const trafficAbortRef = useRef<AbortController | null>(null)
 
   // Click dispatch reads the live tool through a ref so the view's click
   // handler (registered once per view) never needs re-registering.
@@ -643,6 +669,7 @@ export default function MapPageBody() {
       sketchLayerRef.current = null
       flightLayerRef.current = null
       terminatorLayerRef.current = null
+      trafficLayerRef.current = null
     }
     if (!mapRef.current) {
       // Night shading sits UNDER every other overlay (list order = draw order).
@@ -655,6 +682,10 @@ export default function MapPageBody() {
       sketchLayerRef.current = new GraphicsLayer({ elevationInfo: { mode: 'on-the-ground' } })
       // flight graphics carry real z values — the one absolute-height layer
       flightLayerRef.current = new GraphicsLayer({ elevationInfo: { mode: 'absolute-height' } })
+      trafficLayerRef.current = new GraphicsLayer({
+        elevationInfo: { mode: 'on-the-ground' },
+        visible: false, // shown while the traffic tool is active
+      })
       mapRef.current = new EsriMap({
         basemap: createBasemap(basemapIdRef.current),
         ground: 'world-elevation',
@@ -666,6 +697,7 @@ export default function MapPageBody() {
           locateLayerRef.current,
           sketchLayerRef.current,
           flightLayerRef.current,
+          trafficLayerRef.current,
         ],
       })
     }
@@ -687,6 +719,7 @@ export default function MapPageBody() {
       sketchLayerRef.current = null
       flightLayerRef.current = null
       terminatorLayerRef.current = null
+      trafficLayerRef.current = null
       document.getElementById('arcgis-theme')?.remove()
     }
   }, [])
@@ -876,6 +909,21 @@ export default function MapPageBody() {
             lat: event.mapPoint.latitude,
           }),
         )
+      }
+    } else if (activeTool === 'traffic') {
+      // Clicking a camera marker opens its live snapshot; empty ground does
+      // nothing (camera locations come from the feed, not from clicks).
+      const hit = await v.hitTest({ x: event.x, y: event.y })
+      const camHit = hit.results.find(
+        (r) =>
+          r.type === 'graphic' &&
+          r.layer === trafficLayerRef.current &&
+          typeof r.graphic.attributes?.cameraId === 'string',
+      )
+      if (camHit && camHit.type === 'graphic') {
+        const id = camHit.graphic.attributes.cameraId as string
+        const cam = trafficCamsRef.current.find((c) => c.id === id)
+        if (cam) setTrafficCam(cam)
       }
     } else if (activeTool === 'route') {
       if (event.mapPoint?.longitude == null || event.mapPoint.latitude == null) return
@@ -1211,6 +1259,46 @@ export default function MapPageBody() {
     return () => clearInterval(id)
   }, [sunAnim])
 
+  // Traffic cameras: the layer shows only while the tool is active; the
+  // first activation fetches, refresh refetches (every fetch returns the
+  // LATEST snapshot URLs — that's the whole refresh story), and the cached
+  // list survives releasing the tool.
+  const loadTraffic = () => {
+    trafficAbortRef.current?.abort()
+    const ctrl = new AbortController()
+    trafficAbortRef.current = ctrl
+    setTrafficStatus('loading')
+    fetchTrafficCameras(ctrl.signal)
+      .then((cams) => {
+        if (ctrl.signal.aborted) return
+        setTrafficCams(cams)
+        setTrafficAt(new Date().toISOString())
+        setTrafficStatus('ready')
+      })
+      .catch(() => {
+        if (!ctrl.signal.aborted) setTrafficStatus('error')
+      })
+  }
+  useEffect(() => {
+    if (trafficLayerRef.current) trafficLayerRef.current.visible = tool === 'traffic'
+    if (tool === 'traffic' && trafficCamsRef.current.length === 0) loadTraffic()
+  }, [tool])
+  useEffect(() => () => trafficAbortRef.current?.abort(), [])
+  useEffect(() => {
+    const layer = trafficLayerRef.current
+    if (!layer) return
+    layer.removeAll()
+    for (const cam of trafficCams) {
+      layer.add(
+        new Graphic({
+          geometry: new Point({ longitude: cam.lon, latitude: cam.lat }),
+          attributes: { cameraId: cam.id },
+          symbol: CCTV_SYMBOL,
+        }),
+      )
+    }
+  }, [trafficCams, viewRevision])
+
   return (
     <Box
       data-testid="map-page"
@@ -1261,6 +1349,8 @@ export default function MapPageBody() {
       data-sun-hour={sunHour.toFixed(2)}
       data-sun-anim={sunAnim ? 'on' : 'off'}
       data-sun-day={sunDay}
+      data-traffic-count={trafficCams.length}
+      data-traffic-status={trafficStatus}
       sx={{
         display: 'flex',
         flexDirection: 'column',
@@ -1348,6 +1438,11 @@ export default function MapPageBody() {
               <WbSunnyIcon fontSize="small" />
             </Tooltip>
           </ToggleButton>
+          <ToggleButton value="traffic" data-testid="map-tool-traffic" aria-label="Traffic cameras">
+            <Tooltip title="Traffic cameras (tap a marker for its live image)">
+              <LinkedCameraIcon fontSize="small" />
+            </Tooltip>
+          </ToggleButton>
         </ToggleButtonGroup>
         <LocateControl viewRef={viewRef} viewRevision={viewRevision} layerRef={locateLayerRef} />
         <BookmarksControl
@@ -1427,6 +1522,14 @@ export default function MapPageBody() {
             onAnim={setSunAnim}
             lon={focus.lon}
             lat={focus.lat}
+          />
+        )}
+        {tool === 'traffic' && (
+          <TrafficControl
+            count={trafficCams.length}
+            status={trafficStatus}
+            updatedAt={trafficAt}
+            onRefresh={loadTraffic}
           />
         )}
         <Tooltip title={fullscreen ? 'Exit full screen' : 'Full screen'}>
@@ -1548,6 +1651,7 @@ export default function MapPageBody() {
         onUpdated={(id, geometry) => dispatch(updateDrawingGeometry({ id, geometry }))}
         onModeEnd={() => setDrawMode('none')}
       />
+      <TrafficDialog cam={trafficCam} onClose={() => setTrafficCam(null)} />
       <ConfirmDialog
         open={confirmClear}
         title="Remove all pins?"

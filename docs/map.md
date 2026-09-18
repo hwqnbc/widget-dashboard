@@ -173,6 +173,22 @@ on it works without a backend server or API key.
   terminator; "sun below horizon" at night) — so suite 130 asserts the
   whole tool offline: the lighting itself is Esri-rendered and eyeballed
   on deploy.
+- **Traffic cameras** (`TrafficControl.tsx` + pure `trafficModel.ts` +
+  thin `trafficApi.ts`) — a strip tool (`map-tool-traffic`, works in 2D
+  and 3D) showing Singapore's ~90 live LTA expressway cameras from
+  **data.gov.sg `/v1/transport/traffic-images`** (free, no key, CORS).
+  Activating fetches the feed once and drops a CCTV marker per camera
+  (`CCTV_ICON`, an inline SVG data-URI — no network asset — on its own
+  on-the-ground GraphicsLayer, visible only while the tool is active);
+  the refresh button refetches, which IS the "latest" story — every call
+  returns each camera's newest snapshot URL. Tapping a marker opens a
+  dialog with the live image (graceful "image unavailable" on error),
+  capture time and coordinates. The list is transient (cached across tool
+  toggles, gone on reload); the parser is defensive — malformed rows are
+  skipped, junk payloads degrade to 0 cameras + an error caption with
+  retry, never a crash. Contract: `data-traffic-count`,
+  `data-traffic-status`; e2e mocks the API (fixture centered on the live
+  view center, lesson #122 style) and the image host (inline JPEG).
 - **Fullscreen** — a strip button (`data-testid="map-fullscreen"`, Escape or
   the button exits) fixes the page root over the viewport (`position: fixed;
   inset: 0` at modal z-index) plus best-effort native `requestFullscreen`.
@@ -441,6 +457,10 @@ two.
   `SavedRoute` pattern), ~~camera follow mode~~, ~~per-waypoint
   altitudes~~ and ~~auto-release follow on a manual gesture~~ — shipped
   (see the drone flight bullet).
+- **Traffic-camera extras** — auto-refresh while the tool is active (the
+  feed updates ~every 20 s; an interval on the existing `loadTraffic`),
+  and other data.gov.sg transport feeds behind the same pattern (carpark
+  availability, taxi availability — each is one parser + one layer).
 - **Live USGS earthquakes overlay** — `GeoJSONLayer` on the public CORS feed
   (`earthquake.usgs.gov/.../all_day.geojson`), magnitude-scaled renderer +
   popups; toggle in the control strip.

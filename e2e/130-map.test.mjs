@@ -22,7 +22,12 @@
  *    the date input + season chips drive data-sun-day, pure
  *    sunPosition/sunDate units incl. the Singapore seasonal azimuth flip,
  *    the lighting write is view-side try/catch —
- *    asserts offline), undo-disabled state, deep-link render.
+ *    asserts offline), traffic cameras against an always-on data.gov.sg
+ *    mock (pure parser units; activate-fetch → count/status contract,
+ *    refresh refetches, released tool keeps the cache — offline; the
+ *    marker-click → snapshot-dialog flow runs in the online branch with
+ *    the mock feed centered on the live view center),
+ *    undo-disabled state, deep-link render.
  *  - online only: data-map-status reaches "ready" (from view.when, never
  *    networkidle), attribution + zoom UI present, click-driven pins with
  *    reload persistence, and the waypoint-editing flow against an ECHO OSRM
@@ -72,6 +77,7 @@ import {
   sunPosition,
   terminatorLatitude,
 } from './.bundle/terminatorModel.js'
+import { CCTV_ICON, parseTrafficCameras, updatedLabel } from './.bundle/trafficModel.js'
 
 const { check, finish } = reporter('map')
 const { browser, context, page } = await launch()
@@ -170,6 +176,61 @@ await page.route('**overpass-api.de/**', (route) => {
     }),
   })
 })
+
+// Traffic cameras: mock data.gov.sg with two cameras centered on wherever
+// the view currently sits (`trafficCenter` — the online branch sets it from
+// the data-center-* contract before fetching, lesson #122's bbox-mock idea)
+// plus a duplicate and a malformed row the parser must drop. The image host
+// serves a 1×1 JPEG so the snapshot dialog loads offline.
+const trafficCenter = { lon: 103.8511, lat: 1.2951 } // Singapore default
+let trafficCalls = 0
+const trafficFixture = () => ({
+  items: [
+    {
+      timestamp: '2026-09-18T12:00:00+08:00',
+      cameras: [
+        {
+          camera_id: '1701',
+          timestamp: '2026-09-18T11:59:40+08:00',
+          image: 'https://images.data.gov.sg/mock/1701.jpg',
+          location: { latitude: trafficCenter.lat, longitude: trafficCenter.lon },
+          image_metadata: { width: 640, height: 480, md5: 'x' },
+        },
+        {
+          camera_id: '1702',
+          timestamp: '2026-09-18T11:59:41+08:00',
+          image: 'https://images.data.gov.sg/mock/1702.jpg',
+          location: { latitude: trafficCenter.lat + 0.02, longitude: trafficCenter.lon + 0.02 },
+          image_metadata: { width: 640, height: 480, md5: 'y' },
+        },
+        // duplicate id — the parser keeps the first row only
+        {
+          camera_id: '1701',
+          timestamp: 'dupe',
+          image: 'https://images.data.gov.sg/mock/dupe.jpg',
+          location: { latitude: 1.1, longitude: 103.1 },
+        },
+        // malformed row — no image string, junk coords
+        { camera_id: '9999', image: 42, location: { latitude: 'x', longitude: null } },
+      ],
+    },
+  ],
+})
+await page.route('**://api.data.gov.sg/**', (route) => {
+  trafficCalls += 1
+  return route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify(trafficFixture()),
+  })
+})
+const TINY_JPEG = Buffer.from(
+  '/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AVN//2Q==',
+  'base64',
+)
+await page.route('**://images.data.gov.sg/**', (route) =>
+  route.fulfill({ status: 200, contentType: 'image/jpeg', body: TINY_JPEG }),
+)
 
 // ---- stale-chunk recovery: a dead lazy-chunk URL triggers one automatic
 // reload; a persistent failure shows the boundary's Reload card; removing
@@ -701,6 +762,31 @@ await page.route('**overpass-api.de/**', (route) => {
     `az=${equinoxSunrise.azimuth.toFixed(1)} el=${equinoxSunrise.elevation.toFixed(1)}`,
   )
 
+  // Traffic-camera parser: valid rows kept, duplicates and malformed rows
+  // dropped, junk envelopes degrade to [] (never crash).
+  const cams = parseTrafficCameras(trafficFixture())
+  check(
+    'traffic parse keeps valid rows, dedupes ids, skips malformed',
+    cams.length === 2 &&
+      cams[0].id === '1701' &&
+      cams[1].id === '1702' &&
+      cams[0].imageUrl.includes('1701'),
+    `n=${cams.length}`,
+  )
+  check(
+    'traffic parse: junk envelopes yield []',
+    parseTrafficCameras(null).length === 0 &&
+      parseTrafficCameras({}).length === 0 &&
+      parseTrafficCameras({ items: [{}] }).length === 0 &&
+      parseTrafficCameras({ items: [{ cameras: 'nope' }] }).length === 0,
+  )
+  check('cctv marker icon is an inline data URI', CCTV_ICON.startsWith('data:image/svg+xml,'))
+  check(
+    'updatedLabel formats and guards',
+    /^updated \d\d:\d\d:\d\d$/.test(updatedLabel(new Date().toISOString())) &&
+      updatedLabel('junk') === '',
+  )
+
   // Date-aware sunDate (the season picker's seam) + the seasonal flip it
   // exposes. sunDate is local-clock on purpose, so assert via local getters.
   const winter = sunDate(13.5, '2026-12-21')
@@ -996,6 +1082,46 @@ check(
 await page.locator('[data-testid="map-terminator"]').click()
 await page.waitForTimeout(300)
 check('terminator toggles on', (await root().getAttribute('data-terminator')) === 'on')
+
+// ---- traffic cameras (mocked feed — works offline, 2D and 3D alike) ----
+check(
+  'traffic contract defaults (idle, no cameras)',
+  (await root().getAttribute('data-traffic-count')) === '0' &&
+    (await root().getAttribute('data-traffic-status')) === 'idle',
+)
+await page.locator('[data-testid="map-tool-traffic"]').click()
+await waitForAttr('data-traffic-status', (v) => v === 'ready', 10000)
+const trafficCallsAfterLoad = trafficCalls
+check(
+  'activating the tool loads the mocked cameras',
+  (await root().getAttribute('data-tool')) === 'traffic' &&
+    (await root().getAttribute('data-traffic-count')) === '2' &&
+    ((await page.locator('[data-testid="map-traffic-info"]').textContent()) ?? '').includes(
+      '2 cameras',
+    ) &&
+    trafficCallsAfterLoad >= 1,
+)
+await page.locator('[data-testid="map-traffic-refresh"]').click()
+await page.waitForTimeout(400)
+check(
+  'refresh refetches the feed',
+  trafficCalls === trafficCallsAfterLoad + 1 &&
+    (await root().getAttribute('data-traffic-status')) === 'ready' &&
+    (await root().getAttribute('data-traffic-count')) === '2',
+  `calls=${trafficCalls}`,
+)
+await page.locator('[data-testid="map-tool-traffic"]').click() // release
+await page.waitForTimeout(200)
+await page.locator('[data-testid="map-tool-traffic"]').click() // re-activate
+await page.waitForTimeout(300)
+check(
+  'released tool keeps the cache — re-activation does not refetch',
+  trafficCalls === trafficCallsAfterLoad + 1 &&
+    (await root().getAttribute('data-traffic-count')) === '2' &&
+    (await root().getAttribute('data-traffic-status')) === 'ready',
+)
+await page.locator('[data-testid="map-tool-traffic"]').click() // release for the next sections
+await page.waitForTimeout(200)
 check('no drawings initially', (await root().getAttribute('data-drawings')) === '0')
 check('draw mode starts none', (await root().getAttribute('data-draw-mode')) === 'none')
 
@@ -2086,6 +2212,41 @@ check(
         (await root().getAttribute('data-tool')) === 'none' &&
           (await page.locator('[data-testid="map-tool-flight"]').isDisabled()),
       )
+
+      // ---- traffic cameras: click a marker → snapshot dialog (2D) ----
+      // Re-center the mocked feed on wherever the view sits now (the mock
+      // reads `trafficCenter` live), refresh to fetch it, then click the
+      // view center — the marker there must hitTest to camera 1701 (1702
+      // sits ~2 km off and may share the center pixel at country scales).
+      await page.waitForTimeout(1200) // let the stationary watcher snapshot
+      trafficCenter.lon = parseFloat(
+        (await root().getAttribute('data-center-lon')) ?? String(trafficCenter.lon),
+      )
+      trafficCenter.lat = parseFloat(
+        (await root().getAttribute('data-center-lat')) ?? String(trafficCenter.lat),
+      )
+      await page.locator('[data-testid="map-tool-traffic"]').click()
+      await page.waitForTimeout(300)
+      await page.locator('[data-testid="map-traffic-refresh"]').click()
+      await page.waitForTimeout(400)
+      await waitForAttr('data-traffic-status', (v) => v === 'ready', 10000)
+      await page.waitForTimeout(600) // markers mirrored into the layer + drawn
+      await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2)
+      await page.waitForSelector('[data-testid="map-traffic-dialog"]', { timeout: 10000 })
+      check(
+        'clicking a camera marker opens its snapshot dialog',
+        ((await page.locator('[data-testid="map-traffic-dialog"]').textContent()) ?? '').includes(
+          'Camera 17',
+        ) && (await page.locator('[data-testid="map-traffic-image"]').count()) === 1,
+      )
+      await page.locator('[data-testid="map-traffic-close"]').click()
+      await page.waitForTimeout(500)
+      check(
+        'snapshot dialog closes',
+        (await page.locator('[data-testid="map-traffic-dialog"]').count()) === 0,
+      )
+      await page.locator('[data-testid="map-tool-traffic"]').click() // release
+      await page.waitForTimeout(200)
     } else {
       console.log('SKIP: 3D view never settled — flight interactive checks skipped')
       await page.locator('[data-testid="map-mode-2d"]').click()
