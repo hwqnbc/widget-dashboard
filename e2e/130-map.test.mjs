@@ -24,7 +24,8 @@
  *    the lighting write is view-side try/catch —
  *    asserts offline), traffic cameras against an always-on data.gov.sg
  *    mock (pure parser units; activate-fetch → count/status contract,
- *    refresh refetches, released tool keeps the cache — offline; the
+ *    refresh refetches, the JB↔SG checkpoints dialog (labeled crossing
+ *    cameras + in-dialog refresh), released tool keeps the cache — offline; the
  *    marker-click → snapshot-dialog flow runs in the online branch with
  *    the mock feed centered on the live view center),
  *    undo-disabled state, deep-link render.
@@ -77,7 +78,12 @@ import {
   sunPosition,
   terminatorLatitude,
 } from './.bundle/terminatorModel.js'
-import { CCTV_ICON, parseTrafficCameras, updatedLabel } from './.bundle/trafficModel.js'
+import {
+  CCTV_ICON,
+  checkpointCams,
+  parseTrafficCameras,
+  updatedLabel,
+} from './.bundle/trafficModel.js'
 
 const { check, finish } = reporter('map')
 const { browser, context, page } = await launch()
@@ -212,6 +218,22 @@ const trafficFixture = () => ({
         },
         // malformed row — no image string, junk coords
         { camera_id: '9999', image: 42, location: { latitude: 'x', longitude: null } },
+        // checkpoint cameras at their real border locations (far from the
+        // view center, so the online center-click still hits 1701)
+        {
+          camera_id: '2701',
+          timestamp: '2026-09-18T11:59:42+08:00',
+          image: 'https://images.data.gov.sg/mock/2701.jpg',
+          location: { latitude: 1.4451, longitude: 103.7684 },
+          image_metadata: { width: 640, height: 480, md5: 'w' },
+        },
+        {
+          camera_id: '4713',
+          timestamp: '2026-09-18T11:59:43+08:00',
+          image: 'https://images.data.gov.sg/mock/4713.jpg',
+          location: { latitude: 1.3486, longitude: 103.6362 },
+          image_metadata: { width: 640, height: 480, md5: 't' },
+        },
       ],
     },
   ],
@@ -767,11 +789,22 @@ await page.route('**://images.data.gov.sg/**', (route) =>
   const cams = parseTrafficCameras(trafficFixture())
   check(
     'traffic parse keeps valid rows, dedupes ids, skips malformed',
-    cams.length === 2 &&
+    cams.length === 4 &&
       cams[0].id === '1701' &&
       cams[1].id === '1702' &&
       cams[0].imageUrl.includes('1701'),
     `n=${cams.length}`,
+  )
+  const checkpoints = checkpointCams(cams)
+  check(
+    'checkpoint view picks the crossing cameras in display order',
+    checkpoints.length === 2 &&
+      checkpoints[0].id === '2701' &&
+      checkpoints[0].label === 'Woodlands — Causeway' &&
+      checkpoints[1].id === '4713' &&
+      checkpoints[1].label === 'Tuas Checkpoint' &&
+      checkpointCams([]).length === 0,
+    `n=${checkpoints.length}`,
   )
   check(
     'traffic parse: junk envelopes yield []',
@@ -1095,29 +1128,58 @@ const trafficCallsAfterLoad = trafficCalls
 check(
   'activating the tool loads the mocked cameras',
   (await root().getAttribute('data-tool')) === 'traffic' &&
-    (await root().getAttribute('data-traffic-count')) === '2' &&
+    (await root().getAttribute('data-traffic-count')) === '4' &&
     ((await page.locator('[data-testid="map-traffic-info"]').textContent()) ?? '').includes(
-      '2 cameras',
+      '4 cameras',
     ) &&
     trafficCallsAfterLoad >= 1,
 )
+// Checkpoints quick view: the crossing cameras from the same feed, labeled,
+// in one dialog with its own refresh.
+await page.locator('[data-testid="map-traffic-checkpoints"]').click()
+await page.waitForTimeout(400)
+check(
+  'checkpoints dialog shows the crossing cameras with images',
+  (await page.locator('[data-testid="map-checkpoint-tile"]').count()) === 2 &&
+    (await page.locator('[data-testid="map-checkpoint-image"]').count()) === 2 &&
+    ((await page.locator('[data-testid="map-checkpoints-dialog"]').textContent()) ?? '').includes(
+      'Woodlands — Causeway',
+    ),
+)
+const trafficCallsBeforeDialogRefresh = trafficCalls
+await page.locator('[data-testid="map-checkpoints-refresh"]').click()
+await page.waitForTimeout(400)
+check(
+  'checkpoint refresh pulls fresh snapshots',
+  trafficCalls === trafficCallsBeforeDialogRefresh + 1 &&
+    (await page.locator('[data-testid="map-checkpoint-image"]').count()) === 2,
+  `calls=${trafficCalls}`,
+)
+await page.locator('[data-testid="map-checkpoints-close"]').click()
+await page.waitForTimeout(500)
+check(
+  'checkpoints dialog closes',
+  (await page.locator('[data-testid="map-checkpoints-dialog"]').count()) === 0,
+)
+const trafficCallsBeforeStripRefresh = trafficCalls
 await page.locator('[data-testid="map-traffic-refresh"]').click()
 await page.waitForTimeout(400)
 check(
   'refresh refetches the feed',
-  trafficCalls === trafficCallsAfterLoad + 1 &&
+  trafficCalls === trafficCallsBeforeStripRefresh + 1 &&
     (await root().getAttribute('data-traffic-status')) === 'ready' &&
-    (await root().getAttribute('data-traffic-count')) === '2',
+    (await root().getAttribute('data-traffic-count')) === '4',
   `calls=${trafficCalls}`,
 )
+const trafficCallsBeforeRelease = trafficCalls
 await page.locator('[data-testid="map-tool-traffic"]').click() // release
 await page.waitForTimeout(200)
 await page.locator('[data-testid="map-tool-traffic"]').click() // re-activate
 await page.waitForTimeout(300)
 check(
   'released tool keeps the cache — re-activation does not refetch',
-  trafficCalls === trafficCallsAfterLoad + 1 &&
-    (await root().getAttribute('data-traffic-count')) === '2' &&
+  trafficCalls === trafficCallsBeforeRelease &&
+    (await root().getAttribute('data-traffic-count')) === '4' &&
     (await root().getAttribute('data-traffic-status')) === 'ready',
 )
 await page.locator('[data-testid="map-tool-traffic"]').click() // release for the next sections

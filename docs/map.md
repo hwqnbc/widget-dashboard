@@ -189,6 +189,16 @@ on it works without a backend server or API key.
   retry, never a crash. Contract: `data-traffic-count`,
   `data-traffic-status`; e2e mocks the API (fixture centered on the live
   view center, lesson #122 style) and the image host (inline JPEG).
+  **Checkpoints quick view**: a "Checkpoints" button in the tool row opens
+  the four JB↔SG crossing cameras in one labeled grid (pure
+  `checkpointCams` over `CHECKPOINT_CAMS`: 2701 Woodlands — Causeway, 2702
+  Woodlands Checkpoint, 4703 Tuas — Second Link, 4713 Tuas Checkpoint)
+  with an in-dialog refresh — camera 2701 looks ACROSS the Causeway, so
+  the JB→SG queue on the bridge is visible without any Malaysia-side
+  data. (Assessed: MBJB iTrafik / LLM / PLUS publish no public CORS API —
+  the sites showing JB-side cameras proxy them server-side, which a
+  GitHub-Pages-only app cannot; LTA's crossing cameras are the coverage
+  that exists.)
 - **Fullscreen** — a strip button (`data-testid="map-fullscreen"`, Escape or
   the button exits) fixes the page root over the viewport (`position: fixed;
   inset: 0` at modal z-index) plus best-effort native `requestFullscreen`.

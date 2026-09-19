@@ -51,6 +51,28 @@ export function parseTrafficCameras(json: unknown): TrafficCam[] {
   return out
 }
 
+/** LTA's JB↔SG crossing cameras, in display order. 2701 looks ACROSS the
+ * Causeway (the JB→SG queue on the bridge); the Malaysia-side networks
+ * (MBJB iTrafik, LLM/PLUS) publish no public CORS API, so these four are
+ * the crossing coverage that actually exists for a browser-only app. */
+export const CHECKPOINT_CAMS: { id: string; label: string }[] = [
+  { id: '2701', label: 'Woodlands — Causeway' },
+  { id: '2702', label: 'Woodlands Checkpoint' },
+  { id: '4703', label: 'Tuas — Second Link' },
+  { id: '4713', label: 'Tuas Checkpoint' },
+]
+
+/** The feed's checkpoint cameras, labeled, in CHECKPOINT_CAMS order —
+ * cameras missing from the feed are simply absent. */
+export function checkpointCams(cams: TrafficCam[]): (TrafficCam & { label: string })[] {
+  const out: (TrafficCam & { label: string })[] = []
+  for (const cp of CHECKPOINT_CAMS) {
+    const cam = cams.find((c) => c.id === cp.id)
+    if (cam) out.push({ ...cam, label: cp.label })
+  }
+  return out
+}
+
 /** "updated hh:mm:ss" for the control caption ('' for a bad timestamp). */
 export function updatedLabel(iso: string): string {
   const d = new Date(iso)

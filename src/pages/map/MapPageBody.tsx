@@ -1529,6 +1529,7 @@ export default function MapPageBody() {
             count={trafficCams.length}
             status={trafficStatus}
             updatedAt={trafficAt}
+            cams={trafficCams}
             onRefresh={loadTraffic}
           />
         )}
