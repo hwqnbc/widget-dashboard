@@ -43,6 +43,7 @@ export default defineConfig(({ command, mode }) => ({
       '@arcgis/core/widgets/AreaMeasurement2D',
       '@arcgis/core/widgets/DirectLineMeasurement3D',
       '@arcgis/core/widgets/AreaMeasurement3D',
+      '@arcgis/core/widgets/Compass',
     ],
   },
   plugins: [react()],

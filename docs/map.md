@@ -84,6 +84,11 @@ on it works without a backend server or API key.
   rendered blank ("tiles don't load"). `ensureMap` also self-heals by
   rebuilding if it ever finds the map destroyed, and suite 130 fails on any
   "map is already destroyed" console warning.
+  The 2D view also gets an explicit **`Compass` widget** in its UI
+  (top-left, under zoom): the SceneView ships one by default but the
+  MapView doesn't, despite rotating via right-drag / two-finger twist —
+  the needle tracks `view.rotation` and a tap resets north-up. Owned by
+  the view UI, so the swap teardown destroys it with the view.
 - **The live view never enters React state or props** (lessons.md #67):
   ArcGIS `Accessor` objects are getter minefields, and React 19's dev-mode
   render instrumentation deep-walks changed props — reading `zoom` on a

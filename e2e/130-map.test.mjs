@@ -30,7 +30,7 @@
  *    the mock feed centered on the live view center),
  *    undo-disabled state, deep-link render.
  *  - online only: data-map-status reaches "ready" (from view.when, never
- *    networkidle), attribution + zoom UI present, click-driven pins with
+ *    networkidle), attribution + zoom + 2D-compass UI present, click-driven pins with
  *    reload persistence, and the waypoint-editing flow against an ECHO OSRM
  *    mock (returns a line through the requested coords): A→B distance,
  *    insert by clicking the line, remove by clicking a marker, undo of
@@ -934,6 +934,12 @@ if (online) {
       ((await page.locator('.esri-attribution').textContent()) ?? '').length > 0,
   )
   check('zoom UI present (ArcGIS CSS applied)', (await page.locator('.esri-zoom').count()) === 1)
+  // The 2D view carries an explicit Compass widget (the SceneView's is
+  // Esri-default) — the MapView rotates, so north-up needs a one-tap reset.
+  check(
+    '2D compass present (reset-to-north for a rotated MapView)',
+    (await page.locator('.esri-compass').count()) === 1,
+  )
 } else {
   const status = await root().getAttribute('data-map-status')
   check(

@@ -49,6 +49,7 @@ import Polyline from '@arcgis/core/geometry/Polyline'
 import PictureMarkerSymbol from '@arcgis/core/symbols/PictureMarkerSymbol'
 import SimpleFillSymbol from '@arcgis/core/symbols/SimpleFillSymbol'
 import SimpleMarkerSymbol from '@arcgis/core/symbols/SimpleMarkerSymbol'
+import Compass from '@arcgis/core/widgets/Compass'
 import type Viewpoint from '@arcgis/core/Viewpoint'
 import lightCss from '@arcgis/core/assets/esri/themes/light/main.css?inline'
 import darkCss from '@arcgis/core/assets/esri/themes/dark/main.css?inline'
@@ -769,6 +770,11 @@ export default function MapPageBody() {
           props.scale = saved.scale
         }
         nextView = new MapView(props)
+        // The SceneView ships a compass in its default UI; the MapView
+        // doesn't, yet it rotates (right-drag / two-finger twist) — give it
+        // the same one-tap way back to north-up. Owned by the view UI, so
+        // view.destroy() on swap/unmount tears it down.
+        nextView.ui.add(new Compass({ view: nextView }), 'top-left')
       }
 
       nextView.when(
