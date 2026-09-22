@@ -2000,3 +2000,15 @@ carried over; these are the new ones.
      does nothing (taps counter never moved, which is what gave it away:
      probe `document.elementFromPoint` when a synthetic click vanishes).
      Wait for the backdrop to unmount before coordinate-driven input.
+
+124. **Measure puzzle difficulty as solver choice width, then tune levers
+     one at a time against it.** "Make it harder" resists intuition: three
+     plausible Arrow Escape levers (raw ray-coverage scoring, compactness
+     bonuses, bigger counts) each measurably made boards EASIER or thinner.
+     The number that worked: average free choices across a greedy solve,
+     plus free-at-start. Two insights it surfaced — an arrow whose head hugs
+     the wall it points at has a zero-length ray and is PERMANENTLY free
+     (prefer the longest clear ray instead), and difficulty lives in the
+     LATE-seated pieces (the top of the pile), so bias placement there and
+     let the early board pack dense. Pin the measured hardness in the suite
+     as a regression bound, exactly like a perf budget.

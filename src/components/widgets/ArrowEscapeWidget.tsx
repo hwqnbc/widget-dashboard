@@ -106,7 +106,7 @@ export default function ArrowEscapeWidget({ id }: WidgetProps) {
 
   const dims = ARROW_DIMS[size]
   const puzzle = useMemo(
-    () => generatePuzzle(seed, dims.cols, dims.rows, dims.count, dims.minLen, dims.maxLen),
+    () => generatePuzzle(seed, dims.cols, dims.rows, dims.count, dims.minLen, dims.maxLen, dims.pick),
     [seed, dims],
   )
   const tracks = useMemo(() => {

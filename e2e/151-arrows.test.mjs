@@ -83,8 +83,10 @@ const { check, finish } = reporter('arrow-escape')
     let clean = true
     let seated = 0
     let ordered = 0
+    let freeStart = 0
+    let width = 0
     for (let seed = 1; seed <= 200; seed++) {
-      const p = generatePuzzle(seed, d.cols, d.rows, d.count, d.minLen, d.maxLen)
+      const p = generatePuzzle(seed, d.cols, d.rows, d.count, d.minLen, d.maxLen, d.pick)
       seated += p.arrows.length
       const seen = new Set()
       for (const a of p.arrows) {
@@ -96,11 +98,38 @@ const { check, finish } = reporter('arrow-escape')
       }
       if (solveOrder(p) !== null) solvable++
       if (p.arrows.some((a) => blockerOf(a, p.arrows, p.cols, p.rows) !== null)) ordered++
+      // Choice width: the average number of free arrows across a greedy
+      // solve — THE difficulty number (lower = harder). Free-at-start is
+      // its opening move.
+      let alive = [...p.arrows]
+      let w = 0
+      let steps = 0
+      while (alive.length > 0) {
+        const free = alive.filter((a) => blockerOf(a, alive, p.cols, p.rows) === null)
+        if (free.length === 0) break
+        if (steps === 0) freeStart += free.length / p.arrows.length
+        w += free.length
+        steps++
+        alive = alive.filter((a) => a.id !== free[0].id)
+      }
+      width += w / Math.max(1, steps)
     }
     check(`${size}: every one of 200 seeds is solvable`, solvable === 200)
     check(`${size}: snakes stay in-bounds and never overlap`, clean)
-    check(`${size}: boards seat near-full (${(seated / 200).toFixed(1)}/${d.count})`, seated / 200 >= d.count * 0.85)
+    check(
+      `${size}: boards seat their floor (${(seated / 200).toFixed(1)} ≥ ${d.minSeat})`,
+      seated / 200 >= d.minSeat,
+    )
     check(`${size}: most boards need an ORDER (${ordered}/200 have a blocked arrow)`, ordered >= 150)
+    if (size === 'large') {
+      // Hardness must not silently regress: measured ~0.37 free at start
+      // and width ~5.6; the bounds are conservative, not aspirational.
+      check(
+        `large: most arrows start blocked (${((freeStart / 200) * 100).toFixed(0)}% free)`,
+        freeStart / 200 <= 0.45,
+      )
+      check(`large: the solve stays narrow (width ${(width / 200).toFixed(1)})`, width / 200 <= 6.5)
+    }
   }
 }
 
@@ -130,7 +159,7 @@ check('the DOM carries one group per arrow', (await arrowsOnBoard()).length === 
 check(
   'the DOM agrees with the model on the same seed',
   (await num('data-seed')) >= 0 &&
-    generatePuzzle(await num('data-seed'), dims.cols, dims.rows, dims.count, dims.minLen, dims.maxLen)
+    generatePuzzle(await num('data-seed'), dims.cols, dims.rows, dims.count, dims.minLen, dims.maxLen, dims.pick)
       .arrows.length === total,
 )
 

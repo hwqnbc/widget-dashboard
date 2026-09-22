@@ -46,22 +46,47 @@ Two hard-won details:
   stays removable — removability is monotone, and a greedy that wedges
   means no order exists at all.
 
-Density is tuned against measured seat rates (small 9/7×7 at ~62% fill,
-medium 16/9×9 at ~72%, large 26/12×12 at ~75% with **~13 arrows blocked at
-start** — the ad-dense tangle; the first cut looked thin even on large, so
-the presets were raised until the boards read like the original). Two
-generator moves make that density seat instead of degrading:
+## Difficulty — measured as choice width, not vibes
 
-- **All four head directions are scanned per attempt** (seeded order), not
-  gambled one per attempt — on a dense board most rays are blocked, and the
-  short ray toward the nearest wall is usually the one that clears, which is
-  also how the original game's boards read.
-- **The body walk runs best-of-three**, keeping the longest — a single
-  self-avoiding walk jams short on a crowded board — and `minLen` is 2, so
-  late arrows may seat as the small hooks the ad also has.
+Two rounds of user feedback said the boards played too easy, and both times
+the fix came from measuring, not guessing. The difficulty number is **choice
+width**: the average number of free (tappable-out) arrows across a greedy
+solve — width 7 is a tap-fest, width ~3 is a puzzle. Free-at-start is its
+opening move. The suite asserts both for large, so hardness cannot silently
+regress.
 
-A board too crowded still ships with what fitted — solvable, just lighter.
-The widget publishes the *actual* total.
+Presets (measured over 120+ seeds): small 9/7×7 at ~62% fill, width ~3.1 —
+the gentle warm-up, generated plain first-fit. Medium ~15/9×9 at ~77%,
+width ~3.3. Large — the adult board — **~29 arrows on 14×14** at ~71% fill,
+**63% of them blocked at the start, width ~5.6** (vs 7.6 for unbiased
+placement on the same dims). What buys the hardness, in the order it was
+discovered:
+
+- **No free wall-huggers.** A head adjacent to the edge it points at has a
+  zero-length exit ray nothing can ever cover — a permanently free arrow,
+  and the old first-clear-direction scan actively preferred them. On hard
+  sizes (`pick > 1`) every seat now takes the clear direction with the
+  LONGEST ray: long interior rays are exactly what later bodies land on.
+- **Chain-forming placement, phased in late.** `pick` is the difficulty
+  dial: per seat the generator collects up to `pick` valid candidates (all
+  sampled against the same occupancy, so all stay valid) and commits the one
+  that newly blocks the most DISTINCT currently-free arrows — blocking an
+  already-blocked arrow adds nothing, and scoring raw ray coverage measurably
+  rewarded sprawl that crowded later seats out. The bias only activates
+  after ~25% of seats: early arrows are the bottom of the pile (freed last),
+  so packing them dense and unbiased keeps the seat rate, while the late
+  bodies — the ones on top — are what decide which arrows start free.
+- **The count over-asks.** The biased generator saturates around ~29 arrows
+  on large; requesting 52 just lets every board reach saturation. `count`
+  is a ceiling, `minSeat` is the suite's floor on the average, and the
+  widget publishes the *actual* total.
+
+Also from the density round: **all four head directions are scanned per
+attempt** (seeded order) rather than gambled one per attempt, and **the body
+walk runs best-of-three keeping the longest** — a single self-avoiding walk
+jams short on a crowded board — with `minLen` 2 so late arrows may seat as
+the small hooks the original game also has. A board too crowded still ships
+with what fitted — solvable, just lighter.
 
 ## Interaction and animation
 
@@ -134,11 +159,13 @@ reshuffle/size changes.
   progress is one `pos`-style "arrows left" counter.
 
 **Puzzle depth**
-- **Long-chain generator bias** — prefer seats whose ray crosses existing
-  bodies, raising the blocked-at-start count further for an explicit "hard"
-  toggle; the solvability invariant is untouched (it only constrains the
-  new arrow's own ray). The density round already lifted large to ~13
-  blocked at start — this is the lever beyond that.
+- ~~Long-chain generator bias~~ — **shipped** as the `pick` candidate
+  scoring plus the longest-ray direction rule (see *Difficulty*); large now
+  starts 63% blocked with choice width ~5.6.
+- **An explicit Hard/Expert toggle** — the `pick` dial and the phase-in
+  fraction are per-size constants; exposing a fourth preset (or a
+  hard-mode switch reusing large's dims with `pick` cranked and the width
+  bound retuned) is a settings row plus a suite row.
 - **Rotating arrows** — a special arrow that turns 90° when bumped; needs a
   `dir` override in state and a re-check of the generation invariant.
 - **Walls** — static cells no ray may cross; generation treats them as

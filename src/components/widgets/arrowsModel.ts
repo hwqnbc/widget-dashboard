@@ -57,13 +57,22 @@ const PERP: Record<Dir, [Dir, Dir]> = {
 }
 
 /** Board sizes. Density (arrows × mean length vs cells) is tuned against the
- * measured seat rate: small stays a gentle warm-up, medium fills near half
- * the board, and large is the ad-dense tangle — long snakes over most of the
- * grid, where the clearing order is the whole game. */
+ * measured seat rate, and `pick` is the difficulty dial: how many valid
+ * placements the generator collects per seat before committing the most
+ * CHAIN-FORMING one (the candidate whose body lands on the most existing
+ * arrows' exit rays — see generatePuzzle). Small stays a gentle warm-up;
+ * large is deliberately adult-hard: a near-full board where only a couple
+ * of arrows are ever free at once. */
 export const ARROW_DIMS = {
-  small: { cols: 7, rows: 7, count: 9, minLen: 2, maxLen: 5 },
-  medium: { cols: 9, rows: 9, count: 16, minLen: 2, maxLen: 6 },
-  large: { cols: 12, rows: 12, count: 26, minLen: 2, maxLen: 8 },
+  small: { cols: 7, rows: 7, count: 9, minLen: 2, maxLen: 5, pick: 1, minSeat: 8 },
+  medium: { cols: 9, rows: 9, count: 16, minLen: 2, maxLen: 6, pick: 3, minSeat: 14 },
+  // The requested count deliberately over-asks: the biased generator
+  // saturates around ~29 arrows here, and asking for more just lets every
+  // board reach that saturation. Measured (120 seeds): ~29 seated, ~71%
+  // fill, ~10.8 free at the start (63% blocked), choice width ~5.6 vs 7.6
+  // unbiased on the same dims. `minSeat` is the suite's floor on the
+  // average seat count — the honest expectation, since count is a ceiling.
+  large: { cols: 14, rows: 14, count: 52, minLen: 2, maxLen: 7, pick: 12, minSeat: 26 },
 } as const
 export type ArrowsSize = keyof typeof ARROW_DIMS
 
@@ -163,27 +172,59 @@ export function generatePuzzle(
   count: number,
   minLen: number,
   maxLen: number,
+  /**
+   * The difficulty dial: how many valid placements to collect per seat
+   * before committing the most CHAIN-FORMING one — the candidate whose body
+   * covers the most cells that existing arrows' exit rays pass through, so
+   * freeing one arrow tends to require freeing another first. 1 = commit
+   * the first fit (the gentle presets). The solvability invariant is
+   * untouched: it constrains only the new arrow's OWN ray, and every
+   * candidate already passed it.
+   */
+  pick = 1,
 ): Puzzle {
   const rand = mulberry32(seed)
   const occ = new Set<number>()
   const arrows: Arrow[] = []
+  /** Per seated arrow: its ray cells and its own cell set — ray geometry
+   * never changes once seated, so these are computed once. */
+  const raySets = new Map<number, number[]>()
+  const cellSets = new Map<number, Set<number>>()
+
+  /** Seated arrows whose exit is CURRENTLY clear (own cells never block). */
+  const freeSeated = (): number[] =>
+    arrows
+      .filter((a) => raySets.get(a.id)!.every((k) => !occ.has(k) || cellSets.get(a.id)!.has(k)))
+      .map((a) => a.id)
 
   for (let id = 0; id < count; id++) {
-    for (let attempt = 0; attempt < 900; attempt++) {
+    // The bias phases in LATE. Early arrows are the bottom of the pile (the
+    // player frees them last) — packing them dense and unbiased is what
+    // keeps the seat rate; it is the late-seated bodies, the ones on top,
+    // that decide which arrows start free, so that is where chain-forming
+    // placement buys difficulty instead of just fragmenting the board.
+    const usePick = arrows.length >= count * 0.25 ? pick : 1
+    const free = usePick > 1 ? freeSeated() : []
+    const candidates: Cell[][] = []
+    for (let attempt = 0; attempt < 2600 && candidates.length < usePick; attempt++) {
       const head = { x: Math.floor(rand() * cols), y: Math.floor(rand() * rows) }
       if (occ.has(key(head))) continue
 
       // The solvability invariant: the ray must be clear of every arrow
       // already seated (they will still be on the board when this one goes).
-      // All four directions are scanned in a seeded order and the first
-      // workable one wins — on a dense board most rays are blocked, and
-      // gambling on a single direction per attempt is what capped the old
-      // presets' seat rate. (Short rays toward the nearest wall pass most
-      // often, which is also how the original game's boards read.)
+      // All four directions are scanned in a seeded order — on a dense board
+      // most rays are blocked, and gambling on a single direction per
+      // attempt is what capped the old presets' seat rate. Gentle boards
+      // (pick 1) take the first clear direction, which favours the short
+      // hop to the nearest wall; hard boards take the clear direction with
+      // the LONGEST ray, because a head hugging the wall it points at has a
+      // zero-length ray nothing can ever cover — a permanently free arrow —
+      // while a long interior ray is exactly what later bodies land on.
       const spin = Math.floor(rand() * 4)
       let dir: Dir | null = null
       let behind: Cell | null = null
-      for (let k = 0; k < 4 && dir === null; k++) {
+      let bestRay = -1
+      for (let k = 0; k < 4; k++) {
         const cand = DIR_IDS[(spin + k) % 4]
         const step = DIRS[cand]
         const back = { x: head.x - step.x, y: head.y - step.y }
@@ -191,19 +232,28 @@ export function generatePuzzle(
         if (occ.has(key(back))) continue
         let rx = head.x + step.x
         let ry = head.y + step.y
+        let rayLen = 0
         let clear = true
         while (rx >= 0 && rx < cols && ry >= 0 && ry < rows) {
           if (occ.has(ry * 64 + rx)) {
             clear = false
             break
           }
+          rayLen++
           rx += step.x
           ry += step.y
         }
-        if (clear) {
+        if (!clear) continue
+        // The longest-ray preference applies to EVERY seat of a hard size
+        // (pick > 1), early ones included — an early wall-hugger is free
+        // forever, whatever lands later. Only the candidate SCORING phases
+        // in late (usePick).
+        if (dir === null || (pick > 1 && rayLen > bestRay)) {
           dir = cand
           behind = back
+          bestRay = rayLen
         }
+        if (pick === 1) break
       }
       if (dir === null || behind === null) continue
       // Consts for the walk closure — narrowing on `let` doesn't cross it.
@@ -254,10 +304,39 @@ export function generatePuzzle(
       }
       if (cells.length < minLen) continue
 
-      for (const c of cells) occ.add(key(c))
-      arrows.push({ id, cells })
-      break
+      // All candidates for one seat are sampled against the SAME occupancy —
+      // nothing commits until one is chosen, so every candidate stays valid.
+      candidates.push(cells)
     }
+    if (candidates.length === 0) continue
+
+    // Commit the candidate that newly blocks the most DISTINCT currently-free
+    // arrows — blocking an already-blocked arrow adds no difficulty, and
+    // scoring raw ray coverage turned out to reward sprawling bodies that
+    // crowd later seats out. Ties fall to the first (seeded) candidate, so
+    // pick=1 boards are byte-identical to a plain first-fit.
+    let best = candidates[0]
+    let bestScore = -Infinity
+    for (const cells of candidates) {
+      const body = new Set(cells.map(key))
+      let blocks = 0
+      for (const fid of free) {
+        if (raySets.get(fid)!.some((k) => body.has(k))) blocks++
+      }
+      // Blocks dominate; at equal blocks prefer the LONGER body — it fills
+      // the board the way the original game looks, and a compactness bonus
+      // measurably cost more width than it bought seats.
+      const score = blocks * 100 + cells.length
+      if (score > bestScore) {
+        bestScore = score
+        best = cells
+      }
+    }
+    for (const c of best) occ.add(key(c))
+    const placed: Arrow = { id, cells: best }
+    arrows.push(placed)
+    raySets.set(id, rayCells(placed, cols, rows).map(key))
+    cellSets.set(id, new Set(best.map(key)))
   }
   return { cols, rows, arrows }
 }
