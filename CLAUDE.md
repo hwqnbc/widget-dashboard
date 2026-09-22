@@ -273,7 +273,11 @@ for the Othello widget (8×8 flipping discs on the pure `othelloModel` —
 turn stored INSIDE the position because forced passes break disc parity,
 weight-table alpha-beta AI with a corner-sane Easy, flip/pop animations,
 legal-move hints, and **2 Devices** mode whose `TBoard` is the whole
-position object). See `docs/netplay.md`
+position object). See `docs/arrow-escape.md` for the Arrow Escape widget
+(the tap-the-arrows-out untangle puzzle on the pure `arrowsModel` — seeded
+snake arrows whose exit ray must be clear, solvable-by-construction
+generation proven by a 200-seed-per-size greedy sweep, rails-window slide
+animation, bump-and-flash on a blocked tap). See `docs/netplay.md`
 for two-device play (peer-to-peer WebRTC on one wifi with **no server** —
 `iceServers: []` so traffic never leaves the LAN, QR codes as the signaling
 channel, a compact SDP codec that gets a pairing token down to ~120

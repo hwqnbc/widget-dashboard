@@ -138,6 +138,34 @@ export async function addMazeWidgets(page, count = 2) {
   await page.locator('[data-testid="maze-root"]').nth(count - 1).waitFor()
 }
 
+/** Fresh dashboard with one Arrow Escape widget. */
+export async function addArrowsWidget(page) {
+  await page.goto(BASE_URL, { waitUntil: 'networkidle' })
+  await page.getByRole('button', { name: 'Add widget' }).click()
+  await page.getByRole('menuitem', { name: /Arrow Escape/ }).click()
+  await page.locator('[data-testid="arrows-root"]').waitFor()
+  // The menu's INVISIBLE backdrop outlives the click through its close
+  // transition. Locator clicks wait for that; the raw `page.mouse` clicks
+  // `tapArrowCell` makes do not — they'd land on the backdrop and vanish.
+  await page.waitForFunction(() => !document.querySelector('.MuiModal-backdrop'), null, {
+    timeout: 3000,
+  })
+}
+
+/**
+ * Click a board cell of the Arrow Escape widget by grid coordinates —
+ * `preserveAspectRatio: meet` letterboxes the svg, so the mapping must
+ * account for the centring offsets, not just scale by the bounding box.
+ */
+export async function tapArrowCell(page, x, y, cols, rows) {
+  const svg = page.locator('[data-testid="arrows-board"]')
+  const box = await svg.boundingBox()
+  const scale = Math.min(box.width / cols, box.height / rows)
+  const ox = box.x + (box.width - scale * cols) / 2
+  const oy = box.y + (box.height - scale * rows) / 2
+  await page.mouse.click(ox + (x + 0.5) * scale, oy + (y + 0.5) * scale)
+}
+
 /** Fresh dashboard with `count` Othello widgets, loopback transport armed
  * (see `addTicTacToeWidgets` for why `?netloop=1`). */
 export async function addOthelloWidgets(page, count = 2) {

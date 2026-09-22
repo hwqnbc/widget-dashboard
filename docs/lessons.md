@@ -1981,3 +1981,22 @@ carried over; these are the new ones.
      paths instead (endpoint inside an inflated footprint) — and the tests
      must pin BOTH sides: the wide detour found, and a genuinely sealed
      courtyard (plus a gap narrower than 2×clearance) still blocked.
+
+122. **Prove a generator's invariant with a mass sweep, and know when greedy
+     is a proof.** Arrow Escape's "always solvable" rests on seat-time ray
+     checks; a subtle bug (the body walk could bend on its FIRST step, so
+     the arrowhead aimed somewhere the ray check never looked) silently
+     broke ~35% of boards. A 200-seeds-per-size `solveOrder` sweep caught it
+     in seconds — and because removing an arrow only ever clears cells,
+     removability is monotone, greedy is complete, and the sweep is a real
+     proof rather than a spot check. Run the sweep node-side against the
+     e2e bundle BEFORE wiring the widget, and keep it in the suite.
+
+123. **MUI's invisible menu backdrop eats raw coordinate clicks.** After
+     clicking a menu item, the menu's `MuiModal-backdrop` outlives the
+     click through the close transition. Locator clicks auto-wait for the
+     covering element to go; `page.mouse.click(x, y)` — the only way to hit
+     an SVG stroke by grid coordinates — lands on the backdrop and silently
+     does nothing (taps counter never moved, which is what gave it away:
+     probe `document.elementFromPoint` when a synthetic click vanishes).
+     Wait for the backdrop to unmount before coordinate-driven input.

@@ -4,6 +4,7 @@ import { DEFAULT_SEED } from '../../components/widgets/droneSim/worldLayout'
 import { DEFAULT_TANK_SEED } from '../../components/widgets/tankBattle/terrain'
 import { DEFAULT_MAZE_SEED } from '../../components/widgets/mazeRunner/mazeModel'
 import { initialPosition } from '../../components/widgets/othelloModel'
+import { DEFAULT_ARROWS_SEED } from '../../components/widgets/arrowsModel'
 
 /**
  * Static metadata about each widget type. Kept free of component imports so
@@ -74,6 +75,12 @@ export const WIDGET_CATALOG: WidgetMeta[] = [
     title: 'Othello',
     description: 'Flip discs — corners are gold',
     defaultSize: { w: 5, h: 6, minW: 4, minH: 5 },
+  },
+  {
+    type: 'arrowEscape',
+    title: 'Arrow Escape',
+    description: 'Tap arrows to slide them out — clear the board',
+    defaultSize: { w: 4, h: 6, minW: 3, minH: 4 },
   },
   {
     type: 'memory',
@@ -162,6 +169,15 @@ export function defaultWidgetData(type: WidgetType): Record<string, unknown> {
         mode: 'pvp',
         difficulty: 'medium',
         first: 'toy',
+      }
+    case 'arrowEscape':
+      return {
+        seed: DEFAULT_ARROWS_SEED,
+        size: 'medium',
+        removed: [],
+        taps: 0,
+        bumps: 0,
+        solved: 0,
       }
     case 'memory':
       return {
