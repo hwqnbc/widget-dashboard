@@ -56,12 +56,14 @@ const PERP: Record<Dir, [Dir, Dir]> = {
   w: ['n', 's'],
 }
 
-/** Board sizes. Density (arrows × mean length vs cells) is tuned so the
- * rejection-sampled generator virtually always seats the full count. */
+/** Board sizes. Density (arrows × mean length vs cells) is tuned against the
+ * measured seat rate: small stays a gentle warm-up, medium fills near half
+ * the board, and large is the ad-dense tangle — long snakes over most of the
+ * grid, where the clearing order is the whole game. */
 export const ARROW_DIMS = {
-  small: { cols: 7, rows: 7, count: 8, minLen: 2, maxLen: 4 },
-  medium: { cols: 9, rows: 9, count: 13, minLen: 2, maxLen: 5 },
-  large: { cols: 11, rows: 11, count: 18, minLen: 3, maxLen: 6 },
+  small: { cols: 7, rows: 7, count: 9, minLen: 2, maxLen: 5 },
+  medium: { cols: 9, rows: 9, count: 16, minLen: 2, maxLen: 6 },
+  large: { cols: 12, rows: 12, count: 26, minLen: 2, maxLen: 8 },
 } as const
 export type ArrowsSize = keyof typeof ARROW_DIMS
 
@@ -167,26 +169,46 @@ export function generatePuzzle(
   const arrows: Arrow[] = []
 
   for (let id = 0; id < count; id++) {
-    for (let attempt = 0; attempt < 400; attempt++) {
+    for (let attempt = 0; attempt < 900; attempt++) {
       const head = { x: Math.floor(rand() * cols), y: Math.floor(rand() * rows) }
       if (occ.has(key(head))) continue
-      const dir = DIR_IDS[Math.floor(rand() * 4)]
 
       // The solvability invariant: the ray must be clear of every arrow
       // already seated (they will still be on the board when this one goes).
-      const step = DIRS[dir]
-      let rx = head.x + step.x
-      let ry = head.y + step.y
-      let clear = true
-      while (rx >= 0 && rx < cols && ry >= 0 && ry < rows) {
-        if (occ.has(ry * 64 + rx)) {
-          clear = false
-          break
+      // All four directions are scanned in a seeded order and the first
+      // workable one wins — on a dense board most rays are blocked, and
+      // gambling on a single direction per attempt is what capped the old
+      // presets' seat rate. (Short rays toward the nearest wall pass most
+      // often, which is also how the original game's boards read.)
+      const spin = Math.floor(rand() * 4)
+      let dir: Dir | null = null
+      let behind: Cell | null = null
+      for (let k = 0; k < 4 && dir === null; k++) {
+        const cand = DIR_IDS[(spin + k) % 4]
+        const step = DIRS[cand]
+        const back = { x: head.x - step.x, y: head.y - step.y }
+        if (back.x < 0 || back.x >= cols || back.y < 0 || back.y >= rows) continue
+        if (occ.has(key(back))) continue
+        let rx = head.x + step.x
+        let ry = head.y + step.y
+        let clear = true
+        while (rx >= 0 && rx < cols && ry >= 0 && ry < rows) {
+          if (occ.has(ry * 64 + rx)) {
+            clear = false
+            break
+          }
+          rx += step.x
+          ry += step.y
         }
-        rx += step.x
-        ry += step.y
+        if (clear) {
+          dir = cand
+          behind = back
+        }
       }
-      if (!clear) continue
+      if (dir === null || behind === null) continue
+      // Consts for the walk closure — narrowing on `let` doesn't cross it.
+      const aim = dir
+      const seat = behind
 
       // Grow the body backward from the head, bending sometimes. The walk is
       // self-avoiding and stays off other arrows; it MAY wander onto the
@@ -196,30 +218,39 @@ export function generatePuzzle(
       // head somewhere the ray was never verified (the bug the suite's
       // 200-seed solvability sweep exists to catch).
       const want = minLen + Math.floor(rand() * (maxLen - minLen + 1))
-      const behind = { x: head.x - step.x, y: head.y - step.y }
-      if (behind.x < 0 || behind.x >= cols || behind.y < 0 || behind.y >= rows) continue
-      if (occ.has(key(behind))) continue
-      const cells: Cell[] = [behind, head]
-      const used = new Set<number>([key(head), key(behind)])
-      let travel: Dir = dir // the forward travel of the segment ending at cells[0]
-      while (cells.length < want) {
-        const turn = rand() < 0.35
-        const options: Dir[] = turn
-          ? [PERP[travel][Math.floor(rand() * 2)], travel]
-          : [travel, PERP[travel][Math.floor(rand() * 2)]]
-        let stepped = false
-        for (const t of options) {
-          const s = DIRS[t]
-          const next = { x: cells[0].x - s.x, y: cells[0].y - s.y }
-          if (next.x < 0 || next.x >= cols || next.y < 0 || next.y >= rows) continue
-          if (occ.has(key(next)) || used.has(key(next))) continue
-          cells.unshift(next)
-          used.add(key(next))
-          travel = t
-          stepped = true
-          break
+
+      const walk = (): Cell[] => {
+        const cells: Cell[] = [seat, head]
+        const used = new Set<number>([key(head), key(seat)])
+        let travel: Dir = aim // the forward travel of the segment ending at cells[0]
+        while (cells.length < want) {
+          const turn = rand() < 0.4
+          const options: Dir[] = turn
+            ? [PERP[travel][Math.floor(rand() * 2)], travel]
+            : [travel, PERP[travel][Math.floor(rand() * 2)]]
+          let stepped = false
+          for (const t of options) {
+            const s = DIRS[t]
+            const next = { x: cells[0].x - s.x, y: cells[0].y - s.y }
+            if (next.x < 0 || next.x >= cols || next.y < 0 || next.y >= rows) continue
+            if (occ.has(key(next)) || used.has(key(next))) continue
+            cells.unshift(next)
+            used.add(key(next))
+            travel = t
+            stepped = true
+            break
+          }
+          if (!stepped) break
         }
-        if (!stepped) break
+        return cells
+      }
+      // On a crowded board a single walk often jams short of `want` — take
+      // the longest of a few tries, which is what lets the dense presets
+      // keep their long snakes instead of degrading into stubs.
+      let cells = walk()
+      for (let retry = 0; retry < 2 && cells.length < want; retry++) {
+        const again = walk()
+        if (again.length > cells.length) cells = again
       }
       if (cells.length < minLen) continue
 

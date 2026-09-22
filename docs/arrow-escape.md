@@ -46,9 +46,22 @@ Two hard-won details:
   stays removable — removability is monotone, and a greedy that wedges
   means no order exists at all.
 
-Density is tuned so the full count nearly always seats (small 8/7×7,
-medium 13/9×9, large 18/11×11); a board too crowded ships with what fitted —
-still solvable, just lighter. The widget publishes the *actual* total.
+Density is tuned against measured seat rates (small 9/7×7 at ~62% fill,
+medium 16/9×9 at ~72%, large 26/12×12 at ~75% with **~13 arrows blocked at
+start** — the ad-dense tangle; the first cut looked thin even on large, so
+the presets were raised until the boards read like the original). Two
+generator moves make that density seat instead of degrading:
+
+- **All four head directions are scanned per attempt** (seeded order), not
+  gambled one per attempt — on a dense board most rays are blocked, and the
+  short ray toward the nearest wall is usually the one that clears, which is
+  also how the original game's boards read.
+- **The body walk runs best-of-three**, keeping the longest — a single
+  self-avoiding walk jams short on a crowded board — and `minLen` is 2, so
+  late arrows may seat as the small hooks the ad also has.
+
+A board too crowded still ships with what fitted — solvable, just lighter.
+The widget publishes the *actual* total.
 
 ## Interaction and animation
 
@@ -122,9 +135,10 @@ reshuffle/size changes.
 
 **Puzzle depth**
 - **Long-chain generator bias** — prefer seats whose ray crosses existing
-  bodies, raising the blocked-at-start count for a "hard" toggle; the
-  solvability invariant is untouched (it only constrains the new arrow's
-  own ray).
+  bodies, raising the blocked-at-start count further for an explicit "hard"
+  toggle; the solvability invariant is untouched (it only constrains the
+  new arrow's own ray). The density round already lifted large to ~13
+  blocked at start — this is the lever beyond that.
 - **Rotating arrows** — a special arrow that turns 90° when bumped; needs a
   `dir` override in state and a re-check of the generation invariant.
 - **Walls** — static cells no ray may cross; generation treats them as
