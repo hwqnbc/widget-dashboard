@@ -95,6 +95,45 @@ jams short on a crowded board — with `minLen` 2 so late arrows may seat as
 the small hooks the original game also has. A board too crowded still ships
 with what fitted — solvable, just lighter.
 
+### Master — packed, deep, and unforgiving
+
+The fifth toggle answers two asks at once: boards as **cramped as the
+original game's** (the sampling generator plateaued near ~72% fill, because
+it can only seat an arrow where a clear exit ray already exists — near-full
+boards leave only wall-hugging seats), and a tier where **lookahead is
+required, not just rewarded** (under the base rules there are no wrong
+moves — removability is monotone — so scanning always suffices).
+
+- **`generatePacked`: pack first, orient second.** Snake bodies are carved
+  directly into empty space (`packBodies`, a seeded self-avoiding walk pass
+  repeated until only scattered singles remain), THEN each body picks which
+  end is the head. Each body admits exactly two orientations, and bodies are
+  inserted one at a time under the same invariant as ever — the chosen ray
+  must clear everything already inserted — so reverse insertion order is
+  still a proof of solvability and `solveOrder` still certifies every board.
+- **Ordering is survival, orientation is depth.** Which body inserts next is
+  chosen by wedge-risk (a body down to one live orientation with enemies
+  standing on that ray dies the moment one of them inserts first) — that
+  heuristic took the drop rate from ~45% of packed cells to a few percent.
+  Which END becomes the head costs nobody anything (only the cells
+  constrain others, and they're the same either way), so it is spent
+  entirely on the **dependency-depth metric** (`blockDepth`: the longest
+  "free that one first, and before it that one" chain — the lookahead a
+  no-bump tap requires). A body wedged both ways is **split in half** — the
+  halves get brand-new end segments, so brand-new rays that usually fit —
+  and six seeded orientation restarts keep the best board by fill, trading
+  ~2.5 cells per depth point.
+- **The bump budget** is what turns depth into required planning:
+  `MASTER_BUMPS` (3) blocked taps void the puzzle — overlay, locked board —
+  and **Retry** replays the *same seed* with clean counters, so a failed
+  tangle can be studied and beaten. Guessing is fatal; tracing the chain
+  before tapping is the game.
+
+Measured (120 seeds): **~44 arrows at ~84% fill** (vs large's 29 at 71%),
+dependency depth ~8.3 (the deepest tier), only ~25% of arrows free at the
+start, width ~4.9, 100% solvable, generation ≤ ~55ms. The suite pins fill
+≥ 80% and depth ≥ 7 as regression bounds.
+
 ## Interaction and animation
 
 - **Tap** anywhere on a snake (a fat invisible twin of the stroke is the
@@ -131,10 +170,11 @@ changes reseed, and are confirm-guarded once arrows have been freed
 
 On `[data-testid="arrows-root"]`: `data-size`, `data-seed`, `data-total`,
 `data-left`, `data-taps`, `data-bumps`, `data-solved`,
-`data-state` (`live|won`). Each snake is a `g[data-arrow]` with `data-dir`,
+`data-state` (`live|won|failed`), `data-bumps-left` (master only). Each snake is a `g[data-arrow]` with `data-dir`,
 `data-len`, `data-blocked` and `data-head` (`"x,y"` — where the suite aims
 its coordinate taps). The board svg is `arrows-board`, the win overlay
-`arrows-cleared`, the reshuffle button `arrows-new`, the size toggles
+`arrows-cleared`, master's failure overlay `arrows-failed` and its Retry
+button `arrows-retry`, the reshuffle button `arrows-new`, the size toggles
 `arrows-size-*`.
 
 **Tapping in tests**: `tapArrowCell` (helpers) maps grid coordinates through
@@ -172,11 +212,12 @@ reshuffle/size changes.
 - ~~An explicit Hard/Expert toggle~~ — **shipped** as the fourth size
   preset (see *Difficulty*): `phase: 0`, `pick: 22`, width ~4.3, with its
   own suite hardness bounds.
-- **Deeper-than-greedy hardness** — the current metric measures the greedy
-  frontier; a true search-depth metric (length of the forced-move chain to
-  the first branching point) would let an eventual fifth tier require
-  LOOKAHEAD, not just scanning. Needs a small solver in the model, reused
-  by the suite.
+- ~~Deeper-than-greedy hardness~~ — **shipped** as the Master tier: the
+  `blockDepth` dependency metric, the packed-board generator and the bump
+  budget (see *Master* above).
+- **Master leaderboard / streaks** — consecutive no-fail clears, best
+  retry count per seed; the counters and Retry-same-seed loop already
+  exist, this is a persisted stats row.
 - **Rotating arrows** — a special arrow that turns 90° when bumped; needs a
   `dir` override in state and a re-check of the generation invariant.
 - **Walls** — static cells no ray may cross; generation treats them as

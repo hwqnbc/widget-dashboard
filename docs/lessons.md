@@ -2012,3 +2012,18 @@ carried over; these are the new ones.
      LATE-seated pieces (the top of the pile), so bias placement there and
      let the early board pack dense. Pin the measured hardness in the suite
      as a regression bound, exactly like a perf budget.
+
+125. **Pack first, orient second — separate the geometry from the freedom.**
+     Arrow Escape's sampling generator plateaued at ~72% fill because it
+     entangled two decisions: WHERE a body sits and WHICH WAY it can exit
+     had to be feasible simultaneously, and near-full boards only offer
+     wall-hugging (trivially free) seats. Splitting them — carve bodies into
+     empty space, then choose each head under the same invariant —
+     dissolved a tension no scoring tweak could fix (84% fill AND the
+     deepest chains). Three sub-lessons from the orientation pass: order by
+     SURVIVAL (a body down to one live orientation with enemies on that ray
+     dies next — most-endangered-first cut drops from ~45% to a few
+     percent); spend choices that cost others nothing on the objective (an
+     orientation constrains nobody — only cells do — so it buys depth for
+     free); and when an item wedges, RESHAPE it instead of discarding it
+     (splitting a wedged body mints new end geometry, and the halves fit).

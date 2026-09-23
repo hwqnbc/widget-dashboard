@@ -16,7 +16,9 @@ import ConfirmDialog from './ConfirmDialog'
 import {
   ARROW_DIMS,
   DEFAULT_ARROWS_SEED,
+  MASTER_BUMPS,
   blockerOf,
+  generatePacked,
   generatePuzzle,
   headDir,
   trackOf,
@@ -91,7 +93,7 @@ export default function ArrowEscapeWidget({ id }: WidgetProps) {
     typeof v === 'number' && Number.isFinite(v) ? v : undefined,
   )
   const size = useWidgetField<ArrowsSize>(id, 'size', 'medium', (v) =>
-    v === 'small' || v === 'large' || v === 'expert' ? v : 'medium',
+    v === 'small' || v === 'large' || v === 'expert' || v === 'master' ? v : 'medium',
   )
   const removed = useWidgetField<number[]>(id, 'removed', NO_REMOVED, coerceRemoved)
   const taps = useWidgetField<number>(id, 'taps', 0, (v) =>
@@ -107,16 +109,18 @@ export default function ArrowEscapeWidget({ id }: WidgetProps) {
   const dims = ARROW_DIMS[size]
   const puzzle = useMemo(
     () =>
-      generatePuzzle(
-        seed,
-        dims.cols,
-        dims.rows,
-        dims.count,
-        dims.minLen,
-        dims.maxLen,
-        dims.pick,
-        dims.phase,
-      ),
+      dims.packed
+        ? generatePacked(seed, dims.cols, dims.rows, dims.minLen, dims.maxLen)
+        : generatePuzzle(
+            seed,
+            dims.cols,
+            dims.rows,
+            dims.count,
+            dims.minLen,
+            dims.maxLen,
+            dims.pick,
+            dims.phase,
+          ),
     [seed, dims],
   )
   const tracks = useMemo(() => {
@@ -128,6 +132,11 @@ export default function ArrowEscapeWidget({ id }: WidgetProps) {
   const removedSet = useMemo(() => new Set(removed), [removed])
   const alive = puzzle.arrows.filter((a) => !removedSet.has(a.id))
   const won = removed.length > 0 && alive.length === 0
+  // Master plays under a bump budget: mistakes end the puzzle, so every tap
+  // has to be PLANNED — the tier where lookahead is required, not just
+  // rewarded. Derived, never stored (bumps already persists).
+  const failed = size === 'master' && !won && bumps >= MASTER_BUMPS
+  const bumpsLeft = Math.max(0, MASTER_BUMPS - bumps)
 
   // ---------------------------------------------------------- animation
   // Anim state lives in a ref (per-frame reads), with a counter state that
@@ -197,7 +206,7 @@ export default function ArrowEscapeWidget({ id }: WidgetProps) {
   const setGame = (next: Record<string, unknown>) => dispatch(updateWidgetData({ id, data: next }))
 
   const tapArrow = (a: Arrow) => {
-    if (won || anims.current.has(a.id)) return
+    if (won || failed || anims.current.has(a.id)) return
     const blk = blockerOf(a, blockingAlive, puzzle.cols, puzzle.rows)
     setGame({ taps: taps + 1, ...(blk ? { bumps: bumps + 1 } : {}) })
     if (blk) {
@@ -222,7 +231,7 @@ export default function ArrowEscapeWidget({ id }: WidgetProps) {
 
   // ------------------------------------------------------------- controls
   const [pending, setPending] = useState<{ size?: ArrowsSize; reshuffle?: true } | null>(null)
-  const inProgress = removed.length > 0 && !won
+  const inProgress = removed.length > 0 && !won && !failed
 
   const freshPuzzle = (extra: Partial<{ size: ArrowsSize }> = {}) => {
     anims.current.clear()
@@ -243,6 +252,13 @@ export default function ArrowEscapeWidget({ id }: WidgetProps) {
   const changeSize = (next: ArrowsSize | null) => {
     if (next && next !== size) requestFresh({ size: next })
   }
+  /** Master's second chance: the SAME puzzle again, counters wiped. */
+  const retrySame = () => {
+    anims.current.clear()
+    setAnimCount(0)
+    setFlash(null)
+    setGame({ removed: [], taps: 0, bumps: 0 })
+  }
 
   const clip = `arrows-clip-${id}`
 
@@ -259,7 +275,8 @@ export default function ArrowEscapeWidget({ id }: WidgetProps) {
       data-taps={taps}
       data-bumps={bumps}
       data-solved={solved}
-      data-state={won ? 'won' : 'live'}
+      data-state={won ? 'won' : failed ? 'failed' : 'live'}
+      data-bumps-left={size === 'master' ? bumpsLeft : ''}
       sx={{ height: '100%', display: 'flex', flexDirection: 'column', gap: 1, p: 0.5 }}
     >
       <ToggleButtonGroup
@@ -269,7 +286,7 @@ export default function ArrowEscapeWidget({ id }: WidgetProps) {
         onChange={(_, v) => changeSize(v as ArrowsSize | null)}
         sx={{ alignSelf: 'center' }}
       >
-        {(['small', 'medium', 'large', 'expert'] as const).map((s) => (
+        {(['small', 'medium', 'large', 'expert', 'master'] as const).map((s) => (
           <ToggleButton
             key={s}
             value={s}
@@ -396,6 +413,31 @@ export default function ArrowEscapeWidget({ id }: WidgetProps) {
             </Typography>
           </Box>
         )}
+
+        {failed && (
+          <Box
+            sx={{
+              position: 'absolute',
+              inset: 0,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 0.5,
+              borderRadius: 1,
+              bgcolor: 'rgba(0,0,0,0.5)',
+              pointerEvents: 'none',
+            }}
+            data-testid="arrows-failed"
+          >
+            <Typography sx={{ fontWeight: 700, color: 'common.white' }}>
+              Out of bumps — the tangle wins!
+            </Typography>
+            <Typography variant="caption" sx={{ color: 'common.white' }}>
+              Retry runs the same puzzle again.
+            </Typography>
+          </Box>
+        )}
       </Box>
 
       <Stack
@@ -404,11 +446,24 @@ export default function ArrowEscapeWidget({ id }: WidgetProps) {
         sx={{ alignItems: 'center', justifyContent: 'space-between', px: 0.5 }}
       >
         <Typography variant="body2" sx={{ fontWeight: 600 }}>
-          {won ? `Solved ×${solved}` : `${alive.length} to go · ${bumps} bump${bumps === 1 ? '' : 's'}`}
+          {won
+            ? `Solved ×${solved}`
+            : failed
+              ? 'Out of bumps'
+              : size === 'master'
+                ? `${alive.length} to go · ${bumpsLeft} bump${bumpsLeft === 1 ? '' : 's'} left`
+                : `${alive.length} to go · ${bumps} bump${bumps === 1 ? '' : 's'}`}
         </Typography>
-        <Button size="small" data-testid="arrows-new" onClick={() => requestFresh()}>
-          New puzzle
-        </Button>
+        <Stack direction="row" spacing={0.5}>
+          {failed && (
+            <Button size="small" data-testid="arrows-retry" onClick={retrySame}>
+              Retry
+            </Button>
+          )}
+          <Button size="small" data-testid="arrows-new" onClick={() => requestFresh()}>
+            New puzzle
+          </Button>
+        </Stack>
       </Stack>
 
       <ConfirmDialog

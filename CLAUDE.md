@@ -277,7 +277,9 @@ position object). See `docs/arrow-escape.md` for the Arrow Escape widget
 (the tap-the-arrows-out untangle puzzle on the pure `arrowsModel` — seeded
 snake arrows whose exit ray must be clear, solvable-by-construction
 generation proven by a 200-seed-per-size greedy sweep, rails-window slide
-animation, bump-and-flash on a blocked tap). See `docs/netplay.md`
+animation, bump-and-flash on a blocked tap, five sizes up to the Master
+tier — a packed pack-first/orient-second board with a dependency-depth
+lookahead metric and a 3-bump budget with Retry-same-seed). See `docs/netplay.md`
 for two-device play (peer-to-peer WebRTC on one wifi with **no server** —
 `iceServers: []` so traffic never leaves the LAN, QR codes as the signaling
 channel, a compact SDP codec that gets a pairing token down to ~120

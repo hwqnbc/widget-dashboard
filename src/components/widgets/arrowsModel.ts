@@ -64,22 +64,29 @@ const PERP: Record<Dir, [Dir, Dir]> = {
  * large is deliberately adult-hard: a near-full board where only a couple
  * of arrows are ever free at once. */
 export const ARROW_DIMS = {
-  small: { cols: 7, rows: 7, count: 9, minLen: 2, maxLen: 5, pick: 1, phase: 0.25, minSeat: 8 },
-  medium: { cols: 9, rows: 9, count: 16, minLen: 2, maxLen: 6, pick: 3, phase: 0.25, minSeat: 14 },
+  small: { cols: 7, rows: 7, count: 9, minLen: 2, maxLen: 5, pick: 1, phase: 0.25, minSeat: 8, packed: false },
+  medium: { cols: 9, rows: 9, count: 16, minLen: 2, maxLen: 6, pick: 3, phase: 0.25, minSeat: 14, packed: false },
   // The requested count deliberately over-asks: the biased generator
   // saturates around ~29 arrows here, and asking for more just lets every
   // board reach that saturation. Measured (120 seeds): ~29 seated, ~71%
   // fill, ~10.8 free at the start (63% blocked), choice width ~5.6 vs 7.6
   // unbiased on the same dims. `minSeat` is the suite's floor on the
   // average seat count — the honest expectation, since count is a ceiling.
-  large: { cols: 14, rows: 14, count: 52, minLen: 2, maxLen: 7, pick: 12, phase: 0.25, minSeat: 26 },
+  large: { cols: 14, rows: 14, count: 52, minLen: 2, maxLen: 7, pick: 12, phase: 0.25, minSeat: 26, packed: false },
   // Expert trades a few arrows for the tightest solve the generator can
   // reach: the chain bias runs from the FIRST seat (`phase: 0`) with a
   // deeper candidate pool and longer snakes — the measured frontier trade
   // from the difficulty round, where large keeps the arrow count and expert
   // takes the width. Measured (120 seeds): ~22 seated, choice width ~4.3,
   // ~39% free at the start.
-  expert: { cols: 14, rows: 14, count: 52, minLen: 2, maxLen: 8, pick: 22, phase: 0, minSeat: 20 },
+  expert: { cols: 14, rows: 14, count: 52, minLen: 2, maxLen: 8, pick: 22, phase: 0, minSeat: 20, packed: false },
+  // Master is a DIFFERENT generator (`generatePacked` — pack bodies first,
+  // orient heads second), so `count`/`pick`/`phase` are unused: the packer
+  // fills the board and the arrow count emerges. Measured (120 seeds): ~44
+  // arrows at ~84% fill, dependency depth ~8.3 (the deepest tier), only
+  // ~25% of arrows free at the start. It also plays under the bump budget
+  // (`MASTER_BUMPS`) — mistakes end the puzzle.
+  master: { cols: 14, rows: 14, count: 0, minLen: 2, maxLen: 8, pick: 0, phase: 0, minSeat: 38, packed: true },
 } as const
 export type ArrowsSize = keyof typeof ARROW_DIMS
 
@@ -366,4 +373,252 @@ export function solveOrder(p: Puzzle): number[] | null {
     alive.splice(i, 1)
   }
   return order
+}
+
+// ------------------------------------------------------------ master tier
+
+/** Master's bump budget: this many blocked taps void the puzzle. */
+export const MASTER_BUMPS = 3
+
+/**
+ * The lookahead metric: the longest "free that one first, and before it
+ * that one" dependency chain on the board. An arrow's unlock depth is
+ * 1 + the deepest unlock depth among the arrows standing on its exit ray;
+ * the board's depth is the maximum. Construction keeps the blocking
+ * relation acyclic (a later-inserted arrow's ray avoids earlier bodies, so
+ * blocking edges only ever point later → earlier); the memo's pre-seed
+ * guards termination anyway on a hostile input.
+ */
+export function blockDepth(p: Puzzle): number {
+  const owner = new Map<number, number>()
+  for (const a of p.arrows) for (const c of a.cells) owner.set(key(c), a.id)
+  const blockersOf = new Map<number, number[]>()
+  for (const a of p.arrows) {
+    const bs = new Set<number>()
+    for (const c of rayCells(a, p.cols, p.rows)) {
+      const o = owner.get(key(c))
+      if (o !== undefined && o !== a.id) bs.add(o)
+    }
+    blockersOf.set(a.id, [...bs])
+  }
+  const memo = new Map<number, number>()
+  const depthOf = (id: number): number => {
+    const hit = memo.get(id)
+    if (hit !== undefined) return hit
+    memo.set(id, 1)
+    const d = 1 + Math.max(0, ...blockersOf.get(id)!.map(depthOf))
+    memo.set(id, d)
+    return d
+  }
+  return Math.max(0, ...p.arrows.map((a) => depthOf(a.id)))
+}
+
+/**
+ * Carve snake bodies directly into empty space — the packing half of the
+ * master generator. Walks are self-avoiding, prefer straight with 40°/60
+ * bends, and only cross EMPTY cells; passes repeat until one commits
+ * nothing, leaving at most scattered singleton holes.
+ */
+function packBodies(
+  rand: () => number,
+  cols: number,
+  rows: number,
+  minLen: number,
+  maxLen: number,
+): Cell[][] {
+  const occ = new Set<number>()
+  const bodies: Cell[][] = []
+  const cells: Cell[] = []
+  for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) cells.push({ x, y })
+
+  for (;;) {
+    // Seeded shuffle of the start order per pass.
+    const order = cells.slice()
+    for (let i = order.length - 1; i > 0; i--) {
+      const j = Math.floor(rand() * (i + 1))
+      ;[order[i], order[j]] = [order[j], order[i]]
+    }
+    let placed = 0
+    for (const start of order) {
+      if (occ.has(key(start))) continue
+      const want = minLen + Math.floor(rand() * (maxLen - minLen + 1))
+      const body: Cell[] = [start]
+      const used = new Set<number>([key(start)])
+      let travel: Dir = DIR_IDS[Math.floor(rand() * 4)]
+      while (body.length < want) {
+        const turn = rand() < 0.4
+        const options: Dir[] = turn
+          ? [PERP[travel][Math.floor(rand() * 2)], travel, PERP[travel][Math.floor(rand() * 2)]]
+          : [travel, PERP[travel][Math.floor(rand() * 2)], PERP[travel][Math.floor(rand() * 2)]]
+        let stepped = false
+        for (const t of options) {
+          const s = DIRS[t]
+          const next = { x: body[body.length - 1].x + s.x, y: body[body.length - 1].y + s.y }
+          if (next.x < 0 || next.x >= cols || next.y < 0 || next.y >= rows) continue
+          if (occ.has(key(next)) || used.has(key(next))) continue
+          body.push(next)
+          used.add(key(next))
+          travel = t
+          stepped = true
+          break
+        }
+        if (!stepped) break
+      }
+      if (body.length < minLen) continue
+      for (const c of body) occ.add(key(c))
+      bodies.push(body)
+      placed++
+    }
+    if (placed === 0) return bodies
+  }
+}
+
+/**
+ * The master generator: pack bodies first, orient heads second.
+ *
+ * Each packed body admits exactly two orientations — the head at either
+ * end, its direction fixed by that end's final segment. Bodies are then
+ * inserted one at a time (insertion order = reverse removal order, the same
+ * proof as `generatePuzzle`): an orientation is feasible when its exit ray
+ * avoids every body already inserted, and among feasible options the
+ * DEEPEST one wins — `1 + max(chain of the earlier arrows whose rays this
+ * body covers)` — which is what turns near-full boards into long forced
+ * dependency chains instead of wide shallow blocking. A body with no
+ * feasible orientation at its turn is dropped (its cells become holes);
+ * measured, that costs only a few percent of fill.
+ */
+export function generatePacked(
+  seed: number,
+  cols: number,
+  rows: number,
+  minLen: number,
+  maxLen: number,
+): Puzzle {
+  const rand = mulberry32(seed)
+  const bodies = packBodies(rand, cols, rows, minLen, maxLen)
+
+  // The orientation pass is greedy under seeded tie-break jitter, so
+  // different jitter finds different drop sets: run it a few times on the
+  // SAME packed bodies and keep the fullest board (depth breaks ties).
+  // Everything stays deterministic — one rand stream, consumed in order.
+  let best: Puzzle | null = null
+  let bestScore = -1
+  for (let restart = 0; restart < 6; restart++) {
+    const attempt = orientBodies(bodies, cols, rows, rand, minLen)
+    const fill = attempt.arrows.reduce((s, a) => s + a.cells.length, 0)
+    // Fill leads, but a depth point is worth trading ~2.5 cells for — the
+    // tier's promise is packed AND deep, not packed alone.
+    const score = fill * 10 + blockDepth(attempt) * 25
+    if (score > bestScore) {
+      bestScore = score
+      best = attempt
+    }
+  }
+  return best!
+}
+
+/** One greedy orientation pass over packed bodies — see `generatePacked`. */
+function orientBodies(
+  packed: Cell[][],
+  cols: number,
+  rows: number,
+  rand: () => number,
+  minLen: number,
+): Puzzle {
+  // Local pool: wedged bodies get SPLIT into halves (below), and that must
+  // not leak into the shared packing across restarts.
+  const bodies = packed.slice()
+  const arrows: Arrow[] = []
+  const insertedCells = new Set<number>()
+  const raySetOf = new Map<number, Set<number>>()
+  const chainOf = new Map<number, number>()
+  const remaining = new Set<number>(bodies.map((_, i) => i))
+
+  const rayOf = (cells: Cell[]): Cell[] => rayCells({ id: -1, cells }, cols, rows)
+
+  // Which cells belong to which not-yet-inserted body — for the danger score.
+  const cellBody = new Map<number, number>()
+  bodies.forEach((b, bi) => {
+    for (const c of b) cellBody.set(key(c), bi)
+  })
+
+  /** A body wedged both ways is not yet a hole: cut it in two — the halves
+   * have brand-new end segments, so brand-new rays that usually fit. Halves
+   * that wedge again split again, down to `minLen` stubs. */
+  const split = (bi: number): boolean => {
+    const b = bodies[bi]
+    if (b.length < 2 * minLen) return false
+    const cut = Math.floor(b.length / 2)
+    remaining.delete(bi)
+    for (const half of [b.slice(0, cut), b.slice(cut)]) {
+      const ni = bodies.length
+      bodies.push(half)
+      remaining.add(ni)
+      for (const c of half) cellBody.set(key(c), ni)
+    }
+    return true
+  }
+
+  outer: while (remaining.size > 0) {
+    // Two separate decisions, because they answer different questions.
+    // WHICH body to insert is about survival: a body dies when every
+    // orientation's ray is blocked by inserted cells, so the most
+    // wedge-endangered body goes first (one live orientation with enemies
+    // standing on it beats two live ones; among equals, more enemies is
+    // more urgent). WHICH WAY it points is free — its cells (the only thing
+    // that constrains anyone else) are the same either way — so the
+    // orientation is spent entirely on DEPTH: cover the deepest existing
+    // chain.
+    interface Opt {
+      cells: Cell[]
+      ray: Cell[]
+      danger: number
+      chain: number
+    }
+    let bestBody: { bi: number; opts: Opt[]; urgency: number } | null = null
+    for (const bi of remaining) {
+      const opts: Opt[] = []
+      for (const flip of [false, true]) {
+        const oriented = flip ? bodies[bi].slice().reverse() : bodies[bi]
+        const ray = rayOf(oriented)
+        // Feasible only when the ray clears every body already inserted —
+        // exactly the invariant that makes reverse insertion a valid solve.
+        if (ray.some((c) => insertedCells.has(key(c)))) continue
+        const danger = new Set(
+          ray.map((c) => cellBody.get(key(c))).filter((o) => o !== undefined && o !== bi),
+        ).size
+        let chain = 1
+        for (const a of arrows) {
+          const rs = raySetOf.get(a.id)!
+          if (oriented.some((c) => rs.has(key(c)))) {
+            chain = Math.max(chain, 1 + chainOf.get(a.id)!)
+          }
+        }
+        opts.push({ cells: oriented, ray, danger, chain })
+      }
+      if (opts.length === 0) {
+        // Wedged both ways: split and rescan, or (too short to split) a hole.
+        if (split(bi)) continue outer
+        continue
+      }
+      const urgency =
+        (opts.length === 1 ? 1000 + opts[0].danger : Math.min(opts[0].danger, opts[1].danger)) +
+        rand() * 0.5
+      if (bestBody === null || urgency > bestBody.urgency) bestBody = { bi, opts, urgency }
+    }
+    if (bestBody === null) break // everything left is wedged — holes
+
+    let pickOpt = bestBody.opts[0]
+    for (const o of bestBody.opts) {
+      if (o.chain > pickOpt.chain) pickOpt = o
+    }
+    remaining.delete(bestBody.bi)
+    for (const c of bodies[bestBody.bi]) cellBody.delete(key(c))
+    const id = arrows.length
+    arrows.push({ id, cells: pickOpt.cells })
+    for (const c of pickOpt.cells) insertedCells.add(key(c))
+    raySetOf.set(id, new Set(pickOpt.ray.map(key)))
+    chainOf.set(id, pickOpt.chain)
+  }
+  return { cols, rows, arrows }
 }

@@ -20,7 +20,10 @@
 import { addArrowsWidget, launch, reporter, tapArrowCell } from './helpers.mjs'
 import {
   ARROW_DIMS,
+  MASTER_BUMPS,
+  blockDepth,
   blockerOf,
+  generatePacked,
   generatePuzzle,
   headDir,
   rayCells,
@@ -85,8 +88,14 @@ const { check, finish } = reporter('arrow-escape')
     let ordered = 0
     let freeStart = 0
     let width = 0
+    let fill = 0
+    let depth = 0
     for (let seed = 1; seed <= 200; seed++) {
-      const p = generatePuzzle(seed, d.cols, d.rows, d.count, d.minLen, d.maxLen, d.pick, d.phase)
+      const p = d.packed
+        ? generatePacked(seed, d.cols, d.rows, d.minLen, d.maxLen)
+        : generatePuzzle(seed, d.cols, d.rows, d.count, d.minLen, d.maxLen, d.pick, d.phase)
+      fill += p.arrows.reduce((s, a) => s + a.cells.length, 0) / (d.cols * d.rows)
+      if (d.packed) depth += blockDepth(p)
       seated += p.arrows.length
       const seen = new Set()
       for (const a of p.arrows) {
@@ -134,6 +143,17 @@ const { check, finish } = reporter('arrow-escape')
       check(
         `${size}: the solve stays narrow (width ${(width / 200).toFixed(1)} ≤ ${hardness.width})`,
         width / 200 <= hardness.width,
+      )
+    }
+    if (size === 'master') {
+      // The tier's two promises, pinned: PACKED (measured ~84% fill — the
+      // cramped ad look) and DEEP (dependency depth ~8.3 — chains a player
+      // must trace ahead of a tap, since the bump budget makes guessing
+      // fatal). Bounds conservative, not aspirational.
+      check(`master: the board is packed (fill ${((fill / 200) * 100).toFixed(0)}%)`, fill / 200 >= 0.8)
+      check(
+        `master: the dependency chains run deep (depth ${(depth / 200).toFixed(1)} ≥ 7)`,
+        depth / 200 >= 7,
       )
     }
   }
@@ -307,6 +327,68 @@ check(
   check(
     `and it is genuinely loaded (${await attr('data-total')} arrows)`,
     (await num('data-total')) >= 18 && (await num('data-left')) === (await num('data-total')),
+  )
+}
+
+// ---------------------------------------------- 4. master: the bump budget
+// Master's packed board plays under MASTER_BUMPS: blocked taps spend the
+// budget, spending it all fails the puzzle (board locked, overlay up), and
+// Retry replays the SAME seed with clean counters.
+{
+  await root.locator('[data-testid="arrows-size-master"]').click()
+  await page.waitForFunction(
+    () => document.querySelector('[data-testid="arrows-root"]')?.dataset.size === 'master',
+    null,
+    { timeout: 3000 },
+  )
+  const mDims = ARROW_DIMS.master
+  const mTotal = await num('data-total')
+  check(`the Master toggle deals a PACKED board (${mTotal} arrows)`, mTotal >= 30)
+  check('the budget is published', (await num('data-bumps-left')) === MASTER_BUMPS)
+  const mSeed = await num('data-seed')
+
+  // Spend the whole budget on distinct blocked arrows (distinct, so no tap
+  // races a still-running bump animation on the same arrow).
+  for (let b = 1; b <= MASTER_BUMPS; b++) {
+    const blockedArrows = (await arrowsOnBoard()).filter((a) => a.blocked)
+    const target = blockedArrows[b % blockedArrows.length]
+    await tapArrowCell(page, target.head[0], target.head[1], mDims.cols, mDims.rows)
+    await page.waitForFunction(
+      (want) => document.querySelector('[data-testid="arrows-root"]')?.dataset.bumps === String(want),
+      b,
+      { timeout: 4000 },
+    )
+  }
+  await page.waitForFunction(
+    () => document.querySelector('[data-testid="arrows-root"]')?.dataset.state === 'failed',
+    null,
+    { timeout: 3000 },
+  )
+  check('spending the budget fails the puzzle', (await attr('data-state')) === 'failed')
+  check(
+    'the failure overlay is up',
+    (await page.locator('[data-testid="arrows-failed"]').count()) === 1,
+  )
+
+  // The board is dead while failed: even a FREE arrow refuses the tap.
+  const free = (await arrowsOnBoard()).find((a) => !a.blocked)
+  await tapArrowCell(page, free.head[0], free.head[1], mDims.cols, mDims.rows)
+  await page.waitForTimeout(400)
+  check('a failed board refuses even free arrows', (await num('data-left')) === mTotal)
+  check('and counts nothing', (await num('data-taps')) === MASTER_BUMPS)
+
+  // Retry: the SAME puzzle, counters wiped.
+  await root.locator('[data-testid="arrows-retry"]').click()
+  await page.waitForFunction(
+    () => document.querySelector('[data-testid="arrows-root"]')?.dataset.state === 'live',
+    null,
+    { timeout: 3000 },
+  )
+  check('Retry revives the board', (await attr('data-state')) === 'live')
+  check('with the SAME puzzle', (await num('data-seed')) === mSeed && (await num('data-total')) === mTotal)
+  check(
+    'and a full budget again',
+    (await num('data-bumps-left')) === MASTER_BUMPS && (await num('data-taps')) === 0,
   )
 }
 
