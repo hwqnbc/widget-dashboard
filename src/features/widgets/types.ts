@@ -9,6 +9,7 @@ export type WidgetType =
   | 'connect4'
   | 'othello'
   | 'arrowEscape'
+  | 'carPark'
   | 'memory'
   | 'archery'
   | 'droneSim'

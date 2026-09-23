@@ -10,6 +10,7 @@ import TicTacToeWidget from '../components/widgets/TicTacToeWidget'
 import Connect4Widget from '../components/widgets/Connect4Widget'
 import OthelloWidget from '../components/widgets/OthelloWidget'
 import ArrowEscapeWidget from '../components/widgets/ArrowEscapeWidget'
+import CarParkWidget from '../components/widgets/carPark/CarParkWidget'
 import MemoryWidget from '../components/widgets/MemoryWidget'
 import ArcheryWidget from '../components/widgets/ArcheryWidget'
 import DroneSimWidget from '../components/widgets/droneSim/DroneSimWidget'
@@ -35,6 +36,7 @@ export const widgetComponents: Record<WidgetType, ComponentType<WidgetProps>> = 
   connect4: Connect4Widget,
   othello: OthelloWidget,
   arrowEscape: ArrowEscapeWidget,
+  carPark: CarParkWidget,
   memory: MemoryWidget,
   archery: ArcheryWidget,
   droneSim: DroneSimWidget,

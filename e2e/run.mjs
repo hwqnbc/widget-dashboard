@@ -160,6 +160,22 @@ const archeryBundle = spawnSync(
 )
 if (archeryBundle.status !== 0) process.exit(archeryBundle.status ?? 1)
 
+// Car Park's pure model + level pack — its own flat pass (a different
+// directory from the pass above would nest the outputs).
+const carParkBundle = spawnSync(
+  'npx',
+  [
+    'esbuild',
+    'src/components/widgets/carPark/carParkModel.ts',
+    'src/components/widgets/carPark/carParkLevels.ts',
+    '--bundle',
+    '--format=esm',
+    `--outdir=${join(here, '.bundle')}`,
+  ],
+  { cwd: root, stdio: 'inherit' },
+)
+if (carParkBundle.status !== 0) process.exit(carParkBundle.status ?? 1)
+
 // The app-wide console capture store — eighth flat pass, same reasoning.
 const consoleBundle = spawnSync(
   'npx',

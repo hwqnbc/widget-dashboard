@@ -279,7 +279,14 @@ snake arrows whose exit ray must be clear, solvable-by-construction
 generation proven by a 200-seed-per-size greedy sweep, rails-window slide
 animation, bump-and-flash on a blocked tap, five sizes up to the Master
 tier — a packed pack-first/orient-second board with a dependency-depth
-lookahead metric and a 3-bump budget with Retry-same-seed). See `docs/netplay.md`
+lookahead metric and a 3-bump budget with Retry-same-seed). See
+`docs/car-park.md` for the Car Park widget (the slide-the-red-car-out
+"Rush Hour" puzzle on the pure `carPark/carParkModel` — the first puzzle on
+a FIXED, append-only level pack: 4 tiers × 10 levels picked by two
+dropdowns, each level pre-solved offline by `scripts/gen-carpark-levels.mjs`
+(whole-cluster BFS + hill-climb) with its BFS-optimal par re-proven and
+band-checked by the e2e sweep, drag-to-slide with snap, a persisted move
+log replayed into the board, Undo/Reset, par ★ and per-level bests). See `docs/netplay.md`
 for two-device play (peer-to-peer WebRTC on one wifi with **no server** —
 `iceServers: []` so traffic never leaves the LAN, QR codes as the signaling
 channel, a compact SDP codec that gets a pairing token down to ~120

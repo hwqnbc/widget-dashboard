@@ -166,6 +166,40 @@ export async function tapArrowCell(page, x, y, cols, rows) {
   await page.mouse.click(ox + (x + 0.5) * scale, oy + (y + 0.5) * scale)
 }
 
+/** Fresh dashboard with one Car Park widget (backdrop waited out — the
+ * drags below are raw `page.mouse` input, see `addArrowsWidget`). */
+export async function addCarParkWidget(page) {
+  await page.goto(BASE_URL, { waitUntil: 'networkidle' })
+  await page.getByRole('button', { name: 'Add widget' }).click()
+  await page.getByRole('menuitem', { name: /Car Park/ }).click()
+  await page.locator('[data-testid="carpark-root"]').waitFor()
+  await page.waitForFunction(() => !document.querySelector('.MuiModal-backdrop'), null, {
+    timeout: 3000,
+  })
+}
+
+/**
+ * Drag Car Park vehicle `index` by `cells` bays along its axis. The board
+ * svg's viewBox is the 6×6 lot plus a 0.25-cell kerb (6.5 units), letterboxed
+ * by `meet`, so one bay is `min(w, h) / 6.5` px. Moves in small steps so the
+ * pointermove path is exercised, then releases for the snap.
+ */
+export async function dragVehicle(page, index, cells) {
+  const g = page.locator(`[data-testid="carpark-board"] [data-index="${index}"]`)
+  const horiz = (await g.getAttribute('data-horiz')) === '1'
+  const svgBox = await page.locator('[data-testid="carpark-board"]').boundingBox()
+  const bay = Math.min(svgBox.width, svgBox.height) / 6.5
+  const box = await g.boundingBox()
+  const x0 = box.x + box.width / 2
+  const y0 = box.y + box.height / 2
+  const dx = horiz ? cells * bay : 0
+  const dy = horiz ? 0 : cells * bay
+  await page.mouse.move(x0, y0)
+  await page.mouse.down()
+  await page.mouse.move(x0 + dx, y0 + dy, { steps: 6 })
+  await page.mouse.up()
+}
+
 /** Fresh dashboard with `count` Othello widgets, loopback transport armed
  * (see `addTicTacToeWidgets` for why `?netloop=1`). */
 export async function addOthelloWidgets(page, count = 2) {

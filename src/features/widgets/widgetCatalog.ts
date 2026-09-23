@@ -83,6 +83,12 @@ export const WIDGET_CATALOG: WidgetMeta[] = [
     defaultSize: { w: 4, h: 6, minW: 3, minH: 4 },
   },
   {
+    type: 'carPark',
+    title: 'Car Park',
+    description: 'Slide the cars to drive the red one out',
+    defaultSize: { w: 4, h: 6, minW: 3, minH: 5 },
+  },
+  {
     type: 'memory',
     title: 'Memory',
     description: '2-player pairs — Toy vs Ninja',
@@ -179,6 +185,8 @@ export function defaultWidgetData(type: WidgetType): Record<string, unknown> {
         bumps: 0,
         solved: 0,
       }
+    case 'carPark':
+      return { tier: 'beginner', level: 0, moves: [], best: {}, solved: 0 }
     case 'memory':
       return {
         size: 4,

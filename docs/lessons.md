@@ -2027,3 +2027,20 @@ carried over; these are the new ones.
      orientation constrains nobody — only cells do — so it buys depth for
      free); and when an item wedges, RESHAPE it instead of discarding it
      (splitting a wedged body mints new end geometry, and the halves fit).
+
+126. **When interesting puzzles are rare, ship a pre-solved pack, not a
+     generator.** Rush Hour-style sliding puzzles are the opposite of Arrow
+     Escape: random lots mostly solve in 1–5 moves or not at all, so Car
+     Park ships a FIXED, append-only level pack where every level carries
+     its BFS-optimal par. Three parts make it maintainable: (a) the offline
+     search works on the whole reversible state CLUSTER — BFS it, then
+     multi-source BFS from every solved state gives every state its exact
+     distance, and the farthest state is the hardest puzzle those vehicles
+     can pose; a mutate-and-keep-if-not-worse hill-climb on the vehicle set
+     reaches 30–51-move boards that plain sampling essentially never hits;
+     (b) level identity is `tier:index`, so the list is append-only and
+     saved bests never drift; (c) the e2e suite re-derives every par and
+     checks its tier band, so "add a level" is paste + `npm run e2e` with no
+     trust in the generator. Persist the MOVE LOG, derive the board with a
+     `replay` that stops at the first illegal move — a stale log degrades to
+     its valid prefix instead of corrupting the position.
