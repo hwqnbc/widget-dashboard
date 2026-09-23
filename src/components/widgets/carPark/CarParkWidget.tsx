@@ -30,7 +30,7 @@ const TAP_CELLS = 0.2
 const TARGET_COLOR = '#e53935'
 /** Cars and trucks cycle separate palettes so a truck reads as heavier. */
 const CAR_COLORS = ['#1e88e5', '#43a047', '#fb8c00', '#8e24aa', '#00acc1', '#fdd835', '#6d4c41', '#d81b60']
-const TRUCK_COLORS = ['#3949ab', '#00897b', '#5e35b1', '#546e7a']
+const TRUCK_COLORS = ['#3949ab', '#00897b', '#546e7a', '#9e9d24']
 
 const NO_MOVES: Move[] = []
 const NO_BEST: Record<string, number> = {}
@@ -397,17 +397,6 @@ export default function CarParkWidget({ id }: WidgetProps) {
               Out in {applied} moves!
               {applied <= level.par ? ' Par ★' : ` Par is ${level.par}.`}
             </Typography>
-            {after && (
-              <Button
-                variant="contained"
-                size="small"
-                data-testid="carpark-next"
-                onClick={() => goTo(after)}
-                sx={{ pointerEvents: 'auto' }}
-              >
-                Next level
-              </Button>
-            )}
           </Box>
         )}
       </Box>
@@ -417,6 +406,11 @@ export default function CarParkWidget({ id }: WidgetProps) {
           {`Moves ${applied} · Par ${level.par}${myBest !== undefined ? ` · Best ${myBest}` : ''}`}
         </Typography>
         <Stack direction="row" spacing={0.5}>
+          {won && after && (
+            <Button variant="contained" size="small" data-testid="carpark-next" onClick={() => goTo(after)}>
+              Next level
+            </Button>
+          )}
           <Button size="small" data-testid="carpark-undo" disabled={applied === 0 || won} onClick={undo}>
             Undo
           </Button>

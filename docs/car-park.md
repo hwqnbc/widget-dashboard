@@ -57,8 +57,8 @@ mode is on the backlog. It would reuse the same solver.
 - **Solved.** A level is solved when the target's nose reaches the right
   edge. The drive-out off the lot is animation, not a move.
 - **Solver.** `solve(lot, from)` is a BFS over positions that returns the
-  optimal line, or `null` if there is none. The hardest 6×6 boards have a
-  few thousand reachable states, so this is milliseconds even in the
+  optimal line, or `null` if there is none. Even the hardest 6×6 boards reach
+  at most tens of thousands of states, so this is fast even in the
   browser. `hint` is its first move and has no UI yet (see the backlog).
 - **Replay.** `replay(lot, moves)` rebuilds a position from a move log and
   stops at the first illegal move. This lets the widget persist only the
@@ -146,8 +146,10 @@ To add levels:
   - The win overlay fades in 500 ms later. On a reload of a won level, the
     car is simply already gone.
 - **Win overlay.** It shows `WinnerCelebration`, "Out in N moves!" with
-  "Par ★" or "Par is P", and a **Next level** button. Next level goes to
-  the next level in the tier, then on to the first level of the next tier.
+  "Par ★" or "Par is P". A **Next level** button appears in the footer
+  row. It lives there rather than in the overlay because the celebration
+  figure fills the overlay on a small card. Next level goes to the next
+  level in the tier, then on to the first level of the next tier.
 - **Controls.** **Undo** pops the last move. **Reset** and a level or tier
   change are `ConfirmDialog`-guarded while an attempt is in progress.
 
