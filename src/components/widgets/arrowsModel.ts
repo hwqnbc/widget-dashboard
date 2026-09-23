@@ -64,15 +64,22 @@ const PERP: Record<Dir, [Dir, Dir]> = {
  * large is deliberately adult-hard: a near-full board where only a couple
  * of arrows are ever free at once. */
 export const ARROW_DIMS = {
-  small: { cols: 7, rows: 7, count: 9, minLen: 2, maxLen: 5, pick: 1, minSeat: 8 },
-  medium: { cols: 9, rows: 9, count: 16, minLen: 2, maxLen: 6, pick: 3, minSeat: 14 },
+  small: { cols: 7, rows: 7, count: 9, minLen: 2, maxLen: 5, pick: 1, phase: 0.25, minSeat: 8 },
+  medium: { cols: 9, rows: 9, count: 16, minLen: 2, maxLen: 6, pick: 3, phase: 0.25, minSeat: 14 },
   // The requested count deliberately over-asks: the biased generator
   // saturates around ~29 arrows here, and asking for more just lets every
   // board reach that saturation. Measured (120 seeds): ~29 seated, ~71%
   // fill, ~10.8 free at the start (63% blocked), choice width ~5.6 vs 7.6
   // unbiased on the same dims. `minSeat` is the suite's floor on the
   // average seat count — the honest expectation, since count is a ceiling.
-  large: { cols: 14, rows: 14, count: 52, minLen: 2, maxLen: 7, pick: 12, minSeat: 26 },
+  large: { cols: 14, rows: 14, count: 52, minLen: 2, maxLen: 7, pick: 12, phase: 0.25, minSeat: 26 },
+  // Expert trades a few arrows for the tightest solve the generator can
+  // reach: the chain bias runs from the FIRST seat (`phase: 0`) with a
+  // deeper candidate pool and longer snakes — the measured frontier trade
+  // from the difficulty round, where large keeps the arrow count and expert
+  // takes the width. Measured (120 seeds): ~22 seated, choice width ~4.3,
+  // ~39% free at the start.
+  expert: { cols: 14, rows: 14, count: 52, minLen: 2, maxLen: 8, pick: 22, phase: 0, minSeat: 20 },
 } as const
 export type ArrowsSize = keyof typeof ARROW_DIMS
 
@@ -182,6 +189,9 @@ export function generatePuzzle(
    * candidate already passed it.
    */
   pick = 1,
+  /** Fraction of seats placed before the chain bias activates (see the loop
+   * comment). 0 = biased from the first seat — the expert setting. */
+  phase = 0.25,
 ): Puzzle {
   const rand = mulberry32(seed)
   const occ = new Set<number>()
@@ -203,7 +213,7 @@ export function generatePuzzle(
     // keeps the seat rate; it is the late-seated bodies, the ones on top,
     // that decide which arrows start free, so that is where chain-forming
     // placement buys difficulty instead of just fragmenting the board.
-    const usePick = arrows.length >= count * 0.25 ? pick : 1
+    const usePick = arrows.length >= count * phase ? pick : 1
     const free = usePick > 1 ? freeSeated() : []
     const candidates: Cell[][] = []
     for (let attempt = 0; attempt < 2600 && candidates.length < usePick; attempt++) {

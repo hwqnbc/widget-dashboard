@@ -91,7 +91,7 @@ export default function ArrowEscapeWidget({ id }: WidgetProps) {
     typeof v === 'number' && Number.isFinite(v) ? v : undefined,
   )
   const size = useWidgetField<ArrowsSize>(id, 'size', 'medium', (v) =>
-    v === 'small' || v === 'large' ? v : 'medium',
+    v === 'small' || v === 'large' || v === 'expert' ? v : 'medium',
   )
   const removed = useWidgetField<number[]>(id, 'removed', NO_REMOVED, coerceRemoved)
   const taps = useWidgetField<number>(id, 'taps', 0, (v) =>
@@ -106,7 +106,17 @@ export default function ArrowEscapeWidget({ id }: WidgetProps) {
 
   const dims = ARROW_DIMS[size]
   const puzzle = useMemo(
-    () => generatePuzzle(seed, dims.cols, dims.rows, dims.count, dims.minLen, dims.maxLen, dims.pick),
+    () =>
+      generatePuzzle(
+        seed,
+        dims.cols,
+        dims.rows,
+        dims.count,
+        dims.minLen,
+        dims.maxLen,
+        dims.pick,
+        dims.phase,
+      ),
     [seed, dims],
   )
   const tracks = useMemo(() => {
@@ -259,7 +269,7 @@ export default function ArrowEscapeWidget({ id }: WidgetProps) {
         onChange={(_, v) => changeSize(v as ArrowsSize | null)}
         sx={{ alignSelf: 'center' }}
       >
-        {(['small', 'medium', 'large'] as const).map((s) => (
+        {(['small', 'medium', 'large', 'expert'] as const).map((s) => (
           <ToggleButton
             key={s}
             value={s}

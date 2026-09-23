@@ -86,7 +86,7 @@ const { check, finish } = reporter('arrow-escape')
     let freeStart = 0
     let width = 0
     for (let seed = 1; seed <= 200; seed++) {
-      const p = generatePuzzle(seed, d.cols, d.rows, d.count, d.minLen, d.maxLen, d.pick)
+      const p = generatePuzzle(seed, d.cols, d.rows, d.count, d.minLen, d.maxLen, d.pick, d.phase)
       seated += p.arrows.length
       const seen = new Set()
       for (const a of p.arrows) {
@@ -121,14 +121,20 @@ const { check, finish } = reporter('arrow-escape')
       seated / 200 >= d.minSeat,
     )
     check(`${size}: most boards need an ORDER (${ordered}/200 have a blocked arrow)`, ordered >= 150)
-    if (size === 'large') {
-      // Hardness must not silently regress: measured ~0.37 free at start
-      // and width ~5.6; the bounds are conservative, not aspirational.
+    // Hardness must not silently regress on the adult tiers: measured ~0.37
+    // free at start / width ~5.6 (large) and ~0.39 / ~4.3 (expert); the
+    // bounds are conservative, not aspirational — and expert must actually
+    // sit BELOW large's width bound to deserve the name.
+    const hardness = { large: { free: 0.45, width: 6.5 }, expert: { free: 0.47, width: 5.2 } }[size]
+    if (hardness) {
       check(
-        `large: most arrows start blocked (${((freeStart / 200) * 100).toFixed(0)}% free)`,
-        freeStart / 200 <= 0.45,
+        `${size}: most arrows start blocked (${((freeStart / 200) * 100).toFixed(0)}% free)`,
+        freeStart / 200 <= hardness.free,
       )
-      check(`large: the solve stays narrow (width ${(width / 200).toFixed(1)})`, width / 200 <= 6.5)
+      check(
+        `${size}: the solve stays narrow (width ${(width / 200).toFixed(1)} ≤ ${hardness.width})`,
+        width / 200 <= hardness.width,
+      )
     }
   }
 }
@@ -159,7 +165,7 @@ check('the DOM carries one group per arrow', (await arrowsOnBoard()).length === 
 check(
   'the DOM agrees with the model on the same seed',
   (await num('data-seed')) >= 0 &&
-    generatePuzzle(await num('data-seed'), dims.cols, dims.rows, dims.count, dims.minLen, dims.maxLen, dims.pick)
+    generatePuzzle(await num('data-seed'), dims.cols, dims.rows, dims.count, dims.minLen, dims.maxLen, dims.pick, dims.phase)
       .arrows.length === total,
 )
 
@@ -288,6 +294,19 @@ check(
   check(
     'small really is the small board',
     (await num('data-total')) <= ARROW_DIMS.small.count,
+  )
+
+  // The Expert toggle deals the adult board (fresh board, so no confirm).
+  await root.locator('[data-testid="arrows-size-expert"]').click()
+  await page.waitForFunction(
+    () => document.querySelector('[data-testid="arrows-root"]')?.dataset.size === 'expert',
+    null,
+    { timeout: 3000 },
+  )
+  check('the Expert toggle deals an expert board', (await attr('data-size')) === 'expert')
+  check(
+    `and it is genuinely loaded (${await attr('data-total')} arrows)`,
+    (await num('data-total')) >= 18 && (await num('data-left')) === (await num('data-total')),
   )
 }
 

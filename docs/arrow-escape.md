@@ -59,7 +59,12 @@ Presets (measured over 120+ seeds): small 9/7×7 at ~62% fill, width ~3.1 —
 the gentle warm-up, generated plain first-fit. Medium ~15/9×9 at ~77%,
 width ~3.3. Large — the adult board — **~29 arrows on 14×14** at ~71% fill,
 **63% of them blocked at the start, width ~5.6** (vs 7.6 for unbiased
-placement on the same dims). What buys the hardness, in the order it was
+placement on the same dims). **Expert** — the fourth toggle — takes the
+other end of the measured frontier: the same 14×14 board with the chain
+bias active **from the first seat** (`phase: 0`), a deeper candidate pool
+(`pick: 22`) and longer snakes (maxLen 8): **~22 arrows, width ~4.3, ~39%
+free at the start** — fewer pieces than large, but at any moment far fewer
+of them go anywhere. What buys the hardness, in the order it was
 discovered:
 
 - **No free wall-huggers.** A head adjacent to the edge it points at has a
@@ -72,10 +77,12 @@ discovered:
   sampled against the same occupancy, so all stay valid) and commits the one
   that newly blocks the most DISTINCT currently-free arrows — blocking an
   already-blocked arrow adds nothing, and scoring raw ray coverage measurably
-  rewarded sprawl that crowded later seats out. The bias only activates
-  after ~25% of seats: early arrows are the bottom of the pile (freed last),
-  so packing them dense and unbiased keeps the seat rate, while the late
-  bodies — the ones on top — are what decide which arrows start free.
+  rewarded sprawl that crowded later seats out. On large the bias only
+  activates after ~25% of seats (`phase`): early arrows are the bottom of
+  the pile (freed last), so packing them dense and unbiased keeps the seat
+  rate, while the late bodies — the ones on top — are what decide which
+  arrows start free. Expert sets `phase: 0` and pays the seat-count cost
+  knowingly — that trade IS the preset.
 - **The count over-asks.** The biased generator saturates around ~29 arrows
   on large; requesting 52 just lets every board reach saturation. `count`
   is a ceiling, `minSeat` is the suite's floor on the average, and the
@@ -162,10 +169,14 @@ reshuffle/size changes.
 - ~~Long-chain generator bias~~ — **shipped** as the `pick` candidate
   scoring plus the longest-ray direction rule (see *Difficulty*); large now
   starts 63% blocked with choice width ~5.6.
-- **An explicit Hard/Expert toggle** — the `pick` dial and the phase-in
-  fraction are per-size constants; exposing a fourth preset (or a
-  hard-mode switch reusing large's dims with `pick` cranked and the width
-  bound retuned) is a settings row plus a suite row.
+- ~~An explicit Hard/Expert toggle~~ — **shipped** as the fourth size
+  preset (see *Difficulty*): `phase: 0`, `pick: 22`, width ~4.3, with its
+  own suite hardness bounds.
+- **Deeper-than-greedy hardness** — the current metric measures the greedy
+  frontier; a true search-depth metric (length of the forced-move chain to
+  the first branching point) would let an eventual fifth tier require
+  LOOKAHEAD, not just scanning. Needs a small solver in the model, reused
+  by the suite.
 - **Rotating arrows** — a special arrow that turns 90° when bumped; needs a
   `dir` override in state and a re-check of the generation invariant.
 - **Walls** — static cells no ray may cross; generation treats them as
