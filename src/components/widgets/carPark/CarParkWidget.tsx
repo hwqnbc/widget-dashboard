@@ -1,11 +1,21 @@
-import { useMemo, useRef, useState } from 'react'
+import { Suspense, useCallback, useMemo, useRef, useState } from 'react'
 import type { KeyboardEvent, PointerEvent as ReactPointerEvent } from 'react'
-import { Box, Button, NativeSelect, Stack, Typography } from '@mui/material'
+import {
+  Box,
+  Button,
+  CircularProgress,
+  NativeSelect,
+  Stack,
+  ToggleButton,
+  ToggleButtonGroup,
+  Typography,
+} from '@mui/material'
 import { useAppDispatch } from '../../../app/hooks'
 import { updateWidgetData } from '../../../features/widgets/widgetsSlice'
 import { useWidgetField } from '../../../features/widgets/useWidgetField'
 import type { WidgetProps } from '../../../registry/widgetRegistry'
 import { isTypingTarget } from '../../../utils/isTypingTarget'
+import { lazyWithReload } from '../../../utils/lazyWithReload'
 import WinnerCelebration from '../WinnerCelebration'
 import ConfirmDialog from '../ConfirmDialog'
 import {
@@ -19,6 +29,14 @@ import {
   type Vehicle,
 } from './carParkModel'
 import { LEVELS, TIERS, TIER_LABEL, type Tier } from './carParkLevels'
+import { TARGET_COLOR, vehicleColor } from './palette'
+
+/** The 3D board is its own lazy chunk — three.js never reaches the main
+ * bundle, and the 2D default never downloads it. */
+const CarPark3D = lazyWithReload(() => import('./CarPark3D'), 'carpark3d')
+
+type BoardView = '2d' | '3d'
+const coerceView = (v: unknown): BoardView | undefined => (v === '2d' || v === '3d' ? v : undefined)
 
 /** The lot is drawn with a kerb margin around the 6×6 bays. */
 const PAD = 0.25
@@ -26,11 +44,6 @@ const VIEW = LOT + PAD * 2
 /** Below this (in cells) a pointer release is a TAP — it selects the
  * vehicle for the keyboard instead of moving it. */
 const TAP_CELLS = 0.2
-
-const TARGET_COLOR = '#e53935'
-/** Cars and trucks cycle separate palettes so a truck reads as heavier. */
-const CAR_COLORS = ['#1e88e5', '#43a047', '#fb8c00', '#8e24aa', '#00acc1', '#fdd835', '#6d4c41', '#d81b60']
-const TRUCK_COLORS = ['#3949ab', '#00897b', '#546e7a', '#9e9d24']
 
 const NO_MOVES: Move[] = []
 const NO_BEST: Record<string, number> = {}
@@ -59,18 +72,25 @@ function nextLevel(tier: Tier, index: number): { tier: Tier; level: number } | n
   return null
 }
 
+/** A drag in progress — view-agnostic, in BAYS. The 2D board and the 3D
+ * view each turn their own pointer input into a bay delta and feed it here,
+ * so clamping, snapping and move counting are shared. */
 interface Drag {
   vi: number
-  pointerId: number
-  /** Client coordinate along the vehicle's axis at pointer-down. */
-  origin: number
-  /** Viewbox units per client pixel. */
-  perPx: number
   min: number
   max: number
   /** Live fractional slide — in the ref so a release never reads a stale
    * render's value. */
   delta: number
+}
+
+/** The 2D board's pointer bookkeeping (client px → bays). */
+interface SvgGrab {
+  pointerId: number
+  /** Client coordinate along the vehicle's axis at pointer-down. */
+  origin: number
+  /** Viewbox units per client pixel. */
+  perPx: number
 }
 
 function VehicleShape({ v, color, selected }: { v: Vehicle; color: string; selected: boolean }) {
@@ -110,6 +130,7 @@ export default function CarParkWidget({ id }: WidgetProps) {
   const moves = useWidgetField<Move[]>(id, 'moves', NO_MOVES, coerceMoves)
   const best = useWidgetField<Record<string, number>>(id, 'best', NO_BEST, coerceBest)
   const solved = useWidgetField<number>(id, 'solved', 0)
+  const view = useWidgetField<BoardView>(id, 'view', '2d', coerceView)
 
   const levels = LEVELS[tier]
   const levelIdx = Math.min(storedLevel, Math.max(0, levels.length - 1))
@@ -144,50 +165,73 @@ export default function CarParkWidget({ id }: WidgetProps) {
   const [drag, setDrag] = useState<{ vi: number; delta: number } | null>(null)
   const [selected, setSelected] = useState<number | null>(null)
 
-  const startDrag = (e: ReactPointerEvent, vi: number) => {
-    if (won || dragRef.current) return
-    const svg = svgRef.current
-    if (!svg) return
-    e.stopPropagation()
-    const rect = svg.getBoundingClientRect()
-    const v = lot.vehicles[vi]
-    const { min, max } = moveRange(lot, pos, vi)
-    dragRef.current = {
-      vi,
-      pointerId: e.pointerId,
-      origin: v.horiz ? e.clientX : e.clientY,
-      perPx: VIEW / Math.min(rect.width, rect.height),
-      min,
-      max,
-      delta: 0,
-    }
-    svg.setPointerCapture(e.pointerId)
-    setDrag({ vi, delta: 0 })
-  }
+  const svgGrab = useRef<SvgGrab | null>(null)
+  const probeRef = useRef<HTMLDivElement>(null)
 
-  const moveDrag = (e: ReactPointerEvent) => {
+  // Refs mirror the latest render so the (memoized, 3D-facing) drag core
+  // never closes over a stale position or move log.
+  const live = useRef({ won, lot, pos, commit })
+  live.current = { won, lot, pos, commit }
+
+  const beginDrag = useCallback((vi: number): boolean => {
+    const { won: w, lot: l, pos: p } = live.current
+    if (w || dragRef.current) return false
+    const { min, max } = moveRange(l, p, vi)
+    dragRef.current = { vi, min, max, delta: 0 }
+    setDrag({ vi, delta: 0 })
+    return true
+  }, [])
+
+  const dragTo = useCallback((raw: number) => {
     const d = dragRef.current
-    if (!d || e.pointerId !== d.pointerId) return
-    const v = lot.vehicles[d.vi]
-    const raw = ((v.horiz ? e.clientX : e.clientY) - d.origin) * d.perPx
+    if (!d) return
     d.delta = Math.min(d.max, Math.max(d.min, raw))
     setDrag({ vi: d.vi, delta: d.delta })
-  }
+  }, [])
 
-  /** Release — or LOST capture (lessons #39): snap to the nearest bay. */
-  const endDrag = (e: ReactPointerEvent) => {
+  /** Release — or LOST capture (lessons #39): a tap selects, anything else
+   * snaps to the nearest bay and commits ONE move. */
+  const finishDrag = useCallback(() => {
     const d = dragRef.current
-    if (!d || e.pointerId !== d.pointerId) return
+    if (!d) return
     dragRef.current = null
-    const { delta } = d
     setDrag(null)
-    if (svgRef.current?.hasPointerCapture(e.pointerId)) svgRef.current.releasePointerCapture(e.pointerId)
-    if (Math.abs(delta) < TAP_CELLS) {
+    if (Math.abs(d.delta) < TAP_CELLS) {
       setSelected(d.vi)
       return
     }
-    const snapped = Math.round(delta)
-    if (snapped !== 0) commit([d.vi, snapped])
+    const snapped = Math.round(d.delta)
+    if (snapped !== 0) live.current.commit([d.vi, snapped])
+  }, [])
+
+  const startSvgDrag = (e: ReactPointerEvent, vi: number) => {
+    const svg = svgRef.current
+    if (!svg || !beginDrag(vi)) return
+    e.stopPropagation()
+    const rect = svg.getBoundingClientRect()
+    const v = lot.vehicles[vi]
+    svgGrab.current = {
+      pointerId: e.pointerId,
+      origin: v.horiz ? e.clientX : e.clientY,
+      perPx: VIEW / Math.min(rect.width, rect.height),
+    }
+    svg.setPointerCapture(e.pointerId)
+  }
+
+  const moveSvgDrag = (e: ReactPointerEvent) => {
+    const g = svgGrab.current
+    const d = dragRef.current
+    if (!g || !d || e.pointerId !== g.pointerId) return
+    const v = lot.vehicles[d.vi]
+    dragTo(((v.horiz ? e.clientX : e.clientY) - g.origin) * g.perPx)
+  }
+
+  const endSvgDrag = (e: ReactPointerEvent) => {
+    const g = svgGrab.current
+    if (!g || e.pointerId !== g.pointerId) return
+    svgGrab.current = null
+    if (svgRef.current?.hasPointerCapture(e.pointerId)) svgRef.current.releasePointerCapture(e.pointerId)
+    finishDrag()
   }
 
   // ------------------------------------------------------------ keyboard
@@ -246,6 +290,7 @@ export default function CarParkWidget({ id }: WidgetProps) {
       data-best={myBest ?? ''}
       data-solved={solved}
       data-state={won ? 'won' : 'live'}
+      data-view={view}
       sx={{ height: '100%', display: 'flex', flexDirection: 'column', gap: 1, p: 0.5, outline: 'none' }}
     >
       <Stack direction="row" spacing={1} sx={{ justifyContent: 'center', flexWrap: 'wrap' }}>
@@ -279,6 +324,23 @@ export default function CarParkWidget({ id }: WidgetProps) {
             )
           })}
         </NativeSelect>
+        <ToggleButtonGroup
+          size="small"
+          exclusive
+          value={view}
+          onChange={(_, v: BoardView | null) => {
+            if (v && v !== view) setGame({ view: v })
+          }}
+          data-testid="carpark-view"
+          aria-label="Board view"
+        >
+          <ToggleButton value="2d" data-testid="carpark-view-2d" sx={{ textTransform: 'none', py: 0.3, px: 1 }}>
+            2D
+          </ToggleButton>
+          <ToggleButton value="3d" data-testid="carpark-view-3d" sx={{ textTransform: 'none', py: 0.3, px: 1 }}>
+            3D
+          </ToggleButton>
+        </ToggleButtonGroup>
       </Stack>
 
       <Box
@@ -291,6 +353,7 @@ export default function CarParkWidget({ id }: WidgetProps) {
           placeItems: 'center',
         }}
       >
+        {view === '2d' ? (
         <svg
           ref={svgRef}
           data-testid="carpark-board"
@@ -298,10 +361,10 @@ export default function CarParkWidget({ id }: WidgetProps) {
           width="100%"
           height="100%"
           preserveAspectRatio="xMidYMid meet"
-          onPointerMove={moveDrag}
-          onPointerUp={endDrag}
-          onPointerCancel={endDrag}
-          onLostPointerCapture={endDrag}
+          onPointerMove={moveSvgDrag}
+          onPointerUp={endSvgDrag}
+          onPointerCancel={endSvgDrag}
+          onLostPointerCapture={endSvgDrag}
           style={{ display: 'block', maxWidth: '100%', maxHeight: '100%', touchAction: 'none' }}
         >
           {/* kerb + tarmac + bay lines */}
@@ -345,8 +408,7 @@ export default function CarParkWidget({ id }: WidgetProps) {
               const out = won && vi === 0 ? LOT + PAD + 0.5 : off
               const x = v.horiz ? out : v.lane
               const y = v.horiz ? v.lane : out
-              const color =
-                vi === 0 ? TARGET_COLOR : v.len === 3 ? TRUCK_COLORS[vi % TRUCK_COLORS.length] : CAR_COLORS[vi % CAR_COLORS.length]
+              const color = vehicleColor(v, vi)
               return (
                 <g
                   key={v.id}
@@ -356,7 +418,7 @@ export default function CarParkWidget({ id }: WidgetProps) {
                   data-col={v.horiz ? pos[vi] : v.lane}
                   data-len={v.len}
                   data-horiz={v.horiz ? '1' : '0'}
-                  onPointerDown={(e) => startDrag(e, vi)}
+                  onPointerDown={(e) => startSvgDrag(e, vi)}
                   style={{
                     transform: `translate(${x}px, ${y}px)`,
                     transition: dragging
@@ -373,6 +435,34 @@ export default function CarParkWidget({ id }: WidgetProps) {
             })}
           </g>
         </svg>
+        ) : (
+          <Box
+            ref={probeRef}
+            data-testid="carpark-3d"
+            sx={{ position: 'absolute', inset: 0, touchAction: 'none' }}
+          >
+            <Suspense
+              fallback={
+                <Box sx={{ height: '100%', display: 'grid', placeItems: 'center' }}>
+                  <CircularProgress size={24} />
+                </Box>
+              }
+            >
+              <CarPark3D
+                lot={lot}
+                pos={pos}
+                drag={drag}
+                won={won}
+                selected={selected}
+                onBegin={beginDrag}
+                onDrag={dragTo}
+                onEnd={finishDrag}
+                levelKey={key}
+                probeRef={probeRef}
+              />
+            </Suspense>
+          </Box>
+        )}
 
         {won && (
           <Box

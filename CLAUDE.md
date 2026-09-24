@@ -286,7 +286,10 @@ a FIXED, append-only level pack: 4 tiers × 10 levels picked by two
 dropdowns, each level pre-solved offline by `scripts/gen-carpark-levels.mjs`
 (whole-cluster BFS + hill-climb) with its BFS-optimal par re-proven and
 band-checked by the e2e sweep, drag-to-slide with snap, a persisted move
-log replayed into the board, Undo/Reset, par ★ and per-level bests). See `docs/netplay.md`
+log replayed into the board, Undo/Reset, par ★ and per-level bests — plus a
+persisted 2D/3D toggle: the lazy `CarPark3D` three.js board is a pure view
+fed by the widget's view-agnostic bay-unit drag core, dragged via R3F
+captured-pointer plane intersection). See `docs/netplay.md`
 for two-device play (peer-to-peer WebRTC on one wifi with **no server** —
 `iceServers: []` so traffic never leaves the LAN, QR codes as the signaling
 channel, a compact SDP codec that gets a pairing token down to ~120

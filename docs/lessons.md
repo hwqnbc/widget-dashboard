@@ -2044,3 +2044,16 @@ carried over; these are the new ones.
      trust in the generator. Persist the MOVE LOG, derive the board with a
      `replay` that stops at the first illegal move — a stale log degrades to
      its valid prefix instead of corrupting the position.
+
+127. **Make the 3D view a pure view over a unit-agnostic input core.** Car
+     Park's 3D board owns no game logic: the widget's drag core works in
+     BAYS (`beginDrag`/`dragTo`/`finishDrag` — clamp, tap threshold, snap,
+     one move), and each view only converts its own input into bays (2D:
+     client px × viewBox scale; 3D: world units, which ARE bays). Choose
+     world units = game units and the 3D conversion is the identity. Two
+     R3F specifics: drag by re-intersecting `e.ray` with a plane at the
+     GRABBED height (not the ground) after `e.target.setPointerCapture`, so
+     the point under the finger stays put; and for e2e, publish each
+     object's projected screen TRACK (one point per legal position) from an
+     in-canvas probe — perspective makes one step's pixel length vary, so a
+     test should aim at an exact projected target, never scale a unit step.

@@ -153,6 +153,63 @@ To add levels:
 - **Controls.** **Undo** pops the last move. **Reset** and a level or tier
   change are `ConfirmDialog`-guarded while an attempt is in progress.
 
+## 3D view — `carPark/CarPark3D.tsx` (lazy chunk)
+
+A **2D | 3D** toggle (`carpark-view`, next to the dropdowns) swaps the SVG
+board for a fully playable three.js board. The choice is persisted as
+`view`, and the default is 2D.
+
+- **Game logic stays in the widget.** The widget still owns the move log,
+  clamping, snapping, the win, the keyboard and the controls. `CarPark3D`
+  is a pure **view**: it takes `lot`, `pos`, the live `drag`, `won` and
+  `selected`, and reports drags back through `onBegin(vi)`, `onDrag(bays)`
+  and `onEnd()`.
+- **Shared drag core.** The drag handling is view-agnostic and works in
+  **bays** (`beginDrag`, `dragTo`, `finishDrag`). The 2D board converts
+  client pixels to bays. The 3D board converts world units to bays, and
+  since 1 unit = 1 bay that is the identity. Tap-to-select, the 0.2-bay
+  tap threshold and ONE move per snapped slide therefore behave the same
+  in both views.
+  - The core is memoized and reads the latest position through a ref, so
+    the 3D view's handlers never close over stale state.
+- **Loading.** The chunk loads through
+  `lazyWithReload(() => import('./CarPark3D'), 'carpark3d')` inside
+  `<Suspense>`, so three.js never reaches the main bundle. Players who stay
+  in 2D never download it: the chunk itself is about 7 kB, and it shares
+  the three/R3F vendor chunk with the other 3D widgets.
+- **Scene.** The lot is centred on the origin, rows run toward the camera
+  (+z) and the exit is on the right (+x). The camera is **fixed** at 55°
+  elevation. `CameraRig` walks it along that view direction until the lot
+  plus kerb plus exit chevron fill about 94% of the canvas, and it refits
+  on every resize, so portrait and landscape both frame the whole lot.
+  There is no orbit, because orbiting would fight the drag.
+- **Vehicles.** `Vehicle3D` draws a simple toy car or truck: a chassis in
+  the vehicle's colour, a dark glasshouse, a roof, headlights and wheels.
+  Trucks have a front cab and a coloured cargo box. They use the 2D palette
+  (`palette.ts`), so a vehicle keeps its colour across the toggle.
+  - They follow the low-spec convention (up to 13 on screen): matte
+    `meshStandardMaterial`, no transmission or emissive. The Model Viewer
+    trucks weren't reused because they have no colour prop and are far too
+    detailed for 13 instances.
+- **Dragging in 3D.** R3F's own mesh events drive the drag, which is new to
+  the repo (other 3D widgets use DOM pointer events on a wrapper).
+  - `onPointerDown` on a vehicle captures the pointer
+    (`e.target.setPointerCapture`) and records where `e.ray` hits a
+    horizontal plane at mid-body height (`y = 0.3`).
+  - Captured `onPointerMove` events re-intersect that plane, and the
+    world delta along the vehicle's axis *is* the bay delta.
+  - `onPointerUp`, `onPointerCancel` and `onLostPointerCapture` end the
+    drag.
+  - Using a plane at body height rather than the ground keeps the grabbed
+    point under the finger.
+- **Motion.** Vehicles ease toward their snapped bay in `useFrame`
+  (`1 − e^(−16·dt)`) and follow the finger instantly while dragged. The
+  won target car eases out past the exit more slowly (`EASE_OUT`). The
+  vehicle group is keyed by level, so a level change places the cars
+  instead of gliding them.
+- **Overlay.** The win overlay and the footer are unchanged and sit over
+  whichever board is showing.
+
 ## State model (persisted `data`, via `useWidgetField`)
 
 | Field    | Meaning |
@@ -162,6 +219,7 @@ To add levels:
 | `moves`  | `[vehicleIndex, delta][]`, the current attempt's log. The board is **derived** by `replay`, never stored. |
 | `best`   | `{ 'tier:index': fewestMoves }`. |
 | `solved` | Lifetime solve count. |
+| `view`   | `'2d'` or `'3d'` board (coerced; default `'2d'`). |
 
 The winning move writes `moves`, `solved` and `best` in **one** dispatch,
 so a reload can never double-count a solve.
@@ -170,7 +228,8 @@ so a reload can never double-count a solve.
 
 - **Root** `carpark-root`: `data-tier`, `data-level`, `data-moves` (moves
   applied), `data-par`, `data-best` (empty when there is none),
-  `data-solved`, and `data-state` (`live` or `won`).
+  `data-solved`, `data-state` (`live` or `won`) and `data-view` (`2d` or
+  `3d`).
 - **Board** `carpark-board`: one `<g>` per vehicle with `data-vehicle`
   (letter), `data-index` (model index), `data-row`, `data-col`, `data-len`
   and `data-horiz`.
@@ -178,7 +237,17 @@ so a reload can never double-count a solve.
   - `carpark-tier` and `carpark-level` (the native `<select>` is inside
     each);
   - `carpark-undo` and `carpark-reset`;
-  - `carpark-won` and `carpark-next`.
+  - `carpark-won` and `carpark-next`;
+  - `carpark-view` with `carpark-view-2d` and `carpark-view-3d`.
+- **3D wrapper** `carpark-3d`, which exists only in 3D. Its throttled
+  attributes are written every 10 frames by one owner, the in-canvas
+  `Probe`:
+  - `data-frames` counts rendered frames.
+  - `data-vehicles` is JSON `[{ i, off, track }]`. `track[k]` is the
+    wrapper-pixel projection of the vehicle's drag-plane centre at lane
+    offset `k`. Perspective makes a bay's on-screen length vary, so
+    `dragVehicle3D` in `helpers.mjs` aims at the exact projected bay
+    instead of scaling a single step.
 
 ## Verifying
 
@@ -187,6 +256,15 @@ so a reload can never double-count a solve.
 - **Pure checks:** crafted boards, then the whole-pack sweep.
 - **Live checks:** real pointer drags through `dragVehicle` in
   `helpers.mjs`, including playing the solver's optimal line to a ★ win.
+
+`e2e/153-carpark-3d.test.mjs` covers the 3D view. It checks:
+- the default 2D view, and that the toggle mounts one rendering canvas;
+- that `data-vehicles` matches the model;
+- a 3D over-drag that clamps and counts one move, then Undo;
+- a tap followed by an arrow key;
+- that the view survives a reload;
+- an optimal-line win played through 3D drags;
+- that switching back to 2D keeps the game.
 
 ## Future work (enhancement backlog)
 
@@ -219,7 +297,20 @@ so a reload can never double-count a solve.
 - **Solution replay.** Animate `solve()`'s line after a win or a give-up.
 - **Sound.** An engine purr on drag and a thunk at the end of a slide
   through `droneSim/webAudio`, with no asset files.
-- **3D view.** Render the lot with the Model Viewer's truck and car models,
-  as Drone Strike's `ModelTargets` do. They would use the `lowSpec`
-  convention, since up to 13 vehicles are on screen.
+- ~~**3D view**~~ — **shipped** as the lazy `CarPark3D` board behind the
+  2D/3D toggle (see *3D view* above), with its own toy models rather than
+  the Model Viewer trucks.
+- **Orbit / tilt camera button.** A "rotate view" chip that steps the fixed
+  camera 90° around the lot. Rotating in fixed steps avoids fighting the
+  drag, and `CameraRig`'s fit already handles any view direction.
+- **Exit gate + drive-off in 3D.** A boom barrier at the exit that lifts
+  when the red car's path clears, then the car accelerates away. This is
+  pure `useFrame` on the existing drive-out.
+- **Shadows and lights on win.** Cheap blob shadows under the cars, and
+  headlights that light up during the drive-out. The glow could be an
+  opacity pulse on the lamp boxes instead of emissive, to stay within the
+  low-spec rule.
+- **3D in fullscreen by default.** Open the 3D view when the card is
+  maximised (`usePresentation`), since the 3D board benefits most from the
+  space.
 - **Per-tier progress.** Show "7/10 ★" beside each tier in the dropdown.

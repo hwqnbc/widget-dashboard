@@ -186,7 +186,7 @@ export function defaultWidgetData(type: WidgetType): Record<string, unknown> {
         solved: 0,
       }
     case 'carPark':
-      return { tier: 'beginner', level: 0, moves: [], best: {}, solved: 0 }
+      return { tier: 'beginner', level: 0, moves: [], best: {}, solved: 0, view: '2d' }
     case 'memory':
       return {
         size: 4,

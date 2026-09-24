@@ -200,6 +200,53 @@ export async function dragVehicle(page, index, cells) {
   await page.mouse.up()
 }
 
+/**
+ * Drag Car Park vehicle `index` by `cells` bays in the 3D view. The 3D board
+ * publishes, per vehicle, its screen-space TRACK (`data-vehicles` on
+ * `carpark-3d`): the projected drag-plane point at every offset its lane
+ * allows — perspective makes a bay's on-screen length vary, so the helper
+ * aims at the exact projected bay rather than scaling one step. Waits for a
+ * fresh probe write first so the track reflects the latest position; drags
+ * past the lane's end extrapolate the last step (the widget clamps).
+ */
+export async function dragVehicle3D(page, index, cells) {
+  const wrap = page.locator('[data-testid="carpark-3d"]')
+  const f0 = parseInt((await wrap.getAttribute('data-frames')) ?? '0', 10)
+  await page.waitForFunction(
+    (f) => parseInt(document.querySelector('[data-testid="carpark-3d"]')?.dataset.frames ?? '0', 10) >= f + 20,
+    f0,
+    { timeout: 10000 },
+  )
+  const box = await wrap.boundingBox()
+  const v = JSON.parse(await wrap.getAttribute('data-vehicles')).find((e) => e.i === index)
+  const at = (k) => {
+    const t = v.track
+    if (k >= 0 && k < t.length) return t[k]
+    const [a, b] = k < 0 ? [t[0], t[1] ?? t[0]] : [t[t.length - 1], t[t.length - 2] ?? t[t.length - 1]]
+    const n = k < 0 ? -k : k - (t.length - 1)
+    return [a[0] + (a[0] - b[0]) * n, a[1] + (a[1] - b[1]) * n]
+  }
+  const [x0, y0] = at(v.off)
+  const [x1, y1] = at(v.off + cells)
+  await page.mouse.move(box.x + x0, box.y + y0)
+  await page.mouse.down()
+  await page.mouse.move(box.x + x1, box.y + y1, { steps: 8 })
+  await page.mouse.up()
+}
+
+/** The 3D board's published offset for vehicle `index`, after a fresh probe
+ * write (see `dragVehicle3D`). */
+export async function vehicleOff3D(page, index) {
+  const wrap = page.locator('[data-testid="carpark-3d"]')
+  const f0 = parseInt((await wrap.getAttribute('data-frames')) ?? '0', 10)
+  await page.waitForFunction(
+    (f) => parseInt(document.querySelector('[data-testid="carpark-3d"]')?.dataset.frames ?? '0', 10) >= f + 20,
+    f0,
+    { timeout: 10000 },
+  )
+  return JSON.parse(await wrap.getAttribute('data-vehicles')).find((e) => e.i === index).off
+}
+
 /** Fresh dashboard with `count` Othello widgets, loopback transport armed
  * (see `addTicTacToeWidgets` for why `?netloop=1`). */
 export async function addOthelloWidgets(page, count = 2) {
