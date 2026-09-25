@@ -168,6 +168,7 @@ const carParkBundle = spawnSync(
     'esbuild',
     'src/components/widgets/carPark/carParkModel.ts',
     'src/components/widgets/carPark/carParkLevels.ts',
+    'src/components/widgets/carPark/palette.ts',
     '--bundle',
     '--format=esm',
     `--outdir=${join(here, '.bundle')}`,

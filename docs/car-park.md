@@ -145,6 +145,20 @@ To add levels:
     700 ms ease-in, which is the drive-out.
   - The win overlay fades in 500 ms later. On a reload of a won level, the
     car is simply already gone.
+- **Making the target obvious.** The red car must be identifiable at a
+  glance, and never by colour alone.
+  - **Palette rule** (`palette.ts`): no other vehicle colour may sit within
+    50° of the target's hue, so there is no orange, pink, magenta or
+    reddish-brown. Low-saturation greys are exempt. The target itself is a
+    pure bright red, `#ff1f1f`. The rule is pinned by a pure check in the
+    152 suite, which caught a near-amber yellow when it was first added.
+  - **Livery in both views:** two white racing stripes and a gold outline
+    (2D) or gold belt line (3D). The 2D car also has a white roof chevron
+    pointing at the exit. White stays reserved for the selection outline.
+  - **3D marker:** a red cone in a white ring bobs above the car
+    (`TargetMarker`). It is hidden while the car is dragged or driving off.
+  - **Goal lane:** the exit row is faintly tinted red in both views, so
+    the lane to clear reads too.
 - **Win overlay.** It shows "Out in N moves!" with "Par ★" or "Par is P",
   **above** the `WinnerCelebration`. The text comes first because the
   celebration figure can fill the overlay on a narrow card, and the result
@@ -280,7 +294,7 @@ so a reload can never double-count a solve.
   *effective* view, `2d` or `3d`) and `data-yaw`.
 - **Board** `carpark-board`: one `<g>` per vehicle with `data-vehicle`
   (letter), `data-index` (model index), `data-row`, `data-col`, `data-len`
-  and `data-horiz`.
+  and `data-horiz`. The target car's `<g>` also carries `data-target="1"`.
 - **Controls:**
   - `carpark-tier` and `carpark-level` (the native `<select>` is inside
     each);

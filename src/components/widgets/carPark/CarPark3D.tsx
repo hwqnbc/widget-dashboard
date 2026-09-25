@@ -127,6 +127,28 @@ function CameraRig({ yaw }: { yaw: number }) {
   return null
 }
 
+/** A bobbing marker over the red car — a downward red cone in a white
+ * ring. Gentle motion catches the eye without flashing; hidden while the
+ * car is dragged or driving off. Low-spec: matte, 8 segments. */
+function TargetMarker({ len, visible }: { len: number; visible: boolean }) {
+  const ref = useRef<Group>(null)
+  useFrame(({ clock }) => {
+    if (ref.current) ref.current.position.y = 1.3 + Math.sin(clock.elapsedTime * 3) * 0.1
+  })
+  return (
+    <group ref={ref} position={[len / 2, 1.3, 0]} visible={visible}>
+      <mesh rotation={[Math.PI, 0, 0]}>
+        <coneGeometry args={[0.26, 0.5, 8]} />
+        <meshStandardMaterial color={TARGET_COLOR} roughness={0.6} />
+      </mesh>
+      <mesh position={[0, 0.26, 0]} rotation={[Math.PI / 2, 0, 0]}>
+        <torusGeometry args={[0.27, 0.045, 6, 16]} />
+        <meshStandardMaterial color="#ffffff" roughness={0.6} />
+      </mesh>
+    </group>
+  )
+}
+
 /** Is the target car's path to the exit clear (every exit-row bay ahead of
  * its nose empty)? Drives the barrier. */
 function pathClear(lot: Lot, pos: readonly number[]): boolean {
@@ -330,7 +352,14 @@ function VehicleNode({
       onPointerCancel={release}
       onLostPointerCapture={release}
     >
-      <Vehicle3D len={v.len} color={vehicleColor(v, vi)} selected={selected} lightsOn={driveOff} />
+      <Vehicle3D
+        len={v.len}
+        color={vehicleColor(v, vi)}
+        selected={selected}
+        lightsOn={driveOff}
+        target={vi === 0}
+      />
+      {vi === 0 && <TargetMarker len={v.len} visible={!driveOff && !instant} />}
     </group>
   )
 }
@@ -371,6 +400,11 @@ function Lot3D({ lot, gateOpen }: { lot: Lot; gateOpen: boolean }) {
       <mesh position={[0, -0.01, 0]}>
         <boxGeometry args={[LOT, 0.02, LOT]} />
         <meshStandardMaterial color="#5f6b73" roughness={0.95} />
+      </mesh>
+      {/* the goal lane: a faint red tint along the exit row */}
+      <mesh position={[K / 2, 0.004, exitZ]} rotation={[-Math.PI / 2, 0, 0]}>
+        <planeGeometry args={[LOT + K, 1]} />
+        <meshBasicMaterial color={TARGET_COLOR} transparent opacity={0.18} depthWrite={false} />
       </mesh>
       {/* the exit gap's floor + a red chevron beyond it */}
       <mesh position={[edge, -0.01, exitZ]}>

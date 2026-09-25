@@ -29,6 +29,7 @@ import {
   solve,
 } from './.bundle/carParkModel.js'
 import { LEVELS, TIERS, TIER_BANDS } from './.bundle/carParkLevels.js'
+import { CAR_COLORS, TARGET_COLOR, TRUCK_COLORS } from './.bundle/palette.js'
 
 const { check, finish } = reporter('car-park')
 
@@ -123,6 +124,31 @@ for (const [name, board] of [
   check('the Expert tier reaches a 40+ move board', maxPar >= 40, `${maxPar}`)
 }
 
+// ------------------------------------------------------ 2b. palette rule
+// The red car must never blend in: no other vehicle colour may sit within
+// 50° of its hue (greys — low saturation — are exempt).
+{
+  const hsl = (hex) => {
+    const n = parseInt(hex.slice(1), 16)
+    const [r, g, b] = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((c) => c / 255)
+    const max = Math.max(r, g, b)
+    const min = Math.min(r, g, b)
+    const d = max - min
+    const l = (max + min) / 2
+    const s = d === 0 ? 0 : d / (1 - Math.abs(2 * l - 1))
+    let h = 0
+    if (d) h = max === r ? ((g - b) / d) % 6 : max === g ? (b - r) / d + 2 : (r - g) / d + 4
+    return { h: (h * 60 + 360) % 360, s }
+  }
+  const t = hsl(TARGET_COLOR)
+  const clash = [...CAR_COLORS, ...TRUCK_COLORS].filter((c) => {
+    const { h, s } = hsl(c)
+    const dh = Math.min(Math.abs(h - t.h), 360 - Math.abs(h - t.h))
+    return s > 0.25 && dh < 50
+  })
+  check('no vehicle colour is within 50° of the target red', clash.length === 0, clash.join(','))
+}
+
 // ---------------------------------------------------------------- 3. live
 const { browser, page } = await launch()
 await addCarParkWidget(page)
@@ -149,6 +175,11 @@ check('publishes the level par', (await num('data-par')) === L0.par)
 check(
   'draws one group per vehicle',
   (await page.locator('[data-testid="carpark-board"] [data-vehicle]').count()) === lot0.vehicles.length,
+)
+check(
+  'exactly one vehicle is marked as the target, and it is vehicle 0',
+  (await page.locator('[data-testid="carpark-board"] [data-target="1"]').count()) === 1 &&
+    (await page.locator('[data-testid="carpark-board"] [data-target="1"]').getAttribute('data-index')) === '0',
 )
 check('a fresh level has no moves', (await num('data-moves')) === 0 && (await attr('data-state')) === 'live')
 

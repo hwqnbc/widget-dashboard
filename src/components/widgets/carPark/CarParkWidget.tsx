@@ -32,7 +32,7 @@ import {
   type Vehicle,
 } from './carParkModel'
 import { LEVELS, TIERS, TIER_LABEL, type Tier } from './carParkLevels'
-import { TARGET_COLOR, vehicleColor } from './palette'
+import { TARGET_COLOR, TARGET_STRIPE, TARGET_TRIM, vehicleColor } from './palette'
 
 /** The 3D board is its own lazy chunk — three.js never reaches the main
  * bundle, and the 2D default never downloads it. */
@@ -122,7 +122,18 @@ interface SvgGrab {
   perPx: number
 }
 
-function VehicleShape({ v, color, selected }: { v: Vehicle; color: string; selected: boolean }) {
+function VehicleShape({
+  v,
+  color,
+  selected,
+  target = false,
+}: {
+  v: Vehicle
+  color: string
+  selected: boolean
+  /** The red car — gets a livery so it never relies on colour alone. */
+  target?: boolean
+}) {
   const L = v.len
   // Drawn horizontally, nose to the right (+x); a vertical vehicle is the
   // same shape rotated a quarter turn, nose down.
@@ -135,9 +146,22 @@ function VehicleShape({ v, color, selected }: { v: Vehicle; color: string; selec
         height={0.8}
         rx={0.2}
         fill={color}
-        stroke={selected ? '#fff' : 'rgba(0,0,0,0.35)'}
-        strokeWidth={selected ? 0.07 : 0.03}
+        stroke={selected ? '#fff' : target ? TARGET_TRIM : 'rgba(0,0,0,0.35)'}
+        strokeWidth={selected ? 0.07 : target ? 0.06 : 0.03}
       />
+      {target && (
+        <>
+          {/* racing stripes + a roof chevron pointing at the exit */}
+          <rect x={0.14} y={0.4} width={L - 0.28} height={0.06} fill={TARGET_STRIPE} opacity={0.9} />
+          <rect x={0.14} y={0.54} width={L - 0.28} height={0.06} fill={TARGET_STRIPE} opacity={0.9} />
+          <polygon
+            points={`${L / 2 - 0.2},0.3 ${L / 2 + 0.12},0.5 ${L / 2 - 0.2},0.7 ${L / 2 - 0.1},0.5`}
+            fill={TARGET_STRIPE}
+            stroke="rgba(0,0,0,0.35)"
+            strokeWidth={0.02}
+          />
+        </>
+      )}
       {/* windscreen + rear window */}
       <rect x={L - 0.62} y={0.22} width={0.2} height={0.56} rx={0.06} fill="rgba(20,30,45,0.7)" />
       <rect x={L === 3 ? L - 1.05 : 0.2} y={0.24} width={L === 3 ? 0.08 : 0.14} height={0.52} rx={0.04} fill="rgba(20,30,45,0.55)" />
@@ -408,6 +432,8 @@ export default function CarParkWidget({ id }: WidgetProps) {
           {/* kerb + tarmac + bay lines */}
           <rect x={-PAD} y={-PAD} width={VIEW} height={VIEW} rx={0.2} fill="#37474f" />
           <rect x={0} y={0} width={LOT} height={LOT} fill={lotColor} />
+          {/* the goal lane: a faint red tint along the exit row */}
+          <rect x={0} y={EXIT_ROW} width={LOT + PAD} height={1} fill={TARGET_COLOR} opacity={0.16} />
           {/* the exit: a gap in the right kerb on the exit row */}
           <rect x={LOT} y={EXIT_ROW} width={PAD} height={1} fill={lotColor} />
           <polygon
@@ -456,6 +482,7 @@ export default function CarParkWidget({ id }: WidgetProps) {
                   data-col={v.horiz ? pos[vi] : v.lane}
                   data-len={v.len}
                   data-horiz={v.horiz ? '1' : '0'}
+                  data-target={vi === 0 ? '1' : undefined}
                   onPointerDown={(e) => startSvgDrag(e, vi)}
                   style={{
                     transform: `translate(${x}px, ${y}px)`,
@@ -467,7 +494,7 @@ export default function CarParkWidget({ id }: WidgetProps) {
                     cursor: won ? 'default' : v.horiz ? 'ew-resize' : 'ns-resize',
                   }}
                 >
-                  <VehicleShape v={v} color={color} selected={selected === vi && !won} />
+                  <VehicleShape v={v} color={color} selected={selected === vi && !won} target={vi === 0} />
                 </g>
               )
             })}

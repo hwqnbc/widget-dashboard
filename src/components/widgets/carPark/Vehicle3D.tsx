@@ -12,6 +12,7 @@ import { useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
 import { Shape } from 'three'
 import type { MeshBasicMaterial } from 'three'
+import { TARGET_STRIPE, TARGET_TRIM } from './palette'
 
 const GLASS = '#1e293b'
 const TYRE = '#212121'
@@ -48,12 +49,16 @@ export default function Vehicle3D({
   color,
   selected,
   lightsOn = false,
+  target = false,
 }: {
   len: number
   color: string
   selected: boolean
   /** Headlights on — the won car's drive-off. */
   lightsOn?: boolean
+  /** The red car: racing stripes + a gold belt line, so it never relies on
+   * colour alone. */
+  target?: boolean
 }) {
   const truck = len === 3
   const bodyLen = len - 0.16
@@ -140,6 +145,27 @@ export default function Vehicle3D({
           <mesh position={[len / 2 - 0.08, 0.7, 0]}>
             <boxGeometry args={[0.85, 0.04, 0.7]} />
             <meshStandardMaterial color={color} roughness={0.55} />
+          </mesh>
+        </>
+      )}
+      {target && (
+        <>
+          {/* racing stripes over hood/boot and roof, gold belt line */}
+          {[0.09, -0.09].map((z) => (
+            <group key={z}>
+              <mesh position={[len / 2, 0.452, z]}>
+                <boxGeometry args={[bodyLen - 0.04, 0.008, 0.07]} />
+                <meshStandardMaterial color={TARGET_STRIPE} roughness={0.5} />
+              </mesh>
+              <mesh position={[len / 2 - 0.08, 0.724, z]}>
+                <boxGeometry args={[0.83, 0.008, 0.07]} />
+                <meshStandardMaterial color={TARGET_STRIPE} roughness={0.5} />
+              </mesh>
+            </group>
+          ))}
+          <mesh position={[len / 2, 0.3, 0]}>
+            <boxGeometry args={[bodyLen + 0.02, 0.05, 0.82]} />
+            <meshStandardMaterial color={TARGET_TRIM} roughness={0.5} />
           </mesh>
         </>
       )}

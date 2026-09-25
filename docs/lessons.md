@@ -2069,3 +2069,14 @@ carried over; these are the new ones.
      the other N−1 every frame — the drive-off flag never stuck until only
      the target car's node was allowed to write it. Give frame-loop shared
      state exactly one writer, same as DOM probe attributes (#46).
+
+129. **Never let the key piece rely on colour alone — and pin the palette
+     rule in a test.** Car Park's red target blended in because the other
+     cars' palette held orange, pink, magenta and reddish-brown. The fix
+     was three-layered: EXCLUDE the key piece's hue family from everyone
+     else (a ≥50° hue gap, greys exempt), give it a SHAPE/livery cue
+     (stripes, gold trim, roof chevron, a bobbing 3D marker) so it still
+     reads for colour-blind players, and tint its goal lane. Then make the
+     palette rule a pure e2e check: it immediately caught a "yellow" that
+     was really a 49° amber. Palettes drift as colours get added; a test
+     is what keeps the rule true.
