@@ -16,7 +16,7 @@ import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import type { ThreeEvent } from '@react-three/fiber'
 import { Plane, Vector3 } from 'three'
 import type { Group, PerspectiveCamera } from 'three'
-import { EXIT_ROW, LOT, type Lot, type Vehicle } from './carParkModel'
+import { EXIT_ROW, LOT, occupancy, type Lot, type Vehicle } from './carParkModel'
 import { TARGET_COLOR, vehicleColor } from './palette'
 import Vehicle3D from './Vehicle3D'
 
@@ -35,6 +35,14 @@ export interface CarPark3DProps {
   levelKey: string
   /** DOM wrapper that carries the e2e probe attributes. */
   probeRef: RefObject<HTMLElement | null>
+  /** Camera quarter-turns around the lot (0–3); eased between steps. */
+  yaw: number
+}
+
+/** Transient scene facts the probe mirrors to the DOM (not React state —
+ * they change inside `useFrame`). */
+interface SceneFx {
+  droveOff: boolean
 }
 
 const HALF = LOT / 2
@@ -42,13 +50,18 @@ const HALF = LOT / 2
  * the finger stays on the car it grabbed (and e2e can aim exactly). */
 const DRAG_Y = 0.3
 const DRAG_PLANE = new Plane(new Vector3(0, 1, 0), -DRAG_Y)
-/** Where the won target car drives to — well past the exit gap. */
-const DRIVE_OUT = LOT + 2.5
 const EASE = 16
-/** The drive-out eases slower, so it reads as the car pulling away. */
-const EASE_OUT = 3
+/** Drive-off: the won car ACCELERATES from rest (bays/s²) and is hidden once
+ * it's this far along — past the raised barrier and off the lot. */
+const DRIVE_ACCEL = 6
+const DRIVE_GONE = LOT + 3
 const ELEVATION = (55 * Math.PI) / 180
-const LOOK_AT = new Vector3(0, 0, 0.25)
+const LOOK_AT = new Vector3(0, 0, 0)
+/** Camera yaw easing rate (≈400 ms to settle a quarter turn). */
+const YAW_EASE = 10
+const GATE_EASE = 6
+const GATE_UP = (80 * Math.PI) / 180
+const EXIT_Z = EXIT_ROW + 0.5 - HALF
 
 /** World position of a vehicle's rear corner origin at offset `off`. */
 function originOf(v: Vehicle, off: number): [number, number, number] {
@@ -56,35 +69,102 @@ function originOf(v: Vehicle, off: number): [number, number, number] {
 }
 
 /** Keep the whole lot (kerb + exit arrow) in frame at any aspect: walk the
- * camera along its fixed view direction until the bounds fill ~94%. */
-function CameraRig() {
-  const camera = useThree((s) => s.camera) as PerspectiveCamera
-  const size = useThree((s) => s.size)
-  useLayoutEffect(() => {
-    const dir = new Vector3(0, Math.sin(ELEVATION), Math.cos(ELEVATION))
-    const corners: Vector3[] = []
-    for (const x of [-HALF - 0.3, HALF + 0.5])
-      for (const z of [-HALF - 0.3, HALF + 0.3]) for (const y of [0, 0.8]) corners.push(new Vector3(x, y, z))
-    camera.aspect = size.width / Math.max(1, size.height)
-    camera.updateProjectionMatrix()
-    let d = 12
-    const p = new Vector3()
-    for (let k = 0; k < 6; k++) {
-      camera.position.copy(LOOK_AT).addScaledVector(dir, d)
-      camera.lookAt(LOOK_AT)
-      camera.updateMatrixWorld()
-      let m = 0
-      for (const c of corners) {
-        p.copy(c).project(camera)
-        m = Math.max(m, Math.abs(p.x), Math.abs(p.y))
-      }
-      d *= m / 0.94
-    }
+ * camera along its view direction until the bounds fill ~94%. The direction
+ * is the 55° elevation vector turned about Y by the eased yaw angle; the fit
+ * reruns only while the angle moves or the canvas resizes. */
+const CORNERS: Vector3[] = []
+for (const x of [-HALF - 0.3, HALF + 0.5])
+  for (const z of [-HALF - 0.3, HALF + 0.3]) for (const y of [0, 0.8]) CORNERS.push(new Vector3(x, y, z))
+
+function fitCamera(camera: PerspectiveCamera, angle: number) {
+  const c = Math.cos(ELEVATION)
+  const dir = new Vector3(Math.sin(angle) * c, Math.sin(ELEVATION), Math.cos(angle) * c)
+  const p = new Vector3()
+  let d = 12
+  for (let k = 0; k < 6; k++) {
     camera.position.copy(LOOK_AT).addScaledVector(dir, d)
     camera.lookAt(LOOK_AT)
     camera.updateMatrixWorld()
+    let m = 0
+    for (const q of CORNERS) {
+      p.copy(q).project(camera)
+      m = Math.max(m, Math.abs(p.x), Math.abs(p.y))
+    }
+    d *= m / 0.94
+  }
+  camera.position.copy(LOOK_AT).addScaledVector(dir, d)
+  camera.lookAt(LOOK_AT)
+  camera.updateMatrixWorld()
+}
+
+function CameraRig({ yaw }: { yaw: number }) {
+  const camera = useThree((s) => s.camera) as PerspectiveCamera
+  const size = useThree((s) => s.size)
+  const angle = useRef(yaw * (Math.PI / 2))
+  const dirty = useRef(true)
+  useLayoutEffect(() => {
+    camera.aspect = size.width / Math.max(1, size.height)
+    camera.updateProjectionMatrix()
+    fitCamera(camera, angle.current)
   }, [camera, size.width, size.height])
+  useFrame((_, dt) => {
+    const goal = yaw * (Math.PI / 2)
+    // Shortest way round (3 → 0 turns a quarter, not three quarters back).
+    let diff = goal - angle.current
+    diff = Math.atan2(Math.sin(diff), Math.cos(diff))
+    if (Math.abs(diff) < 1e-3) {
+      if (dirty.current) {
+        angle.current = goal
+        fitCamera(camera, angle.current)
+        dirty.current = false
+      }
+      return
+    }
+    angle.current += diff * (1 - Math.exp(-YAW_EASE * Math.min(dt, 0.1)))
+    dirty.current = true
+    fitCamera(camera, angle.current)
+  })
   return null
+}
+
+/** Is the target car's path to the exit clear (every exit-row bay ahead of
+ * its nose empty)? Drives the barrier. */
+function pathClear(lot: Lot, pos: readonly number[]): boolean {
+  const grid = occupancy(lot, pos)
+  for (let c = pos[0] + lot.vehicles[0].len; c < LOT; c++) if (grid[EXIT_ROW * LOT + c] !== -1) return false
+  return true
+}
+
+/** Boom barrier across the exit gap: a post on the kerb just below the gap
+ * and a red/white striped arm hinged on it, lifted while `open`. */
+function ExitGate({ open }: { open: boolean }) {
+  const arm = useRef<Group>(null)
+  const want = useRef(open)
+  want.current = open
+  useFrame((_, dt) => {
+    const g = arm.current
+    if (!g) return
+    const goal = want.current ? GATE_UP : 0
+    g.rotation.x += (goal - g.rotation.x) * (1 - Math.exp(-GATE_EASE * Math.min(dt, 0.1)))
+  })
+  const x = HALF + 0.125
+  const hingeZ = EXIT_Z + 0.62
+  return (
+    <group position={[x, 0, hingeZ]}>
+      <mesh position={[0, 0.25, 0]}>
+        <boxGeometry args={[0.12, 0.5, 0.12]} />
+        <meshStandardMaterial color="#eceff1" roughness={0.7} />
+      </mesh>
+      <group ref={arm} position={[0, 0.42, 0]}>
+        {Array.from({ length: 5 }, (_, k) => (
+          <mesh key={k} position={[0, 0, -0.12 - k * 0.22]}>
+            <boxGeometry args={[0.06, 0.06, 0.22]} />
+            <meshStandardMaterial color={k % 2 === 0 ? TARGET_COLOR : '#fafafa'} roughness={0.7} />
+          </mesh>
+        ))}
+      </group>
+    </group>
+  )
 }
 
 /** Throttled DOM mirror for e2e (single owner of these attributes, lesson
@@ -95,14 +175,20 @@ function Probe({
   probeRef,
   lot,
   pos,
+  gateOpen,
+  won,
+  fx,
 }: {
   probeRef: RefObject<HTMLElement | null>
   lot: Lot
   pos: readonly number[]
+  gateOpen: boolean
+  won: boolean
+  fx: RefObject<SceneFx>
 }) {
   const frames = useRef(0)
-  const latest = useRef({ lot, pos })
-  latest.current = { lot, pos }
+  const latest = useRef({ lot, pos, gateOpen, won })
+  latest.current = { lot, pos, gateOpen, won }
   const camera = useThree((s) => s.camera)
   const size = useThree((s) => s.size)
   useFrame(() => {
@@ -111,7 +197,10 @@ function Probe({
     const el = probeRef.current
     if (!el) return
     el.setAttribute('data-frames', String(frames.current))
-    const { lot: l, pos: p } = latest.current
+    const { lot: l, pos: p, gateOpen: gate, won: w } = latest.current
+    el.setAttribute('data-gate', gate ? 'open' : 'closed')
+    el.setAttribute('data-lights', w ? 'on' : 'off')
+    el.setAttribute('data-drove-off', fx.current.droveOff ? '1' : '0')
     const v3 = new Vector3()
     const out = l.vehicles.map((v, i) => {
       const track: [number, number][] = []
@@ -135,7 +224,8 @@ function VehicleNode({
   vi,
   off,
   instant,
-  slow,
+  driveOff,
+  fx,
   selected,
   interactive,
   onBegin,
@@ -146,7 +236,9 @@ function VehicleNode({
   vi: number
   off: number
   instant: boolean
-  slow: boolean
+  /** Won target car: accelerate out through the exit instead of easing. */
+  driveOff: boolean
+  fx: RefObject<SceneFx>
   selected: boolean
   interactive: boolean
   onBegin: (vi: number) => boolean
@@ -155,21 +247,50 @@ function VehicleNode({
 }) {
   const ref = useRef<Group>(null)
   const placed = useRef(false)
-  const target = useRef({ off, instant, slow })
-  target.current = { off, instant, slow }
+  const target = useRef({ off, instant, driveOff })
+  target.current = { off, instant, driveOff }
+  // Mounted already won (reload / level revisit): the car is simply gone.
+  const goneAtMount = useRef(driveOff)
+  const vel = useRef(0)
   const grab = useRef<{ pointerId: number; start: number } | null>(null)
   const hit = useMemo(() => new Vector3(), [])
 
   useFrame((_, dt) => {
     const g = ref.current
     if (!g) return
-    const [x, , z] = originOf(v, target.current.off)
-    if (!placed.current || target.current.instant) {
+    const t = target.current
+    const [x, , z] = originOf(v, t.off)
+    if (t.driveOff) {
+      if (goneAtMount.current) {
+        g.visible = false
+        fx.current.droveOff = true
+        return
+      }
+      if (!placed.current) {
+        g.position.set(x, 0, z)
+        placed.current = true
+      }
+      const step = Math.min(dt, 0.1)
+      vel.current += DRIVE_ACCEL * step
+      g.position.x += vel.current * step
+      if (g.position.x > DRIVE_GONE - HALF) {
+        g.visible = false
+        fx.current.droveOff = true
+      }
+      return
+    }
+    // Not (or no longer) driving off — e.g. Reset after a win.
+    goneAtMount.current = false
+    vel.current = 0
+    g.visible = true
+    // Only the target car owns the drive-off flag (every node runs this).
+    if (vi === 0) fx.current.droveOff = false
+    if (!placed.current || t.instant) {
       g.position.set(x, 0, z)
       placed.current = true
       return
     }
-    const k = 1 - Math.exp(-(target.current.slow ? EASE_OUT : EASE) * Math.min(dt, 0.1))
+    const k = 1 - Math.exp(-EASE * Math.min(dt, 0.1))
     g.position.x += (x - g.position.x) * k
     g.position.z += (z - g.position.z) * k
   })
@@ -209,12 +330,12 @@ function VehicleNode({
       onPointerCancel={release}
       onLostPointerCapture={release}
     >
-      <Vehicle3D len={v.len} color={vehicleColor(v, vi)} selected={selected} />
+      <Vehicle3D len={v.len} color={vehicleColor(v, vi)} selected={selected} lightsOn={driveOff} />
     </group>
   )
 }
 
-function Lot3D({ lot }: { lot: Lot }) {
+function Lot3D({ lot, gateOpen }: { lot: Lot; gateOpen: boolean }) {
   const kerbH = 0.2
   const K = 0.25
   const exitZ = EXIT_ROW + 0.5 - HALF
@@ -266,6 +387,7 @@ function Lot3D({ lot }: { lot: Lot }) {
       {kerb('l', -edge, 0, K, LOT)}
       {kerb('r1', edge, -HALF + topLen / 2, K, topLen)}
       {kerb('r2', edge, HALF - botLen / 2, K, botLen)}
+      <ExitGate open={gateOpen} />
       {lot.walls.map((w) => (
         <mesh key={`w${w}`} position={[(w % LOT) + 0.5 - HALF, 0.25, Math.floor(w / LOT) + 0.5 - HALF]}>
           <boxGeometry args={[0.9, 0.5, 0.9]} />
@@ -277,7 +399,9 @@ function Lot3D({ lot }: { lot: Lot }) {
 }
 
 export default function CarPark3D(props: CarPark3DProps) {
-  const { lot, pos, drag, won, selected, onBegin, onDrag, onEnd, levelKey, probeRef } = props
+  const { lot, pos, drag, won, selected, onBegin, onDrag, onEnd, levelKey, probeRef, yaw } = props
+  const fx = useRef<SceneFx>({ droveOff: false })
+  const gateOpen = won || pathClear(lot, pos)
   return (
     <Canvas
       frameloop="always"
@@ -288,13 +412,13 @@ export default function CarPark3D(props: CarPark3DProps) {
       <ambientLight intensity={0.8} />
       <directionalLight position={[4, 9, 6]} intensity={1.5} />
       <directionalLight position={[-5, 3, -5]} intensity={0.5} color="#93c5fd" />
-      <CameraRig />
-      <Probe probeRef={probeRef} lot={lot} pos={pos} />
-      <Lot3D lot={lot} />
+      <CameraRig yaw={yaw} />
+      <Probe probeRef={probeRef} lot={lot} pos={pos} gateOpen={gateOpen} won={won} fx={fx} />
+      <Lot3D lot={lot} gateOpen={gateOpen} />
       <group key={levelKey}>
         {lot.vehicles.map((v, vi) => {
           const dragging = drag?.vi === vi
-          const off = won && vi === 0 ? DRIVE_OUT : pos[vi] + (dragging ? drag.delta : 0)
+          const off = pos[vi] + (dragging ? drag.delta : 0)
           return (
             <VehicleNode
               key={v.id}
@@ -302,7 +426,8 @@ export default function CarPark3D(props: CarPark3DProps) {
               vi={vi}
               off={off}
               instant={dragging}
-              slow={won && vi === 0}
+              driveOff={won && vi === 0}
+              fx={fx}
               selected={selected === vi && !won}
               interactive={!won}
               onBegin={onBegin}

@@ -2057,3 +2057,15 @@ carried over; these are the new ones.
      object's projected screen TRACK (one point per legal position) from an
      in-canvas probe — perspective makes one step's pixel length vary, so a
      test should aim at an exact projected target, never scale a unit step.
+
+128. **Low-spec glow = unlit material, not emissive; and one owner per
+     frame-loop flag.** Car Park's win headlights switch the lamp boxes to
+     `meshBasicMaterial` (unlit, so bright under any lighting) and fade
+     transparent beam planes in via material opacity — the look of
+     emissive without breaking the low-spec convention; blob shadows are a
+     25%-black `depthWrite={false}` plane, no shadow maps. Gotcha from the
+     same round: a scene flag written inside a component that is rendered
+     N times (every vehicle node runs the same `useFrame`) gets reset by
+     the other N−1 every frame — the drive-off flag never stuck until only
+     the target car's node was allowed to write it. Give frame-loop shared
+     state exactly one writer, same as DOM probe attributes (#46).

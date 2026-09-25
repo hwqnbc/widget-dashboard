@@ -4,17 +4,20 @@ import {
   Box,
   Button,
   CircularProgress,
+  IconButton,
   NativeSelect,
   Stack,
   ToggleButton,
   ToggleButtonGroup,
   Typography,
 } from '@mui/material'
+import RotateRightIcon from '@mui/icons-material/RotateRight'
 import { useAppDispatch } from '../../../app/hooks'
 import { updateWidgetData } from '../../../features/widgets/widgetsSlice'
 import { useWidgetField } from '../../../features/widgets/useWidgetField'
 import type { WidgetProps } from '../../../registry/widgetRegistry'
 import { isTypingTarget } from '../../../utils/isTypingTarget'
+import { usePresentation } from '../../fullscreen/presentation'
 import { lazyWithReload } from '../../../utils/lazyWithReload'
 import WinnerCelebration from '../WinnerCelebration'
 import ConfirmDialog from '../ConfirmDialog'
@@ -37,6 +40,32 @@ const CarPark3D = lazyWithReload(() => import('./CarPark3D'), 'carpark3d')
 
 type BoardView = '2d' | '3d'
 const coerceView = (v: unknown): BoardView | undefined => (v === '2d' || v === '3d' ? v : undefined)
+const coerceYaw = (v: unknown): number | undefined =>
+  Number.isInteger(v) && (v as number) >= 0 && (v as number) < 4 ? (v as number) : undefined
+
+/**
+ * World direction (dx, dz in bays) an arrow key means on SCREEN when the 3D
+ * camera has turned `yaw` quarter-turns about the lot. At yaw 0 the camera
+ * sits south of the lot: right = +x, down (toward the viewer) = +z. Turning
+ * the camera rotates both — so keys always move cars the way they look.
+ */
+function screenKeyToWorld(key: string, yaw: number): { dx: number; dz: number } | null {
+  const a = (yaw * Math.PI) / 2
+  const right = { dx: Math.round(Math.cos(a)), dz: Math.round(-Math.sin(a)) }
+  const toward = { dx: Math.round(Math.sin(a)), dz: Math.round(Math.cos(a)) }
+  switch (key) {
+    case 'ArrowRight':
+      return right
+    case 'ArrowLeft':
+      return { dx: -right.dx, dz: -right.dz }
+    case 'ArrowDown':
+      return toward
+    case 'ArrowUp':
+      return { dx: -toward.dx, dz: -toward.dz }
+    default:
+      return null
+  }
+}
 
 /** The lot is drawn with a kerb margin around the 6×6 bays. */
 const PAD = 0.25
@@ -130,7 +159,13 @@ export default function CarParkWidget({ id }: WidgetProps) {
   const moves = useWidgetField<Move[]>(id, 'moves', NO_MOVES, coerceMoves)
   const best = useWidgetField<Record<string, number>>(id, 'best', NO_BEST, coerceBest)
   const solved = useWidgetField<number>(id, 'solved', 0)
-  const view = useWidgetField<BoardView>(id, 'view', '2d', coerceView)
+  const cardView = useWidgetField<BoardView>(id, 'view', '2d', coerceView)
+  // Fullscreen keeps its OWN view choice (default 3D — the 3D board is the
+  // one that benefits from the space); the card keeps its own.
+  const fsView = useWidgetField<BoardView>(id, 'fsView', '3d', coerceView)
+  const yaw = useWidgetField<number>(id, 'yaw', 0, coerceYaw)
+  const { fullscreen } = usePresentation()
+  const view = fullscreen ? fsView : cardView
 
   const levels = LEVELS[tier]
   const levelIdx = Math.min(storedLevel, Math.max(0, levels.length - 1))
@@ -241,8 +276,10 @@ export default function CarParkWidget({ id }: WidgetProps) {
   const onKeyDown = (e: KeyboardEvent) => {
     if (won || selected === null || isTypingTarget(e.target)) return
     const v = lot.vehicles[selected]
-    const dir =
-      e.key === (v.horiz ? 'ArrowRight' : 'ArrowDown') ? 1 : e.key === (v.horiz ? 'ArrowLeft' : 'ArrowUp') ? -1 : 0
+    // In 3D the camera may be turned — map the key through it.
+    const w = screenKeyToWorld(e.key, view === '3d' ? yaw : 0)
+    if (!w) return
+    const dir = v.horiz ? w.dx : w.dz
     if (!dir) return
     e.preventDefault()
     const { min, max } = moveRange(lot, pos, selected)
@@ -291,6 +328,7 @@ export default function CarParkWidget({ id }: WidgetProps) {
       data-solved={solved}
       data-state={won ? 'won' : 'live'}
       data-view={view}
+      data-yaw={yaw}
       sx={{ height: '100%', display: 'flex', flexDirection: 'column', gap: 1, p: 0.5, outline: 'none' }}
     >
       <Stack direction="row" spacing={1} sx={{ justifyContent: 'center', flexWrap: 'wrap' }}>
@@ -329,7 +367,7 @@ export default function CarParkWidget({ id }: WidgetProps) {
           exclusive
           value={view}
           onChange={(_, v: BoardView | null) => {
-            if (v && v !== view) setGame({ view: v })
+            if (v && v !== view) setGame(fullscreen ? { fsView: v } : { view: v })
           }}
           data-testid="carpark-view"
           aria-label="Board view"
@@ -459,9 +497,29 @@ export default function CarParkWidget({ id }: WidgetProps) {
                 onEnd={finishDrag}
                 levelKey={key}
                 probeRef={probeRef}
+                yaw={yaw}
               />
             </Suspense>
           </Box>
+        )}
+
+        {view === '3d' && (
+          <IconButton
+            size="small"
+            aria-label="Rotate view"
+            data-testid="carpark-rotate"
+            onClick={() => setGame({ yaw: (yaw + 1) % 4 })}
+            sx={{
+              position: 'absolute',
+              top: 4,
+              right: 4,
+              bgcolor: 'background.paper',
+              boxShadow: 1,
+              '&:hover': { bgcolor: 'background.paper' },
+            }}
+          >
+            <RotateRightIcon fontSize="small" />
+          </IconButton>
         )}
 
         {won && (
@@ -482,11 +540,13 @@ export default function CarParkWidget({ id }: WidgetProps) {
             }}
             data-testid="carpark-won"
           >
-            <WinnerCelebration winner="toy" />
+            {/* Text first: on a narrow card the celebration figure can fill
+                the overlay, and the result line must never be clipped. */}
             <Typography sx={{ fontWeight: 700, color: 'common.white', textAlign: 'center' }}>
               Out in {applied} moves!
               {applied <= level.par ? ' Par ★' : ` Par is ${level.par}.`}
             </Typography>
+            <WinnerCelebration winner="toy" />
           </Box>
         )}
       </Box>
@@ -501,9 +561,13 @@ export default function CarParkWidget({ id }: WidgetProps) {
               Next level
             </Button>
           )}
-          <Button size="small" data-testid="carpark-undo" disabled={applied === 0 || won} onClick={undo}>
-            Undo
-          </Button>
+          {/* Won: Next level takes Undo's (disabled anyway) slot, so the
+              footer fits a narrow card on one line. */}
+          {!won && (
+            <Button size="small" data-testid="carpark-undo" disabled={applied === 0} onClick={undo}>
+              Undo
+            </Button>
+          )}
           <Button
             size="small"
             data-testid="carpark-reset"

@@ -145,11 +145,15 @@ To add levels:
     700 ms ease-in, which is the drive-out.
   - The win overlay fades in 500 ms later. On a reload of a won level, the
     car is simply already gone.
-- **Win overlay.** It shows `WinnerCelebration`, "Out in N moves!" with
-  "Par ★" or "Par is P". A **Next level** button appears in the footer
-  row. It lives there rather than in the overlay because the celebration
-  figure fills the overlay on a small card. Next level goes to the next
-  level in the tier, then on to the first level of the next tier.
+- **Win overlay.** It shows "Out in N moves!" with "Par ★" or "Par is P",
+  **above** the `WinnerCelebration`. The text comes first because the
+  celebration figure can fill the overlay on a narrow card, and the result
+  line must never be clipped.
+  - A **Next level** button appears in the footer row, not the overlay,
+    and takes Undo's slot, since Undo is meaningless once won. That keeps
+    the footer on one line on a narrow card.
+  - Next level goes to the next level in the tier, then on to the first
+    level of the next tier.
 - **Controls.** **Undo** pops the last move. **Reset** and a level or tier
   change are `ConfirmDialog`-guarded while an attempt is in progress.
 
@@ -182,7 +186,50 @@ board for a fully playable three.js board. The choice is persisted as
   elevation. `CameraRig` walks it along that view direction until the lot
   plus kerb plus exit chevron fill about 94% of the canvas, and it refits
   on every resize, so portrait and landscape both frame the whole lot.
-  There is no orbit, because orbiting would fight the drag.
+  There is no free orbit, because it would fight the drag.
+- **Rotate view.** A round rotate button (`carpark-rotate`, top-right of
+  the 3D board) turns the camera a quarter turn around the lot.
+  - The step is persisted as `yaw` (0–3), so a player's preferred side
+    sticks.
+  - `CameraRig` eases the displayed angle toward `yaw × 90°`, taking about
+    400 ms and going the shortest way round (3 → 0 is one quarter turn).
+    It re-runs the aspect fit (`fitCamera`) each frame while the angle
+    moves, then settles.
+  - Dragging needs no change, because plane hits are in world space.
+  - **Arrow keys follow the screen.** `screenKeyToWorld(key, yaw)` maps
+    Right, Left, Down and Up to the world direction that key points at on
+    screen for the current yaw: at yaw 0, right is +x and down (toward the
+    viewer) is +z, and both rotate with the camera. The selected car moves
+    only if that direction lies along its axis.
+- **Exit barrier.** `ExitGate` is a post on the kerb just below the exit
+  gap, with a red and white striped arm hinged across the gap.
+  - The arm lifts to 80° (eased) whenever the red car's path is clear,
+    meaning every exit-row bay ahead of its nose is empty (`pathClear` over
+    `occupancy`).
+  - It drops again if a car moves back into the row, and it stays up once
+    the level is won.
+- **Drive-off.** The won red car no longer eases. It **accelerates** from
+  rest at 6 bays/s² out through the raised barrier, turns on its
+  headlights, and is hidden once it is 3 bays past the lot.
+  - A level that is already won when the board mounts (after a reload or a
+    revisit) shows the car gone.
+  - Reset after a win brings it back.
+  - The flag the probe reads (`droveOff`) is owned by the target car's
+    node alone, because every vehicle node runs the same frame loop.
+- **Shadows and headlights.** Every vehicle has a soft blob shadow: a
+  black `meshBasicMaterial` plane at 25% opacity under its footprint, with
+  `depthWrite` off. There are no shadow maps.
+  - While driving off, the red car's lamp boxes switch to an **unlit**
+    `meshBasicMaterial`, which glows regardless of lighting without
+    emissive.
+  - Two transparent yellow beam trapezoids fade in on the ground ahead of
+    the car.
+  - All of this keeps within the low-spec convention.
+- **Fullscreen defaults to 3D.** Fullscreen keeps its **own** view choice,
+  `fsView` (default `'3d'`), read through `usePresentation()`. The
+  effective view is `fullscreen ? fsView : view`.
+  - The toggle writes whichever field is active, so the card keeps its own
+    choice and fullscreen remembers its own.
 - **Vehicles.** `Vehicle3D` draws a simple toy car or truck: a chassis in
   the vehicle's colour, a dark glasshouse, a roof, headlights and wheels.
   Trucks have a front cab and a coloured cargo box. They use the 2D palette
@@ -204,9 +251,8 @@ board for a fully playable three.js board. The choice is persisted as
     point under the finger.
 - **Motion.** Vehicles ease toward their snapped bay in `useFrame`
   (`1 − e^(−16·dt)`) and follow the finger instantly while dragged. The
-  won target car eases out past the exit more slowly (`EASE_OUT`). The
-  vehicle group is keyed by level, so a level change places the cars
-  instead of gliding them.
+  won target car drives off as described above. The vehicle group is keyed
+  by level, so a level change places the cars instead of gliding them.
 - **Overlay.** The win overlay and the footer are unchanged and sit over
   whichever board is showing.
 
@@ -219,7 +265,9 @@ board for a fully playable three.js board. The choice is persisted as
 | `moves`  | `[vehicleIndex, delta][]`, the current attempt's log. The board is **derived** by `replay`, never stored. |
 | `best`   | `{ 'tier:index': fewestMoves }`. |
 | `solved` | Lifetime solve count. |
-| `view`   | `'2d'` or `'3d'` board (coerced; default `'2d'`). |
+| `view`   | The card's board: `'2d'` or `'3d'` (coerced; default `'2d'`). |
+| `fsView` | The fullscreen board: `'2d'` or `'3d'` (default `'3d'`). |
+| `yaw`    | 3D camera quarter-turns, 0–3 (default 0). |
 
 The winning move writes `moves`, `solved` and `best` in **one** dispatch,
 so a reload can never double-count a solve.
@@ -228,8 +276,8 @@ so a reload can never double-count a solve.
 
 - **Root** `carpark-root`: `data-tier`, `data-level`, `data-moves` (moves
   applied), `data-par`, `data-best` (empty when there is none),
-  `data-solved`, `data-state` (`live` or `won`) and `data-view` (`2d` or
-  `3d`).
+  `data-solved`, `data-state` (`live` or `won`), `data-view` (the
+  *effective* view, `2d` or `3d`) and `data-yaw`.
 - **Board** `carpark-board`: one `<g>` per vehicle with `data-vehicle`
   (letter), `data-index` (model index), `data-row`, `data-col`, `data-len`
   and `data-horiz`.
@@ -238,7 +286,10 @@ so a reload can never double-count a solve.
     each);
   - `carpark-undo` and `carpark-reset`;
   - `carpark-won` and `carpark-next`;
-  - `carpark-view` with `carpark-view-2d` and `carpark-view-3d`.
+  - `carpark-view` with `carpark-view-2d` and `carpark-view-3d`;
+  - `carpark-rotate`, which exists only in 3D.
+
+  Once a level is won, `carpark-next` replaces `carpark-undo`.
 - **3D wrapper** `carpark-3d`, which exists only in 3D. Its throttled
   attributes are written every 10 frames by one owner, the in-canvas
   `Probe`:
@@ -248,6 +299,9 @@ so a reload can never double-count a solve.
     offset `k`. Perspective makes a bay's on-screen length vary, so
     `dragVehicle3D` in `helpers.mjs` aims at the exact projected bay
     instead of scaling a single step.
+  - `data-gate` is `open` or `closed` (the barrier's target state).
+  - `data-lights` is `on` or `off`.
+  - `data-drove-off` is `1` once the won car has left the lot.
 
 ## Verifying
 
@@ -265,6 +319,20 @@ so a reload can never double-count a solve.
 - that the view survives a reload;
 - an optimal-line win played through 3D drags;
 - that switching back to 2D keeps the game.
+
+`e2e/154-carpark-3d-polish.test.mjs` covers the 3D polish. It checks:
+- **Rotate:** `data-yaw` steps, the projected tracks actually move, a 3D
+  drag still works when rotated, and four turns wrap back to 0.
+- **Arrow keys:** the key whose on-screen direction matches a car's
+  projected track step slides it +1 at yaw 1. The key is derived from the
+  probe, not hard-coded.
+- **Barrier and drive-off:** the barrier starts `closed` and turns `open`
+  when the optimal line clears the path, one move before the win. On the
+  win the lights come on, Next level replaces Undo, and `data-drove-off`
+  becomes `1`.
+- **Fullscreen:** it opens in 3D while the card is in 2D. Choosing 2D in
+  fullscreen leaves the card's own choice alone, and reopening fullscreen
+  remembers 2D.
 
 ## Future work (enhancement backlog)
 
@@ -300,17 +368,25 @@ so a reload can never double-count a solve.
 - ~~**3D view**~~ — **shipped** as the lazy `CarPark3D` board behind the
   2D/3D toggle (see *3D view* above), with its own toy models rather than
   the Model Viewer trucks.
-- **Orbit / tilt camera button.** A "rotate view" chip that steps the fixed
-  camera 90° around the lot. Rotating in fixed steps avoids fighting the
-  drag, and `CameraRig`'s fit already handles any view direction.
-- **Exit gate + drive-off in 3D.** A boom barrier at the exit that lifts
-  when the red car's path clears, then the car accelerates away. This is
-  pure `useFrame` on the existing drive-out.
-- **Shadows and lights on win.** Cheap blob shadows under the cars, and
-  headlights that light up during the drive-out. The glow could be an
-  opacity pulse on the lamp boxes instead of emissive, to stay within the
-  low-spec rule.
-- **3D in fullscreen by default.** Open the 3D view when the card is
-  maximised (`usePresentation`), since the 3D board benefits most from the
-  space.
+- ~~**Rotate camera**~~ — **shipped** as the `carpark-rotate` quarter-turn
+  button with a persisted `yaw` and screen-relative arrow keys (see
+  *Rotate view*).
+- ~~**Exit gate + drive-off**~~ — **shipped** (`ExitGate`, accelerating
+  drive-off).
+- ~~**Shadows and lights on win**~~ — **shipped** as blob shadows, unlit
+  lamps and fading beam trapezoids.
+- ~~**3D in fullscreen by default**~~ — **shipped** through the separate
+  `fsView` field.
+- **Night mode.** Darken the lights and turn on every car's headlights, by
+  passing `lightsOn` to all of them. The red car's beams become the hint
+  of where the exit is.
+- **Tilt slider.** Let the player change the camera elevation (35°–80°);
+  `fitCamera` already takes any direction. Top-down is closest to the 2D
+  view, and low angles look dramatic.
+- **Honk on a blocked drag.** When a drag hits `moveRange`'s limit, play a
+  short `webAudio` beep and give the blocking car a little bounce. The
+  blocker is the occupant of the cell just beyond the range.
+- **Barrier "ping."** When the barrier lifts (the path becomes clear),
+  play a soft chime as a subtle "you're one move away" cue. The trigger is
+  the `pathClear` edge.
 - **Per-tier progress.** Show "7/10 ★" beside each tier in the dropdown.
