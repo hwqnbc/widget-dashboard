@@ -12,6 +12,7 @@ import {
   Typography,
 } from '@mui/material'
 import RotateRightIcon from '@mui/icons-material/RotateRight'
+import LightbulbIcon from '@mui/icons-material/LightbulbOutlined'
 import { useAppDispatch } from '../../../app/hooks'
 import { updateWidgetData } from '../../../features/widgets/widgetsSlice'
 import { useWidgetField } from '../../../features/widgets/useWidgetField'
@@ -24,6 +25,7 @@ import ConfirmDialog from '../ConfirmDialog'
 import {
   EXIT_ROW,
   LOT,
+  hint as solveHint,
   isSolved,
   moveRange,
   parseBoard,
@@ -73,6 +75,9 @@ const VIEW = LOT + PAD * 2
 /** Below this (in cells) a pointer release is a TAP — it selects the
  * vehicle for the keyboard instead of moving it. */
 const TAP_CELLS = 0.2
+/** Hint highlight — amber-yellow, distinct from the red target and the
+ * white selection outline. */
+const HINT_COLOR = '#ffc400'
 
 const NO_MOVES: Move[] = []
 const NO_BEST: Record<string, number> = {}
@@ -80,6 +85,11 @@ const coerceMoves = (v: unknown): Move[] | undefined =>
   Array.isArray(v) &&
   v.every((m) => Array.isArray(m) && m.length === 2 && m.every((n) => Number.isInteger(n)))
     ? (v as Move[])
+    : undefined
+const NO_ASSISTED: Record<string, true> = {}
+const coerceAssisted = (v: unknown): Record<string, true> | undefined =>
+  v && typeof v === 'object' && !Array.isArray(v) && Object.values(v).every((x) => x === true)
+    ? (v as Record<string, true>)
     : undefined
 const coerceBest = (v: unknown): Record<string, number> | undefined =>
   v && typeof v === 'object' && !Array.isArray(v) &&
@@ -188,6 +198,10 @@ export default function CarParkWidget({ id }: WidgetProps) {
   // one that benefits from the space); the card keeps its own.
   const fsView = useWidgetField<BoardView>(id, 'fsView', '3d', coerceView)
   const yaw = useWidgetField<number>(id, 'yaw', 0, coerceYaw)
+  // Hints used on THIS attempt (reset with the move log) and the levels
+  // solved only with help — those earn ✓ but never ★ / best.
+  const hints = useWidgetField<number>(id, 'hints', 0)
+  const assisted = useWidgetField<Record<string, true>>(id, 'assisted', NO_ASSISTED, coerceAssisted)
   const { fullscreen } = usePresentation()
   const view = fullscreen ? fsView : cardView
 
@@ -202,6 +216,23 @@ export default function CarParkWidget({ id }: WidgetProps) {
   const key = levelKey(tier, levelIdx)
   const myBest = best[key]
 
+  // ------------------------------------------------------------ hint
+  // A hint is shown for ONE position (keyed by level + position), and is
+  // explicitly dropped on every commit / Undo / Reset / level change — so
+  // returning to a hinted position (e.g. via Reset) never resurrects an
+  // old hint without counting it.
+  const posKey = `${key}|${pos.join(',')}`
+  const [hintKey, setHintKey] = useState<string | null>(null)
+  const hintMove = useMemo(
+    () => (hintKey === posKey && !isSolved(lot, pos) ? solveHint(lot, pos) : null),
+    [hintKey, posKey, lot, pos],
+  )
+  const askHint = () => {
+    if (hintKey === posKey) return // same position: already shown, count once
+    setHintKey(posKey)
+    setGame({ hints: hints + 1 })
+  }
+
   const setGame = (data: Record<string, unknown>) => dispatch(updateWidgetData({ id, data }))
 
   /** Commit one slide. The win (solve tally + best) is written in the SAME
@@ -210,10 +241,17 @@ export default function CarParkWidget({ id }: WidgetProps) {
     const log = [...moves.slice(0, applied), m]
     const after = replay(lot, log)
     if (after.applied !== log.length) return
+    setHintKey(null)
     const data: Record<string, unknown> = { moves: log }
     if (isSolved(lot, after.pos)) {
       data.solved = solved + 1
-      if (myBest === undefined || log.length < myBest) data.best = { ...best, [key]: log.length }
+      // A hinted solve counts as solved (✓) but never updates best / ★ —
+      // hints follow the optimal line, so a hinted par would mean nothing.
+      if (hints > 0) {
+        if (myBest === undefined) data.assisted = { ...assisted, [key]: true }
+      } else if (myBest === undefined || log.length < myBest) {
+        data.best = { ...best, [key]: log.length }
+      }
     }
     setGame(data)
   }
@@ -316,7 +354,8 @@ export default function CarParkWidget({ id }: WidgetProps) {
 
   const goTo = (next: { tier: Tier; level: number }) => {
     setSelected(null)
-    setGame({ tier: next.tier, level: next.level, moves: [] })
+    setHintKey(null)
+    setGame({ tier: next.tier, level: next.level, moves: [], hints: 0 })
   }
   const requestLevel = (next: { tier: Tier; level: number }) => {
     if (next.tier === tier && next.level === levelIdx) return
@@ -325,10 +364,14 @@ export default function CarParkWidget({ id }: WidgetProps) {
   }
   const reset = () => {
     setSelected(null)
-    setGame({ moves: [] })
+    setHintKey(null)
+    setGame({ moves: [], hints: 0 })
   }
   const undo = () => {
-    if (applied > 0 && !won) setGame({ moves: moves.slice(0, applied - 1) })
+    if (applied > 0 && !won) {
+      setHintKey(null)
+      setGame({ moves: moves.slice(0, applied - 1) })
+    }
   }
   const after = nextLevel(tier, levelIdx)
 
@@ -349,6 +392,8 @@ export default function CarParkWidget({ id }: WidgetProps) {
       data-moves={applied}
       data-par={level.par}
       data-best={myBest ?? ''}
+      data-hint={hintMove ? `${hintMove[0]}:${hintMove[1]}` : ''}
+      data-hints={hints}
       data-solved={solved}
       data-state={won ? 'won' : 'live'}
       data-view={view}
@@ -378,7 +423,7 @@ export default function CarParkWidget({ id }: WidgetProps) {
         >
           {levels.map((l, i) => {
             const b = best[levelKey(tier, i)]
-            const mark = b === undefined ? '' : b <= l.par ? ' ★' : ' ✓'
+            const mark = b !== undefined ? (b <= l.par ? ' ★' : ' ✓') : assisted[levelKey(tier, i)] ? ' ✓' : ''
             return (
               <option key={i} value={i}>
                 {`Level ${i + 1}${mark}`}
@@ -463,6 +508,32 @@ export default function CarParkWidget({ id }: WidgetProps) {
 
           {/* Keyed by level so a level change re-mounts the cars instead of
               transitioning them from the old layout. */}
+          {hintMove && (() => {
+            const [hv, hd] = hintMove
+            const v = lot.vehicles[hv]
+            const to = pos[hv] + hd
+            const gx = v.horiz ? to : v.lane
+            const gy = v.horiz ? v.lane : to
+            const w = v.horiz ? v.len : 1
+            const h = v.horiz ? 1 : v.len
+            return (
+              <g pointerEvents="none">
+                <rect
+                  data-testid="carpark-hint-ghost"
+                  x={gx + 0.07}
+                  y={gy + 0.07}
+                  width={w - 0.14}
+                  height={h - 0.14}
+                  rx={0.2}
+                  fill={vehicleColor(v, hv)}
+                  fillOpacity={0.3}
+                  stroke={HINT_COLOR}
+                  strokeWidth={0.05}
+                  strokeDasharray="0.14 0.08"
+                />
+              </g>
+            )
+          })()}
           <g key={key}>
             {lot.vehicles.map((v, vi) => {
               const dragging = drag?.vi === vi
@@ -483,6 +554,7 @@ export default function CarParkWidget({ id }: WidgetProps) {
                   data-len={v.len}
                   data-horiz={v.horiz ? '1' : '0'}
                   data-target={vi === 0 ? '1' : undefined}
+                  data-hinted={hintMove?.[0] === vi ? '1' : undefined}
                   onPointerDown={(e) => startSvgDrag(e, vi)}
                   style={{
                     transform: `translate(${x}px, ${y}px)`,
@@ -495,10 +567,58 @@ export default function CarParkWidget({ id }: WidgetProps) {
                   }}
                 >
                   <VehicleShape v={v} color={color} selected={selected === vi && !won} target={vi === 0} />
+                  {hintMove?.[0] === vi && (
+                    <rect
+                      x={0.03}
+                      y={0.03}
+                      width={(v.horiz ? v.len : 1) - 0.06}
+                      height={(v.horiz ? 1 : v.len) - 0.06}
+                      rx={0.22}
+                      fill="none"
+                      stroke={HINT_COLOR}
+                      strokeWidth={0.08}
+                      strokeDasharray="0.16 0.08"
+                      pointerEvents="none"
+                    >
+                      <animate attributeName="opacity" values="1;0.3;1" dur="1s" repeatCount="indefinite" />
+                    </rect>
+                  )}
                 </g>
               )
             })}
           </g>
+          {/* Hint arrow ON TOP of the cars: from the hinted car's leading
+              edge (in the slide direction) to the middle of its ghost. */}
+          {hintMove && !drag && (() => {
+            const [hv, hd] = hintMove
+            const v = lot.vehicles[hv]
+            const s = Math.sign(hd)
+            const lead = s > 0 ? pos[hv] + v.len - 0.3 : pos[hv] + 0.3
+            const tip = pos[hv] + hd + v.len / 2
+            const mid = v.lane + 0.5
+            const [x0, y0, x1, y1] = v.horiz ? [lead, mid, tip, mid] : [mid, lead, mid, tip]
+            const ux = v.horiz ? s : 0
+            const uy = v.horiz ? 0 : s
+            return (
+              <g pointerEvents="none" data-testid="carpark-hint-arrow">
+                <line
+                  x1={x0}
+                  y1={y0}
+                  x2={x1 - ux * 0.25}
+                  y2={y1 - uy * 0.25}
+                  stroke={HINT_COLOR}
+                  strokeWidth={0.1}
+                  strokeLinecap="round"
+                />
+                <polygon
+                  points={`${x1},${y1} ${x1 - ux * 0.32 - uy * 0.2},${y1 - uy * 0.32 - ux * 0.2} ${x1 - ux * 0.32 + uy * 0.2},${y1 - uy * 0.32 + ux * 0.2}`}
+                  fill={HINT_COLOR}
+                  stroke="rgba(0,0,0,0.4)"
+                  strokeWidth={0.02}
+                />
+              </g>
+            )
+          })()}
         </svg>
         ) : (
           <Box
@@ -525,6 +645,7 @@ export default function CarParkWidget({ id }: WidgetProps) {
                 levelKey={key}
                 probeRef={probeRef}
                 yaw={yaw}
+                hint={hintMove}
               />
             </Suspense>
           </Box>
@@ -571,7 +692,11 @@ export default function CarParkWidget({ id }: WidgetProps) {
                 the overlay, and the result line must never be clipped. */}
             <Typography sx={{ fontWeight: 700, color: 'common.white', textAlign: 'center' }}>
               Out in {applied} moves!
-              {applied <= level.par ? ' Par ★' : ` Par is ${level.par}.`}
+              {hints > 0
+                ? ` With ${hints} hint${hints === 1 ? '' : 's'}.`
+                : applied <= level.par
+                  ? ' Par ★'
+                  : ` Par is ${level.par}.`}
             </Typography>
             <WinnerCelebration winner="toy" />
           </Box>
@@ -590,6 +715,11 @@ export default function CarParkWidget({ id }: WidgetProps) {
           )}
           {/* Won: Next level takes Undo's (disabled anyway) slot, so the
               footer fits a narrow card on one line. */}
+          {!won && (
+            <IconButton size="small" aria-label="Hint" data-testid="carpark-hint" onClick={askHint}>
+              <LightbulbIcon fontSize="small" />
+            </IconButton>
+          )}
           {!won && (
             <Button size="small" data-testid="carpark-undo" disabled={applied === 0} onClick={undo}>
               Undo

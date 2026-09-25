@@ -16,7 +16,7 @@ import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import type { ThreeEvent } from '@react-three/fiber'
 import { Plane, Vector3 } from 'three'
 import type { Group, PerspectiveCamera } from 'three'
-import { EXIT_ROW, LOT, occupancy, type Lot, type Vehicle } from './carParkModel'
+import { EXIT_ROW, LOT, occupancy, type Lot, type Move, type Vehicle } from './carParkModel'
 import { TARGET_COLOR, vehicleColor } from './palette'
 import Vehicle3D from './Vehicle3D'
 
@@ -37,6 +37,8 @@ export interface CarPark3DProps {
   probeRef: RefObject<HTMLElement | null>
   /** Camera quarter-turns around the lot (0–3); eased between steps. */
   yaw: number
+  /** The hinted move, if a hint is showing. */
+  hint: Move | null
 }
 
 /** Transient scene facts the probe mirrors to the DOM (not React state —
@@ -149,6 +151,45 @@ function TargetMarker({ len, visible }: { len: number; visible: boolean }) {
   )
 }
 
+const HINT_COLOR = '#ffc400'
+
+/** The hint in 3D: a translucent ghost of the hinted car at its destination
+ * bays, and a yellow arrow bobbing above the car pointing the way to slide.
+ * Unlit + transparent (low-spec, no emissive). */
+function HintGhost({ lot, pos, hint }: { lot: Lot; pos: readonly number[]; hint: Move }) {
+  const arrow = useRef<Group>(null)
+  useFrame(({ clock }) => {
+    if (arrow.current) arrow.current.position.y = 1.05 + Math.sin(clock.elapsedTime * 4) * 0.08
+  })
+  const [vi, d] = hint
+  const v = lot.vehicles[vi]
+  const along = (off: number) => {
+    const [x, , z] = originOf(v, off)
+    return v.horiz ? ([x + v.len / 2, z] as const) : ([x, z + v.len / 2] as const)
+  }
+  const [gx, gz] = along(pos[vi] + d)
+  const [cx, cz] = along(pos[vi])
+  const sx = v.horiz ? v.len - 0.12 : 0.88
+  const sz = v.horiz ? 0.88 : v.len - 0.12
+  // Cone points +Y by default; tip it along the move.
+  const s = Math.sign(d)
+  const rot: [number, number, number] = v.horiz ? [0, 0, -s * (Math.PI / 2)] : [s * (Math.PI / 2), 0, 0]
+  return (
+    <group>
+      <mesh position={[gx, 0.3, gz]}>
+        <boxGeometry args={[sx, 0.5, sz]} />
+        <meshBasicMaterial color={HINT_COLOR} transparent opacity={0.35} depthWrite={false} />
+      </mesh>
+      <group ref={arrow} position={[cx, 1.05, cz]}>
+        <mesh rotation={rot}>
+          <coneGeometry args={[0.2, 0.45, 8]} />
+          <meshStandardMaterial color={HINT_COLOR} roughness={0.6} />
+        </mesh>
+      </group>
+    </group>
+  )
+}
+
 /** Is the target car's path to the exit clear (every exit-row bay ahead of
  * its nose empty)? Drives the barrier. */
 function pathClear(lot: Lot, pos: readonly number[]): boolean {
@@ -200,6 +241,7 @@ function Probe({
   gateOpen,
   won,
   fx,
+  hint,
 }: {
   probeRef: RefObject<HTMLElement | null>
   lot: Lot
@@ -207,10 +249,11 @@ function Probe({
   gateOpen: boolean
   won: boolean
   fx: RefObject<SceneFx>
+  hint: Move | null
 }) {
   const frames = useRef(0)
-  const latest = useRef({ lot, pos, gateOpen, won })
-  latest.current = { lot, pos, gateOpen, won }
+  const latest = useRef({ lot, pos, gateOpen, won, hint })
+  latest.current = { lot, pos, gateOpen, won, hint }
   const camera = useThree((s) => s.camera)
   const size = useThree((s) => s.size)
   useFrame(() => {
@@ -223,6 +266,8 @@ function Probe({
     el.setAttribute('data-gate', gate ? 'open' : 'closed')
     el.setAttribute('data-lights', w ? 'on' : 'off')
     el.setAttribute('data-drove-off', fx.current.droveOff ? '1' : '0')
+    const h = latest.current.hint
+    el.setAttribute('data-hint', h ? `${h[0]}:${h[1]}` : '')
     const v3 = new Vector3()
     const out = l.vehicles.map((v, i) => {
       const track: [number, number][] = []
@@ -250,10 +295,12 @@ function VehicleNode({
   fx,
   selected,
   interactive,
+  hinted,
   onBegin,
   onDrag,
   onEnd,
 }: {
+  hinted: boolean
   v: Vehicle
   vi: number
   off: number
@@ -359,7 +406,7 @@ function VehicleNode({
         lightsOn={driveOff}
         target={vi === 0}
       />
-      {vi === 0 && <TargetMarker len={v.len} visible={!driveOff && !instant} />}
+      {vi === 0 && <TargetMarker len={v.len} visible={!driveOff && !instant && !hinted} />}
     </group>
   )
 }
@@ -433,7 +480,7 @@ function Lot3D({ lot, gateOpen }: { lot: Lot; gateOpen: boolean }) {
 }
 
 export default function CarPark3D(props: CarPark3DProps) {
-  const { lot, pos, drag, won, selected, onBegin, onDrag, onEnd, levelKey, probeRef, yaw } = props
+  const { lot, pos, drag, won, selected, onBegin, onDrag, onEnd, levelKey, probeRef, yaw, hint } = props
   const fx = useRef<SceneFx>({ droveOff: false })
   const gateOpen = won || pathClear(lot, pos)
   return (
@@ -447,7 +494,8 @@ export default function CarPark3D(props: CarPark3DProps) {
       <directionalLight position={[4, 9, 6]} intensity={1.5} />
       <directionalLight position={[-5, 3, -5]} intensity={0.5} color="#93c5fd" />
       <CameraRig yaw={yaw} />
-      <Probe probeRef={probeRef} lot={lot} pos={pos} gateOpen={gateOpen} won={won} fx={fx} />
+      <Probe probeRef={probeRef} lot={lot} pos={pos} gateOpen={gateOpen} won={won} fx={fx} hint={hint} />
+      {hint && !drag && <HintGhost lot={lot} pos={pos} hint={hint} />}
       <Lot3D lot={lot} gateOpen={gateOpen} />
       <group key={levelKey}>
         {lot.vehicles.map((v, vi) => {
@@ -464,6 +512,7 @@ export default function CarPark3D(props: CarPark3DProps) {
               fx={fx}
               selected={selected === vi && !won}
               interactive={!won}
+              hinted={hint?.[0] === vi}
               onBegin={onBegin}
               onDrag={onDrag}
               onEnd={onEnd}

@@ -171,6 +171,44 @@ To add levels:
 - **Controls.** **Undo** pops the last move. **Reset** and a level or tier
   change are `ConfirmDialog`-guarded while an attempt is in progress.
 
+## Hints
+
+A lightbulb **Hint** button (`carpark-hint`, in the footer, hidden once
+the level is won) shows the **BFS-optimal next move**, meaning which car to
+slide and where to. It uses `hint(lot, pos)`, the first move of `solve`
+from the *current* position. That is exact, so following hints always
+finishes in the fewest remaining moves, and following them from the start
+solves in exactly par. It computes on click and is memoized per position;
+even Expert takes only milliseconds.
+
+- **What it shows.**
+  - In 2D:
+    - the hinted car gets a pulsing dashed amber outline (SMIL
+      `<animate>` on opacity);
+    - a dashed **ghost** in the car's colour marks its destination bays
+      (`carpark-hint-ghost`);
+    - an amber **arrow** is drawn on top of the cars, from the car's
+      leading edge to the ghost.
+  - In 3D, there is a translucent amber ghost box at the destination and
+    an amber cone bobbing above the car, pointing the way. The red car's
+    own marker hides while it is the hinted one.
+  - Amber (`#ffc400`) is deliberately distinct from the red target and
+    from the white selection outline.
+- **Lifetime.** A hint belongs to one position, keyed by level and
+  position. It is **explicitly** dropped on every committed move, Undo,
+  Reset and level change.
+  - Keying alone wasn't enough. Reset returns to the start position, so
+    an old hint would reappear *uncounted*; the e2e suite caught this.
+  - Pressing Hint again on the same position counts once.
+- **Scoring.** `hints` counts the hints used in the attempt and resets
+  with the move log.
+  - A solve with any hint still counts as **solved**: `solved` goes up,
+    and the level shows ✓ in the dropdown through the `assisted` map.
+  - It **never** earns ★ and never updates `best`, because hints follow
+    the optimal line, so a hinted par would mean nothing.
+  - The win overlay reads "With K hints." instead of the par line.
+  - A later clean solve records `best` and upgrades the level to ★.
+
 ## 3D view — `carPark/CarPark3D.tsx` (lazy chunk)
 
 A **2D | 3D** toggle (`carpark-view`, next to the dropdowns) swaps the SVG
@@ -282,6 +320,8 @@ board for a fully playable three.js board. The choice is persisted as
 | `view`   | The card's board: `'2d'` or `'3d'` (coerced; default `'2d'`). |
 | `fsView` | The fullscreen board: `'2d'` or `'3d'` (default `'3d'`). |
 | `yaw`    | 3D camera quarter-turns, 0–3 (default 0). |
+| `hints`  | Hints used in the current attempt (reset with `moves`). |
+| `assisted` | `{ 'tier:index': true }` — levels solved only with hints (✓, never ★). |
 
 The winning move writes `moves`, `solved` and `best` in **one** dispatch,
 so a reload can never double-count a solve.
@@ -295,6 +335,11 @@ so a reload can never double-count a solve.
 - **Board** `carpark-board`: one `<g>` per vehicle with `data-vehicle`
   (letter), `data-index` (model index), `data-row`, `data-col`, `data-len`
   and `data-horiz`. The target car's `<g>` also carries `data-target="1"`.
+  The hinted car's `<g>` carries `data-hinted="1"`, and the hint draws
+  `carpark-hint-ghost` and `carpark-hint-arrow`.
+- **Root hint attributes:** `data-hint` (`"vi:delta"`, or empty when no
+  hint is showing) and `data-hints` (the count). The button is
+  `carpark-hint`, and the 3D probe mirrors `data-hint`.
 - **Controls:**
   - `carpark-tier` and `carpark-level` (the native `<select>` is inside
     each);
@@ -374,8 +419,15 @@ so a reload can never double-count a solve.
   `solve` validates a board and computes its par before it is accepted.
 
 **Help and feel**
-- **Hint button.** Highlight `hint(lot, pos)` (already exported) and pulse
-  its vehicle. Using it could forfeit the ★ for that attempt.
+- ~~**Hint button**~~ — **shipped** (see *Hints*): the optimal next
+  move, shown in both views, with a ✓-not-★ scoring rule.
+- **Hint budget per tier.** For example 3 hints per level on Expert, shown
+  as bulbs next to the button. `hints` is already counted per attempt.
+- **"Explain" mode.** After a give-up, step through the whole remaining
+  optimal line (`solve(lot, pos)`) with the ghost and arrow. This merges
+  with *Solution replay*.
+- **Hint cooldown.** Make Hint available only after about 20 s without
+  progress, so it nudges rather than solves.
 - **Solution replay.** Animate `solve()`'s line after a win or a give-up.
 - **Sound.** An engine purr on drag and a thunk at the end of a slide
   through `droneSim/webAudio`, with no asset files.

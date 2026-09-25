@@ -2080,3 +2080,11 @@ carried over; these are the new ones.
      palette rule a pure e2e check: it immediately caught a "yellow" that
      was really a 49° amber. Palettes drift as colours get added; a test
      is what keeps the rule true.
+
+130. **Position-keyed transient UI still needs explicit clears.** Car Park's
+     hint was keyed by level + position so any move "cleared it for free" —
+     but Reset returns to the START position, so a hint asked there earlier
+     silently reappeared (and wasn't counted, since the counter only bumps
+     on a new key). Derived-from-key is a great default; wherever a state
+     can RETURN to an earlier key (reset, undo, revisiting a level), clear
+     the transient explicitly at those transitions too.
