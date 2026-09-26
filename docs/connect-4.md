@@ -96,10 +96,22 @@ Root test contract: `data-mode`, `data-net`, `data-seat`, `data-turn`,
 `data-ply`, `data-winner` on `[data-testid="connect4-root"]`.
 
 ## Connect-4-specific bits
-- **Animated drop:** a component `useState lastDrop` holds the just-filled index
-  (set in the human handler and the AI effect); that disc gets the `dropAnim`
-  keyframe (`translateY(-750%) → 0` with a small bounce, ~0.45s). `lastDrop` is
-  not persisted, so a reload shows resting discs with no animation.
+- **Animated drop (full column):** a component `useState lastDrop` holds the
+  just-filled index (set in the human handler and the AI effect). A
+  `useLayoutEffect` on it runs `animateDrop`, which plays the fall with the Web
+  Animations API on the landed disc (`[data-c4-disc=<index>]`): it starts half
+  a slot above the column's top hole and falls past every empty slot into its
+  landing slot, then bounces once. The distance is **measured** off the
+  rendered slots (the board is container-query sized, so there is no fixed
+  pitch — the old CSS keyframe's `translateY(-750%)` was a guess, and the
+  hole's `overflow:hidden` clipped it so the disc only ever moved inside its
+  own hole). The fall time grows like `sqrt(rows)` (≈0.37 s for the top row,
+  ≈0.53 s for the bottom), a short opacity fade-in hides the entry, and while
+  it falls the landing hole's clip is lifted (`overflow:visible`, `zIndex:1`)
+  and restored on finish — or synchronously in the effect cleanup when a
+  reset / StrictMode re-run interrupts it. `prefers-reduced-motion` skips it.
+  `lastDrop` is not persisted, so a reload shows resting discs with no
+  animation. Pinned by `e2e/156-c4-drop`.
 - **Responsiveness:** board wrapper is `containerType:'size'`; the board is
   `aspectRatio:'7 / 6'`, `width:'min(100cqw, calc(100cqh * 7 / 6))'` so it fits
   both dimensions. Slots use `minWidth:0; minHeight:0; overflow:hidden` (the same
@@ -143,5 +155,9 @@ cell's smaller dimension) so the head SVGs always sit centred.
 
 **Feel**
 - **Sound** — drop thunk and win fanfare via `droneSim/webAudio` (no assets).
+- **Animate the opponent's disc in 2 Devices** — a relayed move lands via
+  `useNetGame`'s `setGame` without touching `lastDrop`, so it appears at rest;
+  deriving the drop from a one-disc board diff would animate AI, local and
+  remote moves through one path (`animateDrop` already takes any index).
 - **Threat highlight** — an optional beginner aid ringing any column that would
   let the opponent win next move; `winningCol` already computes it.

@@ -1,4 +1,4 @@
-import { Suspense, useEffect, useState } from 'react'
+import { Suspense, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import {
   Box,
   Button,
@@ -242,13 +242,56 @@ function aiMove(board: Cell[], difficulty: Difficulty): number {
   return difficulty === 'easy' ? easyMove(board) : searchMove(board, DEPTH[difficulty])
 }
 
-/** The disc falls from the top of the column into its slot. */
-const dropAnim = keyframes`
-  0%   { transform: translateY(-750%); }
-  70%  { transform: translateY(0); }
-  82%  { transform: translateY(-9%); }
-  100% { transform: translateY(0); }
-`
+/**
+ * The disc falls down the WHOLE column: it starts just above the top hole and
+ * drops past every empty slot to its landing slot, then bounces once. The
+ * distance is measured off the rendered slots (the board is container-query
+ * sized, so there is no fixed pitch to hard-code) and the fall time grows like
+ * sqrt(distance), as under gravity.
+ */
+function animateDrop(boardEl: HTMLElement, index: number): (() => void) | null {
+  const disc = boardEl.querySelector<HTMLElement>(`[data-c4-disc="${index}"]`)
+  const top = boardEl.querySelector<HTMLElement>(`[data-testid="c4-slot-${index % COLS}"]`)
+  const hole = disc?.parentElement
+  if (!disc || !top || !hole) return null
+  if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return null
+  const landing = disc.getBoundingClientRect()
+  const topSlot = top.getBoundingClientRect()
+  const row = Math.floor(index / COLS)
+  // Start centred half a slot above the top slot's centre, i.e. entering from
+  // the frame's top edge, and fall to the landing disc's resting place.
+  const fromY = topSlot.top - (landing.top + landing.height / 2)
+  const duration = 260 + 110 * Math.sqrt(row + 1)
+  // The hole clips its disc; lift the clip (and the paint order) for the fall.
+  hole.style.overflow = 'visible'
+  hole.style.position = 'relative'
+  hole.style.zIndex = '1'
+  const anims = [
+    disc.animate(
+      [
+        { transform: `translateY(${fromY}px)`, easing: 'cubic-bezier(.55,0,1,.45)' },
+        { offset: 0.72, transform: 'translateY(0)', easing: 'ease-out' },
+        { offset: 0.86, transform: 'translateY(-9%)', easing: 'ease-in' },
+        { transform: 'translateY(0)' },
+      ],
+      { duration },
+    ),
+    disc.animate([{ opacity: 0 }, { opacity: 1, offset: 0.12 }, { opacity: 1 }], { duration }),
+  ]
+  const restore = () => {
+    hole.style.overflow = ''
+    hole.style.position = ''
+    hole.style.zIndex = ''
+  }
+  anims[0].onfinish = restore
+  // Interrupted (a reset, the next move, a StrictMode re-run): restore NOW —
+  // an async cancel event could land after a newer drop lifted the clip.
+  return () => {
+    anims[0].onfinish = null
+    anims.forEach((a) => a.cancel())
+    restore()
+  }
+}
 /** Pulsing glow on the winning discs. */
 const winGlow = keyframes`
   0%, 100% { filter: drop-shadow(0 0 3px currentColor); transform: scale(1); }
@@ -268,6 +311,12 @@ function Disc({ mark }: { mark: Mark }) {
 export default function Connect4Widget({ id }: WidgetProps) {
   const dispatch = useAppDispatch()
   const [lastDrop, setLastDrop] = useState<number | null>(null)
+  const boardRef = useRef<HTMLDivElement>(null)
+  // Before paint, so the disc never flashes at rest in its slot first.
+  useLayoutEffect(() => {
+    if (lastDrop === null || !boardRef.current) return
+    return animateDrop(boardRef.current, lastDrop) ?? undefined
+  }, [lastDrop])
   const [pending, setPending] = useState<
     { mode?: Mode; difficulty?: Difficulty } | null
   >(null)
@@ -466,6 +515,7 @@ export default function Connect4Widget({ id }: WidgetProps) {
         }}
       >
         <Box
+          ref={boardRef}
           sx={{
             width: 'min(100cqw, calc(100cqh * 7 / 6))',
             maxWidth: '100%',
@@ -518,19 +568,14 @@ export default function Connect4Widget({ id }: WidgetProps) {
                 >
                   {cell && (
                     <Box
+                      data-c4-disc={i}
                       sx={{
                         width: '80%',
                         height: '80%',
                         display: 'grid',
                         placeItems: 'center',
                         color: colorOf(cell),
-                        animation:
-                          [
-                            i === lastDrop ? `${dropAnim} 0.45s cubic-bezier(.3,.1,.3,1)` : '',
-                            isWin ? `${winGlow} 1s ease-in-out infinite` : '',
-                          ]
-                            .filter(Boolean)
-                            .join(', ') || undefined,
+                        animation: isWin ? `${winGlow} 1s ease-in-out infinite` : undefined,
                       }}
                     >
                       <Disc mark={cell} />

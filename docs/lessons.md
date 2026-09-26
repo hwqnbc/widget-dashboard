@@ -2088,3 +2088,16 @@ carried over; these are the new ones.
      on a new key). Derived-from-key is a great default; wherever a state
      can RETURN to an earlier key (reset, undo, revisiting a level), clear
      the transient explicitly at those transitions too.
+
+131. **An animation that travels across cells can't live inside a clipped
+     cell.** Connect 4's drop was a `translateY(-750%)` keyframe on a disc
+     whose hole had `overflow:hidden`, so the "fall" only ever showed inside
+     the landing hole. When motion must cross siblings, measure the real
+     distance from the rendered layout (`getBoundingClientRect` in a
+     `useLayoutEffect`, so there's no rest-frame flash), play it with the Web
+     Animations API, and lift the clip only for the flight — restoring it
+     synchronously in the effect cleanup, not in an async `cancel` event that
+     can land after the NEXT animation lifted it. In tests, undo the live
+     transform (`DOMMatrix(...).m42`) before comparing an animating element's
+     rect, and compare against the element, not the cell — a head need not be
+     dead-centre in its slot.

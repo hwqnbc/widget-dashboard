@@ -258,6 +258,14 @@ export async function addOthelloWidgets(page, count = 2) {
   await page.locator('[data-testid="othello-root"]').nth(count - 1).waitFor()
 }
 
+/** Fresh dashboard with one Connect 4 widget (default 2-player mode). */
+export async function addConnect4Widget(page) {
+  await page.goto(BASE_URL, { waitUntil: 'networkidle' })
+  await page.getByRole('button', { name: 'Add widget' }).click()
+  await page.getByRole('menuitem', { name: /Connect 4/ }).click()
+  await page.locator('[data-testid="connect4-root"]').waitFor()
+}
+
 /** Fresh dashboard with `count` Tic-Tac-Toe widgets, loopback transport armed.
  * `?netloop=1` swaps WebRTC for the in-page transport so two widgets in one
  * document can pair; everything else is the production path. */
