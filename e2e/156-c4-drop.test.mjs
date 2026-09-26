@@ -3,12 +3,15 @@
  * disc falls down the WHOLE column — from above the top hole, past every empty
  * slot, into its landing slot — instead of only moving inside its own hole.
  *
- * Asserts on the contract only: the landed disc (`data-c4-disc=<index>`)
- * carries a running transform animation whose start offset spans the column
- * from the top slot to the landing slot, the hole's clip is lifted while it
- * falls (so the disc is visible over the empty slots above) and restored once
- * it lands, a disc landing higher up falls a shorter distance, and a paused
- * mid-fall frame shows the disc physically above its landing slot.
+ * The disc falls BEHIND the frame, seen only through the holes: while it
+ * falls the landed disc (`data-c4-disc=<index>`) is hidden and a clone
+ * (`data-c4-falling=<index>`) runs the fall on `c4-drop-layer`, a board-sized
+ * layer clipped (`clip-path: path(...)`) to exactly the column's holes from
+ * the top down to the landing one (`data-holes`). Asserts on that contract:
+ * the start offset spans the whole column from above the top hole, every
+ * clip circle sits on a hole of the column, a paused mid-fall frame shows the
+ * clone above its landing slot, the layer is removed and the real disc shown
+ * once it lands, and a disc landing higher falls a shorter distance.
  *
  * Pacing: the fall is slow enough to follow (≥ 0.9 s to the bottom row), and
  * nothing covers or cuts it short — root `data-falling` is "true" until it
@@ -31,24 +34,39 @@ async function drop(col, index) {
   return page.evaluate(
     ({ index, col }) => {
       const disc = document.querySelector(`[data-c4-disc="${index}"]`)
+      const clone = document.querySelector(`[data-c4-falling="${index}"]`)
+      const layer = document.querySelector('[data-testid="c4-drop-layer"]')
       const top = document.querySelector(`[data-testid="c4-slot-${col}"]`)
-      if (!disc || !top) return null
-      const fall = disc
-        .getAnimations()
-        .find((a) => a.effect.getKeyframes().some((k) => k.transform))
+      if (!disc || !clone || !layer || !top) return null
+      const fall = clone.getAnimations()[0]
       const first = fall?.effect.getKeyframes()[0]
       const fromY = first ? parseFloat(/translateY\((-?[\d.]+)px\)/.exec(first.transform)?.[1]) : NaN
-      // The disc is mid-transform right now: undo the current translate to get
-      // its resting rect (a head need not sit dead-centre in its slot).
+      // The real disc's resting rect (it is hidden, not moved).
       const d = disc.getBoundingClientRect()
-      const ty = new DOMMatrix(getComputedStyle(disc).transform).m42
+      const t = top.getBoundingClientRect()
+      // Every clip circle's centre, page coords, vs the column's hole centres.
+      const board = layer.getBoundingClientRect()
+      const centres = [...getComputedStyle(layer).clipPath.matchAll(/M\s*(-?[\d.]+)[\s,]+(-?[\d.]+)[\s,]*[aA]\s*([\d.]+)/g)].map(
+        // Each circle is drawn from its leftmost point: centre = x + radius.
+        ([, x, y, r]) => [board.left + parseFloat(x) + parseFloat(r), board.top + parseFloat(y)],
+      )
+      const holes = [...document.querySelectorAll(`[data-col="${col}"]`)].map((el) => {
+        const r = el.firstElementChild.getBoundingClientRect()
+        return [r.left + r.width / 2, r.top + r.height / 2]
+      })
       return {
         running: fall?.playState === 'running',
         fromY,
         duration: fall?.effect.getTiming().duration,
-        // Distance from the top slot's top edge to the disc's resting centre.
-        span: d.top - ty + d.height / 2 - top.getBoundingClientRect().top,
-        clip: getComputedStyle(disc.parentElement).overflow,
+        // Distance from above the top hole (a half slot over the top slot's
+        // top edge) to the disc's resting centre.
+        span: d.top + d.height / 2 - (t.top - t.height / 2),
+        discHidden: getComputedStyle(disc).visibility === 'hidden',
+        holesAttr: Number(layer.dataset.holes),
+        circlesOnHoles:
+          centres.length > 0 &&
+          centres.every(([x, y]) => holes.some(([hx, hy]) => Math.hypot(hx - x, hy - y) < 1.5)),
+        circles: centres.length,
       }
     },
     { index, col },
@@ -59,11 +77,13 @@ async function drop(col, index) {
 const a = await drop(3, 5 * COLS + 3)
 check('the landed disc has a running fall animation', a?.running, JSON.stringify(a))
 check(
-  'it starts from the top of the column, not inside its own hole',
+  'it starts above the top hole, not inside its own hole',
   Math.abs(a.fromY + a.span) < 2,
   `fromY=${a.fromY} span=${a.span}`,
 )
-check('the hole stops clipping while the disc falls', a.clip === 'visible')
+check('the real disc is hidden while its clone falls', a.discHidden)
+check('the fall is clipped to the column\'s holes, top to landing (6)', a.circles === 6 && a.holesAttr === 6, `${a.circles}`)
+check('every clip circle sits on a hole of that column', a.circlesOnHoles)
 
 check('a bottom-row fall takes long enough to follow (≥ 0.9 s)', a.duration >= 900, `${a.duration}`)
 check('the root reports the disc falling', (await root.getAttribute('data-falling')) === 'true')
@@ -74,7 +94,7 @@ check(
 
 // Mid-fall frame: pause it and the disc is above its slot, over the empty ones.
 const mid = await page.evaluate(() => {
-  const disc = document.querySelector('[data-c4-disc="38"]')
+  const disc = document.querySelector('[data-c4-falling="38"]')
   const slot = document.querySelector('[data-testid="c4-slot-38"]')
   const anims = disc.getAnimations()
   for (const x of anims) {
@@ -88,18 +108,15 @@ const mid = await page.evaluate(() => {
 })
 check('mid-fall the disc is drawn above its landing slot', mid.discBottom < mid.slotTop, JSON.stringify(mid))
 
-// The clip comes back on the fall's `finish`, which is dispatched async.
-const clipOf38 = () =>
-  getComputedStyle(document.querySelector('[data-c4-disc="38"]').parentElement).overflow
+// The layer goes on the fall's `finish`, which is dispatched async.
 await page
-  .waitForFunction(
-    () => getComputedStyle(document.querySelector('[data-c4-disc="38"]').parentElement).overflow === 'hidden',
-    null,
-    { timeout: 2000 },
-  )
+  .waitForFunction(() => !document.querySelector('[data-testid="c4-drop-layer"]'), null, { timeout: 2000 })
   .catch(() => {})
-const clipAfter = await page.evaluate(clipOf38)
-check('the hole clips again once the disc has landed', clipAfter === 'hidden', clipAfter)
+const after = await page.evaluate(() => ({
+  layer: !!document.querySelector('[data-testid="c4-drop-layer"]'),
+  vis: getComputedStyle(document.querySelector('[data-c4-disc="38"]')).visibility,
+}))
+check('once landed the drop layer is gone and the real disc shows', !after.layer && after.vis === 'visible', JSON.stringify(after))
 await page.locator('[data-testid="turn-banner"]').waitFor({ timeout: 2000 }).catch(() => {})
 check('once landed, the hand-off banner shows', (await page.locator('[data-testid="turn-banner"]').count()) === 1)
 check('…and the root reports it landed', (await root.getAttribute('data-falling')) === 'false')
@@ -108,7 +125,8 @@ await page.locator('[data-testid="turn-banner"]').waitFor({ state: 'detached' })
 
 // Second disc in the same column lands one row up (index 31): shorter fall.
 const b = await drop(3, 4 * COLS + 3)
-check('a disc landing higher also falls from the top', Math.abs(b.fromY + b.span) < 2, `fromY=${b.fromY} span=${b.span}`)
+check('a disc landing higher also falls from above the top hole', Math.abs(b.fromY + b.span) < 2, `fromY=${b.fromY} span=${b.span}`)
+check('…clipped to only the 5 holes down to it', b.circles === 5, `${b.circles}`)
 check('…over a shorter distance', Math.abs(b.fromY) < Math.abs(a.fromY), `${b.fromY} vs ${a.fromY}`)
 check('…and in less time', b.duration < a.duration, `${b.duration} vs ${a.duration}`)
 

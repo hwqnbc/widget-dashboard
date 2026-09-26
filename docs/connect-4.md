@@ -96,26 +96,33 @@ Root test contract: `data-mode`, `data-net`, `data-seat`, `data-turn`,
 `data-ply`, `data-winner`, `data-falling` on `[data-testid="connect4-root"]`.
 
 ## Connect-4-specific bits
-- **Animated drop (full column):** a component `useState lastDrop` holds the
-  just-filled index (set in the human handler and the AI effect). A
-  `useLayoutEffect` on it runs `animateDrop`, which plays the fall with the Web
-  Animations API on the landed disc (`[data-c4-disc=<index>]`): it starts half
-  a slot above the column's top hole and falls past every empty slot into its
-  landing slot, then bounces once. The distance is **measured** off the
-  rendered slots (the board is container-query sized, so there is no fixed
-  pitch — the old CSS keyframe's `translateY(-750%)` was a guess, and the
-  hole's `overflow:hidden` clipped it so the disc only ever moved inside its
-  own hole). `dropDuration(row)` = `420 + 240·sqrt(row+1)` ms (≈0.66 s for the
-  top row, ≈1 s for the bottom) under a *mild* ease-in — the first cut
-  (0.37–0.53 s, steep ease-in) idled near the top and then flashed through the
-  column, so it read as the disc "just appearing" in its slot. A short opacity
-  fade-in hides the entry. While it falls the landing hole's clip is lifted
-  (`overflow:visible`, `zIndex:1`), the hole is restyled as an EMPTY hole and
-  the white disc face travels with the head (disc background + a rim
-  box-shadow) — otherwise the destination lights up before the disc arrives.
-  All of it is restored on finish, or synchronously in the effect cleanup
-  when a reset / StrictMode re-run interrupts it. `prefers-reduced-motion`
-  skips the fall.
+- **Animated drop (full column, behind the frame):** a component `useState
+  lastDrop` holds the just-filled index (set in the human handler and the AI
+  effect). A `useLayoutEffect` on it runs `animateDrop`: as in the real game
+  the disc falls BEHIND the blue frame and is only seen through the holes it
+  passes. It starts a full hole above the top hole (hidden by the frame's top
+  edge), falls past every empty slot into its landing slot, then bounces once.
+  - **How "behind" works without restructuring the board:** the React-owned
+    disc (`[data-c4-disc=<index>]`) is hidden (`visibility`) for the fall and
+    a visual *clone* (`data-c4-falling`) falls on `c4-drop-layer` — a
+    board-sized absolute layer appended to the board (now
+    `position:relative`) whose `clip-path: path(...)` is the union of that
+    column's hole circles from the top down to the landing one
+    (`data-holes`). The layer never moves, so the clip stays on the holes
+    while the clone slides under it; the frame between holes hides the disc.
+    The clone wears the filled look (white face + a rim shadow out to the
+    hole edge), and the landing hole stays an empty hole until it arrives.
+    Everything is removed / restored on finish, or synchronously in the
+    effect cleanup when a reset / StrictMode re-run interrupts it.
+  - **Measured, not guessed:** distances come off the rendered slots (the
+    board is container-query sized, so there is no fixed pitch — the old CSS
+    keyframe's `translateY(-750%)` was a guess, and the hole's
+    `overflow:hidden` clipped it so the disc only moved inside its own hole).
+  - **Pacing:** `dropDuration(row)` = `420 + 240·sqrt(row+1)` ms (≈0.66 s for
+    the top row, ≈1 s for the bottom) under a *mild* ease-in — the first cut
+    (0.37–0.53 s, steep ease-in) idled near the top then flashed through the
+    column, reading as the disc "just appearing". `prefers-reduced-motion`
+    skips the fall.
 - **Nothing covers or cuts the fall short.** A `landed` state (set by the
   fall's `onfinish`) gives `falling = lastDrop !== landed`, published as root
   `data-falling`. While falling: the 2-player hand-off banner is held in

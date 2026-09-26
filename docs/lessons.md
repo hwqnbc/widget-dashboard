@@ -2111,3 +2111,14 @@ carried over; these are the new ones.
      `currentTime` on the element's `getAnimations()`), and gate every
      overlay / follow-up turn on a `landed` flag set by the animation's
      `onfinish`.
+
+133. **"Behind a frame with holes" = a fixed layer clipped to the holes, with
+     the mover sliding inside it.** Connect 4's disc must fall behind the
+     board. Rather than rebuilding the board as a masked frame over a disc
+     layer, the fall runs on a clone inside a static board-sized layer whose
+     `clip-path: path(...)` is the union of the column's hole circles —
+     the CLIP must sit on a non-moving parent, since a clip on the moving
+     element travels with its transform. Clone the React-owned node (and
+     hide the original) instead of moving it, so React's DOM stays intact.
+     Tests: browsers normalise `path()` on read (relative `a` arcs come back
+     as absolute `A`), so parse both.

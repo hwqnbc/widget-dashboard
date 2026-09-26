@@ -251,11 +251,17 @@ const prefersReducedMotion = () =>
 const dropDuration = (row: number) => 420 + 240 * Math.sqrt(row + 1)
 
 /**
- * The disc falls down the WHOLE column: it starts just above the top hole and
- * drops past every empty slot to its landing slot, then bounces once. The
- * distance is measured off the rendered slots (the board is container-query
- * sized, so there is no fixed pitch to hard-code) and the fall time grows like
- * sqrt(distance), as under gravity.
+ * The disc falls down the WHOLE column, BEHIND the frame — as in the real
+ * game it is only seen through the holes it passes. It starts above the top
+ * hole (hidden by the frame's top edge), drops past every empty slot to its
+ * landing slot, then bounces once. Distances are measured off the rendered
+ * slots (the board is container-query sized, so there is no fixed pitch to
+ * hard-code) and the fall time grows like sqrt(distance), as under gravity.
+ *
+ * "Behind" without restructuring the board: the React-owned disc is hidden
+ * for the fall and a visual CLONE falls on a board-sized layer whose
+ * `clip-path` is the union of that column's holes. The layer never moves, so
+ * the clip stays on the holes while the clone slides under it.
  */
 function animateDrop(
   boardEl: HTMLElement,
@@ -263,61 +269,98 @@ function animateDrop(
   onLanded: () => void,
 ): (() => void) | null {
   const disc = boardEl.querySelector<HTMLElement>(`[data-c4-disc="${index}"]`)
-  const top = boardEl.querySelector<HTMLElement>(`[data-testid="c4-slot-${index % COLS}"]`)
   const hole = disc?.parentElement
-  if (!disc || !top || !hole || prefersReducedMotion()) {
+  if (!disc || !hole || prefersReducedMotion()) {
     onLanded() // nothing to wait for — never leave the game waiting on a fall
     return null
   }
-  const landing = disc.getBoundingClientRect()
-  const topSlot = top.getBoundingClientRect()
+  const col = index % COLS
   const row = Math.floor(index / COLS)
-  // Start centred half a slot above the top slot's centre, i.e. entering from
-  // the frame's top edge, and fall to the landing disc's resting place.
-  const fromY = topSlot.top - (landing.top + landing.height / 2)
-  const duration = dropDuration(row)
-  // The hole clips its disc; lift the clip (and the paint order) for the fall.
-  // The hole's filled look (the white disc face) travels WITH the head, and
-  // the hole itself stays an empty hole until the disc gets there.
+  const board = boardEl.getBoundingClientRect()
+  const landing = disc.getBoundingClientRect()
   const holeRect = hole.getBoundingClientRect()
   const face = getComputedStyle(hole).backgroundColor
+  // The column's holes from the top down to the landing one, board-relative.
+  const circles: string[] = []
+  for (let r = 0; r <= row; r++) {
+    const h = boardEl
+      .querySelector<HTMLElement>(`[data-testid="c4-slot-${r * COLS + col}"]`)
+      ?.firstElementChild?.getBoundingClientRect()
+    if (!h) continue
+    const rad = h.width / 2
+    const cx = h.left - board.left + rad
+    const cy = h.top - board.top + h.height / 2
+    circles.push(
+      `M ${cx - rad} ${cy} a ${rad} ${rad} 0 1 0 ${2 * rad} 0 a ${rad} ${rad} 0 1 0 ${-2 * rad} 0 Z`,
+    )
+  }
+  const layer = document.createElement('div')
+  layer.dataset.testid = 'c4-drop-layer'
+  layer.dataset.holes = String(circles.length)
+  Object.assign(layer.style, {
+    position: 'absolute',
+    inset: '0',
+    pointerEvents: 'none',
+    zIndex: '1',
+    clipPath: `path('${circles.join(' ')}')`,
+  })
+  // The clone wears the filled look: the white disc face (background + a rim
+  // shadow out to the hole's edge) with the head on top.
+  const clone = disc.cloneNode(true) as HTMLElement
+  clone.removeAttribute('data-c4-disc')
+  clone.dataset.c4Falling = String(index)
   const rim = Math.max(0, (holeRect.width - landing.width) / 2)
-  hole.style.overflow = 'visible'
-  hole.style.position = 'relative'
-  hole.style.zIndex = '1'
+  Object.assign(clone.style, {
+    position: 'absolute',
+    left: `${landing.left - board.left}px`,
+    top: `${landing.top - board.top}px`,
+    width: `${landing.width}px`,
+    height: `${landing.height}px`,
+    animation: 'none',
+    backgroundColor: face,
+    borderRadius: '50%',
+    boxShadow: `0 0 0 ${rim}px ${face}`,
+  })
+  layer.appendChild(clone)
+  boardEl.appendChild(layer)
+  // The landing hole stays an empty hole, and its own disc hidden, until the
+  // clone gets there — otherwise the destination lights up early.
   hole.style.backgroundColor = 'rgba(0,0,0,0.28)'
   hole.style.boxShadow = 'inset 0 2px 4px rgba(0,0,0,0.35)'
-  disc.style.backgroundColor = face
-  disc.style.borderRadius = '50%'
-  disc.style.boxShadow = `0 0 0 ${rim}px ${face}`
-  const anims = [
-    disc.animate(
-      [
-        // Mild ease-in: it gathers speed without idling at the top and then
-        // flashing through the column in the last few frames.
-        { transform: `translateY(${fromY}px)`, easing: 'cubic-bezier(.35,0,.75,.55)' },
-        { offset: 0.78, transform: 'translateY(0)', easing: 'ease-out' },
-        { offset: 0.89, transform: 'translateY(-9%)', easing: 'ease-in' },
-        { transform: 'translateY(0)' },
-      ],
-      { duration },
-    ),
-    disc.animate([{ opacity: 0 }, { opacity: 1, offset: 0.06 }, { opacity: 1 }], { duration }),
-  ]
+  disc.style.visibility = 'hidden'
+
+  // From a full hole above the top hole's centre — wholly behind the frame.
+  const top = boardEl
+    .querySelector<HTMLElement>(`[data-testid="c4-slot-${col}"]`)!
+    .getBoundingClientRect()
+  const fromY = top.top - top.height / 2 - (landing.top + landing.height / 2)
+  const duration = dropDuration(row)
+  const fall = clone.animate(
+    [
+      // Mild ease-in: it gathers speed without idling at the top and then
+      // flashing through the column in the last few frames.
+      { transform: `translateY(${fromY}px)`, easing: 'cubic-bezier(.35,0,.75,.55)' },
+      { offset: 0.78, transform: 'translateY(0)', easing: 'ease-out' },
+      { offset: 0.89, transform: 'translateY(-9%)', easing: 'ease-in' },
+      { transform: 'translateY(0)' },
+    ],
+    { duration },
+  )
   const restore = () => {
-    for (const k of ['overflow', 'position', 'zIndex', 'backgroundColor', 'boxShadow'] as const)
-      hole.style[k] = ''
-    for (const k of ['backgroundColor', 'borderRadius', 'boxShadow'] as const) disc.style[k] = ''
+    layer.remove()
+    hole.style.backgroundColor = ''
+    hole.style.boxShadow = ''
+    disc.style.visibility = ''
   }
-  anims[0].onfinish = () => {
+  fall.onfinish = () => {
     restore()
     onLanded()
   }
   // Interrupted (a reset, the next move, a StrictMode re-run): restore NOW —
-  // an async cancel event could land after a newer drop lifted the clip.
+  // an async cancel event could land after a newer drop started.
   return () => {
-    anims[0].onfinish = null
-    anims.forEach((a) => a.cancel())
+    fall.onfinish = null
+    fall.cancel()
     restore()
   }
 }
@@ -565,6 +608,7 @@ export default function Connect4Widget({ id }: WidgetProps) {
         <Box
           ref={boardRef}
           sx={{
+            position: 'relative',
             width: 'min(100cqw, calc(100cqh * 7 / 6))',
             maxWidth: '100%',
             aspectRatio: '7 / 6',
