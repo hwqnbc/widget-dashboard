@@ -232,6 +232,16 @@ export default function CarParkWidget({ id }: WidgetProps) {
     setHintKey(posKey)
     setGame({ hints: hints + 1 })
   }
+  // The FIRST hint of an attempt costs the ★ / best, so it asks first (the
+  // button sits beside Undo/Reset — easy to hit by accident). Later hints
+  // skip the prompt: the ★ is already gone. Per attempt: Reset or a level
+  // change zeroes `hints`, so a fresh attempt asks again.
+  const [hintConfirm, setHintConfirm] = useState(false)
+  const onHintClick = () => {
+    if (hintKey === posKey) return
+    if (hints === 0) setHintConfirm(true)
+    else askHint()
+  }
 
   const setGame = (data: Record<string, unknown>) => dispatch(updateWidgetData({ id, data }))
 
@@ -716,7 +726,7 @@ export default function CarParkWidget({ id }: WidgetProps) {
           {/* Won: Next level takes Undo's (disabled anyway) slot, so the
               footer fits a narrow card on one line. */}
           {!won && (
-            <IconButton size="small" aria-label="Hint" data-testid="carpark-hint" onClick={askHint}>
+            <IconButton size="small" aria-label="Hint" data-testid="carpark-hint" onClick={onHintClick}>
               <LightbulbIcon fontSize="small" />
             </IconButton>
           )}
@@ -746,6 +756,18 @@ export default function CarParkWidget({ id }: WidgetProps) {
           setPending(null)
         }}
         onCancel={() => setPending(null)}
+      />
+      <ConfirmDialog
+        open={hintConfirm}
+        title="Use a hint?"
+        message="Hints show the best next move, but this attempt won't earn a ★ or a best score. You can still finish the level."
+        confirmLabel="Show hint"
+        cancelLabel="Keep trying"
+        onConfirm={() => {
+          setHintConfirm(false)
+          askHint()
+        }}
+        onCancel={() => setHintConfirm(false)}
       />
     </Box>
   )

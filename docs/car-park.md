@@ -200,6 +200,16 @@ even Expert takes only milliseconds.
   - Keying alone wasn't enough. Reset returns to the start position, so
     an old hint would reappear *uncounted*; the e2e suite caught this.
   - Pressing Hint again on the same position counts once.
+- **First-hint confirmation.** The button sits beside Undo and Reset, so
+  it's easy to tap by accident. The **first** hint of an attempt (when
+  `hints === 0`) therefore opens a "Use a hint?" `ConfirmDialog`, which
+  explains that the attempt won't earn a ★ or a best score.
+  - "Show hint" uses the hint. "Keep trying" closes the dialog with
+    nothing shown and nothing counted.
+  - Later hints in the same attempt skip the prompt, because the ★ is
+    already gone.
+  - The rule is per attempt. Reset or a level change zeroes `hints`, so a
+    fresh attempt, which can earn the ★ again, asks again.
 - **Scoring.** `hints` counts the hints used in the attempt and resets
   with the move log.
   - A solve with any hint still counts as **solved**: `solved` goes up,

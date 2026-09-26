@@ -26,8 +26,17 @@ const waitAttr = (name, want, timeout = 6000) =>
     [name, want],
     { timeout },
   )
+const noBackdrop = () =>
+  page.waitForFunction(() => !document.querySelector('.MuiModal-backdrop'), null, { timeout: 3000 })
+/** Ask for a hint, confirming the first-hint dialog if it appears. */
 const hintNow = async () => {
   await root.locator('[data-testid="carpark-hint"]').click()
+  const dialog = page.getByRole('dialog', { name: 'Use a hint?' })
+  await page.waitForTimeout(250)
+  if (await dialog.count()) {
+    await dialog.getByRole('button', { name: 'Show hint' }).click()
+    await noBackdrop()
+  }
   await page.waitForFunction(
     () => (document.querySelector('[data-testid="carpark-root"]')?.dataset.hint ?? '') !== '',
     null,
@@ -40,6 +49,18 @@ const L0 = LEVELS.beginner[0]
 const lot0 = parseBoard(L0.board)
 
 check('no hint showing at the start', (await attr('data-hint')) === '' && (await num('data-hints')) === 0)
+
+// The first hint of an attempt asks first (it costs the ★); cancelling
+// shows nothing and counts nothing.
+{
+  await root.locator('[data-testid="carpark-hint"]').click()
+  const dialog = page.getByRole('dialog', { name: 'Use a hint?' })
+  await dialog.waitFor({ timeout: 3000 })
+  check('the first hint asks for confirmation', (await dialog.count()) === 1)
+  await dialog.getByRole('button', { name: 'Keep trying' }).click()
+  await noBackdrop()
+  check('Keep trying shows no hint and counts nothing', (await attr('data-hint')) === '' && (await num('data-hints')) === 0)
+}
 
 // First hint = the solver's optimal first move (any optimal first move is
 // fine, so check it leads to a position solvable in par − 1).
@@ -57,6 +78,13 @@ check('no hint showing at the start', (await attr('data-hint')) === '' && (await
 
   await dragVehicle(page, vi, d)
   await waitAttr('data-moves', 1)
+  // Later hints in the same attempt: no prompt, the ★ is already gone.
+  await root.locator('[data-testid="carpark-hint"]').click()
+  await page.waitForTimeout(300)
+  check('the second hint needs no confirmation',
+    (await page.getByRole('dialog', { name: 'Use a hint?' }).count()) === 0 && (await attr('data-hint')) !== '')
+  await dragVehicle(page, ...(await attr('data-hint')).split(':').map(Number))
+  await waitAttr('data-moves', 2)
   check('making a move clears the hint', (await attr('data-hint')) === '' &&
     (await page.locator('[data-testid="carpark-hint-ghost"]').count()) === 0)
 }
@@ -67,6 +95,12 @@ check('no hint showing at the start', (await attr('data-hint')) === '' && (await
   await page.getByRole('dialog').getByRole('button', { name: 'Restart' }).click()
   await waitAttr('data-moves', 0)
   check('Reset zeroes the hint count', (await num('data-hints')) === 0)
+  await noBackdrop()
+  await root.locator('[data-testid="carpark-hint"]').click()
+  const again = page.getByRole('dialog', { name: 'Use a hint?' })
+  await again.waitFor({ timeout: 3000 })
+  check('after Reset the first hint asks again', (await again.count()) === 1)
+  await again.getByRole('button', { name: 'Keep trying' }).click()
   check('and back at the start no stale hint reappears', (await attr('data-hint')) === '')
   await page.waitForFunction(() => !document.querySelector('.MuiModal-backdrop'), null, { timeout: 3000 })
 }
