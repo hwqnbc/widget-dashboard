@@ -2122,3 +2122,13 @@ carried over; these are the new ones.
      hide the original) instead of moving it, so React's DOM stays intact.
      Tests: browsers normalise `path()` on read (relative `a` arcs come back
      as absolute `A`), so parse both.
+
+131. **Play demos as a transient overlay over derived state, never through
+     the persisted log.** Car Park's solution replay keeps its own
+     `{base, moves, step}` in React state and derives a `shownPos` that both
+     boards render; the persisted move log, best and solve tally are never
+     written during playback. That makes "replay after a win" free of
+     side-effects (stop anytime, the win is intact) and turns a give-up
+     into ONE explicit write at the end (restart the attempt). Input goes
+     through the same drag core, so a single `replaying` flag there locks
+     both the 2D and 3D boards.

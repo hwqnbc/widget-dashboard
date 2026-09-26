@@ -168,8 +168,14 @@ To add levels:
     the footer on one line on a narrow card.
   - Next level goes to the next level in the tier, then on to the first
     level of the next tier.
-- **Controls.** **Undo** pops the last move. **Reset** and a level or tier
-  change are `ConfirmDialog`-guarded while an attempt is in progress.
+- **Controls.** The footer controls are icon buttons, so the footer stays on
+  one line on a narrow card: Hint 💡, Show solution ▶, Undo ↶ and Reset ↻.
+  Once the level is won they become Next level, Replay ▶ and Reset.
+  - **Undo** pops the last move.
+  - **Reset** and a level or tier change are `ConfirmDialog`-guarded while
+    an attempt is in progress.
+  - The top row never wraps. The two native selects shrink and ellipsize
+    their label, while the open list still shows the full text.
 
 ## Hints
 
@@ -218,6 +224,45 @@ even Expert takes only milliseconds.
     the optimal line, so a hinted par would mean nothing.
   - The win overlay reads "With K hints." instead of the par line.
   - A later clean solve records `best` and upgrades the level to ★.
+
+## Solution replay
+
+The optimal line (`solve`) plays back as a **transient overlay** on the
+real game. It lives in React state (`SolutionReplay`: base position, line,
+step, and whether it is a give-up). The persisted move log is never
+touched during playback.
+
+- **After a win**, the ▶ Replay button (`carpark-replay`) plays the line
+  from the level's **start**. The win overlay steps aside while it plays.
+  Afterwards the level is still won, with the same moves and best.
+- **Mid-attempt**, the ▶ Show solution button (`carpark-solution`) is a
+  give-up, so it asks first: "Show the solution?", with **Show me** or
+  **Keep trying**.
+  - It plays the line from **where you are**, then restarts the attempt
+    (`moves` and `hints` cleared).
+  - A give-up is never counted as solved: no ✓, no ★ and no best.
+- **Pacing:** a 600 ms lead-in, then 650 ms per slide, with slides eased
+  over 380 ms in 2D (normal play uses 120 ms). The finished board holds
+  for 1.2 s before handing back.
+- **During playback:**
+  - input is off (the drag core refuses, and keys are ignored);
+  - the footer shows "Solution k/n" and a **Stop** button
+    (`carpark-replay-stop`). Stopping a give-up still restarts the
+    attempt;
+  - the board, including the 3D view, shows the replay's position. The
+    2D vehicles' `data-row` and `data-col` report the *shown* position.
+- **Implementation:** a derived `shownPos` / `shownWon` pair feeds both
+  boards. Playback is a single `setTimeout` chain on the replay state,
+  cleared on unmount, Reset and level change.
+
+## Progress per tier
+
+The difficulty dropdown shows each tier's progress as
+`Beginner 7/10 ★3`: levels solved (clean or hinted) out of the tier's
+total, and ★s earned (clean solves at or under par). It comes from the
+persisted `best` and `assisted` maps through the pure `tierProgress`
+helper, so it needs no extra state. Each `<option>` carries `data-solved`
+and `data-stars`.
 
 ## 3D view — `carPark/CarPark3D.tsx` (lazy chunk)
 
@@ -353,7 +398,10 @@ so a reload can never double-count a solve.
 - **Controls:**
   - `carpark-tier` and `carpark-level` (the native `<select>` is inside
     each);
-  - `carpark-undo` and `carpark-reset`;
+  - `carpark-undo` and `carpark-reset` (icon buttons);
+  - `carpark-solution`, `carpark-replay` and `carpark-replay-stop`, plus
+    root `data-replay` (`"k/n"` while a solution plays, otherwise empty);
+  - tier `<option>`s carry `data-solved` and `data-stars`;
   - `carpark-won` and `carpark-next`;
   - `carpark-view` with `carpark-view-2d` and `carpark-view-3d`;
   - `carpark-rotate`, which exists only in 3D.
@@ -433,12 +481,15 @@ so a reload can never double-count a solve.
   move, shown in both views, with a ✓-not-★ scoring rule.
 - **Hint budget per tier.** For example 3 hints per level on Expert, shown
   as bulbs next to the button. `hints` is already counted per attempt.
-- **"Explain" mode.** After a give-up, step through the whole remaining
-  optimal line (`solve(lot, pos)`) with the ghost and arrow. This merges
-  with *Solution replay*.
+- **"Explain" mode.** Step through the solution manually (◀ ▶) with
+  the hint ghost and arrow on each move, instead of the timed playback.
+  `SolutionReplay.step` is already the cursor.
 - **Hint cooldown.** Make Hint available only after about 20 s without
   progress, so it nudges rather than solves.
-- **Solution replay.** Animate `solve()`'s line after a win or a give-up.
+- ~~**Solution replay**~~ — **shipped** (see *Solution replay*): after a
+  win from the start, or as a confirm-guarded give-up from where you are.
+- **Replay speed control.** A 1×/2× toggle on the replay footer; it only
+  changes the `REPLAY_STEP_MS` pacing.
 - **Sound.** An engine purr on drag and a thunk at the end of a slide
   through `droneSim/webAudio`, with no asset files.
 - ~~**3D view**~~ — **shipped** as the lazy `CarPark3D` board behind the
@@ -465,4 +516,8 @@ so a reload can never double-count a solve.
 - **Barrier "ping."** When the barrier lifts (the path becomes clear),
   play a soft chime as a subtle "you're one move away" cue. The trigger is
   the `pathClear` edge.
-- **Per-tier progress.** Show "7/10 ★" beside each tier in the dropdown.
+- ~~**Per-tier progress**~~ — **shipped** as `Beginner 7/10 ★3` in the
+  difficulty dropdown (see *Progress per tier*).
+- **Tier completion reward.** When a tier reaches 10/10 ★, show a
+  one-time trophy celebration and a gold badge on the tier option.
+  `tierProgress` already knows when that happens.

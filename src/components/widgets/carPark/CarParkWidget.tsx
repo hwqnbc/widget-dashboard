@@ -1,4 +1,4 @@
-import { Suspense, useCallback, useMemo, useRef, useState } from 'react'
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { KeyboardEvent, PointerEvent as ReactPointerEvent } from 'react'
 import {
   Box,
@@ -13,6 +13,9 @@ import {
 } from '@mui/material'
 import RotateRightIcon from '@mui/icons-material/RotateRight'
 import LightbulbIcon from '@mui/icons-material/LightbulbOutlined'
+import PlayCircleIcon from '@mui/icons-material/PlayCircleOutlined'
+import UndoIcon from '@mui/icons-material/Undo'
+import RestartIcon from '@mui/icons-material/RestartAlt'
 import { useAppDispatch } from '../../../app/hooks'
 import { updateWidgetData } from '../../../features/widgets/widgetsSlice'
 import { useWidgetField } from '../../../features/widgets/useWidgetField'
@@ -25,11 +28,13 @@ import ConfirmDialog from '../ConfirmDialog'
 import {
   EXIT_ROW,
   LOT,
+  applyMove,
   hint as solveHint,
   isSolved,
   moveRange,
   parseBoard,
   replay,
+  solve,
   type Move,
   type Vehicle,
 } from './carParkModel'
@@ -78,6 +83,20 @@ const TAP_CELLS = 0.2
 /** Hint highlight — amber-yellow, distinct from the red target and the
  * white selection outline. */
 const HINT_COLOR = '#ffc400'
+/** Solution replay pacing: a beat before the first move, one slide per
+ * step, and a hold on the finished board before handing back. */
+const REPLAY_LEAD_MS = 600
+const REPLAY_STEP_MS = 650
+const REPLAY_HOLD_MS = 1200
+
+/** A solution playing back — transient, never persisted. `giveUp`: started
+ * mid-attempt from "Show solution", so the attempt restarts afterwards. */
+interface SolutionReplay {
+  base: number[]
+  moves: Move[]
+  step: number
+  giveUp: boolean
+}
 
 const NO_MOVES: Move[] = []
 const NO_BEST: Record<string, number> = {}
@@ -102,6 +121,23 @@ const coerceTier = (v: unknown): Tier | undefined =>
 /** Persisted-best key for a level — `tier:index`, stable because the pack is
  * append-only. */
 const levelKey = (tier: Tier, index: number) => `${tier}:${index}`
+
+/** A tier's progress: levels solved (clean or hinted) and ★ (clean, ≤ par). */
+function tierProgress(
+  tier: Tier,
+  best: Record<string, number>,
+  assisted: Record<string, true>,
+): { solved: number; stars: number; total: number } {
+  let solved = 0
+  let stars = 0
+  LEVELS[tier].forEach((l, i) => {
+    const k = levelKey(tier, i)
+    const b = best[k]
+    if (b !== undefined || assisted[k]) solved++
+    if (b !== undefined && b <= l.par) stars++
+  })
+  return { solved, stars, total: LEVELS[tier].length }
+}
 
 /** The level after this one: next in the tier, else the next tier's first. */
 function nextLevel(tier: Tier, index: number): { tier: Tier; level: number } | null {
@@ -243,6 +279,54 @@ export default function CarParkWidget({ id }: WidgetProps) {
     else askHint()
   }
 
+  // ------------------------------------------------------------ solution replay
+  // Plays the optimal line as a transient overlay on the real game: after a
+  // win it replays from the level's start (nothing changes); mid-attempt
+  // ("Show solution" — a give-up) it plays from where you are, then the
+  // attempt restarts. The persisted move log is never touched by playback.
+  const [solutionReplay, setSolutionReplay] = useState<SolutionReplay | null>(null)
+  const [solutionConfirm, setSolutionConfirm] = useState(false)
+  const replayPos = useMemo(
+    () =>
+      solutionReplay
+        ? solutionReplay.moves.slice(0, solutionReplay.step).reduce<number[]>((p, m) => applyMove(p, m), solutionReplay.base)
+        : null,
+    [solutionReplay],
+  )
+  useEffect(() => {
+    if (!solutionReplay) return
+    const { step, moves: line, giveUp } = solutionReplay
+    const done = step >= line.length
+    const t = setTimeout(
+      () => {
+        if (!done) {
+          setSolutionReplay({ ...solutionReplay, step: step + 1 })
+          return
+        }
+        setSolutionReplay(null)
+        if (giveUp) dispatch(updateWidgetData({ id, data: { moves: [], hints: 0 } }))
+      },
+      done ? REPLAY_HOLD_MS : step === 0 ? REPLAY_LEAD_MS : REPLAY_STEP_MS,
+    )
+    return () => clearTimeout(t)
+  }, [solutionReplay, dispatch, id])
+  const startReplay = (giveUp: boolean) => {
+    const base = giveUp ? pos : lot.start
+    const line = solve(lot, base)
+    if (!line) return
+    setSelected(null)
+    setHintKey(null)
+    setSolutionReplay({ base: base.slice(), moves: line, step: 0, giveUp })
+  }
+  const stopReplay = () => {
+    if (solutionReplay?.giveUp) dispatch(updateWidgetData({ id, data: { moves: [], hints: 0 } }))
+    setSolutionReplay(null)
+  }
+  const replaying = solutionReplay !== null
+  // What the board SHOWS: the replay's position while one plays.
+  const shownPos = replayPos ?? pos
+  const shownWon = replaying ? false : won
+
   const setGame = (data: Record<string, unknown>) => dispatch(updateWidgetData({ id, data }))
 
   /** Commit one slide. The win (solve tally + best) is written in the SAME
@@ -277,12 +361,12 @@ export default function CarParkWidget({ id }: WidgetProps) {
 
   // Refs mirror the latest render so the (memoized, 3D-facing) drag core
   // never closes over a stale position or move log.
-  const live = useRef({ won, lot, pos, commit })
-  live.current = { won, lot, pos, commit }
+  const live = useRef({ won, lot, pos, commit, replaying: false })
+  live.current = { won, lot, pos, commit, replaying: solutionReplay !== null }
 
   const beginDrag = useCallback((vi: number): boolean => {
-    const { won: w, lot: l, pos: p } = live.current
-    if (w || dragRef.current) return false
+    const { won: w, lot: l, pos: p, replaying: rp } = live.current
+    if (w || rp || dragRef.current) return false
     const { min, max } = moveRange(l, p, vi)
     dragRef.current = { vi, min, max, delta: 0 }
     setDrag({ vi, delta: 0 })
@@ -346,7 +430,7 @@ export default function CarParkWidget({ id }: WidgetProps) {
   // from the rest of the dashboard. Tap a vehicle to select it; each arrow
   // press slides it one bay (= one move).
   const onKeyDown = (e: KeyboardEvent) => {
-    if (won || selected === null || isTypingTarget(e.target)) return
+    if (won || replaying || selected === null || isTypingTarget(e.target)) return
     const v = lot.vehicles[selected]
     // In 3D the camera may be turned — map the key through it.
     const w = screenKeyToWorld(e.key, view === '3d' ? yaw : 0)
@@ -363,6 +447,7 @@ export default function CarParkWidget({ id }: WidgetProps) {
   const inProgress = applied > 0 && !won
 
   const goTo = (next: { tier: Tier; level: number }) => {
+    setSolutionReplay(null)
     setSelected(null)
     setHintKey(null)
     setGame({ tier: next.tier, level: next.level, moves: [], hints: 0 })
@@ -373,6 +458,7 @@ export default function CarParkWidget({ id }: WidgetProps) {
     else goTo(next)
   }
   const reset = () => {
+    setSolutionReplay(null)
     setSelected(null)
     setHintKey(null)
     setGame({ moves: [], hints: 0 })
@@ -404,32 +490,38 @@ export default function CarParkWidget({ id }: WidgetProps) {
       data-best={myBest ?? ''}
       data-hint={hintMove ? `${hintMove[0]}:${hintMove[1]}` : ''}
       data-hints={hints}
+      data-replay={solutionReplay ? `${solutionReplay.step}/${solutionReplay.moves.length}` : ''}
       data-solved={solved}
       data-state={won ? 'won' : 'live'}
       data-view={view}
       data-yaw={yaw}
       sx={{ height: '100%', display: 'flex', flexDirection: 'column', gap: 1, p: 0.5, outline: 'none' }}
     >
-      <Stack direction="row" spacing={1} sx={{ justifyContent: 'center', flexWrap: 'wrap' }}>
+      {/* One row on any card width: the selects shrink (a native select
+          ellipsizes its label; the open list still shows the full text). */}
+      <Stack direction="row" spacing={1} sx={{ justifyContent: 'center', alignItems: 'center', minWidth: 0 }}>
         <NativeSelect
           value={tier}
           onChange={(e) => requestLevel({ tier: e.target.value as Tier, level: 0 })}
           data-testid="carpark-tier"
           inputProps={{ 'aria-label': 'Difficulty' }}
-          sx={{ fontSize: 14 }}
+          sx={{ fontSize: 14, minWidth: 0, flexShrink: 1 }}
         >
-          {TIERS.map((t) => (
-            <option key={t} value={t}>
-              {TIER_LABEL[t]}
-            </option>
-          ))}
+          {TIERS.map((t) => {
+            const p = tierProgress(t, best, assisted)
+            return (
+              <option key={t} value={t} data-solved={p.solved} data-stars={p.stars}>
+                {`${TIER_LABEL[t]} ${p.solved}/${p.total}${p.stars ? ` ★${p.stars}` : ''}`}
+              </option>
+            )
+          })}
         </NativeSelect>
         <NativeSelect
           value={levelIdx}
           onChange={(e) => requestLevel({ tier, level: parseInt(e.target.value, 10) })}
           data-testid="carpark-level"
           inputProps={{ 'aria-label': 'Level' }}
-          sx={{ fontSize: 14 }}
+          sx={{ fontSize: 14, minWidth: 0, flexShrink: 1 }}
         >
           {levels.map((l, i) => {
             const b = best[levelKey(tier, i)]
@@ -442,6 +534,7 @@ export default function CarParkWidget({ id }: WidgetProps) {
           })}
         </NativeSelect>
         <ToggleButtonGroup
+          sx={{ flexShrink: 0 }}
           size="small"
           exclusive
           value={view}
@@ -549,8 +642,8 @@ export default function CarParkWidget({ id }: WidgetProps) {
               const dragging = drag?.vi === vi
               // Drag delta is fractional (follows the finger); released cars
               // snap with a short CSS transition. A won target drives OUT.
-              const off = pos[vi] + (dragging ? drag.delta : 0)
-              const out = won && vi === 0 ? LOT + PAD + 0.5 : off
+              const off = shownPos[vi] + (dragging ? drag.delta : 0)
+              const out = shownWon && vi === 0 ? LOT + PAD + 0.5 : off
               const x = v.horiz ? out : v.lane
               const y = v.horiz ? v.lane : out
               const color = vehicleColor(v, vi)
@@ -559,8 +652,8 @@ export default function CarParkWidget({ id }: WidgetProps) {
                   key={v.id}
                   data-vehicle={v.id}
                   data-index={vi}
-                  data-row={v.horiz ? v.lane : pos[vi]}
-                  data-col={v.horiz ? pos[vi] : v.lane}
+                  data-row={v.horiz ? v.lane : shownPos[vi]}
+                  data-col={v.horiz ? shownPos[vi] : v.lane}
                   data-len={v.len}
                   data-horiz={v.horiz ? '1' : '0'}
                   data-target={vi === 0 ? '1' : undefined}
@@ -570,10 +663,12 @@ export default function CarParkWidget({ id }: WidgetProps) {
                     transform: `translate(${x}px, ${y}px)`,
                     transition: dragging
                       ? 'none'
-                      : won && vi === 0
+                      : shownWon && vi === 0
                         ? 'transform 700ms ease-in'
-                        : 'transform 120ms ease-out',
-                    cursor: won ? 'default' : v.horiz ? 'ew-resize' : 'ns-resize',
+                        : replaying
+                          ? 'transform 380ms ease-in-out' // replay slides read slower
+                          : 'transform 120ms ease-out',
+                    cursor: won || replaying ? 'default' : v.horiz ? 'ew-resize' : 'ns-resize',
                   }}
                 >
                   <VehicleShape v={v} color={color} selected={selected === vi && !won} target={vi === 0} />
@@ -645,9 +740,9 @@ export default function CarParkWidget({ id }: WidgetProps) {
             >
               <CarPark3D
                 lot={lot}
-                pos={pos}
+                pos={shownPos}
                 drag={drag}
-                won={won}
+                won={shownWon}
                 selected={selected}
                 onBegin={beginDrag}
                 onDrag={dragTo}
@@ -680,7 +775,7 @@ export default function CarParkWidget({ id }: WidgetProps) {
           </IconButton>
         )}
 
-        {won && (
+        {shownWon && (
           <Box
             sx={{
               position: 'absolute',
@@ -688,8 +783,10 @@ export default function CarParkWidget({ id }: WidgetProps) {
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'center',
-              justifyContent: 'center',
+              justifyContent: 'flex-start',
               gap: 1,
+              pt: 1,
+              overflow: 'hidden',
               borderRadius: 1,
               bgcolor: 'rgba(0,0,0,0.4)',
               pointerEvents: 'none',
@@ -708,42 +805,66 @@ export default function CarParkWidget({ id }: WidgetProps) {
                   ? ' Par ★'
                   : ` Par is ${level.par}.`}
             </Typography>
-            <WinnerCelebration winner="toy" />
+            {/* The figure takes what's left and is clipped, never the text. */}
+            <Box sx={{ flex: 1, minHeight: 0, width: '100%', display: 'flex', justifyContent: 'center', overflow: 'hidden' }}>
+              <WinnerCelebration winner="toy" />
+            </Box>
           </Box>
         )}
       </Box>
 
       <Stack direction="row" spacing={1} sx={{ alignItems: 'center', justifyContent: 'space-between', px: 0.5 }}>
         <Typography variant="body2" sx={{ fontWeight: 600 }}>
-          {`Moves ${applied} · Par ${level.par}${myBest !== undefined ? ` · Best ${myBest}` : ''}`}
+          {solutionReplay
+            ? `Solution ${solutionReplay.step}/${solutionReplay.moves.length}`
+            : `Moves ${applied} · Par ${level.par}${myBest !== undefined ? ` · Best ${myBest}` : ''}`}
         </Typography>
+        {solutionReplay ? (
+          <Button size="small" variant="outlined" data-testid="carpark-replay-stop" onClick={stopReplay}>
+            Stop
+          </Button>
+        ) : (
         <Stack direction="row" spacing={0.5}>
           {won && after && (
-            <Button variant="contained" size="small" data-testid="carpark-next" onClick={() => goTo(after)}>
+            <Button variant="contained" size="small" data-testid="carpark-next" onClick={() => goTo(after)} sx={{ whiteSpace: 'nowrap', flexShrink: 0 }}>
               Next level
             </Button>
           )}
           {/* Won: Next level takes Undo's (disabled anyway) slot, so the
               footer fits a narrow card on one line. */}
+          {/* Won: replay the optimal line from the start. Live: "Show
+              solution" — a confirm-guarded give-up. */}
+          {won ? (
+            <IconButton size="small" aria-label="Replay solution" data-testid="carpark-replay" onClick={() => startReplay(false)}>
+              <PlayCircleIcon fontSize="small" />
+            </IconButton>
+          ) : (
+            <>
+              <IconButton size="small" aria-label="Hint" data-testid="carpark-hint" onClick={onHintClick}>
+                <LightbulbIcon fontSize="small" />
+              </IconButton>
+              <IconButton size="small" aria-label="Show solution" data-testid="carpark-solution" onClick={() => setSolutionConfirm(true)}>
+                <PlayCircleIcon fontSize="small" />
+              </IconButton>
+            </>
+          )}
+          {/* Icon buttons keep the footer on one line on a narrow card. */}
           {!won && (
-            <IconButton size="small" aria-label="Hint" data-testid="carpark-hint" onClick={onHintClick}>
-              <LightbulbIcon fontSize="small" />
+            <IconButton size="small" aria-label="Undo" data-testid="carpark-undo" disabled={applied === 0} onClick={undo}>
+              <UndoIcon fontSize="small" />
             </IconButton>
           )}
-          {!won && (
-            <Button size="small" data-testid="carpark-undo" disabled={applied === 0} onClick={undo}>
-              Undo
-            </Button>
-          )}
-          <Button
+          <IconButton
             size="small"
+            aria-label="Reset"
             data-testid="carpark-reset"
             disabled={applied === 0}
             onClick={() => (inProgress ? setPending('reset') : reset())}
           >
-            Reset
-          </Button>
+            <RestartIcon fontSize="small" />
+          </IconButton>
         </Stack>
+        )}
       </Stack>
 
       <ConfirmDialog
@@ -768,6 +889,18 @@ export default function CarParkWidget({ id }: WidgetProps) {
           askHint()
         }}
         onCancel={() => setHintConfirm(false)}
+      />
+      <ConfirmDialog
+        open={solutionConfirm}
+        title="Show the solution?"
+        message="The fastest way out plays from where you are. This attempt ends, and you can try the level again afterwards."
+        confirmLabel="Show me"
+        cancelLabel="Keep trying"
+        onConfirm={() => {
+          setSolutionConfirm(false)
+          startReplay(true)
+        }}
+        onCancel={() => setSolutionConfirm(false)}
       />
     </Box>
   )
