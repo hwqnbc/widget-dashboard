@@ -93,7 +93,7 @@ What Connect 4 itself adds:
   rather than leaving a data channel alive behind a board nobody is playing.
 
 Root test contract: `data-mode`, `data-net`, `data-seat`, `data-turn`,
-`data-ply`, `data-winner` on `[data-testid="connect4-root"]`.
+`data-ply`, `data-winner`, `data-falling` on `[data-testid="connect4-root"]`.
 
 ## Connect-4-specific bits
 - **Animated drop (full column):** a component `useState lastDrop` holds the
@@ -105,11 +105,24 @@ Root test contract: `data-mode`, `data-net`, `data-seat`, `data-turn`,
   rendered slots (the board is container-query sized, so there is no fixed
   pitch — the old CSS keyframe's `translateY(-750%)` was a guess, and the
   hole's `overflow:hidden` clipped it so the disc only ever moved inside its
-  own hole). The fall time grows like `sqrt(rows)` (≈0.37 s for the top row,
-  ≈0.53 s for the bottom), a short opacity fade-in hides the entry, and while
-  it falls the landing hole's clip is lifted (`overflow:visible`, `zIndex:1`)
-  and restored on finish — or synchronously in the effect cleanup when a
-  reset / StrictMode re-run interrupts it. `prefers-reduced-motion` skips it.
+  own hole). `dropDuration(row)` = `420 + 240·sqrt(row+1)` ms (≈0.66 s for the
+  top row, ≈1 s for the bottom) under a *mild* ease-in — the first cut
+  (0.37–0.53 s, steep ease-in) idled near the top and then flashed through the
+  column, so it read as the disc "just appearing" in its slot. A short opacity
+  fade-in hides the entry. While it falls the landing hole's clip is lifted
+  (`overflow:visible`, `zIndex:1`), the hole is restyled as an EMPTY hole and
+  the white disc face travels with the head (disc background + a rim
+  box-shadow) — otherwise the destination lights up before the disc arrives.
+  All of it is restored on finish, or synchronously in the effect cleanup
+  when a reset / StrictMode re-run interrupts it. `prefers-reduced-motion`
+  skips the fall.
+- **Nothing covers or cuts the fall short.** A `landed` state (set by the
+  fall's `onfinish`) gives `falling = lastDrop !== landed`, published as root
+  `data-falling`. While falling: the 2-player hand-off banner is held in
+  `pendingHandRef` and announced on landing (it covers the board's middle),
+  clicks are ignored in 2-player mode, the win overlay (`c4-win-overlay`)
+  waits, and the vs-computer reply effect doesn't start its think timer — it
+  used to answer after 0.4 s, cancelling the player's disc mid-fall.
   `lastDrop` is not persisted, so a reload shows resting discs with no
   animation. Pinned by `e2e/156-c4-drop`.
 - **Responsiveness:** board wrapper is `containerType:'size'`; the board is

@@ -9,6 +9,12 @@
  * falls (so the disc is visible over the empty slots above) and restored once
  * it lands, a disc landing higher up falls a shorter distance, and a paused
  * mid-fall frame shows the disc physically above its landing slot.
+ *
+ * Pacing: the fall is slow enough to follow (≥ 0.9 s to the bottom row), and
+ * nothing covers or cuts it short — root `data-falling` is "true" until it
+ * lands, and only then do the 2-player hand-off banner and the win overlay
+ * (`c4-win-overlay`) appear; a click in 2-player mode is ignored meanwhile;
+ * and vs Computer the reply waits for the player's disc to land.
  */
 import { addConnect4Widget, launch, reporter } from './helpers.mjs'
 
@@ -59,6 +65,13 @@ check(
 )
 check('the hole stops clipping while the disc falls', a.clip === 'visible')
 
+check('a bottom-row fall takes long enough to follow (≥ 0.9 s)', a.duration >= 900, `${a.duration}`)
+check('the root reports the disc falling', (await root.getAttribute('data-falling')) === 'true')
+check(
+  'the hand-off banner waits for the disc to land',
+  (await page.locator('[data-testid="turn-banner"]').count()) === 0,
+)
+
 // Mid-fall frame: pause it and the disc is above its slot, over the empty ones.
 const mid = await page.evaluate(() => {
   const disc = document.querySelector('[data-c4-disc="38"]')
@@ -87,6 +100,11 @@ await page
   .catch(() => {})
 const clipAfter = await page.evaluate(clipOf38)
 check('the hole clips again once the disc has landed', clipAfter === 'hidden', clipAfter)
+await page.locator('[data-testid="turn-banner"]').waitFor({ timeout: 2000 }).catch(() => {})
+check('once landed, the hand-off banner shows', (await page.locator('[data-testid="turn-banner"]').count()) === 1)
+check('…and the root reports it landed', (await root.getAttribute('data-falling')) === 'false')
+await page.locator('[data-testid="turn-banner"]').click()
+await page.locator('[data-testid="turn-banner"]').waitFor({ state: 'detached' })
 
 // Second disc in the same column lands one row up (index 31): shorter fall.
 const b = await drop(3, 4 * COLS + 3)
@@ -94,8 +112,67 @@ check('a disc landing higher also falls from the top', Math.abs(b.fromY + b.span
 check('…over a shorter distance', Math.abs(b.fromY) < Math.abs(a.fromY), `${b.fromY} vs ${a.fromY}`)
 check('…and in less time', b.duration < a.duration, `${b.duration} vs ${a.duration}`)
 
-await page.waitForTimeout(700)
+
+// A click while the disc is still falling is ignored in 2-player mode.
+await root.locator('[data-testid="c4-slot-0"]').click()
+check('a click mid-fall is ignored', (await root.getAttribute('data-ply')) === '2')
+
+const landedTB = async () => {
+  await page.waitForFunction(
+    () => document.querySelector('[data-testid="connect4-root"]').dataset.falling === 'false',
+    null,
+    { timeout: 3000 },
+  )
+  const banner = page.locator('[data-testid="turn-banner"]')
+  await banner.waitFor({ timeout: 2000 }).catch(() => {})
+  if (await banner.count()) {
+    await banner.click()
+    await banner.waitFor({ state: 'detached' })
+  }
+}
+await landedTB()
 check('both discs rest on the board', (await root.getAttribute('data-ply')) === '2')
+
+// Win: toy stacks column 0 while ninja stacks column 1 (ninja already has a
+// disc in col 3). The overlay waits for the winning disc to land.
+for (const c of [0, 1, 0, 1, 0, 1]) {
+  await root.locator(`[data-testid="c4-slot-${c}"]`).click()
+  await landedTB()
+}
+await root.locator('[data-testid="c4-slot-0"]').click()
+check('the winning move is recorded at once', (await root.getAttribute('data-winner')) === 'toy')
+check(
+  'the win overlay waits while the winning disc falls',
+  (await root.getAttribute('data-falling')) === 'true' &&
+    (await page.locator('[data-testid="c4-win-overlay"]').count()) === 0,
+)
+await page.locator('[data-testid="c4-win-overlay"]').waitFor({ timeout: 3000 }).catch(() => {})
+check('the win overlay shows once it lands', (await page.locator('[data-testid="c4-win-overlay"]').count()) === 1)
+
+// Vs Computer: switch mode (confirm-free — the game is over), play the bottom
+// row; the reply only comes after our disc has landed.
+await root.getByRole('button', { name: 'vs Computer' }).click()
+await page.waitForFunction(
+  () => document.querySelector('[data-testid="connect4-root"]').dataset.ply === '0',
+  null,
+  { timeout: 3000 },
+)
+await root.locator('[data-testid="c4-slot-3"]').click()
+const t0 = Date.now()
+await page.waitForFunction(
+  () => document.querySelector('[data-testid="connect4-root"]').dataset.falling === 'false',
+  null,
+  { timeout: 3000 },
+)
+const landedAt = Date.now() - t0
+const plyAtLanding = await root.getAttribute('data-ply')
+check('the computer has not replied before our disc landed', plyAtLanding === '1', `ply=${plyAtLanding} after ${landedAt}ms`)
+await page.waitForFunction(
+  () => document.querySelector('[data-testid="connect4-root"]').dataset.ply === '2',
+  null,
+  { timeout: 4000 },
+)
+check('…then it replies', (await root.getAttribute('data-ply')) === '2')
 await page.screenshot({ path: new URL('./.artifacts/c4-drop.png', import.meta.url).pathname })
 
 await finish(browser)

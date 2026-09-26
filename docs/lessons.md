@@ -2101,3 +2101,13 @@ carried over; these are the new ones.
      transform (`DOMMatrix(...).m42`) before comparing an animating element's
      rect, and compare against the element, not the cell — a head need not be
      dead-centre in its slot.
+
+132. **"Too fast" is often "hidden" — check what covers the motion.** The
+     Connect 4 fall was reported as the disc "suddenly appearing". Only part
+     of that was duration: the 2-player hand-off banner went up the same
+     render as the drop and covered the board, the AI's 0.4 s reply
+     cancelled the fall, and the landing hole turned white before the disc
+     reached it. Before tuning timings, screenshot paused frames (set
+     `currentTime` on the element's `getAnimations()`), and gate every
+     overlay / follow-up turn on a `landed` flag set by the animation's
+     `onfinish`.

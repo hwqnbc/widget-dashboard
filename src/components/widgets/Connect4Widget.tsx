@@ -242,6 +242,14 @@ function aiMove(board: Cell[], difficulty: Difficulty): number {
   return difficulty === 'easy' ? easyMove(board) : searchMove(board, DEPTH[difficulty])
 }
 
+const prefersReducedMotion = () =>
+  !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+
+/** How long a disc landing on `row` takes to fall and settle (ms). Grows like
+ * sqrt(distance), as under gravity: ≈0.65 s for the top row, ≈1 s for the
+ * bottom — slow enough to follow the disc all the way down. */
+const dropDuration = (row: number) => 420 + 240 * Math.sqrt(row + 1)
+
 /**
  * The disc falls down the WHOLE column: it starts just above the top hole and
  * drops past every empty slot to its landing slot, then bounces once. The
@@ -249,41 +257,62 @@ function aiMove(board: Cell[], difficulty: Difficulty): number {
  * sized, so there is no fixed pitch to hard-code) and the fall time grows like
  * sqrt(distance), as under gravity.
  */
-function animateDrop(boardEl: HTMLElement, index: number): (() => void) | null {
+function animateDrop(
+  boardEl: HTMLElement,
+  index: number,
+  onLanded: () => void,
+): (() => void) | null {
   const disc = boardEl.querySelector<HTMLElement>(`[data-c4-disc="${index}"]`)
   const top = boardEl.querySelector<HTMLElement>(`[data-testid="c4-slot-${index % COLS}"]`)
   const hole = disc?.parentElement
-  if (!disc || !top || !hole) return null
-  if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return null
+  if (!disc || !top || !hole || prefersReducedMotion()) {
+    onLanded() // nothing to wait for — never leave the game waiting on a fall
+    return null
+  }
   const landing = disc.getBoundingClientRect()
   const topSlot = top.getBoundingClientRect()
   const row = Math.floor(index / COLS)
   // Start centred half a slot above the top slot's centre, i.e. entering from
   // the frame's top edge, and fall to the landing disc's resting place.
   const fromY = topSlot.top - (landing.top + landing.height / 2)
-  const duration = 260 + 110 * Math.sqrt(row + 1)
+  const duration = dropDuration(row)
   // The hole clips its disc; lift the clip (and the paint order) for the fall.
+  // The hole's filled look (the white disc face) travels WITH the head, and
+  // the hole itself stays an empty hole until the disc gets there.
+  const holeRect = hole.getBoundingClientRect()
+  const face = getComputedStyle(hole).backgroundColor
+  const rim = Math.max(0, (holeRect.width - landing.width) / 2)
   hole.style.overflow = 'visible'
   hole.style.position = 'relative'
   hole.style.zIndex = '1'
+  hole.style.backgroundColor = 'rgba(0,0,0,0.28)'
+  hole.style.boxShadow = 'inset 0 2px 4px rgba(0,0,0,0.35)'
+  disc.style.backgroundColor = face
+  disc.style.borderRadius = '50%'
+  disc.style.boxShadow = `0 0 0 ${rim}px ${face}`
   const anims = [
     disc.animate(
       [
-        { transform: `translateY(${fromY}px)`, easing: 'cubic-bezier(.55,0,1,.45)' },
-        { offset: 0.72, transform: 'translateY(0)', easing: 'ease-out' },
-        { offset: 0.86, transform: 'translateY(-9%)', easing: 'ease-in' },
+        // Mild ease-in: it gathers speed without idling at the top and then
+        // flashing through the column in the last few frames.
+        { transform: `translateY(${fromY}px)`, easing: 'cubic-bezier(.35,0,.75,.55)' },
+        { offset: 0.78, transform: 'translateY(0)', easing: 'ease-out' },
+        { offset: 0.89, transform: 'translateY(-9%)', easing: 'ease-in' },
         { transform: 'translateY(0)' },
       ],
       { duration },
     ),
-    disc.animate([{ opacity: 0 }, { opacity: 1, offset: 0.12 }, { opacity: 1 }], { duration }),
+    disc.animate([{ opacity: 0 }, { opacity: 1, offset: 0.06 }, { opacity: 1 }], { duration }),
   ]
   const restore = () => {
-    hole.style.overflow = ''
-    hole.style.position = ''
-    hole.style.zIndex = ''
+    for (const k of ['overflow', 'position', 'zIndex', 'backgroundColor', 'boxShadow'] as const)
+      hole.style[k] = ''
+    for (const k of ['backgroundColor', 'borderRadius', 'boxShadow'] as const) disc.style[k] = ''
   }
-  anims[0].onfinish = restore
+  anims[0].onfinish = () => {
+    restore()
+    onLanded()
+  }
   // Interrupted (a reset, the next move, a StrictMode re-run): restore NOW —
   // an async cancel event could land after a newer drop lifted the clip.
   return () => {
@@ -312,15 +341,30 @@ export default function Connect4Widget({ id }: WidgetProps) {
   const dispatch = useAppDispatch()
   const [lastDrop, setLastDrop] = useState<number | null>(null)
   const boardRef = useRef<HTMLDivElement>(null)
-  // Before paint, so the disc never flashes at rest in its slot first.
-  useLayoutEffect(() => {
-    if (lastDrop === null || !boardRef.current) return
-    return animateDrop(boardRef.current, lastDrop) ?? undefined
-  }, [lastDrop])
+  // The last drop whose fall has finished. While `lastDrop` is still falling,
+  // everything that would cover or cut short the fall waits for it: the
+  // 2-player hand-off banner, the win overlay and the computer's reply.
+  const [landed, setLanded] = useState<number | null>(null)
+  const falling = lastDrop !== null && landed !== lastDrop
+  /** The 2-player hand-off to announce once the current disc lands. */
+  const pendingHandRef = useRef<Mark | null>(null)
   const [pending, setPending] = useState<
     { mode?: Mode; difficulty?: Difficulty } | null
   >(null)
   const hand = useHandoff()
+  // Before paint, so the disc never flashes at rest in its slot first.
+  useLayoutEffect(() => {
+    if (lastDrop === null || !boardRef.current) return
+    return (
+      animateDrop(boardRef.current, lastDrop, () => {
+        setLanded(lastDrop)
+        const next = pendingHandRef.current
+        pendingHandRef.current = null
+        if (next) hand.announce(next)
+      }) ?? undefined
+    )
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lastDrop])
 
   const board = useWidgetField<Cell[]>(id, 'board', EMPTY_BOARD, coerceBoard)
   const mode = useWidgetField<Mode>(id, 'mode', 'pvp', (v) =>
@@ -382,7 +426,7 @@ export default function Connect4Widget({ id }: WidgetProps) {
 
   // Vs-computer: the ninja answers on its turn, after a short "thinking" pause.
   useEffect(() => {
-    if (mode !== 'ai' || winner || isDraw || turn !== 'ninja') return
+    if (mode !== 'ai' || winner || isDraw || turn !== 'ninja' || falling) return
     const delay = THINK_MIN + Math.random() * (THINK_MAX - THINK_MIN)
     const timer = setTimeout(() => {
       const col = aiMove(board, difficulty)
@@ -393,10 +437,11 @@ export default function Connect4Widget({ id }: WidgetProps) {
     }, delay)
     return () => clearTimeout(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [board, mode, difficulty, winner, isDraw, turn])
+  }, [board, mode, difficulty, winner, isDraw, turn, falling])
 
   const playCol = (col: number) => {
     if (winner || isDraw || hand.player) return
+    if (mode === 'pvp' && falling) return // the hand-off banner is still to come
     if (mode === 'ai' && turn === 'ninja') return // AI's move
     if (net.blocked) return // not paired yet, or the other device's turn
     const res = dropInto(board, col, turn)
@@ -406,13 +451,15 @@ export default function Connect4Widget({ id }: WidgetProps) {
     if (online) net.sendMove(col)
     // 2-player hand-off: announce the next player unless this move ended it.
     // Online needs none — each device only ever shows its own turn.
+    // It waits for the disc to land — shown at once it would hide the fall.
     if (mode === 'pvp' && !calcWin(res.board) && legalCols(res.board).length > 0) {
-      hand.announce(turn === 'toy' ? 'ninja' : 'toy')
+      pendingHandRef.current = turn === 'toy' ? 'ninja' : 'toy'
     }
   }
 
   const reset = (extra: Partial<{ mode: Mode; difficulty: Difficulty }> = {}) => {
     hand.clear()
+    pendingHandRef.current = null
     setLastDrop(null)
     setGame({ board: Array(SIZE).fill(null), first: 'toy', ...extra })
   }
@@ -453,6 +500,7 @@ export default function Connect4Widget({ id }: WidgetProps) {
       data-seat={link.seat ?? ''}
       data-turn={turn}
       data-ply={board.filter(Boolean).length}
+      data-falling={falling ? 'true' : 'false'}
       data-winner={winner ?? ''}
       data-avatar-toy={effectiveAvatars.toy}
       data-avatar-ninja={effectiveAvatars.ninja}
@@ -587,8 +635,9 @@ export default function Connect4Widget({ id }: WidgetProps) {
           })}
         </Box>
 
-        {winner && (
+        {winner && !falling && (
           <Box
+            data-testid="c4-win-overlay"
             sx={{
               position: 'absolute',
               inset: 0,
