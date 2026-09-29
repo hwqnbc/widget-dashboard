@@ -289,7 +289,10 @@ band-checked by the e2e sweep, drag-to-slide with snap, a persisted move
 log replayed into the board, Undo/Reset, par ★ and per-level bests — plus a
 persisted 2D/3D toggle: the lazy `CarPark3D` three.js board is a pure view
 fed by the widget's view-agnostic bay-unit drag core, dragged via R3F
-captured-pointer plane intersection). See `docs/netplay.md`
+captured-pointer plane intersection — and a **2 Devices race**: the
+second real-time netplay consumer, the host's level synced, the opponent's
+whole position packed into `pos.cell` and drawn as a live mini lot, first
+red car out wins). See `docs/netplay.md`
 for two-device play (peer-to-peer WebRTC on one wifi with **no server** —
 `iceServers: []` so traffic never leaves the LAN, QR codes as the signaling
 channel, a compact SDP codec that gets a pairing token down to ~120

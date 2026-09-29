@@ -213,6 +213,15 @@ position rather than the game. And with a **synchronised start**, the first
 `done` is necessarily the lower time — so the winner needs no arbitration and
 message ordering cannot change the result.
 
+**Car Park** is the second real-time consumer, with the same three messages
+and no protocol change. It stretches `pos` one notch. There, `cell` is not
+a cell but a **whole packed position**: every vehicle's offset as a base-6
+digit, with the move count above them (`packRacePos` in `carParkModel`),
+still one non-negative safe integer. The opponent is then drawn as a live
+mini board rather than a marker. That is the payoff of keeping the envelope
+an opaque integer: any small game state that packs into 2^53 rides it
+unchanged (see `docs/car-park.md` *2 Devices race*).
+
 ## Seats — and the avatar costume
 
 Host is always Player 1 (`toy`), guest always Player 2 (`ninja`) — decided by

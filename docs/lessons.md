@@ -2132,3 +2132,14 @@ carried over; these are the new ones.
      into ONE explicit write at the end (restart the attempt). Input goes
      through the same drag core, so a single `replaying` flag there locks
      both the 2D and 3D boards.
+
+132. **An opaque integer field carries more than you'd think — pack small
+     states into it instead of bumping the protocol.** Car Park's race
+     needed the opponent's WHOLE board, not a cell index, but the netplay
+     `pos` message only has an integer `cell`. Packing every vehicle offset
+     as a base-6 digit with the move count above them fits in ~1.3e13 (far
+     under 2^53), so the existing message — and `NET_VERSION` — stayed as
+     they were, and the ghost became a live mini board. Pin the packing
+     with a pure round-trip sweep over every level AND a
+     `Number.isSafeInteger` check, because the failure mode (silent
+     precision loss past 2^53) would otherwise look like a rendering bug.

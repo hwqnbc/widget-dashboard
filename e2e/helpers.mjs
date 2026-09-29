@@ -184,10 +184,11 @@ export async function addCarParkWidget(page) {
  * by `meet`, so one bay is `min(w, h) / 6.5` px. Moves in small steps so the
  * pointermove path is exercised, then releases for the snap.
  */
-export async function dragVehicle(page, index, cells) {
-  const g = page.locator(`[data-testid="carpark-board"] [data-index="${index}"]`)
+export async function dragVehicle(page, index, cells, { widget = 0 } = {}) {
+  const board = page.locator('[data-testid="carpark-board"]').nth(widget)
+  const g = board.locator(`[data-index="${index}"]`)
   const horiz = (await g.getAttribute('data-horiz')) === '1'
-  const svgBox = await page.locator('[data-testid="carpark-board"]').boundingBox()
+  const svgBox = await board.boundingBox()
   const bay = Math.min(svgBox.width, svgBox.height) / 6.5
   const box = await g.boundingBox()
   const x0 = box.x + box.width / 2
@@ -245,6 +246,20 @@ export async function vehicleOff3D(page, index) {
     { timeout: 10000 },
   )
   return JSON.parse(await wrap.getAttribute('data-vehicles')).find((e) => e.i === index).off
+}
+
+/** Fresh dashboard with `count` Car Park widgets, loopback transport armed
+ * (see `addTicTacToeWidgets` for why `?netloop=1`). */
+export async function addCarParkWidgets(page, count = 2) {
+  await page.goto(`${BASE_URL}?netloop=1`, { waitUntil: 'networkidle' })
+  for (let i = 0; i < count; i++) {
+    await page.getByRole('button', { name: 'Add widget' }).click()
+    await page.getByRole('menuitem', { name: /Car Park/ }).click()
+  }
+  await page.locator('[data-testid="carpark-root"]').nth(count - 1).waitFor()
+  await page.waitForFunction(() => !document.querySelector('.MuiModal-backdrop'), null, {
+    timeout: 3000,
+  })
 }
 
 /** Fresh dashboard with `count` Othello widgets, loopback transport armed

@@ -209,3 +209,27 @@ export function solve(lot: Lot, from: readonly number[] = lot.start): Move[] | n
 export function hint(lot: Lot, pos: readonly number[]): Move | null {
   return solve(lot, pos)?.[0] ?? null
 }
+
+/**
+ * Two-device race: pack a whole position + its move count into ONE
+ * non-negative integer, so it rides the netplay protocol's existing
+ * `pos.cell` field unchanged. Offsets are base-6 digits (a lot is 6 wide);
+ * the move count sits above them. 13 vehicles × 1000 moves ≈ 1.3e13, far
+ * below 2^53, so it stays an exact JS integer.
+ */
+export function packRacePos(pos: readonly number[], moves: number): number {
+  let code = 0
+  for (let i = pos.length - 1; i >= 0; i--) code = code * LOT + pos[i]
+  return moves * LOT ** pos.length + code
+}
+
+export function unpackRacePos(cell: number, n: number): { pos: number[]; moves: number } {
+  const span = LOT ** n
+  let code = cell % span
+  const pos: number[] = []
+  for (let i = 0; i < n; i++) {
+    pos.push(code % LOT)
+    code = Math.floor(code / LOT)
+  }
+  return { pos, moves: Math.floor(cell / span) }
+}

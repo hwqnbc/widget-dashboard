@@ -16,6 +16,7 @@ import LightbulbIcon from '@mui/icons-material/LightbulbOutlined'
 import PlayCircleIcon from '@mui/icons-material/PlayCircleOutlined'
 import UndoIcon from '@mui/icons-material/Undo'
 import RestartIcon from '@mui/icons-material/RestartAlt'
+import DevicesIcon from '@mui/icons-material/Devices'
 import { useAppDispatch } from '../../../app/hooks'
 import { updateWidgetData } from '../../../features/widgets/widgetsSlice'
 import { useWidgetField } from '../../../features/widgets/useWidgetField'
@@ -23,6 +24,16 @@ import type { WidgetProps } from '../../../registry/widgetRegistry'
 import { isTypingTarget } from '../../../utils/isTypingTarget'
 import { usePresentation } from '../../fullscreen/presentation'
 import { lazyWithReload } from '../../../utils/lazyWithReload'
+import type { Seat, SeatAvatars } from '../../../features/avatars/types'
+import {
+  SeatAvatarsOverride,
+  coerceSeatAvatars,
+  useSeatAvatars,
+} from '../../../features/avatars/useSeatAvatars'
+import { avatarMetaById } from '../../../features/avatars/avatarCatalog'
+import { avatarVisualById } from '../../../registry/avatarRegistry'
+import { useNetplay } from '../../../features/netplay/useNetplay'
+import NetplayChip from '../../netplay/NetplayChip'
 import WinnerCelebration from '../WinnerCelebration'
 import ConfirmDialog from '../ConfirmDialog'
 import {
@@ -32,9 +43,12 @@ import {
   hint as solveHint,
   isSolved,
   moveRange,
+  packRacePos,
   parseBoard,
+  unpackRacePos,
   replay,
   solve,
+  type Lot,
   type Move,
   type Vehicle,
 } from './carParkModel'
@@ -44,6 +58,38 @@ import { TARGET_COLOR, TARGET_STRIPE, TARGET_TRIM, vehicleColor } from './palett
 /** The 3D board is its own lazy chunk — three.js never reaches the main
  * bundle, and the 2D default never downloads it. */
 const CarPark3D = lazyWithReload(() => import('./CarPark3D'), 'carpark3d')
+/** The pairing UI (QR encode/scan) — its own lazy chunk, as in every
+ * net-played widget. */
+const NetplayDialog = lazyWithReload(() => import('../../netplay/NetplayDialog'), 'netplay-dialog')
+
+type PlayMode = 'solo' | 'online'
+const coerceMode = (v: unknown): PlayMode | undefined => (v === 'solo' || v === 'online' ? v : undefined)
+/** Race countdown: three ticks, then GO (as Maze Runner). */
+const COUNT_FROM = 3
+const COUNT_MS = 800
+
+/** The opponent's lot in miniature — drawn from their packed `pos`. */
+function MiniLot({ lot, pos }: { lot: Lot; pos: readonly number[] }) {
+  return (
+    <svg viewBox={`0 0 ${LOT} ${LOT}`} width={56} height={56} style={{ display: 'block', borderRadius: 4 }}>
+      <rect x={0} y={0} width={LOT} height={LOT} fill="#5f6b73" />
+      <rect x={0} y={EXIT_ROW} width={LOT} height={1} fill={TARGET_COLOR} opacity={0.18} />
+      {lot.vehicles.map((v, i) => (
+        <rect
+          key={v.id}
+          x={(v.horiz ? pos[i] : v.lane) + 0.08}
+          y={(v.horiz ? v.lane : pos[i]) + 0.08}
+          width={(v.horiz ? v.len : 1) - 0.16}
+          height={(v.horiz ? 1 : v.len) - 0.16}
+          rx={0.2}
+          fill={vehicleColor(v, i)}
+          stroke={i === 0 ? TARGET_TRIM : 'none'}
+          strokeWidth={0.12}
+        />
+      ))}
+    </svg>
+  )
+}
 
 type BoardView = '2d' | '3d'
 const coerceView = (v: unknown): BoardView | undefined => (v === '2d' || v === '3d' ? v : undefined)
@@ -240,6 +286,8 @@ export default function CarParkWidget({ id }: WidgetProps) {
   const assisted = useWidgetField<Record<string, true>>(id, 'assisted', NO_ASSISTED, coerceAssisted)
   const { fullscreen } = usePresentation()
   const view = fullscreen ? fsView : cardView
+  const mode = useWidgetField<PlayMode>(id, 'mode', 'solo', coerceMode)
+  const online = mode === 'online'
 
   const levels = LEVELS[tier]
   const levelIdx = Math.min(storedLevel, Math.max(0, levels.length - 1))
@@ -359,10 +407,186 @@ export default function CarParkWidget({ id }: WidgetProps) {
   const svgGrab = useRef<SvgGrab | null>(null)
   const probeRef = useRef<HTMLDivElement>(null)
 
+  // ------------------------------------------------------------ 2 Devices race
+  // Maze Runner's ghost race, for cars: both devices play the SAME level at
+  // once, and the first red car out wins. Real-time, so it sits on
+  // `useNetplay` directly (not the turn-based `useNetGame`) and speaks the
+  // protocol's existing go / pos / done. All of it is transient — a race is
+  // a live thing between two devices, never persisted.
+  const [linkOpen, setLinkOpen] = useState(false)
+  const [countdown, setCountdown] = useState<number | null>(null)
+  const [started, setStarted] = useState(false)
+  const [result, setResult] = useState<'won' | 'lost' | 'void' | null>(null)
+  const [opp, setOpp] = useState<{ pos: number[]; moves: number; cell: number } | null>(null)
+  const [peerAvatars, setPeerAvatars] = useState<SeatAvatars | null>(null)
+  const raceStart = useRef(0)
+  const doneSent = useRef(false)
+  const lotRef = useRef(lot)
+  lotRef.current = lot
+
+  const seatAvatars = useSeatAvatars()
+  const avatarsRef = useRef(seatAvatars)
+  avatarsRef.current = seatAvatars
+
+  const link = useNetplay((msg) => {
+    if (msg.t === 'sync') {
+      // The host's level wins, so both devices race the same lot (and a
+      // packed opponent position means the same thing on both).
+      const setup = msg.state as Record<string, unknown> | null
+      if (!setup) return
+      const t = coerceTier(setup.tier)
+      const lv = setup.level
+      if (!t || !Number.isInteger(lv)) return
+      setPeerAvatars(coerceSeatAvatars(setup.avatars) ?? null)
+      setHintKey(null)
+      setSolutionReplay(null)
+      dispatch(updateWidgetData({ id, data: { tier: t, level: lv, moves: [], hints: 0 } }))
+      return
+    }
+    if (msg.t === 'go') {
+      setResult(null)
+      setCountdown(COUNT_FROM)
+      return
+    }
+    if (msg.t === 'pos') {
+      const n = lotRef.current.vehicles.length
+      setOpp({ ...unpackRacePos(msg.cell, n), cell: msg.cell })
+      return
+    }
+    if (msg.t === 'done') {
+      // First done wins: with a synchronised start it is also the lower
+      // time, so no arbitration, and ordering can't flip it.
+      setResult((prev) => prev ?? 'lost')
+    }
+  })
+
+  const linkDead = link.status === 'failed' || link.status === 'closed'
+  const raceState = !online
+    ? 'off'
+    : result !== null
+      ? result
+      : countdown !== null
+        ? 'counting'
+        : started
+          ? 'running'
+          : 'idle'
+  const mySeat: Seat = link.seat ?? 'toy'
+  const oppSeat: Seat = mySeat === 'toy' ? 'ninja' : 'toy'
+  // Costume rules as in every net game: a connected guest wears the host's
+  // picks, transiently (`alive`, so a wifi blip doesn't flicker them).
+  const avatarOverride = online && link.alive ? peerAvatars : null
+  const effectiveAvatars = avatarOverride ?? seatAvatars
+  const { Head: OppHead } = avatarVisualById[effectiveAvatars[oppSeat]]
+  const oppName = avatarMetaById[effectiveAvatars[oppSeat]].name
+  const oppColor = avatarMetaById[effectiveAvatars[oppSeat]].color
+
+  /** GO on this device: a fresh attempt from the level start, both panels
+   * reset, clock armed. */
+  const startRun = useCallback(() => {
+    setStarted(true)
+    setResult(null)
+    setHintKey(null)
+    setSolutionReplay(null)
+    setSelected(null)
+    doneSent.current = false
+    raceStart.current = performance.now()
+    const l = lotRef.current
+    setOpp({ pos: l.start.slice(), moves: 0, cell: packRacePos(l.start, 0) })
+    dispatch(updateWidgetData({ id, data: { moves: [], hints: 0 } }))
+  }, [dispatch, id])
+
+  // Countdown ticks, then both runs start together.
+  useEffect(() => {
+    if (countdown === null) return
+    if (countdown === 0) {
+      setCountdown(null)
+      startRun()
+      return
+    }
+    const t = setTimeout(() => setCountdown((n) => (n === null ? null : n - 1)), COUNT_MS)
+    return () => clearTimeout(t)
+  }, [countdown, startRun])
+
+  // A real link death voids a live, unresolved race (their `done` could never
+  // arrive). Sticky via `result` until the next GO.
+  useEffect(() => {
+    if (!online || !linkDead) return
+    if (!started && countdown === null) return
+    setResult((prev) => prev ?? 'void')
+    setStarted(false)
+    setCountdown(null)
+    setOpp(null)
+  }, [online, linkDead, started, countdown])
+
+  // The host pushes the race setup on connect, and again whenever it picks a
+  // different level (only possible while idle).
+  useEffect(() => {
+    if (!online || !link.connected || link.role !== 'host') return
+    link.send({ t: 'sync', state: { tier, level: levelIdx, avatars: avatarsRef.current } })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [online, link.connected, link.role, tier, levelIdx])
+
+  // Leaving the mode drops the link and every trace of the race; entering
+  // it opens the pairing dialog.
+  useEffect(() => {
+    if (!online) {
+      link.disconnect()
+      setLinkOpen(false)
+      setCountdown(null)
+      setStarted(false)
+      setResult(null)
+      setOpp(null)
+      setPeerAvatars(null)
+    } else if (link.status === 'idle') {
+      setLinkOpen(true)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [online])
+
+  // Every position change during a race (move, Undo, Reset) is relayed —
+  // last-write-wins, one small message per committed change.
+  const racing = online && started && link.connected
+  const packed = packRacePos(pos, applied)
+  useEffect(() => {
+    if (!racing) return
+    link.send({ t: 'pos', seat: mySeat, cell: packed })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [racing, packed])
+
+  // Out first? Tell the other side, once per race.
+  useEffect(() => {
+    if (!online || !started || !won || doneSent.current) return
+    doneSent.current = true
+    link.send({ t: 'done', seat: mySeat, ms: Math.round(performance.now() - raceStart.current) })
+    setResult((prev) => prev ?? 'won')
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [online, started, won])
+
+  // Leaving mid-race (counting/running) forfeits it for both — ask first.
+  const [leaveConfirm, setLeaveConfirm] = useState(false)
+  const toggleMode = () => {
+    if (!online) setGame({ mode: 'online' })
+    else if (raceState === 'counting' || raceState === 'running') setLeaveConfirm(true)
+    else setGame({ mode: 'solo' })
+  }
+
+  /** Either side may start; the sender counts down too. */
+  const startRace = () => {
+    link.send({ t: 'go' })
+    setResult(null)
+    setCountdown(COUNT_FROM)
+  }
+  /** The board is dead until GO, and once a race is void. A LOSER may still
+   * finish their own run. */
+  const raceLock = online && (raceState === 'idle' || raceState === 'counting' || raceState === 'void')
+  // Level choice belongs to the host; nobody changes level mid-race.
+  const levelLocked =
+    online && link.connected && (link.role === 'guest' || raceState === 'counting' || raceState === 'running')
+
   // Refs mirror the latest render so the (memoized, 3D-facing) drag core
   // never closes over a stale position or move log.
   const live = useRef({ won, lot, pos, commit, replaying: false })
-  live.current = { won, lot, pos, commit, replaying: solutionReplay !== null }
+  live.current = { won, lot, pos, commit, replaying: solutionReplay !== null || raceLock }
 
   const beginDrag = useCallback((vi: number): boolean => {
     const { won: w, lot: l, pos: p, replaying: rp } = live.current
@@ -430,7 +654,7 @@ export default function CarParkWidget({ id }: WidgetProps) {
   // from the rest of the dashboard. Tap a vehicle to select it; each arrow
   // press slides it one bay (= one move).
   const onKeyDown = (e: KeyboardEvent) => {
-    if (won || replaying || selected === null || isTypingTarget(e.target)) return
+    if (won || replaying || raceLock || selected === null || isTypingTarget(e.target)) return
     const v = lot.vehicles[selected]
     // In 3D the camera may be turned — map the key through it.
     const w = screenKeyToWorld(e.key, view === '3d' ? yaw : 0)
@@ -476,6 +700,7 @@ export default function CarParkWidget({ id }: WidgetProps) {
   const lineColor = 'rgba(255,255,255,0.35)'
 
   return (
+    <SeatAvatarsOverride.Provider value={avatarOverride}>
     <Box
       className="widget-no-drag"
       onMouseDown={(e) => e.stopPropagation()}
@@ -495,6 +720,13 @@ export default function CarParkWidget({ id }: WidgetProps) {
       data-state={won ? 'won' : 'live'}
       data-view={view}
       data-yaw={yaw}
+      data-mode={mode}
+      data-net={online ? link.status : 'off'}
+      data-seat={online ? mySeat : ''}
+      data-race={raceState}
+      data-opp-moves={online && opp ? opp.moves : -1}
+      data-avatar-toy={effectiveAvatars.toy}
+      data-avatar-ninja={effectiveAvatars.ninja}
       sx={{ height: '100%', display: 'flex', flexDirection: 'column', gap: 1, p: 0.5, outline: 'none' }}
     >
       {/* One row on any card width: the selects shrink (a native select
@@ -503,6 +735,7 @@ export default function CarParkWidget({ id }: WidgetProps) {
         <NativeSelect
           value={tier}
           onChange={(e) => requestLevel({ tier: e.target.value as Tier, level: 0 })}
+          disabled={levelLocked}
           data-testid="carpark-tier"
           inputProps={{ 'aria-label': 'Difficulty' }}
           sx={{ fontSize: 14, minWidth: 0, flexShrink: 1 }}
@@ -519,6 +752,7 @@ export default function CarParkWidget({ id }: WidgetProps) {
         <NativeSelect
           value={levelIdx}
           onChange={(e) => requestLevel({ tier, level: parseInt(e.target.value, 10) })}
+          disabled={levelLocked}
           data-testid="carpark-level"
           inputProps={{ 'aria-label': 'Level' }}
           sx={{ fontSize: 14, minWidth: 0, flexShrink: 1 }}
@@ -551,7 +785,73 @@ export default function CarParkWidget({ id }: WidgetProps) {
             3D
           </ToggleButton>
         </ToggleButtonGroup>
+        <IconButton
+          size="small"
+          aria-label="2 Devices race"
+          aria-pressed={online}
+          data-testid="carpark-mode-online"
+          color={online ? 'primary' : 'default'}
+          onClick={toggleMode}
+          sx={{ flexShrink: 0 }}
+        >
+          <DevicesIcon fontSize="small" />
+        </IconButton>
       </Stack>
+
+      {online && (
+        <Stack
+          direction="row"
+          spacing={1}
+          data-testid="carpark-race-bar"
+          sx={{ alignItems: 'center', justifyContent: 'space-between', minWidth: 0 }}
+        >
+          {/* The chip gives way first (it ellipsizes); the button and the
+              opponent panel never squash. */}
+          <Box sx={{ minWidth: 0, flex: '1 1 auto', overflow: 'hidden', '& .MuiChip-root': { maxWidth: '100%' } }}>
+            <NetplayChip link={link} testId="carpark-link" onOpen={() => setLinkOpen(true)} />
+          </Box>
+          {link.connected && raceState !== 'counting' && raceState !== 'running' && (
+            <Button size="small" variant="contained" data-testid="carpark-start-race" onClick={startRace} sx={{ whiteSpace: 'nowrap', flexShrink: 0 }}>
+              {raceState === 'idle' ? 'Start race' : 'Race again'}
+            </Button>
+          )}
+          {opp && !linkDead && (
+            <Stack
+              direction="row"
+              spacing={0.75}
+              data-testid="carpark-opponent"
+              data-opp-pos={opp.cell}
+              sx={{ alignItems: 'center', flexShrink: 0, opacity: link.status === 'reconnecting' ? 0.4 : 1 }}
+            >
+              <Box sx={{ width: 26, height: 26, color: oppColor, flexShrink: 0 }}>
+                <OppHead />
+              </Box>
+              {/* Their lot, with their move count as a corner badge. */}
+              <Box sx={{ position: 'relative' }}>
+                <MiniLot lot={lot} pos={opp.pos} />
+                <Box
+                  sx={{
+                    position: 'absolute',
+                    right: -4,
+                    bottom: -4,
+                    minWidth: 20,
+                    px: 0.5,
+                    borderRadius: 2,
+                    bgcolor: oppColor,
+                    color: 'common.white',
+                    fontSize: 11,
+                    fontWeight: 700,
+                    textAlign: 'center',
+                    lineHeight: '18px',
+                  }}
+                >
+                  {opp.moves}
+                </Box>
+              </Box>
+            </Stack>
+          )}
+        </Stack>
+      )}
 
       <Box
         sx={{
@@ -775,6 +1075,73 @@ export default function CarParkWidget({ id }: WidgetProps) {
           </IconButton>
         )}
 
+        {raceState === 'counting' && (
+          <Box
+            data-testid="carpark-countdown"
+            sx={{
+              position: 'absolute',
+              inset: 0,
+              display: 'grid',
+              placeItems: 'center',
+              bgcolor: 'rgba(0,0,0,0.45)',
+              borderRadius: 1,
+              pointerEvents: 'none',
+            }}
+          >
+            <Typography sx={{ fontSize: '22cqmin', fontWeight: 800, color: 'common.white' }}>
+              {countdown === 0 ? 'GO' : countdown}
+            </Typography>
+          </Box>
+        )}
+        {raceState === 'void' && (
+          <Box
+            data-testid="carpark-race-void"
+            sx={{
+              position: 'absolute',
+              inset: 0,
+              display: 'grid',
+              placeItems: 'center',
+              bgcolor: 'rgba(0,0,0,0.45)',
+              borderRadius: 1,
+              pointerEvents: 'none',
+            }}
+          >
+            <Typography sx={{ fontSize: '7cqmin', fontWeight: 700, color: 'common.white', textAlign: 'center', px: 2 }}>
+              Connection lost — race void.
+              <br />
+              Re-pair to race again.
+            </Typography>
+          </Box>
+        )}
+        {/* Lost, but still playing: a banner, not an overlay — the loser can
+            finish their own run. */}
+        {raceState === 'lost' && !won && (
+          <Stack
+            direction="row"
+            spacing={1}
+            data-testid="carpark-race-lost"
+            sx={{
+              position: 'absolute',
+              top: 6,
+              left: '50%',
+              transform: 'translateX(-50%)',
+              alignItems: 'center',
+              px: 1.25,
+              py: 0.5,
+              borderRadius: 2,
+              bgcolor: 'rgba(0,0,0,0.65)',
+              pointerEvents: 'none',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            <Box sx={{ width: 22, height: 22, color: oppColor }}>
+              <OppHead />
+            </Box>
+            <Typography variant="body2" sx={{ fontWeight: 700, color: 'common.white' }}>
+              {oppName} got out first
+            </Typography>
+          </Stack>
+        )}
         {shownWon && (
           <Box
             sx={{
@@ -798,6 +1165,7 @@ export default function CarParkWidget({ id }: WidgetProps) {
             {/* Text first: on a narrow card the celebration figure can fill
                 the overlay, and the result line must never be clipped. */}
             <Typography sx={{ fontWeight: 700, color: 'common.white', textAlign: 'center' }}>
+              {raceState === 'won' ? 'You got out first! ' : raceState === 'lost' ? `${oppName} was first. ` : ''}
               Out in {applied} moves!
               {hints > 0
                 ? ` With ${hints} hint${hints === 1 ? '' : 's'}.`
@@ -807,7 +1175,7 @@ export default function CarParkWidget({ id }: WidgetProps) {
             </Typography>
             {/* The figure takes what's left and is clipped, never the text. */}
             <Box sx={{ flex: 1, minHeight: 0, width: '100%', display: 'flex', justifyContent: 'center', overflow: 'hidden' }}>
-              <WinnerCelebration winner="toy" />
+              <WinnerCelebration winner={online ? mySeat : 'toy'} />
             </Box>
           </Box>
         )}
@@ -825,7 +1193,7 @@ export default function CarParkWidget({ id }: WidgetProps) {
           </Button>
         ) : (
         <Stack direction="row" spacing={0.5}>
-          {won && after && (
+          {won && after && !(online && link.connected && link.role === 'guest') && (
             <Button variant="contained" size="small" data-testid="carpark-next" onClick={() => goTo(after)} sx={{ whiteSpace: 'nowrap', flexShrink: 0 }}>
               Next level
             </Button>
@@ -838,7 +1206,7 @@ export default function CarParkWidget({ id }: WidgetProps) {
             <IconButton size="small" aria-label="Replay solution" data-testid="carpark-replay" onClick={() => startReplay(false)}>
               <PlayCircleIcon fontSize="small" />
             </IconButton>
-          ) : (
+          ) : online ? null : (
             <>
               <IconButton size="small" aria-label="Hint" data-testid="carpark-hint" onClick={onHintClick}>
                 <LightbulbIcon fontSize="small" />
@@ -902,6 +1270,24 @@ export default function CarParkWidget({ id }: WidgetProps) {
         }}
         onCancel={() => setSolutionConfirm(false)}
       />
+      <ConfirmDialog
+        open={leaveConfirm}
+        title="Leave the race?"
+        message="The race ends for both devices."
+        confirmLabel="Leave"
+        cancelLabel="Keep racing"
+        onConfirm={() => {
+          setLeaveConfirm(false)
+          setGame({ mode: 'solo' })
+        }}
+        onCancel={() => setLeaveConfirm(false)}
+      />
+      {linkOpen && (
+        <Suspense fallback={null}>
+          <NetplayDialog open onClose={() => setLinkOpen(false)} link={link} />
+        </Suspense>
+      )}
     </Box>
+    </SeatAvatarsOverride.Provider>
   )
 }

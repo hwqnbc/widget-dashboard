@@ -255,6 +255,63 @@ touched during playback.
   boards. Playback is a single `setTimeout` chain on the replay state,
   cleared on unmount, Reset and level change.
 
+## 2 Devices race
+
+Two tablets on the same wifi play the **same level** at the same time, and
+the first red car out wins. The 📱 toggle (`carpark-mode-online`) in the top
+row enters the mode, which is persisted as `mode`, and opens the usual
+pairing dialog. The transport and pairing are shared with every net game;
+see `docs/netplay.md`.
+
+- **Why `useNetplay` and not `useNetGame`.** Like Maze Runner's ghost race,
+  this is real-time: two players move at once on their own copies of the
+  lot, so the turn-based seam doesn't apply. It speaks the protocol's
+  existing race messages `go`, `pos` and `done`, so **no protocol change**
+  was needed.
+- **The host's level wins.** On connect, and whenever the host picks
+  another level while idle, the host sends `sync` with
+  `{ tier, level, avatars }`.
+  - The guest adopts the level (its attempt restarts) and wears the host's
+    avatars through `SeatAvatarsOverride`.
+  - The guest's level selects are locked while linked, and nobody can
+    change level mid-race.
+  - Only the host gets Next level after a race.
+- **Synchronised start.** Either side taps **Start race**. Both count 3-2-1
+  (`carpark-countdown`) from their own receipt of `go` and unlock together.
+  At GO each device restarts its own attempt from the level start. The
+  board is dead until GO; the shared drag core refuses, like it does during
+  a replay.
+- **Fairness.** Hint and Show solution are hidden in the mode, because a
+  head-to-head gets no outside help. Undo and Reset still work, and a race
+  solve scores normally (✓, ★, best). 2D/3D and rotate stay per device.
+- **The ghost is the whole lot.** Every position change (move, Undo, Reset)
+  sends `pos`, and its integer `cell` carries the *entire* position:
+  `packRacePos(pos, moves)` packs base-6 offsets with the move count above
+  them. The worst case is about 1.3e13, well under 2^53, and the pure
+  suite checks every level round-trips as a safe integer.
+  - The opponent panel (`carpark-opponent`) shows their avatar head and a
+    56 px mini lot drawn from `unpackRacePos`, with their move count as a
+    corner badge.
+  - It dims while the link is `reconnecting` and disappears when the link
+    dies.
+  - The message is last-write-wins and needs no sequencing: a stale one is
+    corrected by the next.
+- **Winner.** The first `done` wins, `setResult(prev => prev ?? …)` on both
+  sides. With a synchronised start that is also the lower time, so message
+  ordering can't flip it.
+  - The winner's overlay reads "You got out first!" with the celebration.
+  - The loser gets a banner, `carpark-race-lost` ("{name} got out first"),
+    and may still finish their own run; they stay `lost`.
+  - **Race again** restarts both sides.
+- **Leaving and dying.**
+  - Leaving the mode mid-race asks "Leave the race?" first.
+  - A link that dies (`failed` or `closed`) while counting or running
+    **voids** the race: `carpark-race-void` shows "Connection lost — race
+    void." Void is sticky until the next GO, and Start race is gone until
+    the devices re-pair.
+  - A wifi blip (`reconnecting`) changes nothing, because the reliable
+    channel buffers `pos` and `done` through it.
+
 ## Progress per tier
 
 The difficulty dropdown shows each tier's progress as
@@ -377,6 +434,7 @@ board for a fully playable three.js board. The choice is persisted as
 | `yaw`    | 3D camera quarter-turns, 0–3 (default 0). |
 | `hints`  | Hints used in the current attempt (reset with `moves`). |
 | `assisted` | `{ 'tier:index': true }` — levels solved only with hints (✓, never ★). |
+| `mode`   | `'solo'` or `'online'` (the 2 Devices race). Race state itself is transient. |
 
 The winning move writes `moves`, `solved` and `best` in **one** dispatch,
 so a reload can never double-count a solve.
@@ -402,6 +460,12 @@ so a reload can never double-count a solve.
   - `carpark-solution`, `carpark-replay` and `carpark-replay-stop`, plus
     root `data-replay` (`"k/n"` while a solution plays, otherwise empty);
   - tier `<option>`s carry `data-solved` and `data-stars`;
+  - race: `carpark-mode-online`, `carpark-race-bar`, `carpark-link`,
+    `carpark-start-race`, `carpark-opponent` (`data-opp-pos` = the packed
+    cell), `carpark-countdown`, `carpark-race-lost` and `carpark-race-void`;
+    root `data-mode`, `data-net`, `data-seat`, `data-race`
+    (`off|idle|counting|running|won|lost|void`), `data-opp-moves`, and
+    `data-avatar-toy` / `data-avatar-ninja`;
   - `carpark-won` and `carpark-next`;
   - `carpark-view` with `carpark-view-2d` and `carpark-view-3d`;
   - `carpark-rotate`, which exists only in 3D.
@@ -461,9 +525,17 @@ so a reload can never double-count a solve.
   same board, and the best score shows against par.
 - **Timed challenge.** A clock per level with a per-level best time, using
   Maze Runner's per-size-best pattern.
-- **2 Devices race.** Two tablets play the same level, and the first out
-  wins. It would build on the maze ghost race's synced `go`/`done`, with
-  progress sent as the move count.
+- ~~**2 Devices race**~~ — **shipped** (see *2 Devices race*): same level,
+  synchronised start, a live mini lot of the opponent's packed position,
+  first out wins.
+- **Best-of-3 match.** Keep a transient race score (first to 2) and step
+  both devices through consecutive levels. The host already drives the
+  level through `sync`.
+- **Handicap.** Let the faster player start with extra moves counted, or
+  show the weaker player the opponent's par.
+- **Spectate in 3D.** Tap the mini lot to open the opponent's position full
+  size in the `CarPark3D` view. The unpacked `pos` is already a board the
+  3D view can render read-only.
 
 **Puzzle content**
 - **More levels.** Append from the generator (see above). The dropdown and
