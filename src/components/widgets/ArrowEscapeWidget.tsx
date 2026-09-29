@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Box,
   Button,
@@ -11,8 +11,18 @@ import { useAppDispatch } from '../../app/hooks'
 import { updateWidgetData } from '../../features/widgets/widgetsSlice'
 import { useWidgetField } from '../../features/widgets/useWidgetField'
 import type { WidgetProps } from '../../registry/widgetRegistry'
+import type { Seat, SeatAvatars } from '../../features/avatars/types'
+import {
+  SeatAvatarsOverride,
+  coerceSeatAvatars,
+  useSeatAvatars,
+} from '../../features/avatars/useSeatAvatars'
+import { useNetplay } from '../../features/netplay/useNetplay'
+import NetplayChip from '../netplay/NetplayChip'
 import WinnerCelebration from './WinnerCelebration'
+import PlayerBadge from './PlayerBadge'
 import ConfirmDialog from './ConfirmDialog'
+import { lazyWithReload } from '../../utils/lazyWithReload'
 import {
   ARROW_DIMS,
   DEFAULT_ARROWS_SEED,
@@ -26,6 +36,13 @@ import {
   type ArrowsSize,
   type Cell,
 } from './arrowsModel'
+
+/** The pairing UI pulls in a QR encoder and decoder — kept out of the main
+ * bundle, since most sessions never open it. */
+const NetplayDialog = lazyWithReload(
+  () => import('../netplay/NetplayDialog'),
+  'netplay-dialog',
+)
 
 /** Slide speed, board cells per second — brisk like the ad, readable for a
  * kid. Bump-and-return runs the same speed both ways. */
@@ -47,6 +64,9 @@ const ARROW_COLORS = [
   '#8d6e63',
 ]
 const FLASH_COLOR = '#e53935'
+
+/** Race countdown: three ticks, then GO (as Maze Runner and Car Park). */
+const COUNT_FROM = 3
 
 const NO_REMOVED: number[] = []
 const coerceRemoved = (v: unknown): number[] | undefined =>
@@ -105,6 +125,10 @@ export default function ArrowEscapeWidget({ id }: WidgetProps) {
   const solved = useWidgetField<number>(id, 'solved', 0, (v) =>
     typeof v === 'number' ? v : undefined,
   )
+  const mode = useWidgetField<'solo' | 'online'>(id, 'mode', 'solo', (v) =>
+    v === 'online' ? v : 'solo',
+  )
+  const online = mode === 'online'
 
   const dims = ARROW_DIMS[size]
   const puzzle = useMemo(
@@ -134,9 +158,77 @@ export default function ArrowEscapeWidget({ id }: WidgetProps) {
   const won = removed.length > 0 && alive.length === 0
   // Master plays under a bump budget: mistakes end the puzzle, so every tap
   // has to be PLANNED — the tier where lookahead is required, not just
-  // rewarded. Derived, never stored (bumps already persists).
-  const failed = size === 'master' && !won && bumps >= MASTER_BUMPS
+  // rewarded. Derived, never stored (bumps already persists). A RACE runs
+  // without the budget — bumps already cost time, and speed is the game.
+  const failed = !online && size === 'master' && !won && bumps >= MASTER_BUMPS
   const bumpsLeft = Math.max(0, MASTER_BUMPS - bumps)
+
+  const setGame = useCallback(
+    (next: Record<string, unknown>) => dispatch(updateWidgetData({ id, data: next })),
+    [dispatch, id],
+  )
+
+  // ------------------------------------------------------- 2 Devices race
+  // The clear race: same puzzle on two tablets, first to empty the board
+  // wins. Non-turn-based, so it sits on `useNetplay` DIRECTLY (like the maze
+  // ghost race and the Car Park race — the third such consumer) and reuses
+  // the existing `sync`/`go`/`pos`/`done` messages: `pos.cell` carries
+  // "arrows left", so no protocol version bump. All race state is transient —
+  // persisting "counting" would be a lie the moment a tablet reloads.
+  const [linkOpen, setLinkOpen] = useState(false)
+  const [countdown, setCountdown] = useState<number | null>(null)
+  const [started, setStarted] = useState(false)
+  const [result, setResult] = useState<'won' | 'lost' | 'void' | null>(null)
+  const [oppLeft, setOppLeft] = useState<number | null>(null)
+  const [peerAvatars, setPeerAvatars] = useState<SeatAvatars | null>(null)
+  const raceStart = useRef(0)
+  const seatAvatars = useSeatAvatars()
+  const avatarsRef = useRef(seatAvatars)
+  avatarsRef.current = seatAvatars
+
+  const link = useNetplay((msg) => {
+    if (msg.t === 'sync') {
+      // The host's puzzle wins — seed and size land here, and the host's
+      // avatar picks ride along as the usual transient costume.
+      const s = msg.state as Record<string, unknown> | null
+      if (!s) return
+      if ('avatars' in s) setPeerAvatars(coerceSeatAvatars(s.avatars) ?? null)
+      if (typeof s.seed === 'number' && typeof s.size === 'string' && s.size in ARROW_DIMS) {
+        setGame({ seed: s.seed, size: s.size, removed: [], taps: 0, bumps: 0 })
+      }
+      return
+    }
+    if (msg.t === 'go') {
+      setResult(null)
+      setCountdown(COUNT_FROM)
+      return
+    }
+    if (msg.t === 'pos') {
+      setOppLeft(msg.cell)
+      return
+    }
+    if (msg.t === 'done') {
+      // First to finish wins; with a synchronised start that is also the
+      // lower time, so ordering cannot flip it (first write wins).
+      setResult((prev) => prev ?? 'lost')
+    }
+  })
+
+  const linkDead = link.status === 'failed' || link.status === 'closed'
+  const raceState = !online
+    ? 'off'
+    : result !== null
+      ? result
+      : countdown !== null
+        ? 'counting'
+        : started
+          ? 'running'
+          : 'idle'
+  const mySeat: Seat = link.seat ?? 'toy'
+  const oppSeat: Seat = mySeat === 'toy' ? 'ninja' : 'toy'
+  // Costume gates on `alive`, not strict `connected`, so a wifi blip doesn't
+  // flicker the characters (docs/netplay.md).
+  const avatarOverride = online && link.alive ? peerAvatars : null
 
   // ---------------------------------------------------------- animation
   // Anim state lives in a ref (per-frame reads), with a counter state that
@@ -170,6 +262,19 @@ export default function ArrowEscapeWidget({ id }: WidgetProps) {
               data: { removed: next, ...(next.length === total ? { solved: s + 1 } : {}) },
             }),
           )
+          // Racing: report progress; the final exit is the finish line.
+          const race = raceRef.current
+          if (race.racing) {
+            race.send({ t: 'pos', seat: race.seat, cell: total - next.length })
+            if (next.length === total) {
+              race.send({
+                t: 'done',
+                seat: race.seat,
+                ms: Math.round(now - raceStart.current),
+              })
+              setResult((prev) => prev ?? 'won')
+            }
+          }
         } else if (anim.kind === 'bump' && t * SPEED >= anim.dist * 2) {
           anims.current.delete(aid)
           finished++
@@ -203,10 +308,81 @@ export default function ArrowEscapeWidget({ id }: WidgetProps) {
   // An arrow already flying out no longer blocks anyone — it is leaving.
   const blockingAlive = alive.filter((a) => anims.current.get(a.id)?.kind !== 'exit')
 
-  const setGame = (next: Record<string, unknown>) => dispatch(updateWidgetData({ id, data: next }))
+  // Begin this device's run, called at GO on both sides. The clock starts at
+  // GO — with a synchronised start, staring time has to count or the two
+  // elapsed times aren't comparable.
+  const startRun = useCallback(() => {
+    anims.current.clear()
+    setAnimCount(0)
+    setFlash(null)
+    setStarted(true)
+    setResult(null)
+    setOppLeft(stateRef.current.total)
+    raceStart.current = performance.now()
+    setGame({ removed: [], taps: 0, bumps: 0 })
+  }, [setGame])
+
+  // Tick the countdown down, then start both runs.
+  useEffect(() => {
+    if (countdown === null) return
+    if (countdown === 0) {
+      setCountdown(null)
+      startRun()
+      return
+    }
+    const t = setTimeout(() => setCountdown((c) => (c === null ? null : c - 1)), 700)
+    return () => clearTimeout(t)
+  }, [countdown, startRun])
+
+  // A real death voids a live, unresolved race — their `done` can never
+  // arrive. Sticky via `result` (cleared by the next `go`), never derived
+  // from the flags this same effect clears (lesson #119). A `reconnecting`
+  // blip changes nothing: the reliable channel buffers through it.
+  useEffect(() => {
+    if (!online || !linkDead) return
+    if (!started && countdown === null) return
+    setResult((prev) => prev ?? 'void')
+    setStarted(false)
+    setCountdown(null)
+    setOppLeft(null)
+  }, [online, linkDead, started, countdown])
+
+  // On connect (and on any host reshuffle or size change) the host pushes
+  // its puzzle, so both tablets race the same board.
+  useEffect(() => {
+    if (!online || !link.connected || link.role !== 'host') return
+    link.send({ t: 'sync', state: { seed, size, avatars: avatarsRef.current } })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [online, link.connected, link.role, seed, size])
+
+  // Leaving the mode drops the link rather than leaving it half-alive;
+  // entering it with no link opens the pairing dialog.
+  useEffect(() => {
+    if (!online) {
+      link.disconnect()
+      setLinkOpen(false)
+      setPeerAvatars(null)
+      setStarted(false)
+      setCountdown(null)
+      setResult(null)
+      setOppLeft(null)
+    } else if (link.status === 'idle') {
+      setLinkOpen(true)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [online])
+
+  // The rAF completion handler reports race progress; refs, because it runs
+  // outside the render (the same stateRef pattern the counters use).
+  const raceRef = useRef({ racing: false, seat: mySeat, send: link.send })
+  raceRef.current = { racing: online && started, seat: mySeat, send: link.send }
 
   const tapArrow = (a: Arrow) => {
-    if (won || failed || anims.current.has(a.id)) return
+    // In a race the board is dead until GO, and once the race is void —
+    // deliberately NOT on `lost`: the trailing player may finish their board.
+    const raceLock =
+      online && (raceState === 'idle' || raceState === 'counting' || raceState === 'void')
+    if (won || failed || raceLock || anims.current.has(a.id)) return
     const blk = blockerOf(a, blockingAlive, puzzle.cols, puzzle.rows)
     setGame({ taps: taps + 1, ...(blk ? { bumps: bumps + 1 } : {}) })
     if (blk) {
@@ -230,7 +406,9 @@ export default function ArrowEscapeWidget({ id }: WidgetProps) {
   }
 
   // ------------------------------------------------------------- controls
-  const [pending, setPending] = useState<{ size?: ArrowsSize; reshuffle?: true } | null>(null)
+  const [pending, setPending] = useState<
+    { size?: ArrowsSize; mode?: 'solo' | 'online'; reshuffle?: true } | null
+  >(null)
   const inProgress = removed.length > 0 && !won && !failed
 
   const freshPuzzle = (extra: Partial<{ size: ArrowsSize }> = {}) => {
@@ -252,6 +430,21 @@ export default function ArrowEscapeWidget({ id }: WidgetProps) {
   const changeSize = (next: ArrowsSize | null) => {
     if (next && next !== size) requestFresh({ size: next })
   }
+  /** Mode change keeps the current puzzle; leaving mid-race asks first. */
+  const changeMode = (next: 'solo' | 'online' | null) => {
+    if (!next || next === mode) return
+    if (online && (raceState === 'counting' || raceState === 'running')) {
+      setPending({ mode: next })
+    } else {
+      setGame({ mode: next })
+    }
+  }
+  /** Either side may start; both count down from their own `go` receipt. */
+  const startRace = () => {
+    link.send({ t: 'go' })
+    setResult(null)
+    setCountdown(COUNT_FROM)
+  }
   /** Master's second chance: the SAME puzzle again, counters wiped. */
   const retrySame = () => {
     anims.current.clear()
@@ -261,8 +454,13 @@ export default function ArrowEscapeWidget({ id }: WidgetProps) {
   }
 
   const clip = `arrows-clip-${id}`
+  // In online mode only the HOST drives the puzzle (its sync would stomp a
+  // guest's reshuffle anyway); the guest's controls hide while linked.
+  const hostControls = !online || link.role !== 'guest'
+  const raceLive = raceState === 'counting' || raceState === 'running'
 
   return (
+    <SeatAvatarsOverride.Provider value={avatarOverride}>
     <Box
       className="widget-no-drag"
       onMouseDown={(e) => e.stopPropagation()}
@@ -275,28 +473,80 @@ export default function ArrowEscapeWidget({ id }: WidgetProps) {
       data-taps={taps}
       data-bumps={bumps}
       data-solved={solved}
+      data-mode={mode}
+      data-net={online ? link.status : 'off'}
+      data-seat={online ? (link.seat ?? '') : ''}
+      data-race={raceState}
+      data-opp-left={oppLeft ?? ''}
       data-state={won ? 'won' : failed ? 'failed' : 'live'}
-      data-bumps-left={size === 'master' ? bumpsLeft : ''}
+      data-bumps-left={size === 'master' && !online ? bumpsLeft : ''}
       sx={{ height: '100%', display: 'flex', flexDirection: 'column', gap: 1, p: 0.5 }}
     >
       <ToggleButtonGroup
         size="small"
         exclusive
-        value={size}
-        onChange={(_, v) => changeSize(v as ArrowsSize | null)}
+        value={mode}
+        onChange={(_, v) => changeMode(v as 'solo' | 'online' | null)}
         sx={{ alignSelf: 'center' }}
       >
-        {(['small', 'medium', 'large', 'expert', 'master'] as const).map((s) => (
-          <ToggleButton
-            key={s}
-            value={s}
-            data-testid={`arrows-size-${s}`}
-            sx={{ textTransform: 'capitalize', py: 0.25 }}
-          >
-            {s}
-          </ToggleButton>
-        ))}
+        <ToggleButton value="solo" data-testid="arrows-mode-solo" sx={{ textTransform: 'none', py: 0.25 }}>
+          Solo
+        </ToggleButton>
+        <ToggleButton
+          value="online"
+          data-testid="arrows-mode-online"
+          sx={{ textTransform: 'none', py: 0.25 }}
+        >
+          2 Devices
+        </ToggleButton>
       </ToggleButtonGroup>
+
+      {hostControls && (
+        <ToggleButtonGroup
+          size="small"
+          exclusive
+          value={size}
+          onChange={(_, v) => changeSize(v as ArrowsSize | null)}
+          sx={{ alignSelf: 'center' }}
+        >
+          {(['small', 'medium', 'large', 'expert', 'master'] as const).map((s) => (
+            <ToggleButton
+              key={s}
+              value={s}
+              data-testid={`arrows-size-${s}`}
+              sx={{ textTransform: 'capitalize', py: 0.25 }}
+            >
+              {s}
+            </ToggleButton>
+          ))}
+        </ToggleButtonGroup>
+      )}
+
+      {online && (
+        <Stack
+          direction="row"
+          spacing={1}
+          sx={{ justifyContent: 'center', alignItems: 'center', flexWrap: 'wrap', rowGap: 0.5 }}
+        >
+          <NetplayChip link={link} testId="arrows-link" onOpen={() => setLinkOpen(true)} />
+          {link.connected && !raceLive && (
+            <Button
+              size="small"
+              variant="contained"
+              data-testid="arrows-start-race"
+              onClick={startRace}
+              sx={{ textTransform: 'none', py: 0.1 }}
+            >
+              {raceState === 'idle' ? 'Start race' : 'Race again'}
+            </Button>
+          )}
+          {link.connected && oppLeft !== null && (
+            <Box sx={{ opacity: link.status === 'reconnecting' ? 0.4 : 1 }}>
+              <PlayerBadge mark={oppSeat} label={`${oppLeft} left`} />
+            </Box>
+          )}
+        </Stack>
+      )}
 
       <Box
         sx={{
@@ -407,9 +657,55 @@ export default function ArrowEscapeWidget({ id }: WidgetProps) {
             }}
             data-testid="arrows-cleared"
           >
-            <WinnerCelebration winner="toy" />
+            <WinnerCelebration winner={online ? mySeat : 'toy'} />
             <Typography sx={{ fontWeight: 700, color: 'common.white' }}>
-              Board cleared!{bumps === 0 ? ' Not a single bump ★' : ''}
+              {raceState === 'won'
+                ? 'You win the race!'
+                : raceState === 'lost'
+                  ? 'Cleared it — but the race was lost.'
+                  : `Board cleared!${bumps === 0 ? ' Not a single bump ★' : ''}`}
+            </Typography>
+          </Box>
+        )}
+
+        {raceState === 'counting' && (
+          <Box
+            data-testid="arrows-countdown"
+            sx={{
+              position: 'absolute',
+              inset: 0,
+              display: 'grid',
+              placeItems: 'center',
+              bgcolor: 'rgba(0,0,0,0.45)',
+              borderRadius: 1,
+              pointerEvents: 'none',
+            }}
+          >
+            <Typography sx={{ fontSize: '22cqmin', fontWeight: 800, color: 'common.white' }}>
+              {countdown === 0 ? 'GO' : countdown}
+            </Typography>
+          </Box>
+        )}
+
+        {raceState === 'void' && (
+          <Box
+            data-testid="arrows-race-void"
+            sx={{
+              position: 'absolute',
+              inset: 0,
+              display: 'grid',
+              placeItems: 'center',
+              bgcolor: 'rgba(0,0,0,0.45)',
+              borderRadius: 1,
+              pointerEvents: 'none',
+            }}
+          >
+            <Typography
+              sx={{ fontSize: '7cqmin', fontWeight: 700, color: 'common.white', textAlign: 'center', px: 2 }}
+            >
+              Connection lost — race void.
+              <br />
+              Re-pair to race again.
             </Typography>
           </Box>
         )}
@@ -446,13 +742,15 @@ export default function ArrowEscapeWidget({ id }: WidgetProps) {
         sx={{ alignItems: 'center', justifyContent: 'space-between', px: 0.5 }}
       >
         <Typography variant="body2" sx={{ fontWeight: 600 }}>
-          {won
-            ? `Solved ×${solved}`
-            : failed
-              ? 'Out of bumps'
-              : size === 'master'
-                ? `${alive.length} to go · ${bumpsLeft} bump${bumpsLeft === 1 ? '' : 's'} left`
-                : `${alive.length} to go · ${bumps} bump${bumps === 1 ? '' : 's'}`}
+          {raceState === 'lost' && !won
+            ? `Race lost — ${alive.length} to go, clear it anyway!`
+            : won
+              ? `Solved ×${solved}`
+              : failed
+                ? 'Out of bumps'
+                : size === 'master' && !online
+                  ? `${alive.length} to go · ${bumpsLeft} bump${bumpsLeft === 1 ? '' : 's'} left`
+                  : `${alive.length} to go · ${bumps} bump${bumps === 1 ? '' : 's'}`}
         </Typography>
         <Stack direction="row" spacing={0.5}>
           {failed && (
@@ -460,22 +758,37 @@ export default function ArrowEscapeWidget({ id }: WidgetProps) {
               Retry
             </Button>
           )}
-          <Button size="small" data-testid="arrows-new" onClick={() => requestFresh()}>
-            New puzzle
-          </Button>
+          {hostControls && !raceLive && (
+            <Button size="small" data-testid="arrows-new" onClick={() => requestFresh()}>
+              New puzzle
+            </Button>
+          )}
         </Stack>
       </Stack>
 
+      {online && linkOpen && (
+        <Suspense fallback={null}>
+          <NetplayDialog open onClose={() => setLinkOpen(false)} link={link} />
+        </Suspense>
+      )}
+
       <ConfirmDialog
         open={pending !== null}
-        title="Start over?"
-        message="A new puzzle clears the arrows you have already freed."
+        title={pending?.mode ? 'Leave the race?' : 'Start over?'}
+        message={
+          pending?.mode
+            ? 'Switching modes ends the race for both devices.'
+            : 'A new puzzle clears the arrows you have already freed.'
+        }
+        confirmLabel={pending?.mode ? 'Leave' : 'Restart'}
         onConfirm={() => {
-          if (pending) freshPuzzle(pending.size ? { size: pending.size } : {})
+          if (pending?.mode) setGame({ mode: pending.mode })
+          else if (pending) freshPuzzle(pending.size ? { size: pending.size } : {})
           setPending(null)
         }}
         onCancel={() => setPending(null)}
       />
     </Box>
+    </SeatAvatarsOverride.Provider>
   )
 }

@@ -157,9 +157,46 @@ start, width ~4.9, 100% solvable, generation ≤ ~55ms. The suite pins fill
   the ad's dot lattice per cell, arrows coloured from an 8-colour cycle that
   reads on both themes (the ad's all-black lines would vanish in dark mode).
 
+## 2 Devices — the clear race
+
+The same puzzle on two tablets over the LAN netplay (`docs/netplay.md`),
+first to empty the board wins. Non-turn-based, so the widget sits on
+`useNetplay` DIRECTLY — the third such consumer after the maze ghost race
+and the Car Park race — and reuses the existing `sync` / `go` / `pos` /
+`done` messages verbatim: `pos.cell` carries the arrows-left count, so
+**no protocol version bump**.
+
+- **The host's puzzle wins.** On connect (and on any host reshuffle or size
+  change) the host syncs `{ seed, size, avatars }`; the guest adopts the
+  puzzle, resets its counters, and wears the host's avatar picks as the
+  usual transient costume. While linked, the GUEST's size toggles and New
+  puzzle hide — the host drives, so the boards cannot diverge.
+- **Synced start.** Either side taps Start race → `go` broadcasts → both
+  count 3-2-1 (`arrows-countdown`, taps inert) and reset
+  `removed/taps/bumps` at GO. Every cleared arrow sends `pos`; the
+  opponent's live count renders as a `PlayerBadge` ("N left", dimmed while
+  the link is `reconnecting`). The first full clear sends `done` — with a
+  synchronised start that is also the lower time, so first-write-wins needs
+  no arbitration. The loser may keep clearing their own board.
+- **The bump budget is off in a race** — bumps still count and cost time
+  (the bump animation), but `failed` derives only in solo master. Speed is
+  the game.
+- **A dead link voids a live race** (sticky via `result`, the pattern the
+  netplay robustness round hardened): overlay `arrows-race-void`, Start
+  race gone until re-paired; a `reconnecting` blip changes nothing — the
+  reliable channel buffers `pos`/`done` through it.
+- Race state is transient component state, never persisted: a reload
+  mid-race lands back at `idle` with the synced puzzle intact.
+
+Contract additions on `arrows-root`: `data-mode` (`solo|online`),
+`data-net`, `data-seat`, `data-race`
+(`off|idle|counting|running|won|lost|void`), `data-opp-left`. The chip is
+`arrows-link`, the mode toggles `arrows-mode-*`, the start button
+`arrows-start-race`.
+
 ## State model (persisted `data`, via `useWidgetField`)
 
-`seed` · `size` (`small|medium|large`) · `removed: number[]` (ids in removal
+`seed` · `size` (`small|medium|large`) · `mode` (`solo|online`) · `removed: number[]` (ids in removal
 order — a reload resumes mid-puzzle) · `taps` · `bumps` · `solved` (lifetime
 clears). Everything else — alive set, blocked flags, win — is derived from
 `generatePuzzle(seed, …)` minus `removed` every render. New puzzle and size
@@ -201,9 +238,7 @@ reshuffle/size changes.
   counters already exist, only the thresholds and the end card are new.
 - **Timed mode** — a ticking clock via `useNow`, best times per size like
   the maze's `bestSmall/Medium/Large` fields.
-- **2 Devices race** — same seed on two tablets, first to clear wins; the
-  maze ghost race already proved the synced-start `go`/`done` pattern, and
-  progress is one `pos`-style "arrows left" counter.
+- ~~2 Devices race~~ — **shipped**: see *2 Devices — the clear race*.
 
 **Puzzle depth**
 - ~~Long-chain generator bias~~ — **shipped** as the `pick` candidate

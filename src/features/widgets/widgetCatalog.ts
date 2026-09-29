@@ -180,6 +180,7 @@ export function defaultWidgetData(type: WidgetType): Record<string, unknown> {
       return {
         seed: DEFAULT_ARROWS_SEED,
         size: 'medium',
+        mode: 'solo',
         removed: [],
         taps: 0,
         bumps: 0,

@@ -222,6 +222,14 @@ mini board rather than a marker. That is the payoff of keeping the envelope
 an opaque integer: any small game state that packs into 2^53 rides it
 unchanged (see `docs/car-park.md` *2 Devices race*).
 
+**Arrow Escape** is the third, and deliberately the most boring: `pos.cell`
+carries its arrows-left count, `sync` carries `{ seed, size, avatars }`, and
+everything else — synced countdown, first-`done`-wins, the sticky link-death
+`void` — is the same shape again (see `docs/arrow-escape.md` *2 Devices*).
+Three near-identical inline copies of that shape now exist (maze, Car Park,
+Arrow Escape), which is past the threshold `useNetGame` was extracted at —
+extracting a shared `useNetRace` is queued in the backlog below.
+
 ## Seats — and the avatar costume
 
 Host is always Player 1 (`toy`), guest always Player 2 (`ninja`) — decided by
@@ -396,6 +404,13 @@ gameplay.
 - **Spectator seat** — a third peer receiving `sync` only.
 
 **Beyond turn-based**
+- **Extract `useNetRace`** — the race wiring (link + synced countdown +
+  sticky `result` with link-death void + host `sync`-on-connect + costume +
+  leave-mode lifecycle) now exists as three near-identical inline copies in
+  Maze Runner, Car Park and Arrow Escape. Same story as `useNetGame` at
+  consumer #2: the game-specific remainder is only the sync payload, what
+  `pos.cell` means, and what GO resets. All three race suites (147, 157,
+  158) make the refactor mechanical to verify.
 - **Drone Strike score duel** — the next real-time consumer, designed and
   waiting in `docs/drone-strike.md`'s backlog (same seeded waves fought
   privately, synced start, live scoreboard; the ghost/shared-kills fork and

@@ -138,12 +138,16 @@ export async function addMazeWidgets(page, count = 2) {
   await page.locator('[data-testid="maze-root"]').nth(count - 1).waitFor()
 }
 
-/** Fresh dashboard with one Arrow Escape widget. */
-export async function addArrowsWidget(page) {
-  await page.goto(BASE_URL, { waitUntil: 'networkidle' })
-  await page.getByRole('button', { name: 'Add widget' }).click()
-  await page.getByRole('menuitem', { name: /Arrow Escape/ }).click()
-  await page.locator('[data-testid="arrows-root"]').waitFor()
+/** Fresh dashboard with `count` Arrow Escape widgets, loopback transport
+ * armed (see `addTicTacToeWidgets` for why `?netloop=1` — a single solo
+ * widget never constructs a transport, so it is harmless there). */
+export async function addArrowsWidget(page, count = 1) {
+  await page.goto(`${BASE_URL}?netloop=1`, { waitUntil: 'networkidle' })
+  for (let i = 0; i < count; i++) {
+    await page.getByRole('button', { name: 'Add widget' }).click()
+    await page.getByRole('menuitem', { name: /Arrow Escape/ }).click()
+  }
+  await page.locator('[data-testid="arrows-root"]').nth(count - 1).waitFor()
   // The menu's INVISIBLE backdrop outlives the click through its close
   // transition. Locator clicks wait for that; the raw `page.mouse` clicks
   // `tapArrowCell` makes do not — they'd land on the backdrop and vanish.
@@ -156,9 +160,13 @@ export async function addArrowsWidget(page) {
  * Click a board cell of the Arrow Escape widget by grid coordinates —
  * `preserveAspectRatio: meet` letterboxes the svg, so the mapping must
  * account for the centring offsets, not just scale by the bounding box.
+ * `index` picks the board when several widgets share the page.
  */
-export async function tapArrowCell(page, x, y, cols, rows) {
-  const svg = page.locator('[data-testid="arrows-board"]')
+export async function tapArrowCell(page, x, y, cols, rows, index = 0) {
+  const svg = page.locator('[data-testid="arrows-board"]').nth(index)
+  // Raw mouse clicks don't auto-scroll (lesson #116) — a second widget below
+  // the fold would silently swallow the tap. Scroll BEFORE measuring.
+  await svg.scrollIntoViewIfNeeded()
   const box = await svg.boundingBox()
   const scale = Math.min(box.width / cols, box.height / rows)
   const ox = box.x + (box.width - scale * cols) / 2

@@ -279,7 +279,10 @@ snake arrows whose exit ray must be clear, solvable-by-construction
 generation proven by a 200-seed-per-size greedy sweep, rails-window slide
 animation, bump-and-flash on a blocked tap, five sizes up to the Master
 tier — a packed pack-first/orient-second board with a dependency-depth
-lookahead metric and a 3-bump budget with Retry-same-seed). See
+lookahead metric and a 3-bump budget with Retry-same-seed — plus a
+**2 Devices** clear race: the netplay layer's third non-turn-based
+consumer, same `sync`/`go`/`pos`/`done` wire as the maze and Car Park
+races with `pos.cell` carrying arrows-left). See
 `docs/car-park.md` for the Car Park widget (the slide-the-red-car-out
 "Rush Hour" puzzle on the pure `carPark/carParkModel` — the first puzzle on
 a FIXED, append-only level pack: 4 tiers × 10 levels picked by two
