@@ -2143,3 +2143,16 @@ carried over; these are the new ones.
      with a pure round-trip sweep over every level AND a
      `Number.isSafeInteger` check, because the failure mode (silent
      precision loss past 2^53) would otherwise look like a rendering bug.
+
+126. **When an assertion races a background timer, sample at the earliest
+     moment the contract must hold — never pad the sleep.** The
+     115-tank-safezone flake ("pad chip shows REPAIRING") survived many
+     rounds because the suite sampled after driving all the way home plus a
+     fixed 600ms: hearts repair after 3s spent ANYWHERE in the zone, so on
+     slow approaches the heart had honestly healed and the chip honestly
+     read SAFE — the game was right, the sampling raced the tick. The fix
+     is positional, not temporal: stop just inside the zone edge, wait for
+     the `data-safe` flip (a transition, lessons #97/#103), assert
+     REPAIRING there — the state is then guaranteed for a full repair
+     period — and only afterwards finish the drive. A longer sleep would
+     have WIDENED the race it was meant to hide.

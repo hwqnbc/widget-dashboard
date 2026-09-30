@@ -105,14 +105,30 @@ let hp = 3
 }
 check('took a hit from wave-2 fire', hp < 3, `hp=${hp}`)
 
-// Retreat to the pad.
-check('drove home', await pilot.driveTo({ x: TANK_SPAWN.x, z: TANK_SPAWN.z }, { tol: 4, timeout: 90000 }))
-await page.waitForTimeout(600)
-check('safe again on the pad', (await hud.getAttribute('data-safe')) === 'on')
+// Retreat to the pad. The REPAIRING assertion samples at zone ENTRY, not
+// after the drive home: hearts repair after 3s spent anywhere inside the
+// zone (moving included), so sampling after the full drive + a settle used
+// to RACE the repair tick — the long-standing flake where the chip already
+// read SAFE because the heart had honestly healed en route.
+check(
+  'drove back to the zone edge',
+  await pilot.driveTo(
+    { x: TANK_SPAWN.x, z: TANK_SPAWN.z },
+    { tol: SAFE_ZONE_RADIUS - 2, timeout: 90000 },
+  ),
+)
+await page.waitForFunction(
+  () => document.querySelector('[data-testid="tank-hud"]')?.dataset.safe === 'on',
+  null,
+  { timeout: 3000 },
+)
+check('safe again inside the zone', (await hud.getAttribute('data-safe')) === 'on')
 check(
   'pad chip shows REPAIRING with hearts missing',
   (await padChip.getAttribute('data-pad-state')) === 'repairing',
 )
+check('drove home', await pilot.driveTo({ x: TANK_SPAWN.x, z: TANK_SPAWN.z }, { tol: 4, timeout: 30000 }))
+check('still safe on the pad', (await hud.getAttribute('data-safe')) === 'on')
 
 // Rest → the heart comes back, chip returns to SAFE.
 let healed = false
