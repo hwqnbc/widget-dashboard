@@ -197,6 +197,8 @@ export function defaultWidgetData(type: WidgetType): Record<string, unknown> {
         turn: 'toy',
         scores: { toy: 0, ninja: 0 },
         rule: 'again',
+        mode: 'local',
+        ply: 0,
       }
     case 'archery':
       return {

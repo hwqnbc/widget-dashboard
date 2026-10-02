@@ -303,7 +303,10 @@ characters, the game-agnostic move protocol, and the `loopback` transport the
 e2e suites pair through). See
 `docs/memory.md` for the Memory widget (2-player pairs, 4×4/6×6, card faces are
 every avatar head × colour sampled at random, flip animation; reuses PlayerBadge, ConfirmDialog
-and WinnerCelebration). See `docs/archery.md` for the Archery widget (2-player
+and WinnerCelebration — plus **2 Devices** mode on the pure `memoryModel`:
+the shuffle crosses as `cards` data in the synced whole-state `TBoard`, ply
+counts flips because a match keeps the turn, and both devices run the same
+reveal timer with a resolve-on-receive guard for timer skew). See `docs/archery.md` for the Archery widget (2-player
 projectile game, drag-to-aim slingshot under gravity, random archer heights,
 first to 5 hits; reuses the heads, PlayerBadge, TurnBanner and WinnerCelebration —
 plus **2 Devices** mode: the netplay layer's first real-valued move, a shot

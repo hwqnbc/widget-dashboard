@@ -153,6 +153,7 @@ const archeryBundle = spawnSync(
     'src/components/widgets/archeryModel.ts',
     'src/components/widgets/othelloModel.ts',
     'src/components/widgets/arrowsModel.ts',
+    'src/components/widgets/memoryModel.ts',
     '--bundle',
     '--format=esm',
     `--outdir=${join(here, '.bundle')}`,

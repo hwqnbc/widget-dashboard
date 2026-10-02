@@ -2167,3 +2167,18 @@ carried over; these are the new ones.
     `PictureMarkerSymbol` — offline-safe, deterministic, and the same
     pattern as the traffic-camera CCTV badge; keep emoji for DOM text
     (dialogs, captions), where the browser's own font stack renders them.
+
+135. **When game state resolves on a LOCAL timer, netplay must gate on the
+     resolved state, not the rendered one.** Memory's pair resolution runs
+     in a reveal timer on each device separately (nothing crosses the wire
+     for it) — and a throttled background tab can receive the peer's next
+     flip while its own timer still hasn't flipped the pair back. Three
+     guards make the two orders converge, all pure: report the
+     POST-resolution turn to the seam while a pair sits revealed (or the
+     hook drops the peer's legitimate next move as out-of-turn), resolve
+     the pending pair synchronously in `applyMove` before applying the
+     flip, and make the timer callback re-read the live board and re-check
+     it still holds the pair it was armed for (a stale closure firing after
+     the remote path resolved would clobber the just-applied flip). Also
+     the reason Memory's `ply` counts flips, not turns: the replay guard
+     needs a counter that moves on every message.

@@ -3,9 +3,11 @@
 Design notes for `src/features/netplay/` and `src/components/netplay/`, the
 peer-to-peer link that lets two people play one game from two devices.
 Consumers: Connect 4 (`docs/connect-4.md`), Tic-Tac-Toe
-(`docs/tic-tac-toe.md`), Maze Runner (`docs/maze-runner.md`) and Archery
-(`docs/archery.md`), all through a **2 Devices** mode — turn-based, turn-based,
-a live race, and a turn-based game whose move is a real-valued shot.
+(`docs/tic-tac-toe.md`), Maze Runner (`docs/maze-runner.md`), Archery
+(`docs/archery.md`), Othello (`docs/othello.md`), Car Park (`docs/car-park.md`),
+Arrow Escape (`docs/arrow-escape.md`) and Memory (`docs/memory.md`), all
+through a **2 Devices** mode — turn-based boards, live races, a real-valued
+shot, and a two-flips-per-turn card game.
 
 ## The constraint that shaped everything
 
@@ -187,6 +189,19 @@ parity), so its `TBoard` is a whole position `{ cells, turn }` and its
 `applyMove` computes the pass-aware next mover — the hook is generic over
 `TBoard` and never needed to know (see `docs/othello.md`). A pass never
 crosses the wire: both devices derive it in the same pure function.
+
+Memory leaned on both of those discoveries at once and added a third
+(`docs/memory.md`): the same seat flips TWICE per turn (and keeps the turn on
+a match), so `ply` counts flips rather than turns, and `turn` again lives in
+the position. Its new wrinkle is **timed resolution that never crosses the
+wire** — both devices run the same reveal timer and the same pure
+`resolvePair`; a device whose timer lags (throttled background tab) converges
+because the widget reports the post-resolution turn to the hook while a pair
+sits revealed, and its `applyMove` resolves the pending pair synchronously
+before applying the peer's next flip. The shuffle crosses as data: `TBoard`
+is the whole state including `cards`, so the pairing sync and every restart
+(`sendSync`, the Archery precedent) carry the host's deck itself — no seed,
+no dependence on the two builds agreeing about the avatar pool.
 
 ### Two consumer shapes
 
@@ -376,9 +391,11 @@ gameplay.
   and `docs/othello.md`).
 - **Dots and Boxes online** — same shape again, once the widget exists
   (`docs/widget-ideas.md`).
-- **Memory online** — the first game needing more than moves: the card
-  shuffle must be shared. Host sends the seed in `sync`, exactly as the maze
-  race now sends its maze seed.
+- ~~Memory online~~ — **shipped**, though not with the seed this entry
+  predicted: the shuffle crosses as the `cards` array inside the synced
+  `TBoard` (immune to build drift in the avatar pool), and a restart is a
+  `sendSync` like Archery's. The real novelty was timer-skew convergence —
+  see *The shared seam* above and `docs/memory.md`.
 - ~~Archery online~~ — **shipped**: the real-valued move, quantized into the
   integer `move` and resolved by a shared fixed-step resolver; a restart is a
   `sendSync` because fresh randomness cannot ride `new`. See `docs/archery.md`.

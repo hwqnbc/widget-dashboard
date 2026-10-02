@@ -281,6 +281,16 @@ export async function addOthelloWidgets(page, count = 2) {
   await page.locator('[data-testid="othello-root"]').nth(count - 1).waitFor()
 }
 
+/** Fresh dashboard with `count` Memory widgets, loopback transport armed. */
+export async function addMemoryWidgets(page, count = 2) {
+  await page.goto(`${BASE_URL}?netloop=1`, { waitUntil: 'networkidle' })
+  for (let i = 0; i < count; i++) {
+    await page.getByRole('button', { name: 'Add widget' }).click()
+    await page.getByRole('menuitem', { name: /Memory/ }).click()
+  }
+  await page.locator('[data-testid="memory-root"]').nth(count - 1).waitFor()
+}
+
 /** Fresh dashboard with one Connect 4 widget (default 2-player mode). */
 export async function addConnect4Widget(page) {
   await page.goto(BASE_URL, { waitUntil: 'networkidle' })
