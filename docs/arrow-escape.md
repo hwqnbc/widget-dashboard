@@ -191,8 +191,9 @@ and the Car Park race — and reuses the existing `sync` / `go` / `pos` /
 Contract additions on `arrows-root`: `data-mode` (`solo|online`),
 `data-net`, `data-seat`, `data-race`
 (`off|idle|counting|running|won|lost|void`), `data-opp-left`. The chip is
-`arrows-link`, the mode toggles `arrows-mode-*`, the start button
-`arrows-start-race`.
+`arrows-link`, the mode control the shared `NetplayModeToggle` icon button
+(`arrows-mode-online`, pressed = online — see `docs/netplay.md` *Mode
+control*), the start button `arrows-start-race`.
 
 ## State model (persisted `data`, via `useWidgetField`)
 

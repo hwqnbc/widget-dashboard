@@ -228,7 +228,7 @@ check('a guest restart re-deals BOTH devices identically', true)
 check('the restart cleared the shots on both', (await num(A, 'data-shots')) === 0 && (await num(B, 'data-shots')) === 0)
 
 // Leaving the mode releases the link (fresh board — no confirm needed).
-await A.locator('[data-testid="archery-play-local"]').click()
+await A.locator('[data-testid="archery-play-online"]').click()
 await page.waitForTimeout(300)
 check('leaving 2 Devices releases the link', (await attr(A, 'data-net')) === 'off')
 

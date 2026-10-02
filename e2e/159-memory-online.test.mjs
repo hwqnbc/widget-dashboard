@@ -268,7 +268,7 @@ check(
 )
 
 // Leaving the mode drops the link.
-await A.locator('button[value="local"]').click()
+await A.locator('[data-testid="memory-mode-online"]').click()
 check('leaving online turns the link off', await until(0, 'net', 'off'))
 
 await finish(browser)

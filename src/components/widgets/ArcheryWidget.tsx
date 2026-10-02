@@ -25,6 +25,7 @@ import {
 } from '../../features/avatars/useSeatAvatars'
 import { useNetGame } from '../../features/netplay/useNetGame'
 import NetplayChip from '../netplay/NetplayChip'
+import NetplayModeToggle from '../netplay/NetplayModeToggle'
 import { lazyWithReload } from '../../utils/lazyWithReload'
 
 /** The pairing UI pulls in a QR encoder and decoder — kept out of the main
@@ -617,13 +618,11 @@ export default function ArcheryWidget({ id }: WidgetProps) {
           <ToggleButton value="target" sx={toggleSx}>Target</ToggleButton>
         </ToggleButtonGroup>
       </Box>
-      <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-        <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1, mb: 0.25 }}>Play</Typography>
-        <ToggleButtonGroup size="small" exclusive value={play} onChange={(_, v) => changePlay(v as Play | null)}>
-          <ToggleButton value="local" data-testid="archery-play-local" sx={toggleSx}>Local</ToggleButton>
-          <ToggleButton value="online" data-testid="archery-play-online" sx={toggleSx}>2 Devices</ToggleButton>
-        </ToggleButtonGroup>
-      </Box>
+      <NetplayModeToggle
+        online={online}
+        onToggle={() => changePlay(online ? 'local' : 'online')}
+        testId="archery-play-online"
+      />
       {online && (
         <NetplayChip link={net.link} testId="archery-link" onOpen={() => net.setLinkOpen(true)} />
       )}

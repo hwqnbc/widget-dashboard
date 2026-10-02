@@ -26,6 +26,7 @@ import {
 import { useHandoff } from '../../hooks/useHandoff'
 import { useNetGame } from '../../features/netplay/useNetGame'
 import NetplayChip from '../netplay/NetplayChip'
+import NetplayModeToggle from '../netplay/NetplayModeToggle'
 import { lazyWithReload } from '../../utils/lazyWithReload'
 import {
   MATCH_MS,
@@ -398,24 +399,11 @@ export default function MemoryWidget({ id }: WidgetProps) {
       data-avatar-ninja={effectiveAvatars.ninja}
       sx={{ height: '100%', display: 'flex', flexDirection: 'column', gap: 0.75, p: 0.5 }}
     >
-      <Stack direction="row" spacing={1} sx={{ justifyContent: 'center', flexWrap: 'wrap', rowGap: 0.5 }}>
-        <ToggleButtonGroup
-          size="small"
-          exclusive
-          value={mode}
-          onChange={(_, v) => changeMode(v as Mode | null)}
-        >
-          <ToggleButton value="local" sx={{ textTransform: 'none', py: 0.25 }}>
-            Pass &amp; play
-          </ToggleButton>
-          <ToggleButton
-            value="online"
-            data-testid="memory-mode-online"
-            sx={{ textTransform: 'none', py: 0.25 }}
-          >
-            2 Devices
-          </ToggleButton>
-        </ToggleButtonGroup>
+      <Stack
+        direction="row"
+        spacing={1}
+        sx={{ justifyContent: 'center', alignItems: 'center', flexWrap: 'wrap', rowGap: 0.5 }}
+      >
         {/* The host's board (and settings) win online, so a guest's size and
             rule switches are disabled rather than silently overwritten. */}
         <ToggleButtonGroup
@@ -446,6 +434,11 @@ export default function MemoryWidget({ id }: WidgetProps) {
             Always pass
           </ToggleButton>
         </ToggleButtonGroup>
+        <NetplayModeToggle
+          online={online}
+          onToggle={() => changeMode(online ? 'local' : 'online')}
+          testId="memory-mode-online"
+        />
       </Stack>
 
       {online && (

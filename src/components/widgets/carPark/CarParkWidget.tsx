@@ -16,7 +16,6 @@ import LightbulbIcon from '@mui/icons-material/LightbulbOutlined'
 import PlayCircleIcon from '@mui/icons-material/PlayCircleOutlined'
 import UndoIcon from '@mui/icons-material/Undo'
 import RestartIcon from '@mui/icons-material/RestartAlt'
-import DevicesIcon from '@mui/icons-material/Devices'
 import { useAppDispatch } from '../../../app/hooks'
 import { updateWidgetData } from '../../../features/widgets/widgetsSlice'
 import { useWidgetField } from '../../../features/widgets/useWidgetField'
@@ -34,6 +33,7 @@ import { avatarMetaById } from '../../../features/avatars/avatarCatalog'
 import { avatarVisualById } from '../../../registry/avatarRegistry'
 import { useNetplay } from '../../../features/netplay/useNetplay'
 import NetplayChip from '../../netplay/NetplayChip'
+import NetplayModeToggle from '../../netplay/NetplayModeToggle'
 import WinnerCelebration from '../WinnerCelebration'
 import ConfirmDialog from '../ConfirmDialog'
 import {
@@ -785,17 +785,12 @@ export default function CarParkWidget({ id }: WidgetProps) {
             3D
           </ToggleButton>
         </ToggleButtonGroup>
-        <IconButton
-          size="small"
-          aria-label="2 Devices race"
-          aria-pressed={online}
-          data-testid="carpark-mode-online"
-          color={online ? 'primary' : 'default'}
-          onClick={toggleMode}
-          sx={{ flexShrink: 0 }}
-        >
-          <DevicesIcon fontSize="small" />
-        </IconButton>
+        <NetplayModeToggle
+          online={online}
+          onToggle={toggleMode}
+          testId="carpark-mode-online"
+          label="2 Devices race"
+        />
       </Stack>
 
       {online && (

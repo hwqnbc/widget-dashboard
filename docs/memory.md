@@ -14,8 +14,9 @@ most pairs when the board is cleared (equal = "Draw!"). Players are **Toy vs
 Ninja** (reusing the heads, `PlayerBadge`, and `WinnerCelebration`).
 
 ## Options
-- **Play mode** (`ToggleButtonGroup`): "Pass & play" (default) or "2 Devices"
-  (below). Changing it starts a new game, confirm-guarded mid-game.
+- **Play mode**: the shared `NetplayModeToggle` icon button at the end of the
+  settings row (pressed = 2 Devices, see `docs/netplay.md` *Mode control*).
+  Changing it starts a new game, confirm-guarded mid-game.
 - **Grid size** (`ToggleButtonGroup`): 4×4 (8 pairs) or 6×6 (18 pairs). Changing
   it reshuffles; mid-game it's guarded by `ConfirmDialog` (accidental-tap
   protection). New game is not guarded.

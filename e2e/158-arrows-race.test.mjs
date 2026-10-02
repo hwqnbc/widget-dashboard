@@ -163,7 +163,7 @@ await A.locator('[data-testid="arrows-start-race"]').click()
 await until(0, 'race', 'running')
 await until(1, 'race', 'running')
 
-await B.locator('[data-testid="arrows-mode-solo"]').click()
+await B.locator('[data-testid="arrows-mode-online"]').click()
 await page.waitForSelector('.MuiDialog-root')
 check('leaving mid-race asks first', (await attr(B, 'data-mode')) === 'online')
 await page.getByRole('button', { name: 'Leave' }).click()
@@ -184,7 +184,7 @@ check(
 )
 
 // ----------------------------------------------------------- housekeeping
-await A.locator('[data-testid="arrows-mode-solo"]').click()
+await A.locator('[data-testid="arrows-mode-online"]').click()
 await page.waitForTimeout(300)
 check('leaving the mode releases the link', (await attr(A, 'data-net')) === 'off')
 check('and clears the race', (await attr(A, 'data-race')) === 'off')

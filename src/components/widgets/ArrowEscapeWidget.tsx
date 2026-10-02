@@ -19,6 +19,7 @@ import {
 } from '../../features/avatars/useSeatAvatars'
 import { useNetplay } from '../../features/netplay/useNetplay'
 import NetplayChip from '../netplay/NetplayChip'
+import NetplayModeToggle from '../netplay/NetplayModeToggle'
 import WinnerCelebration from './WinnerCelebration'
 import PlayerBadge from './PlayerBadge'
 import ConfirmDialog from './ConfirmDialog'
@@ -482,45 +483,36 @@ export default function ArrowEscapeWidget({ id }: WidgetProps) {
       data-bumps-left={size === 'master' && !online ? bumpsLeft : ''}
       sx={{ height: '100%', display: 'flex', flexDirection: 'column', gap: 1, p: 0.5 }}
     >
-      <ToggleButtonGroup
-        size="small"
-        exclusive
-        value={mode}
-        onChange={(_, v) => changeMode(v as 'solo' | 'online' | null)}
-        sx={{ alignSelf: 'center' }}
+      <Stack
+        direction="row"
+        spacing={1}
+        sx={{ justifyContent: 'center', alignItems: 'center', flexWrap: 'wrap', rowGap: 0.5 }}
       >
-        <ToggleButton value="solo" data-testid="arrows-mode-solo" sx={{ textTransform: 'none', py: 0.25 }}>
-          Solo
-        </ToggleButton>
-        <ToggleButton
-          value="online"
-          data-testid="arrows-mode-online"
-          sx={{ textTransform: 'none', py: 0.25 }}
-        >
-          2 Devices
-        </ToggleButton>
-      </ToggleButtonGroup>
-
-      {hostControls && (
-        <ToggleButtonGroup
-          size="small"
-          exclusive
-          value={size}
-          onChange={(_, v) => changeSize(v as ArrowsSize | null)}
-          sx={{ alignSelf: 'center' }}
-        >
-          {(['small', 'medium', 'large', 'expert', 'master'] as const).map((s) => (
-            <ToggleButton
-              key={s}
-              value={s}
-              data-testid={`arrows-size-${s}`}
-              sx={{ textTransform: 'capitalize', py: 0.25 }}
-            >
-              {s}
-            </ToggleButton>
-          ))}
-        </ToggleButtonGroup>
-      )}
+        {hostControls && (
+          <ToggleButtonGroup
+            size="small"
+            exclusive
+            value={size}
+            onChange={(_, v) => changeSize(v as ArrowsSize | null)}
+          >
+            {(['small', 'medium', 'large', 'expert', 'master'] as const).map((s) => (
+              <ToggleButton
+                key={s}
+                value={s}
+                data-testid={`arrows-size-${s}`}
+                sx={{ textTransform: 'capitalize', py: 0.25 }}
+              >
+                {s}
+              </ToggleButton>
+            ))}
+          </ToggleButtonGroup>
+        )}
+        <NetplayModeToggle
+          online={online}
+          onToggle={() => changeMode(online ? 'solo' : 'online')}
+          testId="arrows-mode-online"
+        />
+      </Stack>
 
       {online && (
         <Stack

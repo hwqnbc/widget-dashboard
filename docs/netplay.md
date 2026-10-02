@@ -203,6 +203,24 @@ is the whole state including `cards`, so the pairing sync and every restart
 (`sendSync`, the Archery precedent) carry the host's deck itself — no seed,
 no dependence on the two builds agreeing about the avatar pool.
 
+### Mode control (UI convention)
+
+A widget whose only play modes are local and online enters and leaves
+2 Devices through the shared **`NetplayModeToggle`**
+(`components/netplay/NetplayModeToggle.tsx`): one icon button
+(`DevicesIcon`, `aria-pressed`, primary-coloured when online) carrying the
+widget's `*-mode-online` test id — extracted from Car Park's inline
+original, after a two-button text group ("Solo | 2 Devices") proved to
+spend a whole toolbar row saying what one pressed icon says. Memory,
+Archery, Arrow Escape and Car Park use it; mode-change POLICY stays in each
+widget's `onToggle` (restart-confirm on an in-progress board, "Leave the
+race?" mid-race, or a plain switch). Widgets with MORE than two modes keep
+their text rows — the vs-Computer games (Tic-Tac-Toe, Connect 4, Othello)
+and Maze Runner's Solo / 2 Players / 2 Devices — because a binary toggle
+cannot carry three states. E2E: `pairLoopback` only ever clicks the test id
+from the non-online state, so it works unchanged; suites LEAVE online mode
+by clicking the same toggle again.
+
 ### Two consumer shapes
 
 `useNetGame` is turn-based **by construction**: ply, turn ownership, one shared

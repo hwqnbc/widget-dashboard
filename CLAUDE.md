@@ -163,6 +163,9 @@ imports; hashed chunks die on every deploy, lessons.md #76 and #81-83),
 `hooks/useNow` (ticking clock),
 `features/widgets/useWidgetField` (typed persisted-`data` selector),
 `components/widgets/TapStage` (tap-to-animate button),
+`components/netplay/NetplayModeToggle` (the standard 2-Devices mode control
+for games with only local + online modes — one pressed-state icon button;
+see docs/netplay.md *Mode control*),
 `components/widgets/droneSim/webAudio` (synthesized Web Audio SFX engine —
 `tone`/`noise`/`unlockAudio`, no asset files),
 `components/widgets/droneStrike/ModelTargets` (generic model-target pool: a

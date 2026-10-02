@@ -259,8 +259,10 @@ touched during playback.
 
 Two tablets on the same wifi play the **same level** at the same time, and
 the first red car out wins. The 📱 toggle (`carpark-mode-online`) in the top
-row enters the mode, which is persisted as `mode`, and opens the usual
-pairing dialog. The transport and pairing are shared with every net game;
+row — Car Park's inline original, since extracted as the shared
+`NetplayModeToggle` every 2-mode widget now uses (see `docs/netplay.md`
+*Mode control*) — enters the mode, which is persisted as `mode`, and opens
+the usual pairing dialog. The transport and pairing are shared with every net game;
 see `docs/netplay.md`.
 
 - **Why `useNetplay` and not `useNetGame`.** Like Maze Runner's ghost race,
