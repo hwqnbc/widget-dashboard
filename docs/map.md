@@ -178,6 +178,23 @@ on it works without a backend server or API key.
   terminator; "sun below horizon" at night) — so suite 130 asserts the
   whole tool offline: the lighting itself is Esri-rendered and eyeballed
   on deploy.
+- **NEA environment overlays: Haze (PSI) + Weather (2 h)** (pure
+  `envModel.ts` + thin `envApi.ts`) — two persisted switches in the
+  overlays panel (`map-haze`, `map-weather`), both from free no-key
+  CORS-enabled NEA feeds on data.gov.sg: `/v1/environment/psi` and
+  `/v1/environment/2-hour-weather-forecast`. Haze renders a color-banded
+  disc with the 24-h PSI value per region (5 regions; NEA bands in
+  `psiBand`: ≤50 Good green, ≤100 Moderate yellow, ≤200 Unhealthy orange,
+  ≤300 Very unhealthy red, above Hazardous purple; `national` has no
+  location and is skipped). Weather renders a `forecastEmoji` TextSymbol
+  per forecast area (~47; ⛈️🌧️🌫️⛅☁️🌙☀️ keyword map). **Tapping a marker
+  with NO tool active** opens a small details dialog (`map-env-dialog`):
+  region PSI + PM2.5 + band, or area + forecast text. Data is transient;
+  toggling on fetches when missing or older than 5 minutes — toggle
+  off/on is the refresh gesture. Parsers are defensive (junk →
+  0 markers, status 'error'). Contract: `data-haze`/`data-weather` +
+  per-feed `-status`/`-count`; e2e mocks both feeds (the weather fixture's
+  'City' area follows the live view center for the online tap check).
 - **Traffic cameras** (`TrafficControl.tsx` + pure `trafficModel.ts` +
   thin `trafficApi.ts`) — a strip tool (`map-tool-traffic`, works in 2D
   and 3D) showing Singapore's ~90 live LTA expressway cameras from
@@ -476,6 +493,10 @@ two.
   feed updates ~every 20 s; an interval on the existing `loadTraffic`),
   and other data.gov.sg transport feeds behind the same pattern (carpark
   availability, taxi availability — each is one parser + one layer).
+  ~~Haze PSI~~ and ~~2-hour weather~~ — shipped as overlay switches (see
+  the NEA environment bullet); remaining NEA ideas: 24-hour / 4-day
+  forecasts in the weather dialog, air temperature / rainfall station
+  layers, auto-refresh while a layer is on.
 - **Live USGS earthquakes overlay** — `GeoJSONLayer` on the public CORS feed
   (`earthquake.usgs.gov/.../all_day.geojson`), magnitude-scaled renderer +
   popups; toggle in the control strip.

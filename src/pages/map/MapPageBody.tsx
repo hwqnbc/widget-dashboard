@@ -15,12 +15,18 @@ import { useEffect, useRef, useState } from 'react'
 import {
   Alert,
   Box,
+  Button,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   Divider,
   IconButton,
   Stack,
   ToggleButton,
   ToggleButtonGroup,
   Tooltip,
+  Typography,
   useTheme,
 } from '@mui/material'
 import FullscreenIcon from '@mui/icons-material/Fullscreen'
@@ -49,6 +55,7 @@ import Polyline from '@arcgis/core/geometry/Polyline'
 import PictureMarkerSymbol from '@arcgis/core/symbols/PictureMarkerSymbol'
 import SimpleFillSymbol from '@arcgis/core/symbols/SimpleFillSymbol'
 import SimpleMarkerSymbol from '@arcgis/core/symbols/SimpleMarkerSymbol'
+import TextSymbol from '@arcgis/core/symbols/TextSymbol'
 import Compass from '@arcgis/core/widgets/Compass'
 import type Viewpoint from '@arcgis/core/Viewpoint'
 import lightCss from '@arcgis/core/assets/esri/themes/light/main.css?inline'
@@ -82,6 +89,8 @@ import {
   setOverlayVisible,
   setShowPins,
   setTerminator,
+  setHaze,
+  setWeather,
   setTrees,
   setViewMode,
   setViewpoint,
@@ -115,6 +124,8 @@ import SunControl from './SunControl'
 import TrafficControl, { TrafficDialog, type TrafficStatus } from './TrafficControl'
 import { fetchTrafficCameras } from './trafficApi'
 import { CCTV_ICON, type TrafficCam } from './trafficModel'
+import { fetchForecast2h, fetchPsi } from './envApi'
+import { forecastEmoji, psiBand, type PsiRegion, type WeatherArea } from './envModel'
 import { armDrag, createDragState, dragPointerDown, dragPointerUp, dragStep } from './dragModel'
 import type { LonLat, RouteProfile } from './osrm'
 import {
@@ -293,6 +304,10 @@ function todayIso(): string {
 /** CCTV badge for traffic-camera markers (inline SVG — offline-safe). */
 const CCTV_SYMBOL = new PictureMarkerSymbol({ url: CCTV_ICON, width: 22, height: 22 })
 
+type EnvStatus = 'idle' | 'loading' | 'ready' | 'error'
+/** Re-fetch an NEA feed when its data is older than this on toggle-on. */
+const ENV_STALE_MS = 5 * 60_000
+
 /** Night-side shading for the day/night terminator overlay. */
 const NIGHT_SYMBOL = new SimpleFillSymbol({
   color: [4, 8, 28, 0.3],
@@ -352,6 +367,8 @@ export default function MapPageBody() {
   const buildings = useAppSelector((state) => state.map.buildings) ?? true
   const trees = useAppSelector((state) => state.map.trees) ?? true
   const terminator = useAppSelector((state) => state.map.terminator) ?? false
+  const haze = useAppSelector((state) => state.map.haze) ?? false
+  const weather = useAppSelector((state) => state.map.weather) ?? false
   const drawings = useAppSelector((state) => state.map.drawings) ?? NO_DRAWINGS
   const overlays = useAppSelector((state) => state.map.overlays) ?? NO_OVERLAYS
   const activeOverlayId = useAppSelector((state) => state.map.activeOverlayId) ?? null
@@ -383,6 +400,8 @@ export default function MapPageBody() {
   const flightLayerRef = useRef<GraphicsLayer | null>(null)
   const terminatorLayerRef = useRef<GraphicsLayer | null>(null)
   const trafficLayerRef = useRef<GraphicsLayer | null>(null)
+  const hazeLayerRef = useRef<GraphicsLayer | null>(null)
+  const weatherLayerRef = useRef<GraphicsLayer | null>(null)
   const viewpointRef = useRef<Viewpoint | null>(null)
   const basemapIdRef = useRef(basemapId)
 
@@ -439,6 +458,21 @@ export default function MapPageBody() {
   const trafficCamsRef = useRef(trafficCams)
   trafficCamsRef.current = trafficCams
   const trafficAbortRef = useRef<AbortController | null>(null)
+  // NEA environment overlays (transient data; the toggles persist). The
+  // info dialog serves both layers' idle-tap details.
+  const [hazeData, setHazeData] = useState<PsiRegion[]>([])
+  const [hazeStatus, setHazeStatus] = useState<EnvStatus>('idle')
+  const [weatherData, setWeatherData] = useState<WeatherArea[]>([])
+  const [weatherStatus, setWeatherStatus] = useState<EnvStatus>('idle')
+  const [envInfo, setEnvInfo] = useState<{ title: string; lines: string[] } | null>(null)
+  const hazeDataRef = useRef(hazeData)
+  hazeDataRef.current = hazeData
+  const weatherDataRef = useRef(weatherData)
+  weatherDataRef.current = weatherData
+  const hazeAtRef = useRef(0)
+  const weatherAtRef = useRef(0)
+  const hazeAbortRef = useRef<AbortController | null>(null)
+  const weatherAbortRef = useRef<AbortController | null>(null)
 
   // Click dispatch reads the live tool through a ref so the view's click
   // handler (registered once per view) never needs re-registering.
@@ -671,6 +705,8 @@ export default function MapPageBody() {
       flightLayerRef.current = null
       terminatorLayerRef.current = null
       trafficLayerRef.current = null
+      hazeLayerRef.current = null
+      weatherLayerRef.current = null
     }
     if (!mapRef.current) {
       // Night shading sits UNDER every other overlay (list order = draw order).
@@ -687,6 +723,15 @@ export default function MapPageBody() {
         elevationInfo: { mode: 'on-the-ground' },
         visible: false, // shown while the traffic tool is active
       })
+      // NEA environment layers — shown while their panel toggles are on.
+      hazeLayerRef.current = new GraphicsLayer({
+        elevationInfo: { mode: 'on-the-ground' },
+        visible: false,
+      })
+      weatherLayerRef.current = new GraphicsLayer({
+        elevationInfo: { mode: 'on-the-ground' },
+        visible: false,
+      })
       mapRef.current = new EsriMap({
         basemap: createBasemap(basemapIdRef.current),
         ground: 'world-elevation',
@@ -699,6 +744,8 @@ export default function MapPageBody() {
           sketchLayerRef.current,
           flightLayerRef.current,
           trafficLayerRef.current,
+          hazeLayerRef.current,
+          weatherLayerRef.current,
         ],
       })
     }
@@ -721,6 +768,8 @@ export default function MapPageBody() {
       flightLayerRef.current = null
       terminatorLayerRef.current = null
       trafficLayerRef.current = null
+      hazeLayerRef.current = null
+      weatherLayerRef.current = null
       document.getElementById('arcgis-theme')?.remove()
     }
   }, [])
@@ -896,7 +945,39 @@ export default function MapPageBody() {
   ) {
     if (drawModeRef.current !== 'none') return // SketchViewModel owns clicks
     const activeTool = toolRef.current
-    if (activeTool === 'pins') {
+    if (activeTool === 'none') {
+      // No tool claims the click — environment markers answer with details.
+      const hit = await v.hitTest({ x: event.x, y: event.y })
+      for (const r of hit.results) {
+        if (r.type !== 'graphic') continue
+        const regionName = r.graphic.attributes?.psiRegion as unknown
+        if (r.layer === hazeLayerRef.current && typeof regionName === 'string') {
+          const region = hazeDataRef.current.find((p) => p.name === regionName)
+          if (region) {
+            const band = psiBand(region.psi)
+            setEnvInfo({
+              title: `${region.name[0].toUpperCase()}${region.name.slice(1)} region`,
+              lines: [
+                `PSI ${Math.round(region.psi)} — ${band.label}`,
+                `PM2.5 ${Math.round(region.pm25)} µg/m³ (24-h)`,
+              ],
+            })
+            return
+          }
+        }
+        const areaName = r.graphic.attributes?.weatherArea as unknown
+        if (r.layer === weatherLayerRef.current && typeof areaName === 'string') {
+          const area = weatherDataRef.current.find((w) => w.name === areaName)
+          if (area) {
+            setEnvInfo({
+              title: area.name,
+              lines: [`${forecastEmoji(area.forecast)} ${area.forecast}`, '2-hour forecast (NEA)'],
+            })
+            return
+          }
+        }
+      }
+    } else if (activeTool === 'pins') {
       // Clicking an existing pin removes it; empty ground adds one.
       const hit = await v.hitTest({ x: event.x, y: event.y })
       const pinHit = hit.results.find(
@@ -1305,6 +1386,115 @@ export default function MapPageBody() {
     }
   }, [trafficCams, viewRevision])
 
+  // NEA environment overlays: each toggle shows its layer and fetches when
+  // the data is missing or stale (> 5 min) — toggling off/on later is the
+  // refresh gesture. Failures degrade to 'error' (markers absent).
+  const loadHaze = () => {
+    hazeAbortRef.current?.abort()
+    const ctrl = new AbortController()
+    hazeAbortRef.current = ctrl
+    setHazeStatus('loading')
+    fetchPsi(ctrl.signal)
+      .then((regions) => {
+        if (ctrl.signal.aborted) return
+        setHazeData(regions)
+        hazeAtRef.current = Date.now()
+        setHazeStatus('ready')
+      })
+      .catch(() => {
+        if (!ctrl.signal.aborted) setHazeStatus('error')
+      })
+  }
+  const loadWeather = () => {
+    weatherAbortRef.current?.abort()
+    const ctrl = new AbortController()
+    weatherAbortRef.current = ctrl
+    setWeatherStatus('loading')
+    fetchForecast2h(ctrl.signal)
+      .then((areas) => {
+        if (ctrl.signal.aborted) return
+        setWeatherData(areas)
+        weatherAtRef.current = Date.now()
+        setWeatherStatus('ready')
+      })
+      .catch(() => {
+        if (!ctrl.signal.aborted) setWeatherStatus('error')
+      })
+  }
+  useEffect(() => {
+    if (hazeLayerRef.current) hazeLayerRef.current.visible = haze
+    if (haze && (hazeDataRef.current.length === 0 || Date.now() - hazeAtRef.current > ENV_STALE_MS)) {
+      loadHaze()
+    }
+  }, [haze])
+  useEffect(() => {
+    if (weatherLayerRef.current) weatherLayerRef.current.visible = weather
+    if (
+      weather &&
+      (weatherDataRef.current.length === 0 || Date.now() - weatherAtRef.current > ENV_STALE_MS)
+    ) {
+      loadWeather()
+    }
+  }, [weather])
+  useEffect(
+    () => () => {
+      hazeAbortRef.current?.abort()
+      weatherAbortRef.current?.abort()
+    },
+    [],
+  )
+  useEffect(() => {
+    const layer = hazeLayerRef.current
+    if (!layer) return
+    layer.removeAll()
+    for (const region of hazeData) {
+      const geometry = new Point({ longitude: region.lon, latitude: region.lat })
+      const attributes = { psiRegion: region.name }
+      layer.add(
+        new Graphic({
+          geometry,
+          attributes,
+          symbol: new SimpleMarkerSymbol({
+            style: 'circle',
+            color: psiBand(region.psi).color,
+            size: 26,
+            outline: { color: 'white', width: 1.5 },
+          }),
+        }),
+      )
+      layer.add(
+        new Graphic({
+          geometry,
+          attributes,
+          symbol: new TextSymbol({
+            text: String(Math.round(region.psi)),
+            color: 'white',
+            font: { size: 10, weight: 'bold' },
+            verticalAlignment: 'middle',
+          }),
+        }),
+      )
+    }
+  }, [hazeData, viewRevision])
+  useEffect(() => {
+    const layer = weatherLayerRef.current
+    if (!layer) return
+    layer.removeAll()
+    for (const area of weatherData) {
+      layer.add(
+        new Graphic({
+          geometry: new Point({ longitude: area.lon, latitude: area.lat }),
+          attributes: { weatherArea: area.name },
+          symbol: new TextSymbol({
+            text: forecastEmoji(area.forecast),
+            font: { size: 16 },
+            verticalAlignment: 'middle',
+          }),
+        }),
+      )
+    }
+  }, [weatherData, viewRevision])
+
   return (
     <Box
       data-testid="map-page"
@@ -1357,6 +1547,12 @@ export default function MapPageBody() {
       data-sun-day={sunDay}
       data-traffic-count={trafficCams.length}
       data-traffic-status={trafficStatus}
+      data-haze={haze ? 'on' : 'off'}
+      data-haze-status={hazeStatus}
+      data-haze-count={hazeData.length}
+      data-weather={weather ? 'on' : 'off'}
+      data-weather-status={weatherStatus}
+      data-weather-count={weatherData.length}
       sx={{
         display: 'flex',
         flexDirection: 'column',
@@ -1590,6 +1786,10 @@ export default function MapPageBody() {
           onTrees={(on) => dispatch(setTrees(on))}
           terminator={terminator}
           onTerminator={(on) => dispatch(setTerminator(on))}
+          haze={haze}
+          onHaze={(on) => dispatch(setHaze(on))}
+          weather={weather}
+          onWeather={(on) => dispatch(setWeather(on))}
           showPins={showPins}
           onShowPins={(on) => dispatch(setShowPins(on))}
           canDraw={status === 'ready'}
@@ -1659,6 +1859,27 @@ export default function MapPageBody() {
         onModeEnd={() => setDrawMode('none')}
       />
       <TrafficDialog cam={trafficCam} onClose={() => setTrafficCam(null)} />
+      <Dialog
+        open={envInfo != null}
+        onClose={() => setEnvInfo(null)}
+        maxWidth="xs"
+        fullWidth
+        data-testid="map-env-dialog"
+      >
+        <DialogTitle>{envInfo?.title}</DialogTitle>
+        <DialogContent>
+          {envInfo?.lines.map((line, i) => (
+            <Typography key={i} variant={i === 0 ? 'body1' : 'caption'} sx={{ display: 'block' }}>
+              {line}
+            </Typography>
+          ))}
+        </DialogContent>
+        <DialogActions>
+          <Button data-testid="map-env-close" onClick={() => setEnvInfo(null)}>
+            Close
+          </Button>
+        </DialogActions>
+      </Dialog>
       <ConfirmDialog
         open={confirmClear}
         title="Remove all pins?"

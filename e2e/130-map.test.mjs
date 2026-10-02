@@ -27,7 +27,12 @@
  *    refresh refetches, the JB↔SG checkpoints dialog (labeled crossing
  *    cameras + in-dialog refresh), released tool keeps the cache — offline; the
  *    marker-click → snapshot-dialog flow runs in the online branch with
- *    the mock feed centered on the live view center),
+ *    the mock feed centered on the live view center), the NEA haze-PSI and
+ *    2-hour-weather overlays against always-on mocks (pure parser/band/
+ *    emoji units; offline: panel toggles fetch once — 5 regions / 3 areas
+ *    — quick re-toggles don't refetch, the persisted haze toggle refetches
+ *    after reload; online: an idle tap — no tool — on the view-center
+ *    weather marker opens the forecast dialog),
  *    undo-disabled state, deep-link render.
  *  - online only: data-map-status reaches "ready" (from view.when, never
  *    networkidle), attribution + zoom + 2D-compass UI present, click-driven pins with
@@ -84,6 +89,7 @@ import {
   parseTrafficCameras,
   updatedLabel,
 } from './.bundle/trafficModel.js'
+import { forecastEmoji, parseForecast, parsePsi, psiBand } from './.bundle/envModel.js'
 
 const { check, finish } = reporter('map')
 const { browser, context, page } = await launch()
@@ -238,7 +244,7 @@ const trafficFixture = () => ({
     },
   ],
 })
-await page.route('**://api.data.gov.sg/**', (route) => {
+await page.route('**/transport/traffic-images**', (route) => {
   trafficCalls += 1
   return route.fulfill({
     status: 200,
@@ -253,6 +259,80 @@ const TINY_JPEG = Buffer.from(
 await page.route('**://images.data.gov.sg/**', (route) =>
   route.fulfill({ status: 200, contentType: 'image/jpeg', body: TINY_JPEG }),
 )
+
+// NEA environment feeds (haze PSI + 2-hour weather): fixtures with real
+// region locations, one malformed row each, and (for weather) one area at
+// the mutable `envCenter` so the online branch can click it at the view
+// center. Always registered, like the OSRM/traffic mocks.
+const envCenter = { lon: 103.8511, lat: 1.2951 }
+const psiFixture = () => ({
+  region_metadata: [
+    { name: 'west', label_location: { latitude: 1.35735, longitude: 103.7 } },
+    { name: 'east', label_location: { latitude: 1.35735, longitude: 103.94 } },
+    { name: 'central', label_location: { latitude: 1.35735, longitude: 103.82 } },
+    { name: 'south', label_location: { latitude: 1.29587, longitude: 103.82 } },
+    { name: 'north', label_location: { latitude: 1.41803, longitude: 103.82 } },
+    { name: 'national' }, // no location — markers must skip it
+    { name: 'ghost', label_location: { latitude: 'x', longitude: null } }, // malformed
+  ],
+  items: [
+    {
+      timestamp: '2026-10-02T12:00:00+08:00',
+      readings: {
+        psi_twenty_four_hourly: {
+          west: 54,
+          east: 32,
+          central: 101,
+          south: 48,
+          north: 61,
+          national: 61,
+          ghost: 10,
+        },
+        pm25_twenty_four_hourly: { west: 14, east: 8, central: 35, south: 12, north: 17 },
+      },
+    },
+  ],
+})
+const forecastFixture = () => ({
+  area_metadata: [
+    {
+      name: 'City',
+      label_location: { latitude: envCenter.lat, longitude: envCenter.lon },
+    },
+    { name: 'Ang Mo Kio', label_location: { latitude: 1.375, longitude: 103.839 } },
+    { name: 'Bedok', label_location: { latitude: 1.321, longitude: 103.924 } },
+    { name: 'Nowhere' }, // no location — skipped
+  ],
+  items: [
+    {
+      timestamp: '2026-10-02T12:00:00+08:00',
+      forecasts: [
+        { area: 'City', forecast: 'Thundery Showers' },
+        { area: 'Ang Mo Kio', forecast: 'Partly Cloudy (Day)' },
+        { area: 'Bedok', forecast: 'Fair (Day)' },
+        { area: 'Nowhere', forecast: 'Cloudy' },
+      ],
+    },
+  ],
+})
+let psiCalls = 0
+let forecastCalls = 0
+await page.route('**/environment/psi**', (route) => {
+  psiCalls += 1
+  return route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify(psiFixture()),
+  })
+})
+await page.route('**/environment/2-hour-weather-forecast**', (route) => {
+  forecastCalls += 1
+  return route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify(forecastFixture()),
+  })
+})
 
 // ---- stale-chunk recovery: a dead lazy-chunk URL triggers one automatic
 // reload; a persistent failure shows the boundary's Reload card; removing
@@ -820,6 +900,56 @@ await page.route('**://images.data.gov.sg/**', (route) =>
       updatedLabel('junk') === '',
   )
 
+  // NEA environment parsers + the PSI bands and forecast-emoji mapping.
+  const regions = parsePsi(psiFixture())
+  check(
+    'psi parse keeps the 5 located regions, skips national + malformed',
+    regions.length === 5 &&
+      regions.every((r) => r.name !== 'national' && r.name !== 'ghost') &&
+      regions.find((r) => r.name === 'west')?.psi === 54 &&
+      regions.find((r) => r.name === 'west')?.pm25 === 14,
+    `n=${regions.length}`,
+  )
+  check(
+    'psi parse: junk envelopes yield []',
+    parsePsi(null).length === 0 &&
+      parsePsi({}).length === 0 &&
+      parsePsi({ region_metadata: 'x', items: [] }).length === 0,
+  )
+  check(
+    'psi bands at the NEA boundaries',
+    psiBand(50).label === 'Good' &&
+      psiBand(51).label === 'Moderate' &&
+      psiBand(100).label === 'Moderate' &&
+      psiBand(101).label === 'Unhealthy' &&
+      psiBand(200).label === 'Unhealthy' &&
+      psiBand(201).label === 'Very unhealthy' &&
+      psiBand(301).label === 'Hazardous',
+  )
+  const areas = parseForecast(forecastFixture())
+  check(
+    'forecast parse joins areas to forecasts, skips rows without locations',
+    areas.length === 3 &&
+      areas.find((a) => a.name === 'City')?.forecast === 'Thundery Showers' &&
+      !areas.some((a) => a.name === 'Nowhere'),
+    `n=${areas.length}`,
+  )
+  check(
+    'forecast parse: junk envelopes yield []',
+    parseForecast(null).length === 0 && parseForecast({ items: [{}] }).length === 0,
+  )
+  check(
+    'forecast emoji keyword map',
+    forecastEmoji('Heavy Thundery Showers with Gusty Winds') === '⛈️' &&
+      forecastEmoji('Light Rain') === '🌧️' &&
+      forecastEmoji('Slightly Hazy') === '🌫️' &&
+      forecastEmoji('Partly Cloudy (Night)') === '⛅' &&
+      forecastEmoji('Cloudy') === '☁️' &&
+      forecastEmoji('Fair (Night)') === '🌙' &&
+      forecastEmoji('Fair (Day)') === '☀️' &&
+      forecastEmoji('Mystery') === '🌤️',
+  )
+
   // Date-aware sunDate (the season picker's seam) + the seasonal flip it
   // exposes. sunDate is local-clock on purpose, so assert via local getters.
   const winter = sunDate(13.5, '2026-12-21')
@@ -1121,6 +1251,47 @@ check(
 await page.locator('[data-testid="map-terminator"]').click()
 await page.waitForTimeout(300)
 check('terminator toggles on', (await root().getAttribute('data-terminator')) === 'on')
+
+// ---- NEA environment overlays (mocked feeds — work offline) ----
+check(
+  'env contract defaults (both off, idle)',
+  (await root().getAttribute('data-haze')) === 'off' &&
+    (await root().getAttribute('data-weather')) === 'off' &&
+    (await root().getAttribute('data-haze-status')) === 'idle' &&
+    (await root().getAttribute('data-weather-status')) === 'idle',
+)
+await page.locator('[data-testid="map-haze"]').click()
+await waitForAttr('data-haze-status', (v) => v === 'ready', 10000)
+check(
+  'haze toggle loads the 5 PSI regions',
+  (await root().getAttribute('data-haze')) === 'on' &&
+    (await root().getAttribute('data-haze-count')) === '5' &&
+    psiCalls === 1,
+  `calls=${psiCalls}`,
+)
+await page.locator('[data-testid="map-weather"]').click()
+await waitForAttr('data-weather-status', (v) => v === 'ready', 10000)
+check(
+  'weather toggle loads the forecast areas',
+  (await root().getAttribute('data-weather')) === 'on' &&
+    (await root().getAttribute('data-weather-count')) === '3' &&
+    forecastCalls === 1,
+  `calls=${forecastCalls}`,
+)
+await page.locator('[data-testid="map-weather"]').click()
+await page.waitForTimeout(200)
+await page.locator('[data-testid="map-weather"]').click()
+await page.waitForTimeout(300)
+check(
+  'fresh data is not refetched on a quick re-toggle (5-min staleness)',
+  forecastCalls === 1 && (await root().getAttribute('data-weather-count')) === '3',
+  `calls=${forecastCalls}`,
+)
+await page.locator('[data-testid="map-weather"]').click() // off for the rest
+await page.waitForTimeout(200)
+check('weather toggles back off', (await root().getAttribute('data-weather')) === 'off')
+// haze stays ON — the later reload section proves the persisted toggle
+// refetches the transient data on a fresh mount.
 
 // ---- traffic cameras (mocked feed — works offline, 2D and 3D alike) ----
 check(
@@ -1491,6 +1662,12 @@ check(
   'terminator choice persists across reload',
   (await root().getAttribute('data-terminator')) === 'on',
 )
+check('haze choice persists across reload', (await root().getAttribute('data-haze')) === 'on')
+await waitForAttr('data-haze-status', (v) => v === 'ready', 10000)
+check(
+  'persisted haze toggle refetches the transient data on a fresh mount',
+  (await root().getAttribute('data-haze-count')) === '5',
+)
 // panel open state is transient — reopen to reach the switches
 check('panel closed after reload (transient)', (await root().getAttribute('data-panel')) === 'closed')
 await page.locator('[data-testid="map-overlays-toggle"]').click()
@@ -1504,6 +1681,9 @@ check('trees back on', (await root().getAttribute('data-trees')) === 'on')
 await page.locator('[data-testid="map-terminator"]').click()
 await page.waitForTimeout(300)
 check('terminator back off', (await root().getAttribute('data-terminator')) === 'off')
+await page.locator('[data-testid="map-haze"]').click()
+await page.waitForTimeout(300)
+check('haze back off', (await root().getAttribute('data-haze')) === 'off')
 await page.locator('[data-testid="map-overlays-toggle"]').click()
 await page.waitForTimeout(350)
 check('panel closes', (await root().getAttribute('data-panel')) === 'closed')
@@ -2315,6 +2495,41 @@ check(
       )
       await page.locator('[data-testid="map-tool-traffic"]').click() // release
       await page.waitForTimeout(200)
+
+      // ---- NEA weather: idle-tap an area marker → details dialog ----
+      // The mock's 'City' area follows `envCenter`; weather data is empty
+      // again by now (reloads cleared the transient list), so enabling the
+      // toggle fetches a fixture centered on the live view center. The tap
+      // runs with NO tool active — that's the env layers' click contract.
+      envCenter.lon = trafficCenter.lon
+      envCenter.lat = trafficCenter.lat
+      await page.locator('[data-testid="map-overlays-toggle"]').click()
+      await page.waitForTimeout(350)
+      await page.locator('[data-testid="map-weather"]').click()
+      await waitForAttr('data-weather-status', (v) => v === 'ready', 10000)
+      await page.locator('[data-testid="map-overlays-toggle"]').click() // close the panel
+      await page.waitForTimeout(600) // markers drawn
+      check('no tool active for the idle tap', (await root().getAttribute('data-tool')) === 'none')
+      await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2)
+      await page.waitForSelector('[data-testid="map-env-dialog"]', { timeout: 10000 })
+      check(
+        'idle tap on a weather marker opens its forecast details',
+        ((await page.locator('[data-testid="map-env-dialog"]').textContent()) ?? '').includes(
+          'Thundery Showers',
+        ),
+      )
+      await page.locator('[data-testid="map-env-close"]').click()
+      await page.waitForTimeout(500)
+      check(
+        'env dialog closes',
+        (await page.locator('[data-testid="map-env-dialog"]').count()) === 0,
+      )
+      await page.locator('[data-testid="map-overlays-toggle"]').click()
+      await page.waitForTimeout(350)
+      await page.locator('[data-testid="map-weather"]').click() // off again
+      await page.waitForTimeout(200)
+      await page.locator('[data-testid="map-overlays-toggle"]').click()
+      await page.waitForTimeout(350)
     } else {
       console.log('SKIP: 3D view never settled — flight interactive checks skipped')
       await page.locator('[data-testid="map-mode-2d"]').click()

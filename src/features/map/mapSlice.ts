@@ -96,6 +96,10 @@ export interface MapState {
   trees: boolean
   /** Shade the night half of the world (live day/night terminator). */
   terminator: boolean
+  /** Show the NEA haze PSI regional readings layer. */
+  haze: boolean
+  /** Show the NEA 2-hour weather forecast layer. */
+  weather: boolean
   bookmarks: MapBookmark[]
   drawings: MapDrawing[]
   /** The named drawing groups; new shapes land in the active one. */
@@ -128,6 +132,8 @@ const initialState: MapState = {
   buildings: true,
   trees: true,
   terminator: false,
+  haze: false,
+  weather: false,
   bookmarks: [],
   drawings: [],
   overlays: [],
@@ -183,6 +189,12 @@ const mapSlice = createSlice({
     },
     setTerminator(state, action: PayloadAction<boolean>) {
       state.terminator = action.payload
+    },
+    setHaze(state, action: PayloadAction<boolean>) {
+      state.haze = action.payload
+    },
+    setWeather(state, action: PayloadAction<boolean>) {
+      state.weather = action.payload
     },
     saveBookmark: {
       prepare(bookmark: Omit<MapBookmark, 'id'>) {
@@ -311,6 +323,8 @@ export const {
   setBuildings,
   setTrees,
   setTerminator,
+  setHaze,
+  setWeather,
   saveBookmark,
   deleteBookmark,
   addDrawing,
