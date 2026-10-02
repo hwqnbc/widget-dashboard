@@ -11,6 +11,8 @@ export interface PsiRegion {
   lat: number
   psi: number
   pm25: number
+  /** 1-hourly PM2.5 (separate NEA feed) — absent when that feed fails. */
+  pm25OneHr?: number
 }
 
 /**
@@ -47,6 +49,26 @@ export function parsePsi(json: unknown): PsiRegion[] {
     out.push({ name, lon, lat, psi, pm25: Number.isFinite(pm25) ? pm25 : 0 })
   }
   return out
+}
+
+/** Defensive parse of the dedicated PM2.5 feed: region → 1-hourly µg/m³
+ * (`items[0].readings.pm25_one_hourly`); malformed → {}. */
+export function parsePm25(json: unknown): Record<string, number> {
+  const env = json as { items?: { readings?: { pm25_one_hourly?: unknown } }[] }
+  const map = Array.isArray(env?.items) ? env.items[0]?.readings?.pm25_one_hourly : undefined
+  if (typeof map !== 'object' || map == null) return {}
+  const out: Record<string, number> = {}
+  for (const [name, value] of Object.entries(map)) {
+    const n = Number(value)
+    if (Number.isFinite(n)) out[name] = n
+  }
+  return out
+}
+
+/** Attach 1-hourly PM2.5 values to the PSI regions (missing names stay
+ * without the optional field). */
+export function mergePm25(regions: PsiRegion[], oneHr: Record<string, number>): PsiRegion[] {
+  return regions.map((r) => (r.name in oneHr ? { ...r, pm25OneHr: oneHr[r.name] } : r))
 }
 
 /** NEA's PSI descriptor bands with marker colors. */
@@ -117,4 +139,71 @@ export function forecastEmoji(text: string): string {
   if (t.includes('fair') && t.includes('night')) return '🌙'
   if (t.includes('fair') || t.includes('sunny')) return '☀️'
   return '🌤️'
+}
+
+export type WeatherIconKind =
+  | 'thunder'
+  | 'rain'
+  | 'haze'
+  | 'wind'
+  | 'partly'
+  | 'cloud'
+  | 'night'
+  | 'sun'
+  | 'other'
+
+/** Same keyword order as forecastEmoji, but yielding an icon kind — the
+ * MAP markers must be inline-SVG PictureMarkerSymbols, because ArcGIS
+ * TextSymbol glyphs come from Esri font atlases that carry NO emoji
+ * (emoji text draws nothing; lessons.md). Emoji stay for DOM text. */
+export function forecastIconKind(text: string): WeatherIconKind {
+  const t = text.toLowerCase()
+  if (t.includes('thundery')) return 'thunder'
+  if (t.includes('shower') || t.includes('rain')) return 'rain'
+  if (t.includes('hazy') || t.includes('mist') || t.includes('fog')) return 'haze'
+  if (t.includes('windy')) return 'wind'
+  if (t.includes('partly')) return 'partly'
+  if (t.includes('cloudy') || t.includes('overcast')) return 'cloud'
+  if (t.includes('fair') && t.includes('night')) return 'night'
+  if (t.includes('fair') || t.includes('sunny')) return 'sun'
+  return 'other'
+}
+
+const svgUri = (body: string) =>
+  `data:image/svg+xml,${encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 36 36">
+<circle cx="18" cy="18" r="17" fill="#ffffff" fill-opacity="0.92" stroke="#90a4ae" stroke-width="1"/>
+${body}
+</svg>`,
+  )}`
+
+const SUN = '<circle cx="18" cy="18" r="7" fill="#fbc02d"/><g stroke="#fbc02d" stroke-width="2.4" stroke-linecap="round"><line x1="18" y1="4" x2="18" y2="8"/><line x1="18" y1="28" x2="18" y2="32"/><line x1="4" y1="18" x2="8" y2="18"/><line x1="28" y1="18" x2="32" y2="18"/><line x1="8.1" y1="8.1" x2="10.9" y2="10.9"/><line x1="25.1" y1="25.1" x2="27.9" y2="27.9"/><line x1="8.1" y1="27.9" x2="10.9" y2="25.1"/><line x1="25.1" y1="10.9" x2="27.9" y2="8.1"/></g>'
+const CLOUD = (y = 0, fill = '#78909c') =>
+  `<g transform="translate(0 ${y})" fill="${fill}"><circle cx="13" cy="19" r="6"/><circle cx="21" cy="16" r="7"/><circle cx="26" cy="21" r="5"/><rect x="11" y="19" width="16" height="7" rx="3.5"/></g>`
+
+/** Marker icons for the weather layer: small SVG badges as data URIs —
+ * no network assets, and guaranteed to draw where emoji TextSymbols do not. */
+export const WEATHER_ICONS: Record<WeatherIconKind, string> = {
+  sun: svgUri(SUN),
+  night: svgUri(
+    '<circle cx="18" cy="18" r="9" fill="#37474f"/><circle cx="21.5" cy="15" r="8" fill="#ffffff" fill-opacity="0.92"/>',
+  ),
+  cloud: svgUri(CLOUD(0)),
+  partly: svgUri(
+    '<circle cx="13" cy="13" r="6" fill="#fbc02d"/>' + CLOUD(4, '#90a4ae'),
+  ),
+  rain: svgUri(
+    CLOUD(-3) +
+      '<g stroke="#1976d2" stroke-width="2.4" stroke-linecap="round"><line x1="13" y1="26" x2="11.5" y2="31"/><line x1="19" y1="26" x2="17.5" y2="31"/><line x1="25" y1="26" x2="23.5" y2="31"/></g>',
+  ),
+  thunder: svgUri(
+    CLOUD(-4, '#546e7a') + '<polygon points="19,21 13,28 17.5,28 15.5,33 23,25.5 18.5,25.5 21,21" fill="#fbc02d"/>',
+  ),
+  haze: svgUri(
+    '<g stroke="#90a4ae" stroke-width="2.6" stroke-linecap="round"><line x1="9" y1="13" x2="27" y2="13"/><line x1="7" y1="18" x2="29" y2="18"/><line x1="9" y1="23" x2="27" y2="23"/></g>',
+  ),
+  wind: svgUri(
+    '<g stroke="#4fc3f7" stroke-width="2.6" stroke-linecap="round" fill="none"><path d="M7 14 h14 a3.5 3.5 0 1 0 -3.5 -3.5"/><path d="M7 20 h18 a3.5 3.5 0 1 1 -3.5 3.5"/><path d="M7 26 h10"/></g>',
+  ),
+  other: svgUri('<circle cx="12.5" cy="12.5" r="5.5" fill="#fbc02d"/>' + CLOUD(5, '#b0bec5')),
 }

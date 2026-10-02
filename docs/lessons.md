@@ -2156,3 +2156,14 @@ carried over; these are the new ones.
      REPAIRING there — the state is then guaranteed for a full repair
      period — and only afterwards finish the drive. A longer sleep would
      have WIDENED the race it was meant to hide.
+
+134. **ArcGIS `TextSymbol` cannot draw emoji — pictorial markers must be
+    inline-SVG `PictureMarkerSymbol`s.** TextSymbol glyphs come from Esri's
+    server-side font atlases (SDF ranges fetched per font), which carry no
+    emoji codepoints, so an emoji TextSymbol renders *nothing* — silently,
+    in 2D and 3D alike (the Map page's first weather layer shipped
+    invisible). Plain text/digits are fine (the flight waypoint numbers).
+    For icons, encode a small SVG as a `data:image/svg+xml` URI and use
+    `PictureMarkerSymbol` — offline-safe, deterministic, and the same
+    pattern as the traffic-camera CCTV badge; keep emoji for DOM text
+    (dialogs, captions), where the browser's own font stack renders them.

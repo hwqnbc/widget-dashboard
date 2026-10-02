@@ -27,12 +27,14 @@
  *    refresh refetches, the JB↔SG checkpoints dialog (labeled crossing
  *    cameras + in-dialog refresh), released tool keeps the cache — offline; the
  *    marker-click → snapshot-dialog flow runs in the online branch with
- *    the mock feed centered on the live view center), the NEA haze-PSI and
- *    2-hour-weather overlays against always-on mocks (pure parser/band/
- *    emoji units; offline: panel toggles fetch once — 5 regions / 3 areas
- *    — quick re-toggles don't refetch, the persisted haze toggle refetches
- *    after reload; online: an idle tap — no tool — on the view-center
- *    weather marker opens the forecast dialog),
+ *    the mock feed centered on the live view center), the NEA haze-PSI
+ *    (+ 1-h pm25) and 2-hour-weather overlays against always-on mocks
+ *    (pure parser/band/icon-kind units — marker icons are inline-SVG
+ *    PictureMarkerSymbols, never TextSymbol emoji, which Esri's font
+ *    atlases cannot draw; offline: STRIP toggles fetch once — 5 regions /
+ *    3 areas — quick re-toggles don't refetch, the persisted haze toggle
+ *    refetches after reload; online: an idle tap — no tool — on the
+ *    view-center weather marker opens the forecast dialog),
  *    undo-disabled state, deep-link render.
  *  - online only: data-map-status reaches "ready" (from view.when, never
  *    networkidle), attribution + zoom + 2D-compass UI present, click-driven pins with
@@ -89,7 +91,16 @@ import {
   parseTrafficCameras,
   updatedLabel,
 } from './.bundle/trafficModel.js'
-import { forecastEmoji, parseForecast, parsePsi, psiBand } from './.bundle/envModel.js'
+import {
+  forecastEmoji,
+  forecastIconKind,
+  mergePm25,
+  parseForecast,
+  parsePm25,
+  parsePsi,
+  psiBand,
+  WEATHER_ICONS,
+} from './.bundle/envModel.js'
 
 const { check, finish } = reporter('map')
 const { browser, context, page } = await launch()
@@ -317,12 +328,32 @@ const forecastFixture = () => ({
 })
 let psiCalls = 0
 let forecastCalls = 0
+let pm25Calls = 0
 await page.route('**/environment/psi**', (route) => {
   psiCalls += 1
   return route.fulfill({
     status: 200,
     contentType: 'application/json',
     body: JSON.stringify(psiFixture()),
+  })
+})
+const pm25Fixture = () => ({
+  region_metadata: [],
+  items: [
+    {
+      timestamp: '2026-10-02T12:00:00+08:00',
+      readings: {
+        pm25_one_hourly: { west: 18, east: 7, central: 40, south: 11, north: 15, ghost: 'x' },
+      },
+    },
+  ],
+})
+await page.route('**/environment/pm25**', (route) => {
+  pm25Calls += 1
+  return route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify(pm25Fixture()),
   })
 })
 await page.route('**/environment/2-hour-weather-forecast**', (route) => {
@@ -949,6 +980,32 @@ await page.route('**/environment/2-hour-weather-forecast**', (route) => {
       forecastEmoji('Fair (Day)') === '☀️' &&
       forecastEmoji('Mystery') === '🌤️',
   )
+  // 1-h PM2.5 feed + merge (the PSI feed only carries 24-h values).
+  const oneHr = parsePm25(pm25Fixture())
+  const merged = mergePm25(regions, oneHr)
+  check(
+    'pm25 parse + merge attaches finite 1-h values to the PSI regions',
+    oneHr.west === 18 &&
+      !('ghost' in oneHr) &&
+      merged.find((r) => r.name === 'west')?.pm25OneHr === 18 &&
+      merged.find((r) => r.name === 'west')?.pm25 === 14,
+  )
+  check(
+    'pm25 parse: junk envelopes yield {}',
+    Object.keys(parsePm25(null)).length === 0 && Object.keys(parsePm25({ items: [{}] })).length === 0,
+  )
+  // Marker icons must be inline-SVG data URIs — TextSymbol emoji draw
+  // NOTHING (Esri font atlases carry no emoji glyphs).
+  check(
+    'weather marker icons: kind mapping + all data URIs',
+    forecastIconKind('Heavy Thundery Showers') === 'thunder' &&
+      forecastIconKind('Passing Showers') === 'rain' &&
+      forecastIconKind('Slightly Hazy') === 'haze' &&
+      forecastIconKind('Partly Cloudy (Day)') === 'partly' &&
+      forecastIconKind('Fair (Night)') === 'night' &&
+      forecastIconKind('Mystery') === 'other' &&
+      Object.values(WEATHER_ICONS).every((u) => u.startsWith('data:image/svg+xml,')),
+  )
 
   // Date-aware sunDate (the season picker's seam) + the seasonal flip it
   // exposes. sunDate is local-clock on purpose, so assert via local getters.
@@ -1263,11 +1320,12 @@ check(
 await page.locator('[data-testid="map-haze"]').click()
 await waitForAttr('data-haze-status', (v) => v === 'ready', 10000)
 check(
-  'haze toggle loads the 5 PSI regions',
+  'haze toggle loads the 5 PSI regions (psi + 1-h pm25 feeds)',
   (await root().getAttribute('data-haze')) === 'on' &&
     (await root().getAttribute('data-haze-count')) === '5' &&
-    psiCalls === 1,
-  `calls=${psiCalls}`,
+    psiCalls === 1 &&
+    pm25Calls === 1,
+  `psi=${psiCalls} pm25=${pm25Calls}`,
 )
 await page.locator('[data-testid="map-weather"]').click()
 await waitForAttr('data-weather-status', (v) => v === 'ready', 10000)
@@ -2499,15 +2557,12 @@ check(
       // ---- NEA weather: idle-tap an area marker → details dialog ----
       // The mock's 'City' area follows `envCenter`; weather data is empty
       // again by now (reloads cleared the transient list), so enabling the
-      // toggle fetches a fixture centered on the live view center. The tap
-      // runs with NO tool active — that's the env layers' click contract.
+      // strip toggle fetches a fixture centered on the live view center.
+      // The tap runs with NO tool active — the env layers' click contract.
       envCenter.lon = trafficCenter.lon
       envCenter.lat = trafficCenter.lat
-      await page.locator('[data-testid="map-overlays-toggle"]').click()
-      await page.waitForTimeout(350)
       await page.locator('[data-testid="map-weather"]').click()
       await waitForAttr('data-weather-status', (v) => v === 'ready', 10000)
-      await page.locator('[data-testid="map-overlays-toggle"]').click() // close the panel
       await page.waitForTimeout(600) // markers drawn
       check('no tool active for the idle tap', (await root().getAttribute('data-tool')) === 'none')
       await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2)
@@ -2524,12 +2579,8 @@ check(
         'env dialog closes',
         (await page.locator('[data-testid="map-env-dialog"]').count()) === 0,
       )
-      await page.locator('[data-testid="map-overlays-toggle"]').click()
-      await page.waitForTimeout(350)
       await page.locator('[data-testid="map-weather"]').click() // off again
       await page.waitForTimeout(200)
-      await page.locator('[data-testid="map-overlays-toggle"]').click()
-      await page.waitForTimeout(350)
     } else {
       console.log('SKIP: 3D view never settled — flight interactive checks skipped')
       await page.locator('[data-testid="map-mode-2d"]').click()

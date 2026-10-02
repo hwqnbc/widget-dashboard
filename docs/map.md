@@ -179,22 +179,30 @@ on it works without a backend server or API key.
   whole tool offline: the lighting itself is Esri-rendered and eyeballed
   on deploy.
 - **NEA environment overlays: Haze (PSI) + Weather (2 h)** (pure
-  `envModel.ts` + thin `envApi.ts`) — two persisted switches in the
-  overlays panel (`map-haze`, `map-weather`), both from free no-key
-  CORS-enabled NEA feeds on data.gov.sg: `/v1/environment/psi` and
+  `envModel.ts` + thin `envApi.ts`) — two persisted on/off buttons **in the
+  tool strip next to the traffic-camera tool** (`map-haze` Masks icon,
+  `map-weather` cloud icon; independent of the exclusive tool group, so
+  both can stay on while any tool is active), from free no-key
+  CORS-enabled NEA feeds on data.gov.sg: `/v1/environment/psi`,
+  `/v1/environment/pm25` (the 1-hourly PM2.5 the PSI feed lacks) and
   `/v1/environment/2-hour-weather-forecast`. Haze renders a color-banded
   disc with the 24-h PSI value per region (5 regions; NEA bands in
   `psiBand`: ≤50 Good green, ≤100 Moderate yellow, ≤200 Unhealthy orange,
   ≤300 Very unhealthy red, above Hazardous purple; `national` has no
-  location and is skipped). Weather renders a `forecastEmoji` TextSymbol
-  per forecast area (~47; ⛈️🌧️🌫️⛅☁️🌙☀️ keyword map). **Tapping a marker
-  with NO tool active** opens a small details dialog (`map-env-dialog`):
-  region PSI + PM2.5 + band, or area + forecast text. Data is transient;
-  toggling on fetches when missing or older than 5 minutes — toggle
-  off/on is the refresh gesture. Parsers are defensive (junk →
-  0 markers, status 'error'). Contract: `data-haze`/`data-weather` +
-  per-feed `-status`/`-count`; e2e mocks both feeds (the weather fixture's
+  location and is skipped; a dead pm25 feed only costs the dialog's 1-h
+  line). Weather renders an inline-SVG icon per forecast area (~47;
+  `forecastIconKind` → `WEATHER_ICONS` data URIs — **never** emoji
+  TextSymbols, which Esri's font atlases cannot draw, lesson #134).
+  **Tapping a marker with NO tool active** opens a small details dialog
+  (`map-env-dialog`): region PSI + 1-h and 24-h PM2.5 + band, or area +
+  forecast (emoji are fine in DOM text). Data is transient; toggling on
+  fetches when missing or older than 5 minutes — toggle off/on is the
+  refresh gesture. Parsers are defensive (junk → 0 markers, status
+  'error'). Contract: `data-haze`/`data-weather` + per-feed
+  `-status`/`-count`; e2e mocks all three feeds (the weather fixture's
   'City' area follows the live view center for the online tap check).
+  Strip tooltips are `disableInteractive` — an open tooltip must never
+  intercept clicks on wrapped controls beneath it.
 - **Traffic cameras** (`TrafficControl.tsx` + pure `trafficModel.ts` +
   thin `trafficApi.ts`) — a strip tool (`map-tool-traffic`, works in 2D
   and 3D) showing Singapore's ~90 live LTA expressway cameras from

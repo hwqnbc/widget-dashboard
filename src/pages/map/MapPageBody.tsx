@@ -39,6 +39,8 @@ import RouteIcon from '@mui/icons-material/Route'
 import FlightTakeoffIcon from '@mui/icons-material/FlightTakeoff'
 import WbSunnyIcon from '@mui/icons-material/WbSunny'
 import LinkedCameraIcon from '@mui/icons-material/LinkedCamera'
+import MasksIcon from '@mui/icons-material/Masks'
+import WbCloudyIcon from '@mui/icons-material/WbCloudy'
 import DeleteSweepIcon from '@mui/icons-material/DeleteSweep'
 import esriConfig from '@arcgis/core/config'
 import EsriMap from '@arcgis/core/Map'
@@ -124,8 +126,16 @@ import SunControl from './SunControl'
 import TrafficControl, { TrafficDialog, type TrafficStatus } from './TrafficControl'
 import { fetchTrafficCameras } from './trafficApi'
 import { CCTV_ICON, type TrafficCam } from './trafficModel'
-import { fetchForecast2h, fetchPsi } from './envApi'
-import { forecastEmoji, psiBand, type PsiRegion, type WeatherArea } from './envModel'
+import { fetchForecast2h, fetchPm25, fetchPsi } from './envApi'
+import {
+  forecastEmoji,
+  forecastIconKind,
+  mergePm25,
+  psiBand,
+  WEATHER_ICONS,
+  type PsiRegion,
+  type WeatherArea,
+} from './envModel'
 import { armDrag, createDragState, dragPointerDown, dragPointerUp, dragStep } from './dragModel'
 import type { LonLat, RouteProfile } from './osrm'
 import {
@@ -307,6 +317,15 @@ const CCTV_SYMBOL = new PictureMarkerSymbol({ url: CCTV_ICON, width: 22, height:
 type EnvStatus = 'idle' | 'loading' | 'ready' | 'error'
 /** Re-fetch an NEA feed when its data is older than this on toggle-on. */
 const ENV_STALE_MS = 5 * 60_000
+
+/** Weather marker symbols, one per icon kind (inline-SVG data URIs — emoji
+ * TextSymbols draw NOTHING: Esri font atlases carry no emoji glyphs). */
+const WEATHER_SYMBOLS = Object.fromEntries(
+  Object.entries(WEATHER_ICONS).map(([kind, url]) => [
+    kind,
+    new PictureMarkerSymbol({ url, width: 24, height: 24 }),
+  ]),
+)
 
 /** Night-side shading for the day/night terminator overlay. */
 const NIGHT_SYMBOL = new SimpleFillSymbol({
@@ -959,6 +978,9 @@ export default function MapPageBody() {
               title: `${region.name[0].toUpperCase()}${region.name.slice(1)} region`,
               lines: [
                 `PSI ${Math.round(region.psi)} — ${band.label}`,
+                ...(region.pm25OneHr != null
+                  ? [`PM2.5 ${Math.round(region.pm25OneHr)} µg/m³ (1-h)`]
+                  : []),
                 `PM2.5 ${Math.round(region.pm25)} µg/m³ (24-h)`,
               ],
             })
@@ -1394,10 +1416,12 @@ export default function MapPageBody() {
     const ctrl = new AbortController()
     hazeAbortRef.current = ctrl
     setHazeStatus('loading')
-    fetchPsi(ctrl.signal)
-      .then((regions) => {
+    // A dead PM2.5 feed must not take down the PSI layer — it only costs
+    // the dialog's 1-h line.
+    Promise.all([fetchPsi(ctrl.signal), fetchPm25(ctrl.signal).catch(() => ({}))])
+      .then(([regions, oneHr]) => {
         if (ctrl.signal.aborted) return
-        setHazeData(regions)
+        setHazeData(mergePm25(regions, oneHr))
         hazeAtRef.current = Date.now()
         setHazeStatus('ready')
       })
@@ -1485,11 +1509,7 @@ export default function MapPageBody() {
         new Graphic({
           geometry: new Point({ longitude: area.lon, latitude: area.lat }),
           attributes: { weatherArea: area.name },
-          symbol: new TextSymbol({
-            text: forecastEmoji(area.forecast),
-            font: { size: 16 },
-            verticalAlignment: 'middle',
-          }),
+          symbol: WEATHER_SYMBOLS[forecastIconKind(area.forecast)],
         }),
       )
     }
@@ -1601,22 +1621,22 @@ export default function MapPageBody() {
           aria-label="Map tool"
         >
           <ToggleButton value="pins" data-testid="map-tool-pins" aria-label="Drop pins">
-            <Tooltip title="Drop pins (tap a pin to remove it)">
+            <Tooltip title="Drop pins (tap a pin to remove it)" disableInteractive>
               <PushPinIcon fontSize="small" />
             </Tooltip>
           </ToggleButton>
           <ToggleButton value="measure-line" data-testid="map-tool-measure-line" aria-label="Measure distance">
-            <Tooltip title="Measure distance">
+            <Tooltip title="Measure distance" disableInteractive>
               <StraightenIcon fontSize="small" />
             </Tooltip>
           </ToggleButton>
           <ToggleButton value="measure-area" data-testid="map-tool-measure-area" aria-label="Measure area">
-            <Tooltip title="Measure area">
+            <Tooltip title="Measure area" disableInteractive>
               <SquareFootIcon fontSize="small" />
             </Tooltip>
           </ToggleButton>
           <ToggleButton value="route" data-testid="map-tool-route" aria-label="Route distance">
-            <Tooltip title="Route distance (walk / bike / drive)">
+            <Tooltip title="Route distance (walk / bike / drive)" disableInteractive>
               <RouteIcon fontSize="small" />
             </Tooltip>
           </ToggleButton>
@@ -1626,7 +1646,7 @@ export default function MapPageBody() {
             aria-label="Drone flight"
             disabled={viewMode !== '3d'}
           >
-            <Tooltip title={viewMode === '3d' ? 'Drone flight (plant, add waypoints, fly)' : 'Drone flight — switch to 3D'}>
+            <Tooltip title={viewMode === '3d' ? 'Drone flight (plant, add waypoints, fly)' : 'Drone flight — switch to 3D'} disableInteractive>
               <FlightTakeoffIcon fontSize="small" />
             </Tooltip>
           </ToggleButton>
@@ -1636,16 +1656,40 @@ export default function MapPageBody() {
             aria-label="Sun and shadows"
             disabled={viewMode !== '3d'}
           >
-            <Tooltip title={viewMode === '3d' ? 'Sun & shadows (time-of-day slider)' : 'Sun & shadows — switch to 3D'}>
+            <Tooltip title={viewMode === '3d' ? 'Sun & shadows (time-of-day slider)' : 'Sun & shadows — switch to 3D'} disableInteractive>
               <WbSunnyIcon fontSize="small" />
             </Tooltip>
           </ToggleButton>
           <ToggleButton value="traffic" data-testid="map-tool-traffic" aria-label="Traffic cameras">
-            <Tooltip title="Traffic cameras (tap a marker for its live image)">
+            <Tooltip title="Traffic cameras (tap a marker for its live image)" disableInteractive>
               <LinkedCameraIcon fontSize="small" />
             </Tooltip>
           </ToggleButton>
         </ToggleButtonGroup>
+        {/* Environment overlays: independent on/off buttons, NOT exclusive
+            tools — both can stay on while any tool is active. */}
+        <Tooltip title={haze ? 'Hide haze (PSI)' : 'Haze: regional PSI readings (tap a disc for details)'} disableInteractive>
+          <IconButton
+            size="small"
+            data-testid="map-haze"
+            aria-label={haze ? 'Hide haze readings' : 'Show haze readings'}
+            color={haze ? 'primary' : 'default'}
+            onClick={() => dispatch(setHaze(!haze))}
+          >
+            <MasksIcon fontSize="small" />
+          </IconButton>
+        </Tooltip>
+        <Tooltip title={weather ? 'Hide weather' : 'Weather: 2-hour forecast (tap an icon for details)'} disableInteractive>
+          <IconButton
+            size="small"
+            data-testid="map-weather"
+            aria-label={weather ? 'Hide weather forecast' : 'Show weather forecast'}
+            color={weather ? 'primary' : 'default'}
+            onClick={() => dispatch(setWeather(!weather))}
+          >
+            <WbCloudyIcon fontSize="small" />
+          </IconButton>
+        </Tooltip>
         <LocateControl viewRef={viewRef} viewRevision={viewRevision} layerRef={locateLayerRef} />
         <BookmarksControl
           bookmarks={bookmarks}
@@ -1655,7 +1699,7 @@ export default function MapPageBody() {
           onDelete={(id) => dispatch(deleteBookmark(id))}
         />
         {tool === 'pins' && pins.length > 0 && (
-          <Tooltip title="Remove all pins">
+          <Tooltip title="Remove all pins" disableInteractive>
             <IconButton
               size="small"
               data-testid="map-pins-clear"
@@ -1786,10 +1830,6 @@ export default function MapPageBody() {
           onTrees={(on) => dispatch(setTrees(on))}
           terminator={terminator}
           onTerminator={(on) => dispatch(setTerminator(on))}
-          haze={haze}
-          onHaze={(on) => dispatch(setHaze(on))}
-          weather={weather}
-          onWeather={(on) => dispatch(setWeather(on))}
           showPins={showPins}
           onShowPins={(on) => dispatch(setShowPins(on))}
           canDraw={status === 'ready'}

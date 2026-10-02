@@ -77,10 +77,6 @@ export default function OverlaysPanel({
   onTrees,
   terminator,
   onTerminator,
-  haze,
-  onHaze,
-  weather,
-  onWeather,
   showPins,
   onShowPins,
   canDraw,
@@ -108,12 +104,6 @@ export default function OverlaysPanel({
   /** Shade the night half of the world (works in 2D and 3D alike). */
   terminator: boolean
   onTerminator: (on: boolean) => void
-  /** NEA haze PSI readings layer. */
-  haze: boolean
-  onHaze: (on: boolean) => void
-  /** NEA 2-hour weather forecast layer. */
-  weather: boolean
-  onWeather: (on: boolean) => void
   showPins: boolean
   onShowPins: (on: boolean) => void
   canDraw: boolean
@@ -240,8 +230,6 @@ export default function OverlaysPanel({
         {is3d && overlayRow('3D buildings', buildings, onBuildings, 'map-buildings')}
         {is3d && overlayRow('3D trees', trees, onTrees, 'map-trees')}
         {overlayRow('Day/night', terminator, onTerminator, 'map-terminator')}
-        {overlayRow('Haze (PSI)', haze, onHaze, 'map-haze')}
-        {overlayRow('Weather (2 h)', weather, onWeather, 'map-weather')}
         {overlayRow('Pins', showPins, onShowPins, 'map-pins-visible')}
       </List>
 
