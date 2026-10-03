@@ -2,14 +2,22 @@ import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'rea
 import {
   Box,
   Button,
+  IconButton,
   Stack,
   ToggleButton,
   ToggleButtonGroup,
+  Tooltip,
   Typography,
   useTheme,
 } from '@mui/material'
 import { alpha } from '@mui/material/styles'
-import { useAppDispatch } from '../../../app/hooks'
+import { useAppDispatch, useAppSelector } from '../../../app/hooks'
+import {
+  absorbMazeRecords,
+  recordMazeBest,
+  resetGameRecords,
+  selectMazeRecords,
+} from '../../../features/records/recordsSlice'
 import { updateWidgetData } from '../../../features/widgets/widgetsSlice'
 import { useWidgetField } from '../../../features/widgets/useWidgetField'
 import type { WidgetProps } from '../../../registry/widgetRegistry'
@@ -23,6 +31,7 @@ import {
 import { avatarVisualById } from '../../../registry/avatarRegistry'
 import type { SeatAvatars } from '../../../features/avatars/types'
 import { useHandoff } from '../../../hooks/useHandoff'
+import DeleteSweepIcon from '@mui/icons-material/DeleteSweep'
 import { useNow } from '../../../hooks/useNow'
 import { isTypingTarget } from '../../../utils/isTypingTarget'
 import { lazyWithReload } from '../../../utils/lazyWithReload'
@@ -70,15 +79,6 @@ interface Times {
  * fresh reference every render and loop the effects (lessons #10). */
 const START_TRAIL: number[] = [0]
 const NO_TIMES: Times = { toy: 0, ninja: 0 }
-
-/** Persisted key holding the best time for each size. Three flat numbers
- * rather than one object: the trivial `typeof` coercer covers them, and there
- * is no nested shape to validate. */
-const BEST_KEY: Record<MazeSize, 'bestSmall' | 'bestMedium' | 'bestLarge'> = {
-  small: 'bestSmall',
-  medium: 'bestMedium',
-  large: 'bestLarge',
-}
 
 /** Wall thickness, in CELL units — so walls stay proportional as the maze gets
  * bigger. Deliberately not `vectorEffect="non-scaling-stroke"`: that reads the
@@ -184,7 +184,28 @@ export default function MazeRunnerWidget({ id }: WidgetProps) {
       ? (v as Times)
       : undefined,
   )
-  const bestMs = useWidgetField(id, BEST_KEY[size], 0)
+  // Best times live in the app-level records slice — the player's, not the
+  // widget instance's (they survive removeWidget and are shared by every
+  // Maze widget).
+  const mazeRecords = useAppSelector(selectMazeRecords)
+  const bestMs = mazeRecords.best[size] ?? 0
+  const hasRecords =
+    mazeRecords.best.small > 0 || mazeRecords.best.medium > 0 || mazeRecords.best.large > 0
+  // One-time migration from pre-slice widget data; ref-latched because
+  // StrictMode re-invokes effects with the same captured values.
+  const legacySmall = useWidgetField(id, 'bestSmall', 0)
+  const legacyMedium = useWidgetField(id, 'bestMedium', 0)
+  const legacyLarge = useWidgetField(id, 'bestLarge', 0)
+  const hasLegacy = legacySmall > 0 || legacyMedium > 0 || legacyLarge > 0
+  const absorbed = useRef(false)
+  useEffect(() => {
+    if (!hasLegacy || absorbed.current) return
+    absorbed.current = true
+    dispatch(absorbMazeRecords({ small: legacySmall, medium: legacyMedium, large: legacyLarge }))
+    dispatch(updateWidgetData({ id, data: { bestSmall: 0, bestMedium: 0, bestLarge: 0 } }))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasLegacy])
+  const [recordsConfirm, setRecordsConfirm] = useState(false)
 
   const setGame = useCallback(
     (next: Record<string, unknown>) => dispatch(updateWidgetData({ id, data: next })),
@@ -489,23 +510,13 @@ export default function MazeRunnerWidget({ id }: WidgetProps) {
         // `?? 'won'` and not a plain set: if their `done` already landed we
         // lost, and finishing afterwards must not overwrite that.
         setResult((prev) => prev ?? 'won')
-        const isBestRace = bestMs === 0 || finished < bestMs
-        setGame({
-          pos: next,
-          trail: nextTrail,
-          elapsedMs: nextElapsed,
-          ...(isBestRace ? { [BEST_KEY[size]]: finished } : {}),
-        })
+        setGame({ pos: next, trail: nextTrail, elapsedMs: nextElapsed })
+        dispatch(recordMazeBest({ size, ms: finished }))
         return
       }
       if (mode === 'solo') {
-        const isBest = bestMs === 0 || finished < bestMs
-        setGame({
-          pos: next,
-          trail: nextTrail,
-          elapsedMs: nextElapsed,
-          ...(isBest ? { [BEST_KEY[size]]: finished } : {}),
-        })
+        setGame({ pos: next, trail: nextTrail, elapsedMs: nextElapsed })
+        dispatch(recordMazeBest({ size, ms: finished }))
         return
       }
       if (turn === 'toy') {
@@ -523,18 +534,17 @@ export default function MazeRunnerWidget({ id }: WidgetProps) {
       }
       const nextTimes = { ...times, ninja: finished }
       const winnerTime = Math.min(nextTimes.toy, nextTimes.ninja)
-      const isBest = bestMs === 0 || winnerTime < bestMs
       setGame({
         pos: next,
         trail: nextTrail,
         elapsedMs: nextElapsed,
         times: nextTimes,
-        ...(isBest ? { [BEST_KEY[size]]: winnerTime } : {}),
       })
+      dispatch(recordMazeBest({ size, ms: winnerTime }))
     },
     [
       blocked, maze, pos, moveRule, elapsedMs, trail, mode, turn, times,
-      bestMs, size, p2Maze, hand, setGame, online, link, mySeat,
+      size, p2Maze, hand, setGame, online, link, mySeat, dispatch,
     ],
   )
 
@@ -978,6 +988,20 @@ export default function MazeRunnerWidget({ id }: WidgetProps) {
           {running ? <MazeTimer elapsedMs={elapsedMs} since={lastMoveAt.current} /> : fmtLap(elapsedMs)}
           {bestMs > 0 && ` · best ${fmtLap(bestMs)}`}
         </Typography>
+        <Tooltip title="Reset records">
+          <span>
+            <IconButton
+              size="small"
+              aria-label="Reset records"
+              data-testid="maze-reset-records"
+              disabled={!hasRecords}
+              onClick={() => setRecordsConfirm(true)}
+              sx={{ flexShrink: 0 }}
+            >
+              <DeleteSweepIcon fontSize="small" />
+            </IconButton>
+          </span>
+        </Tooltip>
         <Button size="small" onClick={newMaze} sx={{ whiteSpace: 'nowrap' }}>
           New maze
         </Button>
@@ -998,6 +1022,18 @@ export default function MazeRunnerWidget({ id }: WidgetProps) {
           setPending(null)
         }}
         onCancel={() => setPending(null)}
+      />
+      <ConfirmDialog
+        open={recordsConfirm}
+        title="Reset records?"
+        message="This clears the best times for every maze size on this device. The current run is untouched."
+        confirmLabel="Reset records"
+        cancelLabel="Keep them"
+        onConfirm={() => {
+          setRecordsConfirm(false)
+          dispatch(resetGameRecords('maze'))
+        }}
+        onCancel={() => setRecordsConfirm(false)}
       />
     </Box>
     </SeatAvatarsOverride.Provider>

@@ -461,7 +461,10 @@ score source and self-resyncs after a restart, since the score drops below
 the paid line), pays through the body (banner + the pickup chime) and
 publishes `data-milestones`. Session
 score and wave
-are runtime-only; `bestScore`/`bestWave` persist (written at wave-clear).
+are runtime-only; `bestScore`/`bestWave` persist at wave-clear — in the
+app-level records slice (`records.droneStrike`, Car Park pattern: shell
+absorb, shared across instances, settings-panel Reset-records row
+`strike-reset-records`).
 Losing all HP fails the wave — banner, then the same wave restarts with
 fresh targets and HP; the session score survives (arcade-friendly). Restart
 and city-shuffle are confirm-guarded once there is progress.

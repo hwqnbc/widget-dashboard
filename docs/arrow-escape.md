@@ -152,7 +152,9 @@ start, width ~4.9, 100% solvable, generation ≤ ~55ms. The suite pins fill
 - Animations live in a ref (`Map<id, Anim>`) with a single rAF loop keyed
   on an active-count state; an arrow mid-exit no longer blocks anyone (it
   is leaving). The **clear is tallied in the same dispatch that removes the
-  last arrow**, so a reload can never double-count `solved`.
+  last arrow** (now as a records-slice dispatch in the same frame as the
+  removal — redux-persist snapshots the root after both), so a reload can
+  never double-count `solved`.
 - Board: `viewBox` = the grid exactly (letterboxed by `preserveAspectRatio`),
   the ad's dot lattice per cell, arrows coloured from an 8-colour cycle that
   reads on both themes (the ad's all-black lines would vanish in dark mode).
@@ -229,6 +231,20 @@ crafted blocking/self-ray cases, and the live widget: slide-out, bump,
 mid-puzzle reload persistence, a closed-loop full clear driven by the DOM's
 own `data-blocked` flags, the celebration, and the confirm-guarded
 reshuffle/size changes.
+
+## Records — app-level `records` slice
+
+The bests above moved out of widget `data` into the app-level
+`features/records/recordsSlice.ts` (the Car Park pattern,
+`docs/car-park.md` *Records*): they survive the widget being deleted and
+re-added, are shared by every instance, absorb any pre-slice copy a
+widget still carries in its data (one-time, ref-latched against
+StrictMode), and clear through a confirm-guarded reset-records control.
+
+For Arrow Escape that is the lifetime `solved` tally
+(`records.arrows.solved` — the absorb is ADDITIVE, hence the latch). The
+reset-records broom button sits in the top row next to the 2-Devices
+toggle (`arrows-reset-records`).
 
 ## Future work (enhancement backlog)
 

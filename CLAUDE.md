@@ -114,8 +114,9 @@ src/
   features/widgets/   widgetsSlice (instances + layout), types, widgetCatalog
   features/ui/        uiSlice (theme mode + seat→avatar map)
   features/records/   recordsSlice — app-level game records (bests/stars/
-                      tallies) that outlive widget instances; Car Park first
-                      (docs/car-park.md *Records*)
+                      tallies) that outlive widget instances: Car Park, Maze
+                      Runner, Arrow Escape, Drone Sim (landing), Drone
+                      Strike, Tank Battle (docs/car-park.md *Records*)
   features/avatars/   AvatarId/Seat types, avatarCatalog (name/colour), useSeatAvatars
   registry/           widgetRegistry: WidgetType -> component
                       avatarRegistry: AvatarId -> { Head, Figure, Celebration }

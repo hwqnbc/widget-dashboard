@@ -23,6 +23,7 @@ import {
   absorbCarParkRecords,
   recordCarParkSolve,
   resetCarParkRecords,
+  selectCarParkRecords,
 } from '../../../features/records/recordsSlice'
 import { updateWidgetData } from '../../../features/widgets/widgetsSlice'
 import { useWidgetField } from '../../../features/widgets/useWidgetField'
@@ -284,7 +285,7 @@ export default function CarParkWidget({ id }: WidgetProps) {
   // slice, NOT in this instance's data: they are the player's, not the
   // widget's — deleting and re-adding the widget must keep them, and every
   // Car Park widget on the board shares them.
-  const { best, solved, assisted } = useAppSelector((s) => s.records.carPark)
+  const { best, solved, assisted } = useAppSelector(selectCarParkRecords)
   const cardView = useWidgetField<BoardView>(id, 'view', '2d', coerceView)
   // Fullscreen keeps its OWN view choice (default 3D — the 3D board is the
   // one that benefits from the space); the card keeps its own.

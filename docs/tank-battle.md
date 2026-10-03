@@ -131,7 +131,10 @@ Both modes share the enemy pool, AI and scoring (light 25 / heavy 40 pts).
   tanks (heavies with 4 HP and tighter aim from wave 4); wave 1 is passive
   practice, wave 2+ returns fire (`ENEMY_FIRE_WAVE`); enemy aim scatter
   shrinks per wave. 3 HP per wave attempt; a failed wave restarts itself
-  and the session score survives. `bestScore`/`bestWave` persist at clear.
+  and the session score survives. `bestScore`/`bestWave` persist at clear —
+  in the app-level records slice (`records.tankBattle`, Car Park pattern:
+  shell absorb, settings-panel Reset-records row `tank-reset-records`;
+  `bestRoamMs` rides the same namespace).
 - **Roam**: a patrol hunt — `buildRoam` seeds one 8-tank garrison across
   the whole map (all armed), the chip counts `HUNT n LEFT`, and clearing
   it stops the clock: `bestRoamMs` (and `bestScore`) persist. 5 HP per

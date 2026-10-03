@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import {
   Button,
   Dialog,
@@ -17,7 +18,10 @@ import ShuffleIcon from '@mui/icons-material/Shuffle'
 import SettingsBackupRestoreIcon from '@mui/icons-material/SettingsBackupRestore'
 import SwapHorizIcon from '@mui/icons-material/SwapHoriz'
 import type { CourseMode } from './worldLayout'
-import { useAppDispatch } from '../../../app/hooks'
+import { useAppDispatch, useAppSelector } from '../../../app/hooks'
+import DeleteSweepIcon from '@mui/icons-material/DeleteSweep'
+import { resetGameRecords, selectDroneSimRecords } from '../../../features/records/recordsSlice'
+import ConfirmDialog from '../ConfirmDialog'
 import { updateWidgetData } from '../../../features/widgets/widgetsSlice'
 import type { DroneCraft, FlightMode, Weather } from './flightModel'
 import { MAX_FOLLOW, MIN_FOLLOW } from './operatorWalk'
@@ -122,6 +126,9 @@ export default function SettingsPanel({
   onNewCourse: () => void
 }) {
   const dispatch = useAppDispatch()
+  const gameRecords = useAppSelector(selectDroneSimRecords)
+  const hasGameRecords = (() => { const r = gameRecords; return r.landingBest > 0 })()
+  const [recordsConfirm, setRecordsConfirm] = useState(false)
   const set = (data: Record<string, unknown>) =>
     dispatch(updateWidgetData({ id, data }))
 
@@ -382,8 +389,39 @@ export default function SettingsPanel({
               Reset
             </Button>
           </ListItem>
+          <ListItem disableGutters sx={{ py: 0.5 }}>
+            <ListItemText
+              primary="Reset records"
+              secondary="Clear the landing-challenge best on this device. The current course and its lap stats are untouched."
+              slotProps={{ primary: { sx: { fontWeight: 600 } }, secondary: { sx: { fontSize: 12 } } }}
+            />
+            <Button
+              size="small"
+              variant="outlined"
+              color="warning"
+              startIcon={<DeleteSweepIcon />}
+              data-testid="dronesim-reset-records"
+              disabled={!hasGameRecords}
+              onClick={() => setRecordsConfirm(true)}
+              sx={{ ml: 1.5, flexShrink: 0 }}
+            >
+              Reset
+            </Button>
+          </ListItem>
         </List>
       </DialogContent>
+      <ConfirmDialog
+        open={recordsConfirm}
+        title="Reset records?"
+        message="This clears the landing-challenge best on this device."
+        confirmLabel="Reset records"
+        cancelLabel="Keep them"
+        onConfirm={() => {
+          setRecordsConfirm(false)
+          dispatch(resetGameRecords('droneSim'))
+        }}
+        onCancel={() => setRecordsConfirm(false)}
+      />
     </Dialog>
   )
 }

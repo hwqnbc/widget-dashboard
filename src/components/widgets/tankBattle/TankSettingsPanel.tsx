@@ -17,7 +17,10 @@ import {
 } from '@mui/material'
 import ShuffleIcon from '@mui/icons-material/Shuffle'
 import SettingsBackupRestoreIcon from '@mui/icons-material/SettingsBackupRestore'
-import { useAppDispatch } from '../../../app/hooks'
+import { useAppDispatch, useAppSelector } from '../../../app/hooks'
+import DeleteSweepIcon from '@mui/icons-material/DeleteSweep'
+import { resetGameRecords, selectTankBattleRecords } from '../../../features/records/recordsSlice'
+import ConfirmDialog from '../ConfirmDialog'
 import { updateWidgetData } from '../../../features/widgets/widgetsSlice'
 import type { Weather } from '../droneSim/flightModel'
 import type { GyroMode } from '../droneStrike/gyroAim'
@@ -108,6 +111,9 @@ export default function TankSettingsPanel({
   onResetDefaults: () => void
 }) {
   const dispatch = useAppDispatch()
+  const gameRecords = useAppSelector(selectTankBattleRecords)
+  const hasGameRecords = (() => { const r = gameRecords; return r.bestWave > 0 || r.bestScore > 0 || r.bestRoamMs > 0 })()
+  const [recordsConfirm, setRecordsConfirm] = useState(false)
   const set = (data: Record<string, unknown>) =>
     dispatch(updateWidgetData({ id, data }))
   const [gyroDenied, setGyroDenied] = useState(false)
@@ -352,8 +358,39 @@ export default function TankSettingsPanel({
               Reset
             </Button>
           </ListItem>
+          <ListItem disableGutters sx={{ py: 0.5 }}>
+            <ListItemText
+              primary="Reset records"
+              secondary="Clear the best score, best wave and best hunt time on this device."
+              slotProps={{ primary: { sx: { fontWeight: 600 } }, secondary: { sx: { fontSize: 12 } } }}
+            />
+            <Button
+              size="small"
+              variant="outlined"
+              color="warning"
+              startIcon={<DeleteSweepIcon />}
+              data-testid="tank-reset-records"
+              disabled={!hasGameRecords}
+              onClick={() => setRecordsConfirm(true)}
+              sx={{ ml: 1.5, flexShrink: 0 }}
+            >
+              Reset
+            </Button>
+          </ListItem>
         </List>
       </DialogContent>
+      <ConfirmDialog
+        open={recordsConfirm}
+        title="Reset records?"
+        message="This clears the best score, wave and hunt time on this device."
+        confirmLabel="Reset records"
+        cancelLabel="Keep them"
+        onConfirm={() => {
+          setRecordsConfirm(false)
+          dispatch(resetGameRecords('tankBattle'))
+        }}
+        onCancel={() => setRecordsConfirm(false)}
+      />
     </Dialog>
   )
 }

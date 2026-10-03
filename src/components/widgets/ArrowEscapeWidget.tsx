@@ -2,12 +2,21 @@ import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'rea
 import {
   Box,
   Button,
+  IconButton,
   Stack,
   ToggleButton,
   ToggleButtonGroup,
+  Tooltip,
   Typography,
 } from '@mui/material'
-import { useAppDispatch } from '../../app/hooks'
+import { useAppDispatch, useAppSelector } from '../../app/hooks'
+import {
+  absorbArrowsRecords,
+  recordArrowsClear,
+  resetGameRecords,
+  selectArrowsRecords,
+} from '../../features/records/recordsSlice'
+import DeleteSweepIcon from '@mui/icons-material/DeleteSweep'
 import { updateWidgetData } from '../../features/widgets/widgetsSlice'
 import { useWidgetField } from '../../features/widgets/useWidgetField'
 import type { WidgetProps } from '../../registry/widgetRegistry'
@@ -123,9 +132,24 @@ export default function ArrowEscapeWidget({ id }: WidgetProps) {
   const bumps = useWidgetField<number>(id, 'bumps', 0, (v) =>
     typeof v === 'number' ? v : undefined,
   )
-  const solved = useWidgetField<number>(id, 'solved', 0, (v) =>
+  // The lifetime clear tally lives in the app-level records slice — it
+  // survives removeWidget and is shared by every Arrow Escape widget.
+  const { solved } = useAppSelector(selectArrowsRecords)
+  // One-time migration from pre-slice widget data. The tally is ADDITIVE, so
+  // the ref latch is load-bearing: StrictMode re-invokes the effect with the
+  // same captured values and would otherwise count the absorb twice.
+  const legacySolved = useWidgetField<number>(id, 'solved', 0, (v) =>
     typeof v === 'number' ? v : undefined,
   )
+  const absorbed = useRef(false)
+  useEffect(() => {
+    if (legacySolved <= 0 || absorbed.current) return
+    absorbed.current = true
+    dispatch(absorbArrowsRecords({ solved: legacySolved }))
+    dispatch(updateWidgetData({ id, data: { solved: 0 } }))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [legacySolved])
+  const [recordsConfirm, setRecordsConfirm] = useState(false)
   const mode = useWidgetField<'solo' | 'online'>(id, 'mode', 'solo', (v) =>
     v === 'online' ? v : 'solo',
   )
@@ -239,8 +263,8 @@ export default function ArrowEscapeWidget({ id }: WidgetProps) {
   const [, setTick] = useState(0)
   const [flash, setFlash] = useState<number | null>(null)
   const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const stateRef = useRef({ removed, solved, total: puzzle.arrows.length })
-  stateRef.current = { removed, solved, total: puzzle.arrows.length }
+  const stateRef = useRef({ removed, total: puzzle.arrows.length })
+  stateRef.current = { removed, total: puzzle.arrows.length }
 
   useEffect(() => {
     if (animCount === 0) return
@@ -253,16 +277,13 @@ export default function ArrowEscapeWidget({ id }: WidgetProps) {
         if (anim.kind === 'exit' && t * SPEED >= anim.dist) {
           anims.current.delete(aid)
           finished++
-          const { removed: cur, solved: s, total } = stateRef.current
+          const { removed: cur, total } = stateRef.current
           const next = [...cur, aid]
-          // The clear is counted in the SAME dispatch that removes the last
-          // arrow, so a reload can never double-count it.
-          dispatch(
-            updateWidgetData({
-              id,
-              data: { removed: next, ...(next.length === total ? { solved: s + 1 } : {}) },
-            }),
-          )
+          // The last arrow's removal and its clear-tally record go out as two
+          // synchronous dispatches in this frame; redux-persist snapshots the
+          // root after both, so a reload can never double-count the clear.
+          dispatch(updateWidgetData({ id, data: { removed: next } }))
+          if (next.length === total) dispatch(recordArrowsClear())
           // Racing: report progress; the final exit is the finish line.
           const race = raceRef.current
           if (race.racing) {
@@ -512,6 +533,20 @@ export default function ArrowEscapeWidget({ id }: WidgetProps) {
           onToggle={() => changeMode(online ? 'solo' : 'online')}
           testId="arrows-mode-online"
         />
+        <Tooltip title="Reset records">
+          <span>
+            <IconButton
+              size="small"
+              aria-label="Reset records"
+              data-testid="arrows-reset-records"
+              disabled={solved === 0}
+              onClick={() => setRecordsConfirm(true)}
+              sx={{ flexShrink: 0 }}
+            >
+              <DeleteSweepIcon fontSize="small" />
+            </IconButton>
+          </span>
+        </Tooltip>
       </Stack>
 
       {online && (
@@ -779,6 +814,18 @@ export default function ArrowEscapeWidget({ id }: WidgetProps) {
           setPending(null)
         }}
         onCancel={() => setPending(null)}
+      />
+      <ConfirmDialog
+        open={recordsConfirm}
+        title="Reset records?"
+        message="This clears the lifetime solve count on this device. The current puzzle is untouched."
+        confirmLabel="Reset records"
+        cancelLabel="Keep it"
+        onConfirm={() => {
+          setRecordsConfirm(false)
+          dispatch(resetGameRecords('arrows'))
+        }}
+        onCancel={() => setRecordsConfirm(false)}
       />
     </Box>
     </SeatAvatarsOverride.Provider>

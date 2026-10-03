@@ -184,7 +184,6 @@ export function defaultWidgetData(type: WidgetType): Record<string, unknown> {
         removed: [],
         taps: 0,
         bumps: 0,
-        solved: 0,
       }
     case 'carPark':
       // best / solved / assisted moved to the app-level records slice —
@@ -237,7 +236,6 @@ export function defaultWidgetData(type: WidgetType): Record<string, unknown> {
         turbo: false,
         richWorld: true,
         landing: false,
-        landingBest: 0,
         battery: false,
         followDist: 7,
         fpvPolish: false,
@@ -247,8 +245,6 @@ export function defaultWidgetData(type: WidgetType): Record<string, unknown> {
     case 'droneStrike':
       return {
         worldSeed: DEFAULT_SEED,
-        bestWave: 0,
-        bestScore: 0,
         view: 'fp',
         autoFire: false,
         aimAssist: 'mild',
@@ -285,9 +281,6 @@ export function defaultWidgetData(type: WidgetType): Record<string, unknown> {
         pos: 0,
         trail: [0],
         elapsedMs: 0,
-        bestSmall: 0,
-        bestMedium: 0,
-        bestLarge: 0,
         turn: 'toy',
         times: { toy: 0, ninja: 0 },
       }
@@ -296,9 +289,6 @@ export function defaultWidgetData(type: WidgetType): Record<string, unknown> {
         worldSeed: DEFAULT_TANK_SEED,
         battleMode: 'waves',
         roughness: 'rolling',
-        bestWave: 0,
-        bestScore: 0,
-        bestRoamMs: 0,
         autoFire: false,
         autoTurn: true,
         aimAssist: 'mild',

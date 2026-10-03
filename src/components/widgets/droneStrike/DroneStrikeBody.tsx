@@ -4,8 +4,9 @@ import { Box, IconButton, Tooltip, alpha, useTheme } from '@mui/material'
 import CameraswitchIcon from '@mui/icons-material/Cameraswitch'
 import RestartAltIcon from '@mui/icons-material/RestartAlt'
 import SettingsIcon from '@mui/icons-material/Settings'
-import { useAppDispatch } from '../../../app/hooks'
+import { useAppDispatch, useAppSelector } from '../../../app/hooks'
 import { updateWidgetData } from '../../../features/widgets/widgetsSlice'
+import { recordStrikeWave, selectDroneStrikeRecords } from '../../../features/records/recordsSlice'
 import { useWidgetField } from '../../../features/widgets/useWidgetField'
 import { defaultWidgetData } from '../../../features/widgets/widgetCatalog'
 import { usePresentation } from '../../fullscreen/presentation'
@@ -206,8 +207,9 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
   const worldSeed = useWidgetField(id, 'worldSeed', DEFAULT_SEED)
   const view = useWidgetField<StrikeView>(id, 'view', 'fp', coerceStrikeView)
   const minimap = useWidgetField(id, 'minimap', true)
-  const bestWave = useWidgetField(id, 'bestWave', 0)
-  const bestScore = useWidgetField(id, 'bestScore', 0)
+  // Bests live in the app-level records slice — they survive removeWidget
+  // and are shared by every Drone Strike widget.
+  const { bestWave, bestScore } = useAppSelector(selectDroneStrikeRecords)
   const autoFire = useWidgetField(id, 'autoFire', false)
   const aimAssist = useWidgetField<AimAssistLevel>(id, 'aimAssist', 'mild', coerceAimAssist)
   const gyroMode = useWidgetField<GyroMode>(id, 'gyroAim', 'off', coerceGyroMode)
@@ -417,13 +419,10 @@ export default function DroneStrikeBody({ id }: WidgetProps) {
   }, [hp, phase])
 
   const onWaveCleared = useCallback(() => {
-    const score = scoreRef.current
-    const data: Record<string, unknown> = {}
-    if (wave > bestWave) data.bestWave = wave
-    if (score > bestScore) data.bestScore = score
-    if (Object.keys(data).length > 0) dispatch(updateWidgetData({ id, data }))
+    // The slice keeps the maxima; an unconditional report stays correct.
+    dispatch(recordStrikeWave({ wave, score: scoreRef.current }))
     setPhase('cleared')
-  }, [wave, bestWave, bestScore, dispatch, id])
+  }, [wave, dispatch])
 
   const onTargetDown = useCallback((points: number) => {
     const idNum = ++markerId.current

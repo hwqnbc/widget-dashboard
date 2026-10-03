@@ -4,8 +4,9 @@ import { Box, IconButton, Tooltip, alpha, useTheme } from '@mui/material'
 import HelpOutlineIcon from '@mui/icons-material/HelpOutlined'
 import RestartAltIcon from '@mui/icons-material/RestartAlt'
 import SettingsIcon from '@mui/icons-material/Settings'
-import { useAppDispatch } from '../../../app/hooks'
+import { useAppDispatch, useAppSelector } from '../../../app/hooks'
 import { updateWidgetData } from '../../../features/widgets/widgetsSlice'
+import { recordTankClear, selectTankBattleRecords } from '../../../features/records/recordsSlice'
 import { useWidgetField } from '../../../features/widgets/useWidgetField'
 import { defaultWidgetData } from '../../../features/widgets/widgetCatalog'
 import { usePresentation } from '../../fullscreen/presentation'
@@ -151,9 +152,9 @@ export default function TankBattleBody({ id }: WidgetProps) {
   const battleMode = useWidgetField<BattleMode>(id, 'battleMode', 'waves', coerceBattleMode)
   const roughness = useWidgetField<Roughness>(id, 'roughness', 'rolling', coerceRoughness)
   const minimap = useWidgetField(id, 'minimap', true)
-  const bestWave = useWidgetField(id, 'bestWave', 0)
-  const bestScore = useWidgetField(id, 'bestScore', 0)
-  const bestRoamMs = useWidgetField(id, 'bestRoamMs', 0)
+  // Bests live in the app-level records slice — they survive removeWidget
+  // and are shared by every Tank Battle widget.
+  const { bestWave, bestScore, bestRoamMs } = useAppSelector(selectTankBattleRecords)
   const autoFire = useWidgetField(id, 'autoFire', false)
   const autoTurn = useWidgetField(id, 'autoTurn', true)
   const helpSeen = useWidgetField(id, 'helpSeen', false)
@@ -297,18 +298,15 @@ export default function TankBattleBody({ id }: WidgetProps) {
 
   const onCleared = useCallback(() => {
     const score = scoreRef.current
-    const data: Record<string, unknown> = {}
-    if (score > bestScore) data.bestScore = score
     if (battleMode === 'waves') {
-      if (wave > bestWave) data.bestWave = wave
+      dispatch(recordTankClear({ score, wave }))
     } else {
       const elapsed = Math.round(performance.now() - roamStartRef.current)
       roamClearedMsRef.current = elapsed
-      if (bestRoamMs === 0 || elapsed < bestRoamMs) data.bestRoamMs = elapsed
+      dispatch(recordTankClear({ score, roamMs: elapsed }))
     }
-    if (Object.keys(data).length > 0) dispatch(updateWidgetData({ id, data }))
     setPhase('cleared')
-  }, [battleMode, wave, bestWave, bestScore, bestRoamMs, dispatch, id])
+  }, [battleMode, wave, dispatch])
 
   const onTargetDown = useCallback((points: number) => {
     const idNum = ++markerId.current

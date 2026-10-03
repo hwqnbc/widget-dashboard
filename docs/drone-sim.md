@@ -474,7 +474,13 @@ mode on showed nothing in view. They also appear on the minimap. **Touchdown det
 reuses the collision impact: when an airborne drone settles onto a pad's
 roof-rest height inside the disc, `scoreLanding(dist, r, touchdownSpeed)` =
 `clamp(100 − 40·dist/r − 6·speed, 10, 100)` — precision and softness both
-pay. A `LANDED! 87 pts` banner (+ `NEW BEST!`, persisting `landingBest`,
+pay. A `LANDED! 87 pts` banner (+ `NEW BEST!` — the lifetime `landingBest`
+lives in the app-level records slice `records.droneSim` (Car Park pattern:
+the non-WebGL shell absorbs any pre-slice copy; the settings panel's
+Reset-records row `dronesim-reset-records` clears it), while the per-course
+lap stats (`bestLapMs`/`bestLapPath`/`score`) deliberately STAY in widget
+data: working state, wiped on every course change, and the unbounded ghost
+path must not re-serialize with every record write —
 exposed as `data-landing-best`) and a haptic pulse follow; leaving the pad
 re-arms the next attempt. Crash-worthy slams still crash — the detector
 lives in the non-crash branch.

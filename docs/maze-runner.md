@@ -145,7 +145,9 @@ hand-off banner's second out of player 2's time.
   while the run is active, so a finished or untouched maze has no interval.
 - `data-ms` is the **committed** value and deliberately lags the live display;
   one owner per attribute.
-- Best times are three flat fields (`bestSmall`/`bestMedium`/`bestLarge`) rather
+- Best times live in the app-level records slice as `records.maze.best`
+  (per-size ms, 0 = none — see *Records* below); they were three flat
+  widget-data fields (`bestSmall`/`bestMedium`/`bestLarge`) rather
   than one object — the trivial `typeof` coercer covers them and there is no
   nested shape to validate.
 
@@ -240,8 +242,19 @@ is `maze-race-void`.
 
 ## State model (persisted `data`, via `useWidgetField`)
 `seed`, `cols`, `rows` · `size`, `moveRule`, `aid`, `mode`, `mirror` · `pos`, `trail`
-(deduped visited cells) · `elapsedMs` · `bestSmall`/`bestMedium`/`bestLarge` ·
+(deduped visited cells) · `elapsedMs` ·
 `turn`, `times`.
+
+### Records — app-level `records` slice
+
+The bests above moved out of widget `data` into the app-level
+`features/records/recordsSlice.ts` (the Car Park pattern,
+`docs/car-park.md` *Records*): they survive the widget being deleted and
+re-added, are shared by every instance, absorb any pre-slice copy a
+widget still carries in its data (one-time, ref-latched against
+StrictMode), and clear through a confirm-guarded reset-records control.
+The broom button sits in the footer next to the timer
+(`maze-reset-records`, disabled while empty, "Reset records?" confirm).
 
 `state` is **derived**, not stored: `won` when `pos === goal`, else `running`
 when anything has happened. One fewer field to fall out of sync. Fallbacks are

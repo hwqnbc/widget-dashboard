@@ -8,8 +8,9 @@ import DirectionsWalkIcon from '@mui/icons-material/DirectionsWalk'
 import ManIcon from '@mui/icons-material/Man'
 import RestartAltIcon from '@mui/icons-material/RestartAlt'
 import SettingsIcon from '@mui/icons-material/Settings'
-import { useAppDispatch } from '../../../app/hooks'
+import { useAppDispatch, useAppSelector } from '../../../app/hooks'
 import { updateWidgetData } from '../../../features/widgets/widgetsSlice'
+import { recordLanding, selectDroneSimRecords } from '../../../features/records/recordsSlice'
 import { useWidgetField } from '../../../features/widgets/useWidgetField'
 import { defaultWidgetData } from '../../../features/widgets/widgetCatalog'
 import { useSeatAvatarId } from '../../../features/avatars/useSeatAvatars'
@@ -180,7 +181,9 @@ export default function DroneSimBody({ id }: WidgetProps) {
   const minimap = useWidgetField(id, 'minimap', true)
   const richWorld = useWidgetField(id, 'richWorld', true)
   const landing = useWidgetField(id, 'landing', false)
-  const landingBest = useWidgetField(id, 'landingBest', 0)
+  // Lifetime landing best lives in the app-level records slice (the
+  // per-course lap best/ghost stay in widget data by design).
+  const { landingBest } = useAppSelector(selectDroneSimRecords)
   const battery = useWidgetField(id, 'battery', false)
   const batteryRef = useRef<BatteryState>(createBatteryState())
   const batteryBarRef = useRef<HTMLDivElement>(null)
@@ -377,14 +380,12 @@ export default function DroneSimBody({ id }: WidgetProps) {
     (points: number) => {
       vibrate(LAP_PULSE)
       const isBest = points > landingBest
-      if (isBest) {
-        dispatch(updateWidgetData({ id, data: { landingBest: points } }))
-      }
+      if (isBest) dispatch(recordLanding({ score: points }))
       setBanner(`LANDED! ${points} pts${isBest ? ' · NEW BEST!' : ''}`)
       if (bannerTimer.current) clearTimeout(bannerTimer.current)
       bannerTimer.current = setTimeout(() => setBanner(null), 2500)
     },
-    [dispatch, id, landingBest],
+    [dispatch, landingBest],
   )
 
   type CourseChange =

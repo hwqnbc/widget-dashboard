@@ -2202,3 +2202,18 @@ carried over; these are the new ones.
      the e2e caught the dev build double-counting `solved`. The solve
      policy moves into the reducer, pure — the widget reports what
      happened; the slice decides what it is worth.
+
+137. **The autoMergeLevel1 trap recurs one level down: a namespace added to
+     an ALREADY-STORED slice rehydrates as undefined.** Lesson #136's "new
+     top-level slice dodges the trap" was only true for the slice's FIRST
+     stored shape: once `records` existed in storage as `{carPark}`, the
+     maze/arrows/drone/tank namespaces added later came back undefined —
+     the stored slice replaces `initialState` wholesale, exactly the
+     missing-field bug again. Fix it INSIDE the slice, not with an
+     app-wide reconciler swap: an `ensure(state, game)` helper in every
+     reducer plus exported fallback selectors (module-constant empties, so
+     useSelector identity stays stable), and nothing ever trusts a
+     namespace to exist. Corollary for the WebGL games: run the absorb
+     migration in the widget's non-WebGL SHELL — it has the widget id and
+     mounts without the three.js chunk, so records migrate even if the
+     canvas never loads.

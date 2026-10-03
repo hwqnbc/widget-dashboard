@@ -543,10 +543,11 @@ lot behind a ConfirmDialog — the attempt and level choice stay untouched.
   the band table already exist; the only new part is the worker.
 - **Daily puzzle.** Seed the random mode with the date. Everyone gets the
   same board, and the best score shows against par.
-- **Records slice for the other games.** Maze Runner, Drone Sim/Strike and
-  Tank Battle still keep their bests in widget `data`; moving them into
-  `features/records/recordsSlice.ts` (one namespace per game, same absorb
-  migration) gives every game deletion-proof records for free.
+- ~~Records slice for the other games~~ — **shipped**: Maze Runner, Arrow
+  Escape, Drone Sim (landing best), Drone Strike and Tank Battle all moved
+  into `recordsSlice.ts` (one namespace per game, same absorb migration —
+  the WebGL games absorb in their non-WebGL shells; see each design note
+  and lessons #137 for the autoMergeLevel1 one-level-down guard).
 - **Timed challenge.** A clock per level with a per-level best time, using
   Maze Runner's per-size-best pattern.
 - ~~**2 Devices race**~~ — **shipped** (see *2 Devices race*): same level,
