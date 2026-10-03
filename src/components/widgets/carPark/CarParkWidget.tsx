@@ -9,14 +9,21 @@ import {
   Stack,
   ToggleButton,
   ToggleButtonGroup,
+  Tooltip,
   Typography,
 } from '@mui/material'
+import DeleteSweepIcon from '@mui/icons-material/DeleteSweep'
 import RotateRightIcon from '@mui/icons-material/RotateRight'
 import LightbulbIcon from '@mui/icons-material/LightbulbOutlined'
 import PlayCircleIcon from '@mui/icons-material/PlayCircleOutlined'
 import UndoIcon from '@mui/icons-material/Undo'
 import RestartIcon from '@mui/icons-material/RestartAlt'
-import { useAppDispatch } from '../../../app/hooks'
+import { useAppDispatch, useAppSelector } from '../../../app/hooks'
+import {
+  absorbCarParkRecords,
+  recordCarParkSolve,
+  resetCarParkRecords,
+} from '../../../features/records/recordsSlice'
 import { updateWidgetData } from '../../../features/widgets/widgetsSlice'
 import { useWidgetField } from '../../../features/widgets/useWidgetField'
 import type { WidgetProps } from '../../../registry/widgetRegistry'
@@ -273,17 +280,43 @@ export default function CarParkWidget({ id }: WidgetProps) {
     Number.isInteger(v) && (v as number) >= 0 ? (v as number) : undefined,
   )
   const moves = useWidgetField<Move[]>(id, 'moves', NO_MOVES, coerceMoves)
-  const best = useWidgetField<Record<string, number>>(id, 'best', NO_BEST, coerceBest)
-  const solved = useWidgetField<number>(id, 'solved', 0)
+  // Records (bests / stars / solve tally) live in the app-level `records`
+  // slice, NOT in this instance's data: they are the player's, not the
+  // widget's — deleting and re-adding the widget must keep them, and every
+  // Car Park widget on the board shares them.
+  const { best, solved, assisted } = useAppSelector((s) => s.records.carPark)
   const cardView = useWidgetField<BoardView>(id, 'view', '2d', coerceView)
   // Fullscreen keeps its OWN view choice (default 3D — the 3D board is the
   // one that benefits from the space); the card keeps its own.
   const fsView = useWidgetField<BoardView>(id, 'fsView', '3d', coerceView)
   const yaw = useWidgetField<number>(id, 'yaw', 0, coerceYaw)
-  // Hints used on THIS attempt (reset with the move log) and the levels
-  // solved only with help — those earn ✓ but never ★ / best.
+  // Hints used on THIS attempt (reset with the move log) — the levels
+  // solved only with help live in the records slice (`assisted` above).
   const hints = useWidgetField<number>(id, 'hints', 0)
-  const assisted = useWidgetField<Record<string, true>>(id, 'assisted', NO_ASSISTED, coerceAssisted)
+  // Migration: absorb records this instance still carries from before the
+  // records slice existed, then zero its copy so each old instance
+  // contributes exactly once (the merge is min/union/add, so several
+  // instances absorbing compose correctly).
+  const legacyBest = useWidgetField<Record<string, number>>(id, 'best', NO_BEST, coerceBest)
+  const legacySolved = useWidgetField<number>(id, 'solved', 0)
+  const legacyAssisted = useWidgetField<Record<string, true>>(
+    id, 'assisted', NO_ASSISTED, coerceAssisted,
+  )
+  const hasLegacy =
+    Object.keys(legacyBest).length > 0 || legacySolved > 0 || Object.keys(legacyAssisted).length > 0
+  // The latch matters: StrictMode re-invokes the effect with the SAME render's
+  // captured values (the data-zeroing write hasn't re-rendered yet), and the
+  // `solved` tally — unlike the min/union merges — is not idempotent.
+  const absorbed = useRef(false)
+  useEffect(() => {
+    if (!hasLegacy || absorbed.current) return
+    absorbed.current = true
+    dispatch(
+      absorbCarParkRecords({ best: legacyBest, solved: legacySolved, assisted: legacyAssisted }),
+    )
+    dispatch(updateWidgetData({ id, data: { best: {}, solved: 0, assisted: {} } }))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasLegacy])
   const { fullscreen } = usePresentation()
   const view = fullscreen ? fsView : cardView
   const mode = useWidgetField<PlayMode>(id, 'mode', 'solo', coerceMode)
@@ -377,25 +410,20 @@ export default function CarParkWidget({ id }: WidgetProps) {
 
   const setGame = (data: Record<string, unknown>) => dispatch(updateWidgetData({ id, data }))
 
-  /** Commit one slide. The win (solve tally + best) is written in the SAME
-   * dispatch as the finishing move, so a reload never double-counts it. */
+  /** Commit one slide. The finishing move and its record (solve tally +
+   * best, policy in the records slice — a hinted solve earns ✓ but never
+   * best / ★) go out as two synchronous dispatches in this one handler;
+   * redux-persist snapshots the root after both, so a reload still can't
+   * see the move without its record or double-count the solve. */
   const commit = (m: Move) => {
     const log = [...moves.slice(0, applied), m]
     const after = replay(lot, log)
     if (after.applied !== log.length) return
     setHintKey(null)
-    const data: Record<string, unknown> = { moves: log }
+    setGame({ moves: log })
     if (isSolved(lot, after.pos)) {
-      data.solved = solved + 1
-      // A hinted solve counts as solved (✓) but never updates best / ★ —
-      // hints follow the optimal line, so a hinted par would mean nothing.
-      if (hints > 0) {
-        if (myBest === undefined) data.assisted = { ...assisted, [key]: true }
-      } else if (myBest === undefined || log.length < myBest) {
-        data.best = { ...best, [key]: log.length }
-      }
+      dispatch(recordCarParkSolve({ key, moves: log.length, hinted: hints > 0 }))
     }
-    setGame(data)
   }
 
   // ------------------------------------------------------------ dragging
@@ -564,6 +592,9 @@ export default function CarParkWidget({ id }: WidgetProps) {
 
   // Leaving mid-race (counting/running) forfeits it for both — ask first.
   const [leaveConfirm, setLeaveConfirm] = useState(false)
+  const [recordsConfirm, setRecordsConfirm] = useState(false)
+  const hasRecords =
+    Object.keys(best).length > 0 || solved > 0 || Object.keys(assisted).length > 0
   const toggleMode = () => {
     if (!online) setGame({ mode: 'online' })
     else if (raceState === 'counting' || raceState === 'running') setLeaveConfirm(true)
@@ -791,6 +822,22 @@ export default function CarParkWidget({ id }: WidgetProps) {
           testId="carpark-mode-online"
           label="2 Devices race"
         />
+        {/* Records are app-level (shared by every Car Park widget, surviving
+            widget deletion), so clearing them is a deliberate, confirmed act. */}
+        <Tooltip title="Reset records">
+          <span>
+            <IconButton
+              size="small"
+              aria-label="Reset records"
+              data-testid="carpark-reset-records"
+              disabled={!hasRecords}
+              onClick={() => setRecordsConfirm(true)}
+              sx={{ flexShrink: 0 }}
+            >
+              <DeleteSweepIcon fontSize="small" />
+            </IconButton>
+          </span>
+        </Tooltip>
       </Stack>
 
       {online && (
@@ -1264,6 +1311,18 @@ export default function CarParkWidget({ id }: WidgetProps) {
           startReplay(true)
         }}
         onCancel={() => setSolutionConfirm(false)}
+      />
+      <ConfirmDialog
+        open={recordsConfirm}
+        title="Reset records?"
+        message="This clears every level's best moves, stars and solve history on this device. Levels and the current attempt stay as they are."
+        confirmLabel="Reset records"
+        cancelLabel="Keep them"
+        onConfirm={() => {
+          setRecordsConfirm(false)
+          dispatch(resetCarParkRecords())
+        }}
+        onCancel={() => setRecordsConfirm(false)}
       />
       <ConfirmDialog
         open={leaveConfirm}

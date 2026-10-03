@@ -2182,3 +2182,23 @@ carried over; these are the new ones.
      the remote path resolved would clobber the just-applied flip). Also
      the reason Memory's `ply` counts flips, not turns: the replay guard
      needs a counter that moves on every message.
+
+136. **Per-instance widget `data` is the wrong home for RECORDS — bests,
+     stars, lifetime tallies belong to the player, not the widget.** Car
+     Park kept them in `data`, so deleting the widget deleted the game's
+     history. The fix is a top-level redux-persist slice
+     (`features/records/recordsSlice.ts`, whitelisted like `ui`): it
+     survives `removeWidget`, is shared live by every instance, and — being
+     a NEW slice key — dodges autoMergeLevel1's missing-field trap (a slice
+     absent from storage falls back to `initialState` wholesale, while a
+     new FIELD patched into a stored slice rehydrates as undefined, the
+     bug uiSlice guards against by hand). Ship it with a one-time absorb
+     migration whose merge is monotone (min per best, union of flags,
+     tallies added), have the widget zero its legacy copy right after, and
+     the old instances compose correctly however many there are — but latch
+     the absorb effect with a ref: StrictMode re-invokes effects with the
+     SAME render's captured values (the zeroing write hasn't re-rendered
+     yet), and a tally, unlike the min/union merges, is not idempotent —
+     the e2e caught the dev build double-counting `solved`. The solve
+     policy moves into the reducer, pure — the widget reports what
+     happened; the slice decides what it is worth.

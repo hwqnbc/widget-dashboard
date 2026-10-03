@@ -319,7 +319,7 @@ see `docs/netplay.md`.
 The difficulty dropdown shows each tier's progress as
 `Beginner 7/10 ★3`: levels solved (clean or hinted) out of the tier's
 total, and ★s earned (clean solves at or under par). It comes from the
-persisted `best` and `assisted` maps through the pure `tierProgress`
+records slice's `best` and `assisted` maps through the pure `tierProgress`
 helper, so it needs no extra state. Each `<option>` carries `data-solved`
 and `data-stars`.
 
@@ -422,24 +422,40 @@ board for a fully playable three.js board. The choice is persisted as
 - **Overlay.** The win overlay and the footer are unchanged and sit over
   whichever board is showing.
 
-## State model (persisted `data`, via `useWidgetField`)
+## State model
+
+Per-widget `data` (via `useWidgetField`) holds the ATTEMPT; the RECORDS live
+in the app-level `records` slice (below), because they are the player's, not
+the widget instance's.
 
 | Field    | Meaning |
 |----------|---------|
 | `tier`   | Current tier (coerced to a known tier). |
 | `level`  | Index within the tier (clamped to the pack). |
 | `moves`  | `[vehicleIndex, delta][]`, the current attempt's log. The board is **derived** by `replay`, never stored. |
-| `best`   | `{ 'tier:index': fewestMoves }`. |
-| `solved` | Lifetime solve count. |
 | `view`   | The card's board: `'2d'` or `'3d'` (coerced; default `'2d'`). |
 | `fsView` | The fullscreen board: `'2d'` or `'3d'` (default `'3d'`). |
 | `yaw`    | 3D camera quarter-turns, 0–3 (default 0). |
 | `hints`  | Hints used in the current attempt (reset with `moves`). |
-| `assisted` | `{ 'tier:index': true }` — levels solved only with hints (✓, never ★). |
 | `mode`   | `'solo'` or `'online'` (the 2 Devices race). Race state itself is transient. |
 
-The winning move writes `moves`, `solved` and `best` in **one** dispatch,
-so a reload can never double-count a solve.
+### Records — `features/records/recordsSlice.ts` (app-level, persisted)
+
+`best` (`{ 'tier:index': fewestMoves }`), `solved` (lifetime tally) and
+`assisted` (`{ 'tier:index': true }` — hinted solves, ✓ never ★) moved out
+of widget `data` into their own whitelisted redux-persist slice, so they
+**survive the widget being deleted and re-added** and are shared live by
+every Car Park widget on the board. The solve POLICY is a pure reducer
+(`recordCarParkSolve({ key, moves, hinted })`): tally +1; hinted →
+`assisted` only if no best; clean → min best. The finishing move and its
+record go out as two synchronous dispatches in one handler — redux-persist
+snapshots the root after both, so a reload still cannot double-count a
+solve. A widget still carrying pre-slice records in its `data` absorbs them
+on mount (`absorbCarParkRecords` — min per best, union assisted, tallies
+added — then the instance copy is zeroed, so each old instance contributes
+exactly once). The **reset-records button** (`carpark-reset-records`, in
+the top row next to the 2-Devices toggle, disabled while empty) clears the
+lot behind a ConfirmDialog — the attempt and level choice stay untouched.
 
 ## Test contract (`data-*`)
 
@@ -462,6 +478,8 @@ so a reload can never double-count a solve.
   - `carpark-solution`, `carpark-replay` and `carpark-replay-stop`, plus
     root `data-replay` (`"k/n"` while a solution plays, otherwise empty);
   - tier `<option>`s carry `data-solved` and `data-stars`;
+  - `carpark-reset-records` — the records-reset icon button (disabled when
+    there is nothing to clear), confirm-guarded ("Reset records?");
   - race: `carpark-mode-online`, `carpark-race-bar`, `carpark-link`,
     `carpark-start-race`, `carpark-opponent` (`data-opp-pos` = the packed
     cell), `carpark-countdown`, `carpark-race-lost` and `carpark-race-void`;
@@ -525,6 +543,10 @@ so a reload can never double-count a solve.
   the band table already exist; the only new part is the worker.
 - **Daily puzzle.** Seed the random mode with the date. Everyone gets the
   same board, and the best score shows against par.
+- **Records slice for the other games.** Maze Runner, Drone Sim/Strike and
+  Tank Battle still keep their bests in widget `data`; moving them into
+  `features/records/recordsSlice.ts` (one namespace per game, same absorb
+  migration) gives every game deletion-proof records for free.
 - **Timed challenge.** A clock per level with a per-level best time, using
   Maze Runner's per-size-best pattern.
 - ~~**2 Devices race**~~ — **shipped** (see *2 Devices race*): same level,

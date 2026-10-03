@@ -187,7 +187,9 @@ export function defaultWidgetData(type: WidgetType): Record<string, unknown> {
         solved: 0,
       }
     case 'carPark':
-      return { tier: 'beginner', level: 0, moves: [], best: {}, solved: 0, view: '2d', fsView: '3d', yaw: 0, hints: 0, assisted: {}, mode: 'solo' }
+      // best / solved / assisted moved to the app-level records slice —
+      // widgets made before that carry them in data until absorbed.
+      return { tier: 'beginner', level: 0, moves: [], view: '2d', fsView: '3d', yaw: 0, hints: 0, mode: 'solo' }
     case 'memory':
       return {
         size: 4,
