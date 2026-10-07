@@ -11,7 +11,7 @@
  * gallery choice + theme so it works offline), `data-basemap-choice`,
  * `data-view-mode`, `data-tool`, `data-pin-count` and `data-route-*`.
  */
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   Alert,
   Box,
@@ -86,6 +86,7 @@ import {
   setFlightCeiling,
   setFlightCruise,
   setFlightFollow,
+  setFlightUseZones,
   setFlightSpeed,
   setOverlayVisible,
   setShowPins,
@@ -110,6 +111,7 @@ import BookmarksControl from './BookmarksControl'
 import FlightBinding, { type FlightAnim, type FlightGroundPoint } from './FlightBinding'
 import FlightControl from './FlightControl'
 import { buildFlightPath } from './flightPathModel'
+import type { Building } from './flightPlanModel'
 import { useFlightPlan } from './useFlightPlan'
 import ConfirmDialog from '../../components/widgets/ConfirmDialog'
 import CoordinateReadout from './CoordinateReadout'
@@ -398,6 +400,7 @@ export default function MapPageBody() {
   const flightAllowClimb = useAppSelector((state) => state.map.flightAllowClimb) ?? true
   const flightCeiling = useAppSelector((state) => state.map.flightCeiling) ?? 120
   const flightFollow = useAppSelector((state) => state.map.flightFollow) ?? false
+  const flightUseZones = useAppSelector((state) => state.map.flightUseZones) ?? true
   const flightSpeed = useAppSelector((state) => state.map.flightSpeed) ?? 20
   const savedFlights = useAppSelector((state) => state.map.savedFlights) ?? NO_FLIGHTS
 
@@ -1294,11 +1297,29 @@ export default function MapPageBody() {
   // The building-aware plan (Overpass-fed; falls back to direct legs when
   // the service is unreachable). Length is pure math over the planned path;
   // a blocked plan reports the straight-line length instead.
+  // Drawn no-fly zones: every polygon (circles are stored as polygons) in a
+  // VISIBLE overlay becomes an Infinity-height obstacle — never climbable,
+  // only detourable — when the Zones switch is on. Hide/show overlay groups
+  // to manage which zones apply.
+  const flightZones = useMemo<Building[]>(() => {
+    if (!flightUseZones) return []
+    const visible = new Set(overlays.filter((o) => o.visible).map((o) => o.id))
+    const zones: Building[] = []
+    for (const d of drawings) {
+      if (d.kind !== 'polygon' || !d.overlayId || !visible.has(d.overlayId)) continue
+      const ring = d.rings?.[0]
+      if (Array.isArray(ring) && ring.length >= 3) {
+        zones.push({ ring: ring.map(([lon, lat]) => [lon, lat]), height: Number.POSITIVE_INFINITY })
+      }
+    }
+    return zones
+  }, [flightUseZones, drawings, overlays])
   const { plan: flightPlan, status: flightPlanStatus } = useFlightPlan(
     flightPoints,
     flightCruise,
     flightAllowClimb,
     flightCeiling,
+    flightZones,
   )
   const flightKm =
     buildFlightPath(
@@ -1311,16 +1332,14 @@ export default function MapPageBody() {
           })),
     ).total / 1000
 
-  // The flight and sun tools are 3D-only: switching to 2D releases them (and
-  // pauses/stops their animations); the absolute-height graphics only show
-  // in 3D.
+  // The sun tool is 3D-only (scene lighting): switching to 2D releases it.
+  // The flight tool works in BOTH modes (2D draws the plan flat; the chase
+  // cam simply has no effect there), so it survives the toggle.
   useEffect(() => {
     if (viewMode !== '3d') {
-      setTool((t) => (t === 'flight' || t === 'sun' ? 'none' : t))
-      setFlightAnim((a) => (a === 'playing' ? 'paused' : a))
+      setTool((t) => (t === 'sun' ? 'none' : t))
       setSunAnim(false)
     }
-    if (flightLayerRef.current) flightLayerRef.current.visible = viewMode === '3d'
   }, [viewMode])
 
   // Sun tool: drive the scene's native sun lighting from the slider. The
@@ -1548,6 +1567,8 @@ export default function MapPageBody() {
       data-flight-climbs={flightPlan.climbs}
       data-flight-detours={flightPlan.detours}
       data-flight-blocked={flightPlan.blocked}
+      data-flight-zones={flightUseZones ? 'on' : 'off'}
+      data-flight-zone-count={flightZones.length}
       data-drone-t={flightProgress.toFixed(3)}
       data-sun-hour={sunHour.toFixed(2)}
       data-sun-anim={sunAnim ? 'on' : 'off'}
@@ -1627,13 +1648,8 @@ export default function MapPageBody() {
               <RouteIcon fontSize="small" />
             </Tooltip>
           </ToggleButton>
-          <ToggleButton
-            value="flight"
-            data-testid="map-tool-flight"
-            aria-label="Drone flight"
-            disabled={viewMode !== '3d'}
-          >
-            <Tooltip title={viewMode === '3d' ? 'Drone flight (plant, add waypoints, fly)' : 'Drone flight — switch to 3D'} disableInteractive>
+          <ToggleButton value="flight" data-testid="map-tool-flight" aria-label="Drone flight">
+            <Tooltip title="Drone flight (plant, add waypoints, fly — drawn shapes are no-fly zones)" disableInteractive>
               <FlightTakeoffIcon fontSize="small" />
             </Tooltip>
           </ToggleButton>
@@ -1731,6 +1747,10 @@ export default function MapPageBody() {
             anim={flightAnim}
             follow={flightFollow}
             onFollow={(on) => dispatch(setFlightFollow(on))}
+            is3d={viewMode === '3d'}
+            useZones={flightUseZones}
+            onUseZones={(on) => dispatch(setFlightUseZones(on))}
+            zoneCount={flightZones.length}
             savedFlights={savedFlights}
             onSave={saveCurrentFlight}
             onLoad={loadSavedFlight}

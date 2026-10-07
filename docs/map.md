@@ -113,8 +113,11 @@ on it works without a backend server or API key.
   rename (dialog), per-group show/hide (eye — the drawings mirror joins
   visibility, rendering only shapes of visible groups), delete
   (confirm-guarded when the group has shapes, removes them too), expand →
-  per-shape list with delete. Marker and Polygon modes bind ArcGIS's
+  per-shape list with delete. Marker, Polygon and **Circle** modes bind ArcGIS's
   client-side `SketchViewModel` (no key) to a transient **scratch layer**;
+  a sketched circle COMPLETES as a polygon ring, so it flows through the
+  same storage/mirror/edit pipeline (and counts as a flight no-fly zone)
+  with zero new shape kinds;
   completed sketches convert to WGS84 (`webMercatorUtils`) and dispatch into
   the persisted `drawings` list (`MapDrawing` with `overlayId`), mirrored
   onto the **drawings layer** — redux is the single source of truth, same
@@ -326,20 +329,24 @@ on it works without a backend server or API key.
   with abort-on-change — well inside the fair-use policy (attribution +
   ≤1 req/s). Esri's own routing service needs an API key, hence OSRM.
 - **Drone flight** (`FlightBinding.tsx` + `FlightControl.tsx` + the pure
-  `flightPathModel.ts`) — a **3D-only** tool (the strip button disables in
-  2D; switching to 2D releases the tool, pauses the animation and hides the
-  layer). First click **plants the drone** ("D" marker), further clicks add
+  `flightPathModel.ts`) — works in **2D and 3D** (the chase-cam is the one
+  3D-only part — its button disables in 2D; the sun tool is now the only
+  3D-only strip tool). First click **plants the drone** ("D" marker), further clicks add
   numbered waypoints (cap 12); clicking a marker removes it. Each point
   samples ground elevation via `map.ground.queryElevation` (free
-  world-elevation; 3s-raced, offline falls back to 0) and flies at a
+  world-elevation, view-independent — works in 2D; 3s-raced, offline falls back to 0) and flies at a
   settable **cruise height above ground** (persisted `map.flightCruise`,
   default 60 m). Graphics live on the map's one
   `elevationInfo: absolute-height` GraphicsLayer: ground-tether dashes,
-  billboard markers, the hasZ path polyline, and the drone — a quadcopter
+  billboard markers, the hasZ path polyline (2D draws it flat), and the
+  drone — in 3D a quadcopter
   composed from `ObjectSymbol3DLayer` primitives (body puck + four rotor
   spheres + beacon), deliberately **rotation-symmetric so the animation
   never re-assigns a symbol** (symbols are immutable; per-tick symbol swaps
-  would rebuild WebGL resources — only `graphic.geometry` moves). The
+  would rebuild WebGL resources — only `graphic.geometry` moves); in 2D a
+  top-view inline-SVG `PictureMarkerSymbol` icon, because
+  **`PointSymbol3D` object layers are SceneView-only and draw nothing in a
+  MapView** (the view swap re-picks the symbol via `viewRevision`). The
   Play/Pause/Reset transport drives a 33 ms interval advancing wall-clock
   `dt × speed` through the pure `sampleFlight` (never rAF-gated,
   lessons.md #73); progress reaches React only via a 250 ms-throttled
@@ -398,6 +405,15 @@ on it works without a backend server or API key.
   control saying so. The e2e Overpass mock is bbox-driven: it reads the
   requested bbox and answers with one large square building centered in
   it, deterministic wherever the 3D clicks land.
+  **Drawn no-fly zones**: with the flight controls' **Zones** switch on
+  (persisted `flightUseZones`, default on; contract `data-flight-zones` +
+  `data-flight-zone-count`), every drawn polygon — circles are sketched AS
+  polygon rings — in a VISIBLE overlay becomes an **Infinity-height
+  obstacle**: never climbable, so the planner always detours around it
+  (blocked only when a waypoint is sealed inside). Hide/show overlay
+  groups to manage which zones apply; zones also hold when Overpass fails
+  (the 'error' fallback plans against zones alone), making them the manual
+  alternative where building data is missing or wrong.
   **Saved flight plans**: the bookmark-add button on the flight controls
   (`map-flight-save`, enabled from 2 waypoints) names and saves the current
   flight — waypoints with their sampled ground + altitude overrides, plus

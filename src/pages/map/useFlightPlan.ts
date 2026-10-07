@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { FlightGroundPoint } from './FlightBinding'
-import { planFlight, type FlightPlan } from './flightPlanModel'
+import { planFlight, type Building, type FlightPlan } from './flightPlanModel'
 import { bboxAround, fetchBuildings } from './overpass'
 
 export type FlightPlanStatus = 'idle' | 'planning' | 'ready' | 'error'
@@ -19,21 +19,24 @@ const EMPTY: FlightPlanState = {
 /**
  * Waypoints + settings → the building-aware flight plan. Debounced 400 ms
  * (clicks come in bursts), abort-on-change; when Overpass is unreachable
- * the plan is computed with zero buildings (every leg direct) and status
- * flips to 'error' so the control can say so.
+ * the plan is computed against the drawn zones alone and status flips to
+ * 'error' so the control can say the building data is missing. `zones`
+ * are user-drawn no-fly shapes — Infinity-height Buildings the planner
+ * can never climb over, only detour around.
  */
 export function useFlightPlan(
   points: FlightGroundPoint[],
   cruise: number,
   allowClimb: boolean,
   ceiling: number,
+  zones: Building[],
 ): FlightPlanState {
   const [state, setState] = useState<FlightPlanState>(EMPTY)
 
   useEffect(() => {
     if (points.length < 2) {
       setState({
-        plan: planFlight(points, [], { cruise, allowClimb, ceiling }),
+        plan: planFlight(points, zones, { cruise, allowClimb, ceiling }),
         status: 'idle',
       })
       return
@@ -52,7 +55,7 @@ export function useFlightPlan(
       }
       if (abort.signal.aborted) return
       setState({
-        plan: planFlight(points, buildings, { cruise, allowClimb, ceiling }),
+        plan: planFlight(points, [...buildings, ...zones], { cruise, allowClimb, ceiling }),
         status: failed ? 'error' : 'ready',
       })
     }, 400)
@@ -60,7 +63,7 @@ export function useFlightPlan(
       abort.abort()
       clearTimeout(timer)
     }
-  }, [points, cruise, allowClimb, ceiling])
+  }, [points, cruise, allowClimb, ceiling, zones])
 
   return state
 }

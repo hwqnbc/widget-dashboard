@@ -119,6 +119,8 @@ export interface MapState {
   flightCeiling: number
   /** Drone flight: chase-camera follows the drone while it flies. */
   flightFollow: boolean
+  /** Drone flight: treat visible drawn shapes as no-fly zones. */
+  flightUseZones: boolean
   /** Drone flight: cruise speed along the path, m/s. */
   flightSpeed: number
   savedFlights: SavedFlight[]
@@ -144,6 +146,7 @@ const initialState: MapState = {
   flightAllowClimb: true,
   flightCeiling: 120,
   flightFollow: false,
+  flightUseZones: true,
   flightSpeed: 20,
   savedFlights: [],
 }
@@ -294,6 +297,9 @@ const mapSlice = createSlice({
     setFlightFollow(state, action: PayloadAction<boolean>) {
       state.flightFollow = action.payload
     },
+    setFlightUseZones(state, action: PayloadAction<boolean>) {
+      state.flightUseZones = action.payload
+    },
     setFlightSpeed(state, action: PayloadAction<number>) {
       state.flightSpeed = action.payload
     },
@@ -342,6 +348,7 @@ export const {
   setFlightAllowClimb,
   setFlightCeiling,
   setFlightFollow,
+  setFlightUseZones,
   setFlightSpeed,
   saveFlight,
   deleteFlight,

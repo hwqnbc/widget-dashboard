@@ -14,7 +14,9 @@
  *    module: insert index, nearest-distance, tap threshold), pure
  *    flightPathModel checks (3D lengths, sampling, heading, done), pure
  *    flightPlanModel checks (OSM parsing, geometry, climb/detour/blocked
- *    decisions) + the flight tool's 3D-only enable, contract and settings
+ *    decisions incl. Infinity-height no-fly zones — detour-only, blocked
+ *    when sealed) + the flight tool's BOTH-mode enable (2D included; only
+ *    the sun tool is 3D-only), zones switch contract and settings
  *    defaults (speed input included), pure terminatorModel checks (subsolar
  *    point vs the almanac, terminator fixed points, night-ring shape) + the
  *    day/night overlay toggle with reload persistence (pure math — asserts
@@ -680,6 +682,33 @@ await page.route('**/environment/2-hour-weather-forecast**', (route) => {
       }
       check('detour path clears the building footprint', !crosses)
     }
+
+    // A drawn no-fly ZONE is an Infinity-height building: climb must never
+    // be chosen (even with climb allowed and a huge ceiling), the detour's
+    // z stays finite, and sealing a waypoint inside one blocks the leg.
+    const zonePlan = planFlight([A, B], [building(Number.POSITIVE_INFINITY)], {
+      ...opts,
+      ceiling: 1000,
+    })
+    check(
+      'infinity-height zone detours instead of climbing, with finite z',
+      zonePlan.legs[0].mode === 'detour' &&
+        zonePlan.legs[0].path.every((p) => Number.isFinite(p.z)),
+      zonePlan.legs[0].mode,
+    )
+    const seal = {
+      height: Number.POSITIVE_INFINITY,
+      ring: [
+        [103.799, 1.349],
+        [103.801, 1.349],
+        [103.801, 1.351],
+        [103.799, 1.351],
+      ],
+    }
+    check(
+      'waypoint sealed inside a zone blocks the leg',
+      planFlight([A, B], [seal], { ...opts, ceiling: 1000 }).legs[0].mode === 'blocked',
+    )
 
     // Start point surrounded by a building it cannot out-climb: blocked.
     const trap = {
@@ -1523,14 +1552,38 @@ check(
   'trees switch hidden in 2D',
   (await page.locator('[data-testid="map-trees"]').count()) === 0,
 )
-// Drone flight is a 3D-only tool; its contract attrs render offline.
+// Drone flight works in BOTH modes since the zones round; its contract
+// attrs render offline.
 check(
-  'flight tool disabled in 2D',
-  await page.locator('[data-testid="map-tool-flight"]').isDisabled(),
+  'flight tool enabled in 2D, zones default on with no drawn zones',
+  !(await page.locator('[data-testid="map-tool-flight"]').isDisabled()) &&
+    (await root().getAttribute('data-flight-zones')) === 'on' &&
+    (await root().getAttribute('data-flight-zone-count')) === '0',
 )
 check(
   'sun tool disabled in 2D',
   await page.locator('[data-testid="map-tool-sun"]').isDisabled(),
+)
+// Activating flight in 2D renders the controls; the chase-cam stays 3D-only.
+await page.locator('[data-testid="map-tool-flight"]').click()
+await page.waitForTimeout(200)
+check(
+  'flight controls render in 2D: zones switch on, follow disabled',
+  (await root().getAttribute('data-tool')) === 'flight' &&
+    (await page.locator('[data-testid="map-flight-zones"] input').isChecked()) &&
+    (await page.locator('[data-testid="map-flight-follow"]').isDisabled()),
+)
+await page.locator('[data-testid="map-flight-zones"]').click()
+await page.waitForTimeout(200)
+check('zones toggle off', (await root().getAttribute('data-flight-zones')) === 'off')
+await page.locator('[data-testid="map-flight-zones"]').click()
+await page.waitForTimeout(200)
+check('zones back on', (await root().getAttribute('data-flight-zones')) === 'on')
+await page.locator('[data-testid="map-tool-flight"]').click() // release
+await page.waitForTimeout(200)
+check(
+  'circle draw mode renders in the panel',
+  (await page.locator('[data-testid="map-draw-circle"]').count()) === 1,
 )
 check(
   'flight contract defaults (no points, idle, cruise 60, speed 20)',
@@ -2527,15 +2580,18 @@ check(
       // follow is persisted — leave it off
       await page.locator('[data-testid="map-flight-follow"]').click()
       await page.waitForTimeout(200)
-      // Switching to 2D releases the 3D-only tool.
+      // The flight tool SURVIVES the 2D switch since the zones round (only
+      // the sun tool is 3D-only now).
       await page.locator('[data-testid="map-flight-play"]').isDisabled() // settle
       await page.locator('[data-testid="map-mode-2d"]').click()
       await page.waitForTimeout(400)
       check(
-        '2D switch releases the flight tool',
-        (await root().getAttribute('data-tool')) === 'none' &&
-          (await page.locator('[data-testid="map-tool-flight"]').isDisabled()),
+        'flight tool survives the 2D switch',
+        (await root().getAttribute('data-tool')) === 'flight' &&
+          !(await page.locator('[data-testid="map-tool-flight"]').isDisabled()),
       )
+      await page.locator('[data-testid="map-tool-flight"]').click() // release
+      await page.waitForTimeout(200)
 
       // ---- traffic cameras: click a marker → snapshot dialog (2D) ----
       // Re-center the mocked feed on wherever the view sits now (the mock
@@ -2598,6 +2654,66 @@ check(
         (await page.locator('[data-testid="map-env-dialog"]').count()) === 0,
       )
       await page.locator('[data-testid="map-weather"]').click() // off again
+      await page.waitForTimeout(200)
+
+      // ---- drawn no-fly zone routes the 2D flight around it ----
+      // Draw a triangle straddling the view center (the established polygon
+      // flow), then plant waypoints left/right of it: the leg crosses the
+      // zone, which is Infinity-height — never climbable — so the plan must
+      // detour; switching zones off drops it from the plan.
+      const zx = box.x + box.width / 2
+      const zy = box.y + box.height / 2
+      await page.locator('[data-testid="map-overlays-toggle"]').click()
+      await page.waitForTimeout(350)
+      await page.locator('[data-testid="map-draw-polygon"]').click()
+      await page.waitForTimeout(300)
+      await page.mouse.click(zx - 60, zy - 40)
+      await page.waitForTimeout(150)
+      await page.mouse.click(zx + 60, zy - 40)
+      await page.waitForTimeout(150)
+      await page.mouse.dblclick(zx, zy + 50)
+      await page.waitForTimeout(500)
+      check(
+        'zone polygon drawn',
+        parseInt((await root().getAttribute('data-drawings')) ?? '0', 10) >= 1,
+      )
+      await page.locator('[data-testid="map-overlays-toggle"]').click() // close the panel
+      await page.waitForTimeout(350)
+      await page.locator('[data-testid="map-tool-flight"]').click()
+      await page.waitForTimeout(200)
+      check(
+        'drawn polygon counted as a flight zone',
+        parseInt((await root().getAttribute('data-flight-zone-count')) ?? '0', 10) >= 1,
+      )
+      await page.mouse.click(zx - box.width * 0.3, zy)
+      await waitForAttr('data-flight-points', (v) => v === '1', 10000)
+      await page.mouse.click(zx + box.width * 0.3, zy)
+      await waitForAttr('data-flight-points', (v) => v === '2', 10000)
+      await waitForAttr('data-flight-status', (v) => v === 'ready' || v === 'error', 15000)
+      const zoneDetours = parseInt((await root().getAttribute('data-flight-detours')) ?? '0', 10)
+      check('2D flight detours around the drawn zone', zoneDetours >= 1, `detours=${zoneDetours}`)
+      await page.locator('[data-testid="map-flight-zones"]').click() // zones off
+      await page.waitForTimeout(600)
+      await waitForAttr('data-flight-status', (v) => v === 'ready' || v === 'error', 15000)
+      check(
+        'zones off drops the drawn zone from the plan',
+        (await root().getAttribute('data-flight-zone-count')) === '0',
+      )
+      await page.locator('[data-testid="map-flight-zones"]').click() // back on (persisted)
+      await page.waitForTimeout(600)
+      await waitForAttr('data-flight-status', (v) => v === 'ready' || v === 'error', 15000)
+      // The drone flies the 2D plan (the 2D drone icon is a
+      // PictureMarkerSymbol — PointSymbol3D draws nothing in a MapView).
+      await page.locator('[data-testid="map-flight-play"]').click()
+      const t2d = parseFloat(
+        (await waitForAttr('data-drone-t', (v) => parseFloat(v ?? '0') > 0, 5000)) ?? '0',
+      )
+      check('drone flies the 2D plan', t2d > 0, `t=${t2d}`)
+      await page.locator('[data-testid="map-flight-pause"]').click()
+      await page.waitForTimeout(200)
+      await page.locator('[data-testid="map-flight-clear"]').click()
+      await page.waitForTimeout(200)
+      await page.locator('[data-testid="map-tool-flight"]').click() // release
       await page.waitForTimeout(200)
     } else {
       console.log('SKIP: 3D view never settled — flight interactive checks skipped')

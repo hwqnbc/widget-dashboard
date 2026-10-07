@@ -2217,3 +2217,12 @@ carried over; these are the new ones.
      migration in the widget's non-WebGL SHELL — it has the widget id and
      mounts without the three.js chunk, so records migrate even if the
      canvas never loads.
+
+135. **`PointSymbol3D`/`ObjectSymbol3DLayer` are SceneView-only — a MapView
+    draws nothing for them, silently.** Enabling the drone flight tool in
+    2D shipped an invisible drone until the binding picked the symbol per
+    view type: the 3D primitive quadcopter for SceneViews, an inline-SVG
+    `PictureMarkerSymbol` top view for MapViews (re-picked on view swap via
+    `viewRevision`). Same family as #134: when a symbol can silently no-op,
+    render pictorial markers from data-URI SVGs and keep the exotic symbol
+    types for the view class that supports them.

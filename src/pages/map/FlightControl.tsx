@@ -70,6 +70,10 @@ export default function FlightControl({
   anim,
   follow,
   onFollow,
+  is3d,
+  useZones,
+  onUseZones,
+  zoneCount,
   savedFlights,
   onSave,
   onLoad,
@@ -96,9 +100,14 @@ export default function FlightControl({
   plan: FlightPlan
   planStatus: FlightPlanStatus
   anim: FlightAnim
-  /** Chase-camera follow toggle (persisted). */
+  /** Chase-camera follow toggle (persisted; the chase cam is 3D-only). */
   follow: boolean
   onFollow: (on: boolean) => void
+  is3d: boolean
+  /** Treat visible drawn shapes as no-fly zones (persisted). */
+  useZones: boolean
+  onUseZones: (on: boolean) => void
+  zoneCount: number
   /** Saved flight plans (persisted): save the current one, load or delete. */
   savedFlights: SavedFlight[]
   onSave: (name: string) => void
@@ -179,6 +188,25 @@ export default function FlightControl({
           slotProps={{ htmlInput: { 'data-testid': 'map-flight-ceiling', min: 20, max: 1000 } }}
         />
       )}
+      <Tooltip title="Treat visible drawn shapes (polygons/circles) as no-fly zones — the drone detours around them, never over">
+        <FormControlLabel
+          sx={{ mr: 0.5 }}
+          control={
+            <Switch
+              size="small"
+              checked={useZones}
+              onChange={(_, v) => onUseZones(v)}
+              data-testid="map-flight-zones"
+              slotProps={{ input: { 'aria-label': 'Use drawn no-fly zones' } }}
+            />
+          }
+          label={
+            <Typography variant="caption">
+              Zones{useZones && zoneCount > 0 ? ` (${zoneCount})` : ''}
+            </Typography>
+          }
+        />
+      </Tooltip>
       {anim === 'playing' ? (
         <Tooltip title="Pause flight">
           <IconButton size="small" data-testid="map-flight-pause" aria-label="Pause flight" onClick={onPause}>
@@ -206,16 +234,27 @@ export default function FlightControl({
           </span>
         </Tooltip>
       )}
-      <Tooltip title={follow ? 'Stop following the drone' : 'Follow the drone (3D chase camera)'}>
-        <IconButton
-          size="small"
-          data-testid="map-flight-follow"
-          aria-label={follow ? 'Stop following the drone' : 'Follow the drone'}
-          color={follow ? 'primary' : 'default'}
-          onClick={() => onFollow(!follow)}
-        >
-          <VideocamIcon fontSize="small" />
-        </IconButton>
+      <Tooltip
+        title={
+          !is3d
+            ? 'Chase camera works in 3D only'
+            : follow
+              ? 'Stop following the drone'
+              : 'Follow the drone (3D chase camera)'
+        }
+      >
+        <span>
+          <IconButton
+            size="small"
+            data-testid="map-flight-follow"
+            aria-label={follow ? 'Stop following the drone' : 'Follow the drone'}
+            color={follow ? 'primary' : 'default'}
+            disabled={!is3d}
+            onClick={() => onFollow(!follow)}
+          >
+            <VideocamIcon fontSize="small" />
+          </IconButton>
+        </span>
       </Tooltip>
       <Tooltip title="Waypoint altitudes">
         <span>

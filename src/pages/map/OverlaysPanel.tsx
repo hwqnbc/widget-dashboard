@@ -28,6 +28,7 @@ import ExpandLessIcon from '@mui/icons-material/ExpandLess'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import OpenWithIcon from '@mui/icons-material/OpenWith'
 import PentagonIcon from '@mui/icons-material/Pentagon'
+import CircleOutlinedIcon from '@mui/icons-material/CircleOutlined'
 import PlaceIcon from '@mui/icons-material/Place'
 import VisibilityIcon from '@mui/icons-material/Visibility'
 import VisibilityOffIcon from '@mui/icons-material/VisibilityOff'
@@ -48,6 +49,7 @@ const AUTO_TILE = {
 const DRAW_HINTS: Record<Exclude<DrawMode, 'none'>, string> = {
   marker: 'Tap the map to plant markers into the active overlay. Esc to finish.',
   polygon: 'Click to add vertices, double-click to finish. Esc cancels.',
+  circle: 'Press and drag to size the circle (stored as a polygon). Esc cancels.',
   edit: 'Tap a shape, then drag its vertices or the whole shape. Click elsewhere to commit, Esc reverts.',
 }
 
@@ -259,6 +261,14 @@ export default function OverlaysPanel({
           disabled={!canDraw}
         >
           <PentagonIcon fontSize="small" sx={{ mr: 0.5 }} /> Polygon
+        </ToggleButton>
+        <ToggleButton
+          value="circle"
+          data-testid="map-draw-circle"
+          aria-label="Draw circle"
+          disabled={!canDraw}
+        >
+          <CircleOutlinedIcon fontSize="small" sx={{ mr: 0.5 }} /> Circle
         </ToggleButton>
         <ToggleButton
           value="edit"

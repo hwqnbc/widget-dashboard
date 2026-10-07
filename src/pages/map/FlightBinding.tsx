@@ -8,6 +8,7 @@ import SimpleMarkerSymbol from '@arcgis/core/symbols/SimpleMarkerSymbol'
 import TextSymbol from '@arcgis/core/symbols/TextSymbol'
 import PointSymbol3D from '@arcgis/core/symbols/PointSymbol3D'
 import ObjectSymbol3DLayer from '@arcgis/core/symbols/ObjectSymbol3DLayer'
+import PictureMarkerSymbol from '@arcgis/core/symbols/PictureMarkerSymbol'
 import type GraphicsLayer from '@arcgis/core/layers/GraphicsLayer'
 import {
   buildFlightPath,
@@ -59,8 +60,7 @@ const TETHER_SYMBOL = new SimpleLineSymbol({
  * parts are rotation-symmetric enough that the drone needs NO per-frame
  * heading update — only its geometry moves (symbols are immutable, and
  * re-assigning one per tick would rebuild WebGL resources every frame). */
-function droneSymbol(): PointSymbol3D {
-  const rotor = (x: number, y: number) =>
+function droneSymbol(): PointSymbol3D {  const rotor = (x: number, y: number) =>
     new ObjectSymbol3DLayer({
       resource: { primitive: 'sphere' },
       width: 2.4,
@@ -94,6 +94,21 @@ function droneSymbol(): PointSymbol3D {
     ],
   })
 }
+
+/** Top-view quadcopter icon for the 2D MapView — PointSymbol3D object
+ * layers are SceneView-only and draw nothing there. Inline SVG data URI
+ * (lessons.md #134 pattern). */
+const DRONE_SYMBOL_2D = new PictureMarkerSymbol({
+  url: `data:image/svg+xml,${encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 40 40">
+<g stroke="#263238" stroke-width="3" stroke-linecap="round"><line x1="12" y1="12" x2="28" y2="28"/><line x1="28" y1="12" x2="12" y2="28"/></g>
+<g fill="none" stroke="#37474f" stroke-width="2.5"><circle cx="10" cy="10" r="6"/><circle cx="30" cy="10" r="6"/><circle cx="10" cy="30" r="6"/><circle cx="30" cy="30" r="6"/></g>
+<circle cx="20" cy="20" r="6" fill="#263238" stroke="#ffb300" stroke-width="2"/>
+</svg>`,
+  )}`,
+  width: 26,
+  height: 26,
+})
 
 /**
  * Owns every graphic of the drone flight tool on its absolute-height layer:
@@ -251,12 +266,12 @@ export default function FlightBinding({
     }
     const drone = new Graphic({
       geometry: new Point({ longitude: start.lon, latitude: start.lat, z: start.z }),
-      symbol: droneSymbol(),
+      symbol: viewRef.current?.type === '3d' ? droneSymbol() : DRONE_SYMBOL_2D,
     })
     droneRef.current = drone
     layer.add(drone)
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- path derives from plan; onProgress/onAnimChange are stable handlers
-  }, [layerRef, points, cruise, plan])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- path derives from plan; onProgress/onAnimChange are stable handlers; viewRevision re-picks the per-view drone symbol
+  }, [layerRef, points, cruise, plan, viewRevision])
 
   // External reset: park at the start.
   useEffect(() => {

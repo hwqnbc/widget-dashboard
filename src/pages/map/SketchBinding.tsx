@@ -7,7 +7,7 @@ import type Polygon from '@arcgis/core/geometry/Polygon'
 import type { NewMapDrawing } from '../../features/map/mapSlice'
 import type { AnyView } from './MapPageBody'
 
-export type DrawMode = 'none' | 'marker' | 'polygon' | 'edit'
+export type DrawMode = 'none' | 'marker' | 'polygon' | 'circle' | 'edit'
 
 /** View-SR geometry → WGS84 (the view runs Web Mercator; storage is lon/lat). */
 function toGeographic<G extends Point | Polygon>(g: G): G {
@@ -136,7 +136,9 @@ export default function SketchBinding({
             onModeEnd()
           }
         })
-        vm.create(drawMode === 'marker' ? 'point' : 'polygon')
+        // A sketched circle COMPLETES as a polygon ring, so it flows through
+        // the same storage/mirror/edit pipeline as drawn polygons.
+        vm.create(drawMode === 'marker' ? 'point' : drawMode === 'circle' ? 'circle' : 'polygon')
       }
     } catch {
       // offline/broken view — leave draw mode rather than crash React
