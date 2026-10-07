@@ -2226,3 +2226,17 @@ carried over; these are the new ones.
     `viewRevision`). Same family as #134: when a symbol can silently no-op,
     render pictorial markers from data-URI SVGs and keep the exotic symbol
     types for the view class that supports them.
+
+136. **A perf cap on a search space must never be able to cut the only
+    exit — exempt the structurally necessary nodes.** The flight planner's
+    visibility graph capped corners at the 320 nearest the leg LINE. In a
+    dense city every slot went to town corners hugging the leg, silently
+    dropping the far tips of the big drawn zone the leg crossed — the only
+    corners the escape could route through — and the A* "exhausted" a graph
+    that no longer contained the answer: a false 'blocked' (lesson #125's
+    "didn't look far enough", reintroduced by the cap; invisible in e2e
+    because the Overpass mock supplies ONE building — the bug needed ~400).
+    Fix: corners of blockers that CROSS the leg are cap-exempt (they ARE
+    the swing candidates, however far out they sit); the distance cap
+    rations only the surrounding non-crossing corners. Regression: a seeded
+    380-tower city + crossing zone fixture must detour, never block.

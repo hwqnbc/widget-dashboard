@@ -272,13 +272,34 @@ function detourAround(a: XY, b: XY, blockers: MeterBuilding[]): XY[] | null {
   // Corner nodes, slightly re-inflated so graph edges don't graze the very
   // polygon their endpoint sits on; corners buried inside a NEIGHBOURING
   // inflated footprint are unusable (that's how too-narrow gaps seal).
-  let corners: XY[] = []
-  for (const bl of blockers) corners.push(...inflateRing(bl.inflated, 0.5))
-  corners = corners.filter((c) => !blockers.some((bl) => insidePolygon(c, bl.inflated)))
-  // Nearest-to-the-leg corners first: the tier prefixes below slice this
-  // order, and the hard cap drops only the farthest corners.
-  corners.sort((c1, c2) => pointToSegment(c1, a, b) - pointToSegment(c2, a, b))
-  if (corners.length > MAX_CORNERS) corners = corners.slice(0, MAX_CORNERS)
+  //
+  // The corners of blockers that CROSS the leg are the swing candidates —
+  // a long wall or a big drawn zone is escaped exactly at its far corners,
+  // however far from the leg line those sit — so they are exempt from the
+  // nearest-to-the-leg cap. In a dense city the flat cap used to spend all
+  // its slots on town corners hugging the leg and drop the crossing zone's
+  // tips, turning a routable leg into a false "blocked" (lesson #125's
+  // "didn't look far enough", reintroduced by the cap).
+  const crossing = new Set(
+    blockers.filter((bl) => segmentThroughPolygon(a, b, bl.inflated) != null),
+  )
+  let priority: XY[] = []
+  let rest: XY[] = []
+  for (const bl of blockers) {
+    const target = crossing.has(bl) ? priority : rest
+    target.push(...inflateRing(bl.inflated, 0.5))
+  }
+  const usable = (c: XY) => !blockers.some((bl) => insidePolygon(c, bl.inflated))
+  priority = priority.filter(usable)
+  rest = rest.filter(usable)
+  // Nearest-to-the-leg corners first within each class: the tier prefixes
+  // below slice this order, and the hard cap drops only non-crossing
+  // corners (every crossing blocker keeps its full ring).
+  const byLegDistance = (c1: XY, c2: XY) => pointToSegment(c1, a, b) - pointToSegment(c2, a, b)
+  priority.sort(byLegDistance)
+  rest.sort(byLegDistance)
+  const restBudget = Math.max(0, MAX_CORNERS - priority.length)
+  const corners = [...priority, ...rest.slice(0, restBudget)]
   const nodes: XY[] = [a, b, ...corners]
 
   // Edge tests are the cost — cache them across tiers (node indices are
@@ -296,8 +317,15 @@ function detourAround(a: XY, b: XY, blockers: MeterBuilding[]): XY[] | null {
 
   let lastN = 0
   for (const tier of DETOUR_TIERS_M) {
+    // Every priority (leg-crossing) corner joins from the first tier; the
+    // tier radius rations only the surrounding non-crossing corners.
     let n = 2
-    while (n - 2 < corners.length && pointToSegment(corners[n - 2], a, b) <= tier) n++
+    while (
+      n - 2 < corners.length &&
+      (n - 2 < priority.length || pointToSegment(corners[n - 2], a, b) <= tier)
+    ) {
+      n++
+    }
     if (n <= lastN) continue // tier adds no new corners — same graph
     lastN = n
     const via = shortestPath(nodes, n, crosses)

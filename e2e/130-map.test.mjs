@@ -710,6 +710,52 @@ await page.route('**/environment/2-hour-weather-forecast**', (route) => {
       planFlight([A, B], [seal], { ...opts, ceiling: 1000 }).legs[0].mode === 'blocked',
     )
 
+    // Lesson #136 regression (the user's false-blocked screenshot): the
+    // corner cap must never starve the swing. A dense field of tall towers
+    // around the leg's start used to eat every capped corner slot, dropping
+    // the crossing zone's far tips — the exact corners the escape needs —
+    // and reporting 'blocked' where a wide water route existed. Corners of
+    // leg-CROSSING blockers are cap-exempt now.
+    {
+      const rng = (() => {
+        let s = 42
+        return () => (s = (s * 1103515245 + 12345) % 2 ** 31) / 2 ** 31
+      })()
+      const zone = {
+        height: Number.POSITIVE_INFINITY,
+        ring: [
+          [103.78, 1.262], [103.8, 1.266], [103.82, 1.262], [103.84, 1.25],
+          [103.846, 1.243], [103.828, 1.236], [103.812, 1.229], [103.806, 1.246],
+          [103.792, 1.247], [103.784, 1.256], [103.78, 1.262],
+        ],
+      }
+      const city = [zone]
+      for (let i = 0; i < 380; i++) {
+        const lon = 103.77 + rng() * 0.09
+        const lat = 1.265 + rng() * 0.025
+        const w = (25 + rng() * 20) / 111320 / Math.cos((1.28 * Math.PI) / 180)
+        const hh = (25 + rng() * 20) / 111320
+        city.push({
+          height: 40 + rng() * 160,
+          ring: [[lon, lat], [lon + w, lat], [lon + w, lat + hh], [lon, lat + hh], [lon, lat]],
+        })
+      }
+      const dense = planFlight(
+        [
+          { lon: 103.814, lat: 1.276, ground: 0 },
+          { lon: 103.829, lat: 1.212, ground: 0 },
+        ],
+        city,
+        opts,
+      )
+      check(
+        'dense city + crossing zone still detours (cap-exempt swing corners)',
+        dense.legs[0].mode === 'detour' &&
+          dense.legs[0].path.every((p) => Number.isFinite(p.z)),
+        dense.legs[0].mode,
+      )
+    }
+
     // Start point surrounded by a building it cannot out-climb: blocked.
     const trap = {
       height: 500,

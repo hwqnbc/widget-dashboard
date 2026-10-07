@@ -390,8 +390,11 @@ on it works without a backend server or API key.
   profile up/over/down; else **detour** — the best feasible route around
   the buildings: A* over a visibility graph of clearance-inflated footprint
   corners spanning the WHOLE data bbox (not just a leg corridor), searched
-  in widening tiers (400 m → 1600 m → everything, corner cap 320 nearest
-  the leg) with lazily validated, cached edges — so long walls get a wide
+  in widening tiers (400 m → 1600 m → everything; the corner cap of 320
+  nearest the leg rations only NON-crossing blockers — every blocker the
+  leg actually crosses keeps its full ring however far out its corners sit,
+  or a dense city starves the swing and fakes a 'blocked', lesson #136)
+  with lazily validated, cached edges — so long walls get a wide
   swing and dense clusters get threaded through their gaps; else
   **blocked** — which genuinely means enclosed: an endpoint sealed inside
   an inflated footprint, or every gap narrower than 2×clearance, with the
