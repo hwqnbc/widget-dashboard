@@ -99,6 +99,7 @@ import {
   parsePm25,
   parsePsi,
   psiBand,
+  psiBubble,
   WEATHER_ICONS,
 } from './.bundle/envModel.js'
 
@@ -993,6 +994,23 @@ await page.route('**/environment/2-hour-weather-forecast**', (route) => {
   check(
     'pm25 parse: junk envelopes yield {}',
     Object.keys(parsePm25(null)).length === 0 && Object.keys(parsePm25({ items: [{}] })).length === 0,
+  )
+  // The haze bubble: both labeled readings, band color, 1-h row optional.
+  const bubble = decodeURIComponent(psiBubble(54, 18))
+  check(
+    'psi bubble carries both labeled readings in the band color',
+    psiBubble(54, 18).startsWith('data:image/svg+xml,') &&
+      bubble.includes('24h PSI') &&
+      bubble.includes('>54<') &&
+      bubble.includes('1h PM2.5') &&
+      bubble.includes('>18<') &&
+      bubble.includes('#ef6c00') === false &&
+      bubble.includes('#f9a825'), // 54 = Moderate yellow
+  )
+  check(
+    'psi bubble band color follows the reading',
+    decodeURIComponent(psiBubble(101)).includes('#ef6c00') && // Unhealthy orange
+      !decodeURIComponent(psiBubble(101)).includes('1h PM2.5'), // no pm25 row
   )
   // Marker icons must be inline-SVG data URIs — TextSymbol emoji draw
   // NOTHING (Esri font atlases carry no emoji glyphs).

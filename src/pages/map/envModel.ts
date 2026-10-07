@@ -80,6 +80,32 @@ export function psiBand(psi: number): { label: string; color: string } {
   return { label: 'Hazardous', color: '#6a1b9a' }
 }
 
+/**
+ * The haze marker: a band-colored bubble showing BOTH readings with their
+ * labels — `24h PSI n` and `1h PM2.5 n` (the second row only when the
+ * pm25 feed delivered). Rendered as an SVG data URI at 2× and displayed
+ * half-size by PictureMarkerSymbol for crispness; SVG text rasterizes in
+ * the browser, so no Esri font-atlas limits apply (lessons.md #134).
+ */
+export function psiBubble(psi: number, pm25OneHr?: number): string {
+  const { color } = psiBand(psi)
+  const hasPm25 = pm25OneHr != null && Number.isFinite(pm25OneHr)
+  const h = hasPm25 ? 64 : 40
+  const rows =
+    `<text x="10" y="28" font-size="17" fill="#ffffff" fill-opacity="0.85">24h PSI</text>` +
+    `<text x="102" y="28" font-size="21" font-weight="bold" fill="#ffffff" text-anchor="end">${Math.round(psi)}</text>` +
+    (hasPm25
+      ? `<text x="10" y="54" font-size="17" fill="#ffffff" fill-opacity="0.85">1h PM2.5</text>` +
+        `<text x="102" y="54" font-size="21" font-weight="bold" fill="#ffffff" text-anchor="end">${Math.round(pm25OneHr)}</text>`
+      : '')
+  return `data:image/svg+xml,${encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="112" height="${h}" viewBox="0 0 112 ${h}">
+<rect x="1.5" y="1.5" width="109" height="${h - 3}" rx="10" fill="${color}" stroke="#ffffff" stroke-width="3"/>
+<g font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif">${rows}</g>
+</svg>`,
+  )}`
+}
+
 export interface WeatherArea {
   name: string
   lon: number

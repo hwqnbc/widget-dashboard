@@ -57,7 +57,6 @@ import Polyline from '@arcgis/core/geometry/Polyline'
 import PictureMarkerSymbol from '@arcgis/core/symbols/PictureMarkerSymbol'
 import SimpleFillSymbol from '@arcgis/core/symbols/SimpleFillSymbol'
 import SimpleMarkerSymbol from '@arcgis/core/symbols/SimpleMarkerSymbol'
-import TextSymbol from '@arcgis/core/symbols/TextSymbol'
 import Compass from '@arcgis/core/widgets/Compass'
 import type Viewpoint from '@arcgis/core/Viewpoint'
 import lightCss from '@arcgis/core/assets/esri/themes/light/main.css?inline'
@@ -132,6 +131,7 @@ import {
   forecastIconKind,
   mergePm25,
   psiBand,
+  psiBubble,
   WEATHER_ICONS,
   type PsiRegion,
   type WeatherArea,
@@ -1472,29 +1472,16 @@ export default function MapPageBody() {
     if (!layer) return
     layer.removeAll()
     for (const region of hazeData) {
-      const geometry = new Point({ longitude: region.lon, latitude: region.lat })
-      const attributes = { psiRegion: region.name }
+      // One labeled bubble per region: 24h PSI + 1h PM2.5 (SVG data URI —
+      // band-colored, browser-rasterized text; 2× source, half-size here).
       layer.add(
         new Graphic({
-          geometry,
-          attributes,
-          symbol: new SimpleMarkerSymbol({
-            style: 'circle',
-            color: psiBand(region.psi).color,
-            size: 26,
-            outline: { color: 'white', width: 1.5 },
-          }),
-        }),
-      )
-      layer.add(
-        new Graphic({
-          geometry,
-          attributes,
-          symbol: new TextSymbol({
-            text: String(Math.round(region.psi)),
-            color: 'white',
-            font: { size: 10, weight: 'bold' },
-            verticalAlignment: 'middle',
+          geometry: new Point({ longitude: region.lon, latitude: region.lat }),
+          attributes: { psiRegion: region.name },
+          symbol: new PictureMarkerSymbol({
+            url: psiBubble(region.psi, region.pm25OneHr),
+            width: 56,
+            height: region.pm25OneHr != null ? 32 : 20,
           }),
         }),
       )

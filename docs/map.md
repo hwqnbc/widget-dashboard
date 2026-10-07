@@ -185,12 +185,14 @@ on it works without a backend server or API key.
   both can stay on while any tool is active), from free no-key
   CORS-enabled NEA feeds on data.gov.sg: `/v1/environment/psi`,
   `/v1/environment/pm25` (the 1-hourly PM2.5 the PSI feed lacks) and
-  `/v1/environment/2-hour-weather-forecast`. Haze renders a color-banded
-  disc with the 24-h PSI value per region (5 regions; NEA bands in
+  `/v1/environment/2-hour-weather-forecast`. Haze renders a **labeled
+  band-colored bubble per region** (`psiBubble` — an SVG data URI at 2×,
+  browser-rasterized text: `24h PSI n` and `1h PM2.5 n`, the second row
+  only when the pm25 feed delivered; NEA bands in
   `psiBand`: ≤50 Good green, ≤100 Moderate yellow, ≤200 Unhealthy orange,
   ≤300 Very unhealthy red, above Hazardous purple; `national` has no
-  location and is skipped; a dead pm25 feed only costs the dialog's 1-h
-  line). Weather renders an inline-SVG icon per forecast area (~47;
+  location and is skipped; a dead pm25 feed only costs the 1-h
+  row). Weather renders an inline-SVG icon per forecast area (~47;
   `forecastIconKind` → `WEATHER_ICONS` data URIs — **never** emoji
   TextSymbols, which Esri's font atlases cannot draw, lesson #134).
   **Tapping a marker with NO tool active** opens a small details dialog
