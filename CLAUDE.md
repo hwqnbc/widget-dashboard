@@ -61,6 +61,14 @@ feature branch, then ask the user to confirm the merge. On confirmation,
 merge directly (fast-forward/merge, no pull request) — only raise a PR when
 explicitly asked to.
 
+**When the user says "Merge", just merge.** No planning pass, no plan file,
+no plan mode — if plan mode is active, exit it immediately and run the
+standard flow (`git fetch origin main && git checkout main &&
+git merge --ff-only origin/main && git merge <branch> && git push origin
+main && git checkout <branch>`; if main moved since the branch's last
+rebase, rebase + re-verify first). Reply with just "Merged." — no summary,
+the pre-merge round report already covered it.
+
 **After merging to main, don't wait for or verify the GitHub Pages deploy** —
 the user checks it themselves.
 
