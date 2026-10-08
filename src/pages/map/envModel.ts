@@ -91,16 +91,19 @@ export function psiBubble(psi: number, pm25OneHr?: number): string {
   const { color } = psiBand(psi)
   const hasPm25 = pm25OneHr != null && Number.isFinite(pm25OneHr)
   const h = hasPm25 ? 64 : 40
+  // 150 wide with values end-anchored at x=140: the widest label
+  // ("1h PM2.5", ~66px at font 16) and a 3-digit bold value (~38px) keep a
+  // clear gap — at 112 wide they collided.
   const rows =
-    `<text x="10" y="28" font-size="17" fill="#ffffff" fill-opacity="0.85">24h PSI</text>` +
-    `<text x="102" y="28" font-size="21" font-weight="bold" fill="#ffffff" text-anchor="end">${Math.round(psi)}</text>` +
+    `<text x="10" y="28" font-size="16" fill="#ffffff" fill-opacity="0.85">24h PSI</text>` +
+    `<text x="140" y="28" font-size="21" font-weight="bold" fill="#ffffff" text-anchor="end">${Math.round(psi)}</text>` +
     (hasPm25
-      ? `<text x="10" y="54" font-size="17" fill="#ffffff" fill-opacity="0.85">1h PM2.5</text>` +
-        `<text x="102" y="54" font-size="21" font-weight="bold" fill="#ffffff" text-anchor="end">${Math.round(pm25OneHr)}</text>`
+      ? `<text x="10" y="54" font-size="16" fill="#ffffff" fill-opacity="0.85">1h PM2.5</text>` +
+        `<text x="140" y="54" font-size="21" font-weight="bold" fill="#ffffff" text-anchor="end">${Math.round(pm25OneHr)}</text>`
       : '')
   return `data:image/svg+xml,${encodeURIComponent(
-    `<svg xmlns="http://www.w3.org/2000/svg" width="112" height="${h}" viewBox="0 0 112 ${h}">
-<rect x="1.5" y="1.5" width="109" height="${h - 3}" rx="10" fill="${color}" stroke="#ffffff" stroke-width="3"/>
+    `<svg xmlns="http://www.w3.org/2000/svg" width="150" height="${h}" viewBox="0 0 150 ${h}">
+<rect x="1.5" y="1.5" width="147" height="${h - 3}" rx="10" fill="${color}" stroke="#ffffff" stroke-width="3"/>
 <g font-family="system-ui, -apple-system, Segoe UI, Roboto, sans-serif">${rows}</g>
 </svg>`,
   )}`

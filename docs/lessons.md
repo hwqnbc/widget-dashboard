@@ -2240,3 +2240,14 @@ carried over; these are the new ones.
     the swing candidates, however far out they sit); the distance cap
     rations only the surrounding non-crossing corners. Regression: a seeded
     380-tower city + crossing zone fixture must detour, never block.
+
+137. **Esri basemap REFERENCE layers draw above every map layer — graphics
+    included.** The gray-vector basemaps ship their place labels as
+    `basemap.referenceLayers`, which ArcGIS deliberately composites on top
+    of all operational layers, so "Yishun" rendered across the PSI bubbles
+    and every other marker. When markers should win, demote the reference
+    layers into `basemap.baseLayers` after the basemap loads (labels then
+    still sit above the ground tiles but below all graphics) — do it where
+    the basemap is CREATED so theme toggles, watchdog fallbacks and the
+    self-heal path all inherit it. CARTO rasters bake labels into tiles:
+    nothing to demote, and nothing can fix their stacking either.

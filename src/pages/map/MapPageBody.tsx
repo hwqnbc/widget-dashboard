@@ -148,6 +148,22 @@ import {
   resolveBasemapId,
 } from './basemapCatalog'
 
+/** Esri basemaps ship their place labels as REFERENCE layers, which ArcGIS
+ * always draws above EVERY map layer — on top of pins, PSI bubbles, the
+ * drone. Demote them into the base layers (appended, so labels still sit
+ * above the ground tiles) and all graphics draw above the labels. CARTO
+ * basemaps bake labels into the raster — no reference layers, no-op. */
+function demoteReferenceLabels(basemap: Basemap) {
+  try {
+    const refs = basemap.referenceLayers.toArray()
+    if (refs.length === 0) return
+    basemap.referenceLayers.removeAll()
+    basemap.baseLayers.addMany(refs)
+  } catch {
+    /* basemap mid-teardown — the next apply gets another chance */
+  }
+}
+
 /** Gallery id → an ArcGIS Basemap: Esri legacy styles via fromId, the CARTO
  * raster styles via a WebTileLayer basemap (see basemapCatalog for the
  * catalog itself — kept pure so e2e can unit-check the resolver). */
@@ -166,7 +182,15 @@ function createBasemap(id: string): Basemap {
     })
   }
   // fromId types as nullable (unknown ids) — an empty Basemap beats a crash.
-  return Basemap.fromId(def?.esriId ?? id) ?? new Basemap({ title: id })
+  const basemap = Basemap.fromId(def?.esriId ?? id) ?? new Basemap({ title: id })
+  // Labels under graphics, whichever path created this basemap (initial map,
+  // watchdog re-apply, self-heal). Offline the load rejects — no labels then
+  // anyway.
+  void basemap
+    .load()
+    .then(() => demoteReferenceLabels(basemap))
+    .catch(() => {})
+  return basemap
 }
 
 const basemapLabel = (id: string) => basemapDefById[id]?.label ?? id
@@ -1499,7 +1523,7 @@ export default function MapPageBody() {
           attributes: { psiRegion: region.name },
           symbol: new PictureMarkerSymbol({
             url: psiBubble(region.psi, region.pm25OneHr),
-            width: 56,
+            width: 75,
             height: region.pm25OneHr != null ? 32 : 20,
           }),
         }),

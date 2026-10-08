@@ -41,7 +41,12 @@ on it works without a backend server or API key.
   `dark-gray-vector`) — the original behaviour — while an explicit pick wins
   over the theme toggle; unknown/malformed persisted values fall back to the
   theme pair (never crash the render). The swap effect assigns
-  `map.basemap = createBasemap(id)` in place; no view re-create. Esri
+  `map.basemap = createBasemap(id)` in place; no view re-create.
+  `createBasemap` also **demotes the basemap's reference layers** into its
+  base layers once loaded: Esri ships place labels as reference layers,
+  which ArcGIS draws above EVERY map layer — over PSI bubbles, pins, the
+  drone — so demoting them puts labels above the ground tiles but below
+  all graphics (lesson #137; CARTO rasters bake labels in — no-op). Esri
   sunsets the legacy styles in Mar 2028 / Dec 2029 — the CARTO entries in
   this same catalog are the migration path (flip what `'auto'` maps to).
 - **Basemap health watchdog** (from a real phone report: tiles silently
@@ -189,7 +194,8 @@ on it works without a backend server or API key.
   CORS-enabled NEA feeds on data.gov.sg: `/v1/environment/psi`,
   `/v1/environment/pm25` (the 1-hourly PM2.5 the PSI feed lacks) and
   `/v1/environment/2-hour-weather-forecast`. Haze renders a **labeled
-  band-colored bubble per region** (`psiBubble` — an SVG data URI at 2×,
+  band-colored bubble per region** (`psiBubble` — an SVG data URI at 2×
+  (150 wide so the row labels and 3-digit values never collide),
   browser-rasterized text: `24h PSI n` and `1h PM2.5 n`, the second row
   only when the pm25 feed delivered; NEA bands in
   `psiBand`: ≤50 Good green, ≤100 Moderate yellow, ≤200 Unhealthy orange,
