@@ -2251,3 +2251,57 @@ carried over; these are the new ones.
     the basemap is CREATED so theme toggles, watchdog fallbacks and the
     self-heal path all inherit it. CARTO rasters bake labels into tiles:
     nothing to demote, and nothing can fix their stacking either.
+
+## Fixed-wing flight (Wing Flyer)
+
+138. **Pitch for a climb rate is θ = γ + α — the attitude target must add
+    the angle of attack.** Wing Flyer's Trainer flare and altitude hold
+    computed a pitch target from the flight-path angle alone
+    (`asin(vs/v)`). At approach speed the wing flies ~7° nose-up of its
+    path, so the target sat 7° low: the flare "held" the nose flat and
+    touched down at 1.3 m/s instead of 0.5. The slow integrator was hiding
+    the same error in level flight. Add the live AoA (clamped) to every
+    vertical-speed → pitch conversion.
+
+139. **A rate-command model that scales authority with airspeed needs the
+    outer loop to scale back (airspeed scaling).** `stepPlane` multiplies
+    commanded rates by `q̄/q̄_ref` so controls go mushy near the stall —
+    honest physics — but the assists' attitude P-loop then had a steady
+    error at approach speed that the trim-AoA stability term won outright.
+    Real flight controllers divide by the same factor (ArduPlane's
+    airspeed scaling); doing that in `attitudeRates` fixed it without
+    making the raw sticks any less mushy.
+
+140. **Ground contact: snap only on PENETRATION, never within a tolerance
+    band above the surface.** The first ground step snapped the plane back
+    down whenever its wheels were within 5 cm above the runway; a 2.9 m/s
+    climb rises only 2.4 cm per 120 Hz step, so the take-off roll reached
+    15 m/s with a positive climb rate and never left the ground. Clamp when
+    `bottom < h`, declare lift-off when clear by a hair with `vy > 0`.
+
+141. **Sticks-released means BOTH sticks.** The Trainer's "settle onto
+    the ground when released low" checked only the pitch stick — so a
+    child steering (roll held) straight after the throw settled into the
+    grass in a 45° bank and caught a wingtip. Found by the browser input
+    suite pressing → 0.3 s after launch. Any "hands-off" behaviour that
+    moves the plane toward the ground must require every attitude axis
+    centred; and an early take-over during the launch climb keeps the
+    climb's height target.
+
+142. **Flight-time checks must poll, never sleep, under a sub-step cap.**
+    The fixed-step accumulator caps sub-steps per frame (a stutter becomes
+    slow motion, never a tunnelling jump). Under e2e load (software GL plus
+    a parallel full run) frames reached ~160 ms, so the sim ran at ~40 %
+    speed and "climbs to 8 m within 5 s" failed while the game was fine.
+    Wait for the telemetry condition with a generous timeout instead.
+
+143. **A chase camera with exponential follow trails by v/λ — lead the
+    target by the same amount.** At 18 m/s and λ = 6 the wing sat 3 m
+    further back than at rest, small and low on screen. Adding `vel/λ` to
+    the boom target makes the follow's steady-state lag cancel: same
+    framing at any airspeed, the damping still smooths turns.
+
+144. **`pkill -f <pattern>` / `pgrep -f` match the shell running them.**
+    `pkill -f "vite --port 5199"` inside a Bash call killed that call's
+    own shell (exit 144) because the pattern appears in its command line.
+    List with `ps -eo pid,args` first and kill by PID.

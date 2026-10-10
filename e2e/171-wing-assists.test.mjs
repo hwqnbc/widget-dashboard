@@ -202,7 +202,25 @@ for (const id of ['trainer', 'wing']) {
       if (handedAt === null && a.mode === 'fly') handedAt = t
     })
     check(`${id}: right stick takes control early during launch`, handedAt !== null && handedAt < 0.85, `hand-over at ${handedAt?.toFixed(2)} s`)
+    // Normal pilots get exactly what they ask for; the Trainer (below) keeps
+    // climbing after an early take-over.
   }
+}
+
+// --- Trainer: early take-over during launch keeps climbing ---------------------
+for (const id of ['trainer', 'wing']) {
+  const vs = stallSpeed(AIRFRAMES[id])
+  const l = sim(id, 'trainer', { alt: 1.8, speedK: 0, throttle: 0 })
+  l.s.vel.z = -vs * 1.1
+  startLaunch(l.a)
+  let minAlt = Infinity
+  // Hold full right roll from 0.6 s (past the stale-thumb grace) for 2 s.
+  fly(l, 6, (s, i) => {
+    const t = i * STEP_DT
+    if (t > 1) minAlt = Math.min(minAlt, s.pos.y)
+    return t > 0.6 && t < 2.6 ? sticks(1, 0) : sticks()
+  })
+  check(`${id} trainer: steering right after launch still climbs to the hand-over height`, l.s.pos.y > 12 && minAlt > 1.5, `alt ${l.s.pos.y.toFixed(1)} m, min ${minAlt.toFixed(1)} m`)
 }
 
 await finish()

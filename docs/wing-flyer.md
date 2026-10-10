@@ -1,12 +1,11 @@
-# Wing Flyer — fixed-wing RC plane widget (design proposal)
+# Wing Flyer — fixed-wing RC plane widget
 
-> **Status: design only — nothing here is built yet.** This note is the plan
-> the first implementation round works from. Sections marked **(decided)**
-> were agreed with the user; **(proposed)** are technical recommendations
-> that need no product decision. All five open product questions are
-> answered (§14). **Building waits for the user's explicit OK.**
-> When rounds ship, each section moves to the past tense and the backlog
-> items get struck through, as in the other design notes.
+> **Status: Round 1a ("Fly it") is built** — Free Flight with both planes,
+> all three assists, hand launch / runway take-off / landing, chase + FPV
+> cameras, auto-pause, help, sound. §0 below is the as-built summary and
+> every deviation from the plan; §1–§15 are the design the rounds work
+> from (sections marked **(decided)** were agreed with the user). Round 1b
+> ("Score it": landing scorecard, mode menu, missions, stars) is next.
 
 The dashboard's fourth WebGL widget (`wingFlyer`): fly a radio-controlled
 **fixed-wing** plane — a high-wing trainer or an FPV flying wing — over a
@@ -18,6 +17,75 @@ stops when you let go; a plane cannot. Almost every design decision below
 follows from that one fact.
 
 ---
+
+## 0. As built — Round 1a
+
+Files: `src/components/widgets/wingFlyer/`. Pure modules (bundled for the
+node suites): `planeModel` (physics), `airframes`, `assists`, `ground`,
+`islandLayout`, `wingSim` (the one per-step function the rig AND the tests
+run), `wingInput`, `views`, `wingSound`, `planeParts`. React/three:
+`WingFlyerWidget` (eager shell → `lazyWithReload` body), `WingFlyerBody`
+(DOM controls, settings, pause, refs), `PlaneRig` (the `useFrame` loop:
+input → fixed 120 Hz `stepSim` → mesh → camera → HUD), `IslandScene`,
+`AirfieldProps` (pilot + hoops), `PlaneMesh`, `WingSettingsPanel`,
+`WingHelpDialog`.
+
+**What shipped, and how it differs from the plan below:**
+
+- **Physics (§5)** as designed, plus **turn coordination** in the model
+  (`r = g·sinφ·cosθ/V` — without it the nose followed a turn only through a
+  standing sideslip whose side force widened every turn by ~50 %). Measured
+  on both planes by `170-wing-physics`: stall 6.9 / 8.9 m/s, top 20 / 30,
+  hands-off cruise 13 / 18, glide ratio 8.0 / 12.1, 30°/45° turn radius
+  within 1 % of `v²/(g·tanφ)`.
+- **Assists (§4)**: Trainer bank is **45°** (was 35° — too wide to line up
+  with the runway, found in the step-4 play-test). The attitude loop uses
+  **airspeed scaling** and pitch targets are **θ = γ + α** (lessons
+  #138/#139) — the fix that made Trainer landings soft. Extra modes:
+  `runway` (Trainer flies the take-off roll: centreline, rotate at
+  1.25 v_s, launch climb-out) and `rollout` (Trainer brakes + holds
+  heading; throttle stick up = touch-and-go). Launch: 15° climb to 15 m or
+  6 s, 0.3 s motor beat, a 0.5 s stale-thumb grace before stick input can
+  take over, and an early Trainer take-over keeps climbing (lesson #141).
+- **Landing (§7)**: `ground.ts` classifies every touch (landed < 2 m/s,
+  bounce < 3.5, else crash; bank ≤ 15°; pitch window; landable surface)
+  and rolls/skids the plane out (lift-off when clear — lesson #140).
+  Landing help decided after the step-4 play-test (§13): land on grass,
+  approach hoops, home arrow, Trainer auto-flare (sink capped 2 → 0.5 m/s
+  over the last 6 m, approach speed 1.45 v_s when low and descending), a
+  200×30 m runway. A live keyboard landing in the browser touches down at
+  ~0.7 m/s (`176-wing-flight`).
+- **World (§6)**: Tank Battle's `terrain.ts` is imported **unmodified** —
+  sampled at x/5.5 with heights ×3.2 — instead of gaining a scale param;
+  ~880 m island, shoreline, ridge, lake, flat town (30 blocks), 180 trees.
+  Soft edge: a push home past 440 m, Trainer/Normal bank home with the
+  roll stick released, HUD "TURN BACK".
+- **Pilot (decision R5, §13)**: Player 1's avatar via the Drone Sim's `OperatorFigure`,
+  standing at the runway's west end; preflight uses a three-quarter camera
+  so the pilot's head doesn't block the plane.
+- **Cameras (§8)**: chase (25 % roll follow, velocity-led boom — lesson
+  #143, terrain clamp, speed FOV) and FPV (nose, 10° up-tilt, 72° FOV,
+  level-horizon option on by default + a centre bank symbol). Pilot
+  line-of-sight view: backlog.
+- **HUD (§9)**: the minimal HUD (speed / height / throttle, amber/red
+  stall colour only in the air) + home arrow and distance. Full OSD:
+  backlog.
+- **Auto-pause (§11)**: blur, hidden tab, scrolled away
+  (IntersectionObserver < 30 %), settings/help open, fullscreen toggle →
+  frozen; tap → 3-2-1. Rendering drops to `frameloop="demand"` while
+  paused or off-screen.
+- **Help**: remembered **per widget** (`helpSeen`, the Tank Battle
+  pattern), not per device as first discussed — a second Wing Flyer widget
+  shows it once more.
+- **Sound**: synthesized (`wingSound`), **off by default**; motor silent in
+  a glide, wind by speed, pulsing stall horn, one-shots with `data-sfx-*`
+  counters; vibration on touchdown / bounce / crash.
+- **Performance**: 27 draw calls / ~46 k triangles in flight (hoops and
+  runway paint instanced), 51 calls on the ground with the avatar; the HUD
+  publishes `data-draw-calls` / `data-triangles`.
+- **Shared code**: imported in place (decision R2, §13). The only change to another
+  widget's file is `VirtualJoystick`'s optional, default-off `latchY` +
+  `latchRef`; the drone/strike/tank suites re-ran green.
 
 ## 1. Design pillars
 
@@ -169,7 +237,7 @@ near-ground interference), **tilt-to-steer**
 
 ---
 
-## 5. Flight model — `planeModel.ts` (proposed)
+## 5. Flight model — `planeModel.ts` (built — see §0 for additions)
 
 Pure, mutate-in-place, allocation-free, seeded (lesson #30). Unlike the
 drone's yaw + tilt state, a plane needs full 3D attitude.
@@ -520,25 +588,33 @@ src/components/widgets/
 - **The additive changes to `VirtualJoystick` and `terrain.ts` ship with
   the existing drone/strike/tank suites re-run** to prove nothing changed.
 
-### Test contract (data-*)
+### Test contract (data-*) — as built
 
-Root `wingflyer-root`: `data-mode`, `data-airframe`, `data-assist`,
-`data-view`, `data-paused`, `data-phase` (`preflight|flying|landed|crashed|
-complete`). HUD `wingflyer-hud`: `data-airspeed`, `data-alt`, `data-agl`,
-`data-throttle`, `data-bank`, `data-pitch`, `data-heading`, `data-aoa`,
-`data-stall`, `data-vs` (vertical speed), `data-x/-z`, `data-home-dist`.
-Mission chip: `data-rings`, `data-time`, `data-score`, `data-stars`,
-`data-landing` (`landed|bounce|crash` + sink). Sound counter contract
-`data-sfx-*` (lesson #55).
+Root `wingflyer-root`: `data-airframe`, `data-assist`, `data-view`,
+`data-fpv-level`, `data-invert-pitch`, `data-sound`, `data-help-seen`,
+`data-paused`, `data-phase` (`preflight|flying|landed|crashed`),
+`data-world-seed`. HUD `wingflyer-hud` (written every 150 ms by the rig):
+`data-airspeed`, `data-alt`, `data-agl`, `data-throttle`, `data-bank`,
+`data-pitch`, `data-heading`, `data-aoa`, `data-stall` (`ok|warn|stalled`),
+`data-vs`, `data-x/-z`, `data-phase`, `data-start`, `data-ground`
+(`air|ground`), `data-assist-mode` (`fly|panic|launch|runway|rollout`),
+`data-touchdown` (`landed|bounce|crash|none`) + `data-touch-sink`,
+`data-landings`, `data-crashes`, `data-crashed`, `data-home-dist`,
+`data-home-bearing`, `data-outside`, `data-input-source`, `data-view`,
+`data-paused`, `data-sound`, `data-sfx-{launch,touchdown,bounce,crash,
+panic}`, `data-draw-calls`, `data-triangles`. Round 1b adds the mission
+chip (`data-score`, `data-stars`, …).
 
-### Planned e2e suites
+### e2e suites (shipped, `e2e/README.md` has the detail)
 
-Numbered in the next free block, each listed in `e2e/README.md`:
-core (launch → flying, airspeed > `v_s`, HUD sane) · physics (node:
-stall speed, turn radius, glide ratio, hands-off convergence) · assists
-(release in Trainer levels; Panic recovers from inverted) · pause (blur →
-`data-paused`) · landing (closed-loop approach → `landed`) · rings ·
-soaring (thermal climb measured) · combat · records.
+Node (bundled pure modules): `170-wing-physics` (stall, top speed, trim,
+glide ratio, turn radius — both planes), `171-wing-assists` (each level,
+Panic, launch), `172-wing-ground` (touchdown classes, approach geometry,
+runway take-off, a full Trainer approach + landing + roll-out, touch-and-
+go, belly landing on grass, crash, soft edge). Browser: `173-wing-core`,
+`174-wing-input`, `175-wing-pause`, `176-wing-flight` (a live keyboard
+circuit that lands, then a crash). Planned for later rounds: rings,
+soaring, combat, records.
 
 ---
 
@@ -594,6 +670,9 @@ Checkpoints for the user to try the feel: after **step 4** and **step 7**.
 | 6 | FPV cam, minimal HUD, auto-pause, help overlay, settings panel | full 1a experience |
 | 7 | Sound, haptics, phone performance | **user checkpoint** |
 | 8 | e2e suites (170+), docs, lessons; drone/strike/tank suites re-run | build + lint + e2e green |
+
+All eight steps shipped (§0). The step-4 checkpoint was merged so the user
+could fly it; its play-test produced the landing-help decisions above.
 
 ## 14. Decisions (all answered with the user)
 
@@ -675,6 +754,14 @@ Nothing is shipped yet; every item names the integration point it builds on.
 - **Throw animation** — a real hand-launch throw for the avatar; best as a
   shared `throw` action for every avatar (like the shared `walk` gait), so
   other games can use it.
+
+### Help & comfort
+- **Per-device help** — `helpSeen` is per widget (Tank Battle pattern);
+  move it to the `ui` slice if a second Wing Flyer widget re-showing the
+  help ever matters.
+- **Scrolled-away pause e2e** — `175-wing-pause` drives blur / hidden tab /
+  dialog; the IntersectionObserver path shares `pause()` but needs a
+  taller board to scroll in a suite.
 
 ### Code health
 - **`shared/` hoist (refactoring session)** — move the pieces Wing Flyer

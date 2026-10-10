@@ -249,6 +249,10 @@ export function stepAssist(
       (Math.abs(sticks.right.x) > LAUNCH_ABORT_STICK || Math.abs(sticks.right.y) > LAUNCH_ABORT_STICK)
     if (agl >= LAUNCH_HANDOVER_AGL || a.timer >= LAUNCH_MAX_TIME || stickTaken) {
       setAssistMode(a, 'fly')
+      // Trainer taken over early (a child steering straight after the
+      // throw): keep climbing to the hand-over height instead of holding
+      // the 2 m it was at.
+      if (level === 'trainer') a.holdAlt = s.pos.y + Math.max(0, LAUNCH_HANDOVER_AGL - agl)
     }
     return
   }
@@ -336,7 +340,10 @@ export function stepAssist(
   // --- Trainer: small envelope, altitude + airspeed hold, stall-proof -------
   const maxBank = Math.min(TRAINER_BANK, protectedBank(spec, s.airspeed, TRAINER_BANK))
   let pitchT: number
-  const settle = ry === 0 && env.landable && agl < FLARE_AGL
+  // Settle onto the ground only with BOTH sticks released — never while the
+  // pilot is still banking (a held roll + released pitch would otherwise
+  // settle the plane in a 45° bank and catch a wingtip).
+  const settle = ry === 0 && rx === 0 && env.landable && agl < FLARE_AGL
   if (settle) {
     // Released low over landable ground: settle onto it gently instead of
     // holding a few metres up forever.

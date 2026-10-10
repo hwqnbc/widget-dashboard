@@ -413,6 +413,17 @@ right stick orbits the camera with the turret chasing it, auto-turn hull
 assist (default on), automatic gun elevation via a ballistic solver,
 Waves/Roam mode toggle, patrol/engage/attack enemy tank AI with terrain
 line of sight).
+See `docs/wing-flyer.md` for the Wing Flyer widget (the fourth WebGL
+widget — a fixed-wing RC plane, trainer or FPV wing, over a seeded ~880 m
+island built on Tank Battle's terrain imported unmodified; a pure 120 Hz
+quaternion flight model with real lift/stall/drag and rate-command moments,
+Trainer/Normal/Acro assists modelled on real flight controllers (SAFE,
+ArduPlane FBWA + STALL_PREVENTION, acro) with Panic, the pure `wingSim`
+step shared by the rig and the node suites, hand launch from the pilot
+avatar / runway take-off / graded touchdowns with auto-flare, approach
+hoops and a home arrow, latching RC throttle (`VirtualJoystick` `latchY`),
+chase + FPV cameras, auto-pause; §0 is the as-built summary, Round 1b adds
+missions and stars).
 See `docs/maze-runner.md` for the Maze Runner widget (seeded perfect maze —
 recursive-backtracker carve, only the seed persisted; the board's OWN aspect
 ratio picks the maze's proportions at generation time so rotating never
