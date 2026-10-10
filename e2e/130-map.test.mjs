@@ -36,7 +36,10 @@
  *    atlases cannot draw; offline: STRIP toggles fetch once — 5 regions /
  *    3 areas — quick re-toggles don't refetch, the persisted haze toggle
  *    refetches after reload; online: an idle tap — no tool — on the
- *    view-center weather marker opens the forecast dialog),
+ *    view-center weather marker opens the forecast dialog, and a tap on
+ *    the view-center PSI bubble opens the region dialog with the 24-h
+ *    trend sparkline — `?date=` day payloads via date-aware mocks, pure
+ *    parseHourly/lastHours/sparklinePath units),
  *    undo-disabled state, deep-link render.
  *  - online only: data-map-status reaches "ready" (from view.when, never
  *    networkidle), attribution + zoom + 2D-compass UI present, click-driven pins with
@@ -96,12 +99,16 @@ import {
 import {
   forecastEmoji,
   forecastIconKind,
+  lastHours,
   mergePm25,
   parseForecast,
+  parseHourly,
   parsePm25,
   parsePsi,
   psiBand,
   psiBubble,
+  seriesStats,
+  sparklinePath,
   WEATHER_ICONS,
 } from './.bundle/envModel.js'
 
@@ -283,7 +290,9 @@ const psiFixture = () => ({
   region_metadata: [
     { name: 'west', label_location: { latitude: 1.35735, longitude: 103.7 } },
     { name: 'east', label_location: { latitude: 1.35735, longitude: 103.94 } },
-    { name: 'central', label_location: { latitude: 1.35735, longitude: 103.82 } },
+    // central follows the live view center so the online branch can tap its
+    // bubble deterministically (same trick as the traffic/weather mocks)
+    { name: 'central', label_location: { latitude: envCenter.lat, longitude: envCenter.lon } },
     { name: 'south', label_location: { latitude: 1.29587, longitude: 103.82 } },
     { name: 'north', label_location: { latitude: 1.41803, longitude: 103.82 } },
     { name: 'national' }, // no location — markers must skip it
@@ -332,12 +341,41 @@ const forecastFixture = () => ({
 let psiCalls = 0
 let forecastCalls = 0
 let pm25Calls = 0
+// `?date=` requests return one item PER HOUR (the trend feeds); the
+// parameterless requests return the single latest item. Both mocked dates
+// serve the SAME six timestamps, so the merged trend must dedupe to 6.
+const psiDayFixture = () => ({
+  region_metadata: psiFixture().region_metadata,
+  items: Array.from({ length: 6 }, (_, i) => ({
+    timestamp: `2026-10-10T0${i + 2}:00:00+08:00`,
+    readings: {
+      psi_twenty_four_hourly: {
+        west: 50 + i,
+        east: 30 + i,
+        central: 95 + i * 3,
+        south: 45 + i,
+        north: 60 + i,
+        national: 60 + i,
+      },
+    },
+  })),
+})
+const pm25DayFixture = () => ({
+  region_metadata: [],
+  items: Array.from({ length: 6 }, (_, i) => ({
+    timestamp: `2026-10-10T0${i + 2}:00:00+08:00`,
+    readings: {
+      pm25_one_hourly: { west: 12 + i, east: 6 + i, central: 30 + i * 2, south: 10, north: 14 + i },
+    },
+  })),
+})
 await page.route('**/environment/psi**', (route) => {
   psiCalls += 1
+  const isDay = route.request().url().includes('date=')
   return route.fulfill({
     status: 200,
     contentType: 'application/json',
-    body: JSON.stringify(psiFixture()),
+    body: JSON.stringify(isDay ? psiDayFixture() : psiFixture()),
   })
 })
 const pm25Fixture = () => ({
@@ -353,10 +391,11 @@ const pm25Fixture = () => ({
 })
 await page.route('**/environment/pm25**', (route) => {
   pm25Calls += 1
+  const isDay = route.request().url().includes('date=')
   return route.fulfill({
     status: 200,
     contentType: 'application/json',
-    body: JSON.stringify(pm25Fixture()),
+    body: JSON.stringify(isDay ? pm25DayFixture() : pm25Fixture()),
   })
 })
 await page.route('**/environment/2-hour-weather-forecast**', (route) => {
@@ -1087,6 +1126,52 @@ await page.route('**/environment/2-hour-weather-forecast**', (route) => {
     decodeURIComponent(psiBubble(101)).includes('#ef6c00') && // Unhealthy orange
       !decodeURIComponent(psiBubble(101)).includes('1h PM2.5'), // no pm25 row
   )
+  // The 24-h trend seam: `?date=` payloads carry one item per hour.
+  const hourly = parseHourly(psiDayFixture(), 'psi_twenty_four_hourly', 'central')
+  check(
+    'parseHourly walks every hourly item, sorted by time',
+    hourly.length === 6 &&
+      hourly[0].v === 95 &&
+      hourly[5].v === 110 &&
+      hourly.every((p, i, arr) => i === 0 || arr[i - 1].t <= p.t),
+    `n=${hourly.length}`,
+  )
+  check(
+    'parseHourly: junk yields []',
+    parseHourly(null, 'x', 'y').length === 0 &&
+      parseHourly({ items: [{ timestamp: 'junk', readings: {} }] }, 'x', 'y').length === 0,
+  )
+  const windowed = lastHours([...hourly, ...hourly], 4)
+  check(
+    'lastHours dedupes by timestamp and keeps the newest n',
+    windowed.length === 4 && windowed[0].v === 101 && windowed[3].v === 110,
+    JSON.stringify(windowed.map((p) => p.v)),
+  )
+  const stats = seriesStats(hourly)
+  check(
+    'seriesStats: min/max/last of the series, null when empty',
+    stats != null &&
+      stats.min === 95 &&
+      stats.max === 110 &&
+      stats.last === 110 &&
+      seriesStats([]) === null,
+    JSON.stringify(stats),
+  )
+  const spark = sparklinePath(hourly, 260, 80)
+  check(
+    'sparkline path: M-start, finite coords, flat series safe, short series empty',
+    spark.startsWith('M') &&
+      !spark.includes('NaN') &&
+      sparklinePath([hourly[0]], 260, 80) === '' &&
+      !sparklinePath(
+        [
+          { t: 1, v: 5 },
+          { t: 2, v: 5 },
+        ],
+        100,
+        40,
+      ).includes('NaN'),
+  )
   // Marker icons must be inline-SVG data URIs — TextSymbol emoji draw
   // NOTHING (Esri font atlases carry no emoji glyphs).
   check(
@@ -1220,6 +1305,54 @@ if (online) {
     '2D compass present (reset-to-north for a rotated MapView)',
     (await page.locator('.esri-compass').count()) === 1,
   )
+
+  // ---- 24-h PSI trend: tap the central bubble → dialog + sparkline ----
+  // Haze is still on from the offline block, fetched with `central` pinned
+  // to the live view center; the view hasn't panned yet, so the bubble sits
+  // at the container center. The trend fetch hits the date-aware mocks
+  // (today + yesterday serve the SAME six hours → dedupe to 6 points).
+  {
+    const mapBox = await page.locator('[data-testid="map-container"]').boundingBox()
+    await page.mouse.click(mapBox.x + mapBox.width / 2, mapBox.y + mapBox.height / 2)
+    await page.waitForSelector('[data-testid="map-env-dialog"]', { timeout: 10000 })
+    check(
+      'central PSI bubble opens its region dialog',
+      ((await page.locator('[data-testid="map-env-dialog"]').textContent()) ?? '').includes(
+        'Central region',
+      ),
+    )
+    const trend = page.locator('[data-testid="map-psi-trend"]')
+    await page.waitForFunction(
+      () =>
+        document
+          .querySelector('[data-testid="map-psi-trend"]')
+          ?.getAttribute('data-status') !== 'loading',
+      null,
+      { timeout: 10000 },
+    )
+    check(
+      'trend sparkline loads 6 deduped hourly points',
+      (await trend.getAttribute('data-status')) === 'ready' &&
+        (await trend.getAttribute('data-points')) === '6',
+      `status=${await trend.getAttribute('data-status')} points=${await trend.getAttribute('data-points')}`,
+    )
+    const infoText =
+      (await page.locator('[data-testid="map-psi-trend-info"]').textContent()) ?? ''
+    check(
+      'trend legend shows now/min/max per series',
+      infoText.includes('PSI') &&
+        infoText.includes('min') &&
+        infoText.includes('max') &&
+        infoText.includes('PM2.5'),
+      infoText,
+    )
+    await page.locator('[data-testid="map-env-close"]').click()
+    await page.waitForTimeout(500)
+    check(
+      'trend dialog closes',
+      (await page.locator('[data-testid="map-env-dialog"]').count()) === 0,
+    )
+  }
 } else {
   const status = await root().getAttribute('data-map-status')
   check(
@@ -1410,6 +1543,12 @@ check(
     (await root().getAttribute('data-haze-status')) === 'idle' &&
     (await root().getAttribute('data-weather-status')) === 'idle',
 )
+// Fix the mock feeds' movable features to wherever the view currently sits
+// (render-computed data-center-* — available offline) BEFORE the first haze
+// fetch, so the central PSI bubble lands at the view center for the online
+// tap checks.
+envCenter.lon = parseFloat((await root().getAttribute('data-center-lon')) ?? String(envCenter.lon))
+envCenter.lat = parseFloat((await root().getAttribute('data-center-lat')) ?? String(envCenter.lat))
 await page.locator('[data-testid="map-haze"]').click()
 await waitForAttr('data-haze-status', (v) => v === 'ready', 10000)
 check(

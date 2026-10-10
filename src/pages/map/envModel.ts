@@ -71,6 +71,79 @@ export function mergePm25(regions: PsiRegion[], oneHr: Record<string, number>): 
   return regions.map((r) => (r.name in oneHr ? { ...r, pm25OneHr: oneHr[r.name] } : r))
 }
 
+/** One hourly sample of a regional reading. */
+export interface TrendPoint {
+  t: number
+  v: number
+}
+
+/** The hourly series for one region out of a `?date=YYYY-MM-DD` payload —
+ * those carry ONE item per hour (the parameterless feed has a single
+ * latest item, which this also handles). Rows with a bad timestamp or a
+ * non-finite reading are skipped; junk envelopes yield []. */
+export function parseHourly(
+  json: unknown,
+  readingKey: string,
+  region: string,
+): TrendPoint[] {
+  const items = (json as { items?: unknown })?.items
+  if (!Array.isArray(items)) return []
+  const out: TrendPoint[] = []
+  for (const raw of items) {
+    const item = raw as { timestamp?: unknown; readings?: Record<string, Record<string, unknown>> }
+    const t = typeof item?.timestamp === 'string' ? Date.parse(item.timestamp) : NaN
+    const v = Number(item?.readings?.[readingKey]?.[region])
+    if (Number.isFinite(t) && Number.isFinite(v)) out.push({ t, v })
+  }
+  return out.sort((p, q) => p.t - q.t)
+}
+
+/** Sort, dedupe by timestamp (last wins — today's partial day refines
+ * yesterday's overlap), keep the newest `n` points. */
+export function lastHours(points: TrendPoint[], n = 24): TrendPoint[] {
+  const byT = new Map<number, TrendPoint>()
+  for (const p of [...points].sort((a, b) => a.t - b.t)) byT.set(p.t, p)
+  return [...byT.values()].slice(-n)
+}
+
+/** Min / max / latest of a trend series (null when empty) — the legend
+ * under the sparkline. */
+export function seriesStats(
+  points: TrendPoint[],
+): { min: number; max: number; last: number } | null {
+  if (points.length === 0) return null
+  let min = Infinity
+  let max = -Infinity
+  for (const p of points) {
+    if (p.v < min) min = p.v
+    if (p.v > max) max = p.v
+  }
+  return { min, max, last: points[points.length - 1].v }
+}
+
+/** Polyline path for a small SVG sparkline: x spread by timestamp, y by
+ * value (inverted). '' under 2 points; a flat series pads its range ±1 so
+ * it draws a midline instead of dividing by zero. */
+export function sparklinePath(points: TrendPoint[], w: number, h: number, pad = 3): string {
+  if (points.length < 2) return ''
+  const t0 = points[0].t
+  const t1 = points[points.length - 1].t
+  const tSpan = t1 - t0 || 1
+  let vMin = Math.min(...points.map((p) => p.v))
+  let vMax = Math.max(...points.map((p) => p.v))
+  if (vMin === vMax) {
+    vMin -= 1
+    vMax += 1
+  }
+  return points
+    .map((p, i) => {
+      const x = pad + ((p.t - t0) / tSpan) * (w - 2 * pad)
+      const y = pad + (1 - (p.v - vMin) / (vMax - vMin)) * (h - 2 * pad)
+      return `${i === 0 ? 'M' : 'L'}${x.toFixed(1)} ${y.toFixed(1)}`
+    })
+    .join(' ')
+}
+
 /** NEA's PSI descriptor bands with marker colors. */
 export function psiBand(psi: number): { label: string; color: string } {
   if (psi <= 50) return { label: 'Good', color: '#2e7d32' }

@@ -124,6 +124,7 @@ import { useOsrmRoute } from './useOsrmRoute'
 import { insertIndexFor, nearestOnPath, pathDistanceThresholdMeters } from './routeGeometry'
 import { nightRing, sunDate } from './terminatorModel'
 import SunControl from './SunControl'
+import PsiTrend from './PsiTrend'
 import TrafficControl, { TrafficDialog, type TrafficStatus } from './TrafficControl'
 import { fetchTrafficCameras } from './trafficApi'
 import { CCTV_ICON, type TrafficCam } from './trafficModel'
@@ -510,7 +511,11 @@ export default function MapPageBody() {
   const [hazeStatus, setHazeStatus] = useState<EnvStatus>('idle')
   const [weatherData, setWeatherData] = useState<WeatherArea[]>([])
   const [weatherStatus, setWeatherStatus] = useState<EnvStatus>('idle')
-  const [envInfo, setEnvInfo] = useState<{ title: string; lines: string[] } | null>(null)
+  const [envInfo, setEnvInfo] = useState<{
+    title: string
+    lines: string[]
+    region?: string
+  } | null>(null)
   const hazeDataRef = useRef(hazeData)
   hazeDataRef.current = hazeData
   const weatherDataRef = useRef(weatherData)
@@ -1010,6 +1015,7 @@ export default function MapPageBody() {
                   : []),
                 `PM2.5 ${Math.round(region.pm25)} µg/m³ (24-h)`,
               ],
+              region: region.name,
             })
             return
           }
@@ -1944,6 +1950,7 @@ export default function MapPageBody() {
               {line}
             </Typography>
           ))}
+          {envInfo?.region && <PsiTrend region={envInfo.region} />}
         </DialogContent>
         <DialogActions>
           <Button data-testid="map-env-close" onClick={() => setEnvInfo(null)}>

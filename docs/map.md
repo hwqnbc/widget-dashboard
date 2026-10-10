@@ -206,7 +206,15 @@ on it works without a backend server or API key.
   TextSymbols, which Esri's font atlases cannot draw, lesson #134).
   **Tapping a marker with NO tool active** opens a small details dialog
   (`map-env-dialog`): region PSI + 1-h and 24-h PM2.5 + band, or area +
-  forecast (emoji are fine in DOM text). Data is transient; toggling on
+  forecast (emoji are fine in DOM text). A haze tap's dialog also loads a
+  **24-hour trend sparkline** (`PsiTrend.tsx`, testid `map-psi-trend` with
+  `data-status`/`data-points`): both feeds accept `?date=YYYY-MM-DD` and
+  then return one item PER HOUR, so yesterday + today merged (pure
+  `parseHourly` → `lastHours` dedupe, newest 24) gives a rolling window —
+  the smooth rolling 24-h PSI drawn solid, the spiky 1-h PM2.5 dashed,
+  paths from the pure `sparklinePath` (no chart library) with a per-series now/min/max legend (`seriesStats`), cached 10 min
+  per region in `envApi`. Long-range history (2014→) exists only as
+  data.gov.sg CSV datasets — deliberately not pulled by the page. Data is transient; toggling on
   fetches when missing or older than 5 minutes — toggle off/on is the
   refresh gesture. Parsers are defensive (junk → 0 markers, status
   'error'). Contract: `data-haze`/`data-weather` + per-feed
