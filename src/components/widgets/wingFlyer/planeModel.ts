@@ -96,6 +96,9 @@ export interface StepOptions {
   wind?: Vec3
   /** Let a stall drop a wing (Acro). Off: the stall only drops the nose. */
   wingDrop?: boolean
+  /** Scales the nose-seeks-trim-AoA term (default 1). Acro passes 0 so a
+   * centred stick HOLDS attitude, like a flight controller's rate mode. */
+  pitchStability?: number
 }
 
 const NO_WIND: Vec3 = { x: 0, y: 0, z: 0 }
@@ -401,7 +404,9 @@ export function stepPlane(
   let yawStab = 0
   let rollStab = 0
   if (v > 0.5) {
-    pitchStab = -K_ALPHA * (s.aoa - spec.alphaTrim) * airK
+    // A stall always drops the nose, even in Acro.
+    const stab = s.stalled ? 1 : (opts.pitchStability ?? 1)
+    pitchStab = -K_ALPHA * (s.aoa - spec.alphaTrim) * airK * stab
     // Turn coordination: a banked plane's nose follows its curving path at
     // r = g·sinφ·cosθ / V (−right.y = sinφ·cosθ). Without it the nose only
     // follows through a standing sideslip whose side force fights the turn.
