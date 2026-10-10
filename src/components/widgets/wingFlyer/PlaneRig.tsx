@@ -7,14 +7,15 @@ import type { AirframeId } from './airframes'
 import { AIRFRAMES } from './airframes'
 import type { AssistLevel } from './assists'
 import { triggerPanic } from './assists'
-import { advanceFixed, attitudeOf, forwardOf, stallSpeed } from './planeModel'
+import { advanceFixed, attitudeOf, forwardOf, quatFromEuler, stallSpeed } from './planeModel'
 import type { Phase, StartKind, WingSim } from './wingSim'
 import { HAND, holdInHand, launchSim, resetSim, stepCrash, stepSim } from './wingSim'
 import type { IslandSpec } from './islandLayout'
-import { STRIP, islandHeight } from './islandLayout'
+import { STRIP, WORLD_HALF, islandHeight } from './islandLayout'
 import type { WingInput } from './wingInput'
 import { mergeInput } from './wingInput'
 import PlaneMesh from './PlaneMesh'
+import type { WingView } from './views'
 import { createPlaneParts } from './planeParts'
 
 /** Chase camera: boom length/height (m) per airframe, and damping. */
@@ -23,6 +24,12 @@ const CHASE_UP = 1.3
 const CHASE_LAMBDA = 6
 /** Fraction of the plane's bank the chase camera follows (comfort). */
 const CHASE_ROLL_FOLLOW = 0.25
+/** FPV camera: nose offset (m), up-tilt (rad, matches a cruising wing's
+ * nose-up attitude) and field of view (≤ 75° — comfort). */
+const FPV_NOSE = 0.32
+const FPV_UPTILT = (10 * Math.PI) / 180
+const FPV_FOV = 72
+
 
 export interface RigRefs {
   sim: WingSim
@@ -35,6 +42,12 @@ export interface RigRefs {
   /** Home arrow (rotated toward the runway) + its distance label. */
   homeArrow: MutableRefObject<HTMLElement | null>
   homeText: MutableRefObject<HTMLElement | null>
+  view: MutableRefObject<WingView>
+  /** FPV ignores the plane's roll (the comfort default); the bank symbol shows it. */
+  fpvLevel: MutableRefObject<boolean>
+  /** FPV bank symbol (rotated by the bank) and the TURN BACK warning. */
+  bankSymbol: MutableRefObject<HTMLElement | null>
+  edgeWarn: MutableRefObject<HTMLElement | null>
   /** Called (rarely) when the phase or start kind changes — drives the
    * DOM buttons/banner; everything else is direct DOM writes. */
   onPhase: MutableRefObject<(phase: Phase, start: StartKind) => void>
@@ -46,6 +59,7 @@ const _look = new Vector3()
 const _up = new Vector3()
 const _q = new Quaternion()
 const _att = { heading: 0, pitch: 0, bank: 0 }
+const _qp = { x: 0, y: 0, z: 0, w: 1 }
 const _f = { x: 0, y: 0, z: 0 }
 
 export default function PlaneRig({
@@ -92,6 +106,9 @@ export default function PlaneRig({
         sim.launchRequested = false
         launchSim(sim, af)
       }
+    } else if (sim.paused) {
+      // Auto-paused: hold everything (the scene keeps rendering).
+      input.panic = false
     } else if (sim.phase === 'crashed') {
       stepCrash(sim, af, island, dt)
     } else {
@@ -111,8 +128,10 @@ export default function PlaneRig({
     }
 
     // --- model transform + surfaces ---
+    const fpv = refs.view.current === 'fpv' && sim.phase !== 'preflight'
     const g = groupRef.current
     if (g) {
+      g.visible = !fpv || sim.phase === 'crashed'
       g.position.set(s.pos.x, s.pos.y, s.pos.z)
       if (sim.phase === 'crashed') {
         g.rotation.x += dt * 9
@@ -136,10 +155,35 @@ export default function PlaneRig({
     }
     if (parts.prop) parts.prop.rotation.z += dt * (8 + s.throttle * 90)
 
-    // --- chase camera: behind along the heading, partial roll follow ---
     const cam = state.camera as PerspectiveCamera
     attitudeOf(s.q, _att)
     forwardOf(s.q, _f)
+
+    if (fpv && sim.phase !== 'crashed') {
+      // --- FPV: the nose camera ---
+      cam.position.set(s.pos.x + _f.x * FPV_NOSE, s.pos.y + _f.y * FPV_NOSE + 0.05, s.pos.z + _f.z * FPV_NOSE)
+      if (refs.fpvLevel.current) {
+        quatFromEuler(_att.heading, _att.pitch, 0, _qp)
+        cam.quaternion.set(_qp.x, _qp.y, _qp.z, _qp.w)
+      } else {
+        cam.quaternion.set(s.q.x, s.q.y, s.q.z, s.q.w)
+      }
+      cam.rotateX(FPV_UPTILT)
+      cam.up.set(0, 1, 0)
+      if (Math.abs(cam.fov - FPV_FOV) > 0.05) {
+        cam.fov = FPV_FOV
+        cam.updateProjectionMatrix()
+      }
+      camInit.current = false
+      hudTick.current += dt
+      if (hudTick.current >= 0.15) {
+        hudTick.current = 0
+        writeHud(refs, sim, island, spec.id)
+      }
+      return
+    }
+
+    // --- chase camera: behind along the heading, partial roll follow ---
     _fwd.set(Math.sin(_att.heading), 0, -Math.cos(_att.heading))
     _camTarget.set(s.pos.x, s.pos.y, s.pos.z).addScaledVector(_fwd, -CHASE_BACK[af])
     // Lead by velocity/λ so the damped follow's steady lag (v/λ) cancels —
@@ -245,6 +289,14 @@ function writeHud(refs: RigRefs, sim: WingSim, island: IslandSpec, airframe: Air
   if (arrow) arrow.style.transform = `rotate(${(rel * DEG).toFixed(1)}deg)`
   const ht = refs.homeText.current
   if (ht) ht.textContent = `${Math.round(dist)} m`
+  el.dataset.view = refs.view.current
+  el.dataset.paused = sim.paused ? 'true' : 'false'
+  const outside = Math.hypot(s.pos.x, s.pos.z) > WORLD_HALF
+  el.dataset.outside = outside ? 'true' : 'false'
+  const warn = refs.edgeWarn.current
+  if (warn) warn.style.display = outside && sim.phase === 'flying' ? 'block' : 'none'
+  const sym = refs.bankSymbol.current
+  if (sym) sym.style.transform = `translate(-50%, -50%) rotate(${(_att.bank * DEG).toFixed(1)}deg)`
   if (text) {
     text.textContent = `SPD ${s.airspeed.toFixed(0)} · ALT ${Math.max(0, agl).toFixed(0)} · THR ${Math.round(s.throttle * 100)}%`
     text.style.color = s.stalled ? '#ff5252' : stallWarn ? '#ffb300' : '#ffffff'

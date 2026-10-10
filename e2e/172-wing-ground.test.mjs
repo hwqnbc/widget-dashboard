@@ -198,4 +198,17 @@ function trainerApproach(sim, { goAround = false } = {}) {
   void stallSpeed
 }
 
+// --- soft boundary: Trainer/Normal bank home past the island edge -----------
+for (const level of ['trainer', 'normal']) {
+  const sim = createWingSim()
+  resetSim(sim, 'trainer', island, 'hand')
+  // Beyond the east edge, flying further east.
+  resetPlane(sim.s, { x: 470, y: 80, z: 0 }, Math.PI / 2, 14, 0, 0.5)
+  sim.phase = 'flying'
+  run(sim, level, 'trainer', 25, (s) => sticks(s, 0, 0, 0, 0))
+  attitudeOf(sim.s.q, att)
+  const r = Math.hypot(sim.s.pos.x, sim.s.pos.z)
+  check(`${level}: past the edge with sticks released it turns back inside`, r < 440 && sim.crashes === 0, `r ${r.toFixed(0)} m, heading ${(att.heading / DEG).toFixed(0)}°`)
+}
+
 await finish()

@@ -60,7 +60,12 @@ export interface AssistEnv {
   onGround: boolean
   /** The ground below is somewhere a plane can touch down. */
   landable: boolean
+  /** Past the island's edge (soft boundary). */
+  outside?: boolean
+  /** Bearing to home relative to the nose, radians (+ = home is right). */
+  homeRel?: number
 }
+
 
 export interface AssistState {
   mode: AssistMode
@@ -85,6 +90,8 @@ const DEG = Math.PI / 180
  * turned too wide to line up with the runway. */
 export const TRAINER_BANK = 45 * DEG
 export const TRAINER_PITCH = 20 * DEG
+/** Bank the Trainer/Normal steer-back uses past the island edge. */
+export const STEER_BACK_BANK = 30 * DEG
 export const NORMAL_BANK = 60 * DEG
 export const NORMAL_PITCH = 35 * DEG
 /** STALL_PREVENTION never limits bank below this (ArduPlane's floor). */
@@ -313,9 +320,14 @@ export function stepAssist(
   }
 
   // --- Normal: angle command, bank limited near the stall -------------------
+  // Past the island edge with the roll stick released, Trainer/Normal bank
+  // toward home (Acro just gets the HUD warning + the soft push).
+  const steerBack =
+    env.outside && rx === 0 ? clamp(2 * (env.homeRel ?? 0), -STEER_BACK_BANK, STEER_BACK_BANK) : null
+
   if (level === 'normal') {
     const maxBank = protectedBank(spec, s.airspeed, NORMAL_BANK)
-    attitudeRates(a, s, spec, rx * maxBank, ry * NORMAL_PITCH, dt, out)
+    attitudeRates(a, s, spec, steerBack ?? rx * maxBank, ry * NORMAL_PITCH, dt, out)
     out.throttle = manualThrottle
     a.holdAlt = Number.NaN
     return
@@ -349,7 +361,7 @@ export function stepAssist(
   const speedRoom = clamp((s.airspeed - vs * 1.1) / (vs * 0.4), 0, 1)
   if (pitchT > 0) pitchT *= speedRoom
   pitchT = clamp(pitchT, -TRAINER_PITCH, TRAINER_PITCH)
-  attitudeRates(a, s, spec, rx * maxBank, pitchT, dt, out)
+  attitudeRates(a, s, spec, steerBack ?? rx * maxBank, pitchT, dt, out)
   // … and the pitch command is clipped before α reaches the stall.
   const aoaLimit = spec.alphaCrit - TRAINER_AOA_MARGIN
   if (s.aoa > aoaLimit) out.pitch = Math.min(out.pitch, -4 * (s.aoa - aoaLimit))

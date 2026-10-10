@@ -4,6 +4,8 @@ import { Box, Button, IconButton, Tooltip, alpha } from '@mui/material'
 import { useTheme } from '@mui/material'
 import RestartAltIcon from '@mui/icons-material/RestartAlt'
 import SettingsIcon from '@mui/icons-material/Settings'
+import HelpOutlineIcon from '@mui/icons-material/HelpOutlined'
+import VideocamIcon from '@mui/icons-material/Videocam'
 import type { WidgetProps } from '../../../registry/widgetRegistry'
 import { useAppDispatch } from '../../../app/hooks'
 import { updateWidgetData } from '../../../features/widgets/widgetsSlice'
@@ -29,6 +31,9 @@ import { AIRFRAMES } from './airframes'
 import AirfieldProps from './AirfieldProps'
 import { WING_KEYS, createWingInput } from './wingInput'
 import WingSettingsPanel from './WingSettingsPanel'
+import WingHelpDialog from './WingHelpDialog'
+import type { WingView } from './views'
+import { DEFAULT_VIEW, coerceView } from './views'
 
 const coerceSeed = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : undefined)
 const coerceBool = (v: unknown) => (typeof v === 'boolean' ? v : undefined)
@@ -45,6 +50,9 @@ export default function WingFlyerBody({ id }: WidgetProps) {
   const airframe = useWidgetField<AirframeId>(id, 'airframe', 'trainer', coerceAirframe)
   const assist = useWidgetField<AssistLevel>(id, 'assist', 'trainer', coerceAssist)
   const invertPitch = useWidgetField(id, 'invertPitch', false, coerceBool)
+  const view = useWidgetField<WingView>(id, 'view', 'chase', coerceView)
+  const fpvLevel = useWidgetField(id, 'fpvLevel', true, coerceBool)
+  const helpSeen = useWidgetField(id, 'helpSeen', false, coerceBool)
   const island = useMemo(() => buildIsland(worldSeed), [worldSeed])
   const mode = useTheme().palette.mode
   const palette = mode === 'dark' ? NIGHT_PALETTE : DAY_PALETTE
@@ -60,6 +68,10 @@ export default function WingFlyerBody({ id }: WidgetProps) {
   const airframeRef = useRef(airframe)
   const levelRef = useRef(assist)
   const invertRef = useRef(invertPitch)
+  const viewRef = useRef(view)
+  const fpvLevelRef = useRef(fpvLevel)
+  const bankSymbolRef = useRef<HTMLDivElement>(null)
+  const edgeWarnRef = useRef<HTMLDivElement>(null)
   const hudRef = useRef<HTMLDivElement>(null)
   const hudTextRef = useRef<HTMLDivElement>(null)
   const homeArrowRef = useRef<HTMLDivElement>(null)
@@ -75,7 +87,9 @@ export default function WingFlyerBody({ id }: WidgetProps) {
     airframeRef.current = airframe
     levelRef.current = assist
     invertRef.current = invertPitch
-  }, [airframe, assist, invertPitch, sim])
+    viewRef.current = view
+    fpvLevelRef.current = fpvLevel
+  }, [airframe, assist, invertPitch, view, fpvLevel, sim])
   const refs = useMemo<RigRefs>(
     () => ({
       sim,
@@ -88,14 +102,73 @@ export default function WingFlyerBody({ id }: WidgetProps) {
       homeArrow: homeArrowRef,
       homeText: homeTextRef,
       onPhase: onPhaseRef,
+      view: viewRef,
+      fpvLevel: fpvLevelRef,
+      bankSymbol: bankSymbolRef,
+      edgeWarn: edgeWarnRef,
     }),
     [sim, input],
   )
 
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const patch = useCallback((data: Record<string, unknown>) => dispatch(updateWidgetData({ id, data })), [dispatch, id])
+  const [helpOpen, setHelpOpen] = useState(() => !helpSeen)
+  const patch = useCallback(
+    (data: Record<string, unknown>) => {
+      // Switching plane also switches to its natural camera.
+      const af = coerceAirframe(data.airframe)
+      dispatch(updateWidgetData({ id, data: af ? { ...data, view: DEFAULT_VIEW[af] } : data }))
+    },
+    [dispatch, id],
+  )
+  const closeHelp = useCallback(() => {
+    setHelpOpen(false)
+    if (!helpSeen) dispatch(updateWidgetData({ id, data: { helpSeen: true } }))
+  }, [dispatch, helpSeen, id])
 
-  // Live root height drives touch-control sizing (lesson #53).
+  // --- Auto-pause (docs/wing-flyer.md §11: a plane can't stop) ---------------
+  // Scrolling the widget away, switching tab/app, a dialog, or a fullscreen
+  // toggle pauses an airborne flight; resume is a tap + 3-2-1 countdown.
+  const [paused, setPaused] = useState(false)
+  const [countdown, setCountdown] = useState(0)
+  const pause = useCallback(() => {
+    if (sim.phase !== 'flying' || sim.paused) return
+    sim.paused = true
+    input.keys.clear()
+    setCountdown(0)
+    setPaused(true)
+  }, [sim, input])
+  const resume = useCallback(() => setCountdown(3), [])
+  useEffect(() => {
+    if (countdown <= 0) return
+    const t = window.setTimeout(() => {
+      if (countdown === 1) {
+        sim.paused = false
+        setPaused(false)
+      }
+      setCountdown(countdown - 1)
+    }, 600)
+    return () => window.clearTimeout(t)
+  }, [countdown, sim])
+  useEffect(() => {
+    const onVis = () => document.hidden && pause()
+    window.addEventListener('blur', pause)
+    document.addEventListener('visibilitychange', onVis)
+    return () => {
+      window.removeEventListener('blur', pause)
+      document.removeEventListener('visibilitychange', onVis)
+    }
+  }, [pause])
+  useEffect(() => {
+    if (settingsOpen || helpOpen) pause()
+  }, [settingsOpen, helpOpen, pause])
+  const fsSeen = useRef(fullscreen)
+  useEffect(() => {
+    if (fsSeen.current !== fullscreen) pause()
+    fsSeen.current = fullscreen
+  }, [fullscreen, pause])
+
+  // Live root height drives touch-control sizing (lesson #53); the same
+  // element's visibility drives the scrolled-away auto-pause.
   const rootRef = useRef<HTMLDivElement>(null)
   const [rootH, setRootH] = useState(0)
   useEffect(() => {
@@ -103,13 +176,18 @@ export default function WingFlyerBody({ id }: WidgetProps) {
     if (!el) return
     const ro = new ResizeObserver((entries) => setRootH(Math.round(entries[0].contentRect.height)))
     ro.observe(el)
-    return () => ro.disconnect()
-  }, [])
+    const io = new IntersectionObserver(([e]) => e.intersectionRatio < 0.3 && pause(), { threshold: [0.3] })
+    io.observe(el)
+    return () => {
+      ro.disconnect()
+      io.disconnect()
+    }
+  }, [pause])
 
   // Keyboard: window-level, guarded so typing in Notes is never stolen.
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
-      if (!WING_KEYS.has(e.code) || isTypingTarget(e.target) || settingsOpen) return
+      if (!WING_KEYS.has(e.code) || isTypingTarget(e.target) || settingsOpen || helpOpen) return
       e.preventDefault()
       if (e.code === 'Space') {
         if (!e.repeat) input.panic = true
@@ -132,7 +210,7 @@ export default function WingFlyerBody({ id }: WidgetProps) {
       window.removeEventListener('keyup', up)
       window.removeEventListener('blur', clear)
     }
-  }, [input, sim, settingsOpen])
+  }, [input, sim, settingsOpen, helpOpen])
 
   const onLeft = useCallback(
     (x: number, y: number) => {
@@ -169,6 +247,10 @@ export default function WingFlyerBody({ id }: WidgetProps) {
       data-assist={assist}
       data-invert-pitch={invertPitch ? 'on' : 'off'}
       data-phase={phase}
+      data-view={view}
+      data-fpv-level={fpvLevel ? 'on' : 'off'}
+      data-paused={paused ? 'true' : 'false'}
+      data-help-seen={helpSeen ? 'on' : 'off'}
       onMouseDown={(e) => e.stopPropagation()}
       onTouchStart={(e) => e.stopPropagation()}
       sx={{
@@ -241,6 +323,79 @@ export default function WingFlyerBody({ id }: WidgetProps) {
         </Box>
       </Box>
 
+      {/* FPV: a bank symbol at the centre (the level horizon hides the bank). */}
+      {view === 'fpv' && phase !== 'preflight' && (
+        <Box
+          ref={bankSymbolRef}
+          data-testid="wingflyer-bank-symbol"
+          sx={{
+            position: 'absolute',
+            left: '50%',
+            top: '50%',
+            width: 64,
+            height: 2,
+            bgcolor: alpha('#ffd54f', 0.9),
+            pointerEvents: 'none',
+            '&::after': {
+              content: '""',
+              position: 'absolute',
+              left: '50%',
+              top: -4,
+              width: 10,
+              height: 10,
+              ml: '-5px',
+              borderRadius: '50%',
+              border: '2px solid',
+              borderColor: alpha('#ffd54f', 0.9),
+            },
+          }}
+        />
+      )}
+
+      <Box
+        ref={edgeWarnRef}
+        data-testid="wingflyer-edge-warn"
+        sx={{
+          display: 'none',
+          position: 'absolute',
+          top: 68,
+          left: '50%',
+          transform: 'translateX(-50%)',
+          px: 1,
+          borderRadius: 1,
+          bgcolor: alpha('#d32f2f', 0.8),
+          color: '#fff',
+          fontWeight: 700,
+          fontSize: 12,
+          letterSpacing: 1,
+          pointerEvents: 'none',
+        }}
+      >
+        TURN BACK
+      </Box>
+
+      {paused && !settingsOpen && !helpOpen && (
+        <Box
+          data-testid="wingflyer-paused"
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={() => countdown === 0 && resume()}
+          sx={{
+            position: 'absolute',
+            inset: 0,
+            display: 'grid',
+            placeItems: 'center',
+            bgcolor: alpha('#000', 0.35),
+            color: '#fff',
+            fontWeight: 700,
+            fontSize: countdown > 0 ? 48 : 18,
+            cursor: 'pointer',
+            zIndex: 2,
+          }}
+        >
+          {countdown > 0 ? countdown : 'Paused — tap to continue'}
+        </Box>
+      )}
+
       {/* Start / landed controls. */}
       {(phase === 'preflight' || phase === 'landed') && (
         <Box
@@ -305,6 +460,21 @@ export default function WingFlyerBody({ id }: WidgetProps) {
             <RestartAltIcon fontSize="small" />
           </IconButton>
         </Tooltip>
+        <Tooltip title="Camera">
+          <IconButton
+            size="small"
+            data-testid="wingflyer-view"
+            sx={chip}
+            onClick={() => patch({ view: view === 'chase' ? 'fpv' : 'chase' })}
+          >
+            <VideocamIcon fontSize="small" />
+          </IconButton>
+        </Tooltip>
+        <Tooltip title="How to fly">
+          <IconButton size="small" data-testid="wingflyer-help" sx={chip} onClick={() => setHelpOpen(true)}>
+            <HelpOutlineIcon fontSize="small" />
+          </IconButton>
+        </Tooltip>
         <Tooltip title="Settings">
           <IconButton size="small" data-testid="wingflyer-settings" sx={chip} onClick={() => setSettingsOpen(true)}>
             <SettingsIcon fontSize="small" />
@@ -359,8 +529,11 @@ export default function WingFlyerBody({ id }: WidgetProps) {
         airframe={airframe}
         assist={assist}
         invertPitch={invertPitch}
+        view={view}
+        fpvLevel={fpvLevel}
         onChange={patch}
       />
+      <WingHelpDialog open={helpOpen} onClose={closeHelp} assist={assist} />
     </Box>
   )
 }

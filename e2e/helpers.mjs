@@ -1057,5 +1057,12 @@ export async function addWingWidget(page) {
   await page.getByRole('button', { name: 'Add widget' }).click()
   await page.getByRole('menuitem', { name: /Wing Flyer/ }).click()
   await page.waitForSelector('[data-testid="wingflyer-root"]')
-  await page.waitForTimeout(600)
+  // Dismiss the first-run "How to fly" overlay (suite 173 covers it).
+  await page.waitForTimeout(400)
+  const helpClose = page.locator('[data-testid="wingflyer-help-close"]')
+  if (await helpClose.isVisible().catch(() => false)) {
+    await helpClose.click()
+    await page.waitForTimeout(300)
+  }
+  await page.waitForTimeout(300)
 }

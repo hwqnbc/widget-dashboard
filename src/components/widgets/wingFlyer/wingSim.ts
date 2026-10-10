@@ -34,6 +34,8 @@ export interface WingSim {
   start: StartKind
   /** Seconds left in the crash tumble. */
   crashTimer: number
+  /** Auto-pause (widget hidden / blurred / dialog open): no stepping. */
+  paused: boolean
   /** Requests from the DOM layer, consumed by the rig. */
   resetRequested: StartKind | null
   launchRequested: boolean
@@ -57,6 +59,7 @@ export function createWingSim(): WingSim {
     phase: 'preflight',
     start: 'hand',
     crashTimer: 0,
+    paused: false,
     resetRequested: 'hand',
     launchRequested: false,
     crashes: 0,
@@ -156,13 +159,21 @@ export function stepSim(
   const spec = AIRFRAMES[airframe]
   const ground = islandHeight(island, s.pos.x, s.pos.z)
   const agl = s.pos.y - GEAR[airframe].height - ground
+  const outside = Math.hypot(s.pos.x, s.pos.z) > WORLD_HALF
+  let homeRel = 0
+  if (outside) {
+    forwardOf(s.q, _f)
+    const bearing = Math.atan2(STRIP.x - s.pos.x, -(STRIP.z - s.pos.z))
+    const heading = Math.atan2(_f.x, -_f.z)
+    homeRel = Math.atan2(Math.sin(bearing - heading), Math.cos(bearing - heading))
+  }
   stepAssist(
     sim.a,
     level,
     s,
     spec,
     sim.sticks,
-    { agl, onGround: sim.g.onGround, landable: isLandable(island, s.pos.x, s.pos.z) },
+    { agl, onGround: sim.g.onGround, landable: isLandable(island, s.pos.x, s.pos.z), outside, homeRel },
     h,
     sim.cmd,
     sim.opts,
@@ -189,8 +200,8 @@ export function stepSim(
 }
 
 /** Beyond the island the air turns the plane back: a gentle push toward the
- * centre past WORLD_HALF, never an invisible wall. (Assist-driven steer-back
- * and a HUD warning are step 6.) */
+ * centre past WORLD_HALF, never an invisible wall. Trainer/Normal also bank
+ * home (assists' steer-back) and the HUD warns "TURN BACK". */
 export const BOUNDARY_PUSH = 3
 function softBoundary(s: PlaneState, h: number) {
   const r = Math.hypot(s.pos.x, s.pos.z)

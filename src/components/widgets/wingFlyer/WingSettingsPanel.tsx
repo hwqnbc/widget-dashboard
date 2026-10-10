@@ -1,4 +1,5 @@
 import {
+  Button,
   Dialog,
   DialogContent,
   DialogTitle,
@@ -12,6 +13,17 @@ import {
 } from '@mui/material'
 import type { AirframeId } from './airframes'
 import type { AssistLevel } from './assists'
+import type { WingView } from './views'
+import SettingsBackupRestoreIcon from '@mui/icons-material/SettingsBackupRestore'
+
+/** What "Reset settings" restores (the catalog defaults, minus the seed). */
+export const SETTINGS_DEFAULTS = {
+  airframe: 'trainer',
+  assist: 'trainer',
+  invertPitch: false,
+  view: 'chase',
+  fpvLevel: true,
+} as const
 
 /**
  * Wing Flyer settings (portaled MUI Dialog, the drone/tank pattern): the
@@ -24,6 +36,8 @@ export default function WingSettingsPanel({
   airframe,
   assist,
   invertPitch,
+  view,
+  fpvLevel,
   onChange,
 }: {
   open: boolean
@@ -31,6 +45,8 @@ export default function WingSettingsPanel({
   airframe: AirframeId
   assist: AssistLevel
   invertPitch: boolean
+  view: WingView
+  fpvLevel: boolean
   onChange: (patch: Record<string, unknown>) => void
 }) {
   return (
@@ -87,6 +103,37 @@ export default function WingSettingsPanel({
             />
           </ListItem>
         </List>
+        <List dense subheader={<ListSubheader disableGutters>Camera</ListSubheader>}>
+          <ListItem disableGutters>
+            <ToggleButtonGroup
+              exclusive
+              fullWidth
+              size="small"
+              value={view}
+              onChange={(_, v: WingView | null) => v && onChange({ view: v })}
+            >
+              <ToggleButton value="chase" data-testid="wingflyer-view-chase">
+                Chase
+              </ToggleButton>
+              <ToggleButton value="fpv" data-testid="wingflyer-view-fpv">
+                FPV
+              </ToggleButton>
+            </ToggleButtonGroup>
+          </ListItem>
+          <ListItem disableGutters>
+            <ListItemText
+              primary="FPV level horizon"
+              secondary="The nose camera doesn't roll with the plane — kinder on the stomach."
+              slotProps={{ primary: { sx: { fontWeight: 600 } }, secondary: { sx: { fontSize: 12 } } }}
+            />
+            <Switch
+              size="small"
+              data-testid="wingflyer-fpv-level"
+              checked={fpvLevel}
+              onChange={(_, next) => onChange({ fpvLevel: next })}
+            />
+          </ListItem>
+        </List>
         <List dense subheader={<ListSubheader disableGutters>Controls</ListSubheader>}>
           <ListItem disableGutters>
             <ListItemText
@@ -102,6 +149,16 @@ export default function WingSettingsPanel({
             />
           </ListItem>
         </List>
+        <Button
+          fullWidth
+          size="small"
+          startIcon={<SettingsBackupRestoreIcon />}
+          data-testid="wingflyer-reset-settings"
+          onClick={() => onChange({ ...SETTINGS_DEFAULTS })}
+          sx={{ mt: 1 }}
+        >
+          Reset settings
+        </Button>
       </DialogContent>
     </Dialog>
   )
