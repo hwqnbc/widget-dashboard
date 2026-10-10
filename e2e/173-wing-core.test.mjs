@@ -112,12 +112,14 @@ await setting('wingflyer-assist-acro')
 await setting('wingflyer-invert-pitch')
 await setting('wingflyer-fpv-level')
 await setting('wingflyer-sound')
+await setting('wingflyer-landing-hints')
 check(
-  'assist / invert / FPV level / sound toggles land on the root',
+  'assist / invert / FPV level / sound / landing-hints toggles land on the root',
   (await attr('data-assist')) === 'acro' &&
     (await attr('data-invert-pitch')) === 'on' &&
     (await attr('data-fpv-level')) === 'off' &&
-    (await attr('data-sound')) === 'on',
+    (await attr('data-sound')) === 'on' &&
+    (await attr('data-landing-hints')) === 'off',
 )
 await page.reload({ waitUntil: 'networkidle' })
 await page.waitForSelector('[data-testid="wingflyer-root"]')
@@ -137,8 +139,16 @@ check(
     (await attr('data-view')) === 'chase' &&
     (await attr('data-invert-pitch')) === 'off' &&
     (await attr('data-fpv-level')) === 'on' &&
-    (await attr('data-sound')) === 'off',
+    (await attr('data-sound')) === 'off' &&
+    (await attr('data-landing-hints')) === 'on',
 )
+check('help has the "Landing in 3 steps" section', await (async () => {
+  await page.click('[data-testid="wingflyer-help"]')
+  await page.waitForTimeout(300)
+  const ok = /Landing in 3 steps/.test((await page.locator('[data-testid="wingflyer-help-panel"]').textContent()) ?? '')
+  await page.click('[data-testid="wingflyer-help-close"]')
+  return ok
+})())
 
 await page.screenshot({ path: new URL('./.artifacts/173-wing-core.png', import.meta.url).pathname })
 void addWingWidget

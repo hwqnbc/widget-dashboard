@@ -24,6 +24,7 @@ export const SETTINGS_DEFAULTS = {
   view: 'chase',
   fpvLevel: true,
   sound: false,
+  landingHints: true,
 } as const
 
 /**
@@ -40,6 +41,7 @@ export default function WingSettingsPanel({
   view,
   fpvLevel,
   sound,
+  landingHints,
   onChange,
 }: {
   open: boolean
@@ -50,6 +52,7 @@ export default function WingSettingsPanel({
   view: WingView
   fpvLevel: boolean
   sound: boolean
+  landingHints: boolean
   onChange: (patch: Record<string, unknown>) => void
 }) {
   return (
@@ -149,6 +152,19 @@ export default function WingSettingsPanel({
               data-testid="wingflyer-invert-pitch"
               checked={invertPitch}
               onChange={(_, next) => onChange({ invertPitch: next })}
+            />
+          </ListItem>
+          <ListItem disableGutters>
+            <ListItemText
+              primary="Landing hints"
+              secondary="A short tip on the way in: line up, follow the hoops, let go."
+              slotProps={{ primary: { sx: { fontWeight: 600 } }, secondary: { sx: { fontSize: 12 } } }}
+            />
+            <Switch
+              size="small"
+              data-testid="wingflyer-landing-hints"
+              checked={landingHints}
+              onChange={(_, next) => onChange({ landingHints: next })}
             />
           </ListItem>
         </List>

@@ -65,11 +65,17 @@ export default function WingHelpDialog({
             until it ticks, then come back and land — on the runway for the bonus mark.
           </Typography>
         </Section>
-        <Section title="Land">
-          <Typography variant="body2">
-            The yellow arrow points home. Line up with the <b>yellow hoops</b> and fly down through them to the
-            runway — gently. Flat grass works too.
-            {assist === 'trainer' && ' Low down, let go: the Trainer flares and settles by itself.'}
+        <Section title="Landing in 3 steps">
+          <Typography variant="body2" component="div">
+            <b>1. Line up</b> — the yellow arrow points home; aim for the <b>yellow hoops</b>.
+            <br />
+            <b>2. Follow the hoops down</b> — push the right stick gently forward.
+            <br />
+            <b>3. {assist === 'trainer' ? 'Let go low' : 'Ease back low'}</b> —{' '}
+            {assist === 'trainer'
+              ? 'under the last hoop, release the sticks: the Trainer flares and settles itself.'
+              : 'just above the ground, pull back a little to touch down softly.'}
+            {' '}Flat grass works too. Hints appear on the way in (Settings → Landing hints).
           </Typography>
         </Section>
         <Section title="In trouble?">

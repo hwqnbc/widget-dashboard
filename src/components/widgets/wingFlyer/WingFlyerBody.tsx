@@ -27,6 +27,21 @@ import PlaneRig from './PlaneRig'
 import type { ObjectiveSnapshot, RigRefs } from './PlaneRig'
 import ObjectiveChip from './ObjectiveChip'
 import { FLY_OUT_DIST } from './objective'
+import type { LandingHint } from './objective'
+
+/** The landing hint words — short enough for a young reader. */
+function hintWords(h: LandingHint, assist: AssistLevel): string {
+  switch (h) {
+    case 'lineup':
+      return 'Line up with the hoops'
+    case 'follow':
+      return 'Push forward, follow the hoops'
+    case 'low':
+      return assist === 'trainer' ? 'Let go — it lands itself' : 'Ease back, touch down'
+    default:
+      return ''
+  }
+}
 import { createWingSim } from './wingSim'
 import type { Phase, StartKind } from './wingSim'
 import { AIRFRAMES } from './airframes'
@@ -57,6 +72,7 @@ export default function WingFlyerBody({ id }: WidgetProps) {
   const fpvLevel = useWidgetField(id, 'fpvLevel', true, coerceBool)
   const helpSeen = useWidgetField(id, 'helpSeen', false, coerceBool)
   const soundOn = useWidgetField(id, 'sound', false, coerceBool)
+  const hintsOn = useWidgetField(id, 'landingHints', true, coerceBool)
   const island = useMemo(() => buildIsland(worldSeed), [worldSeed])
   const mode = useTheme().palette.mode
   const palette = mode === 'dark' ? NIGHT_PALETTE : DAY_PALETTE
@@ -102,6 +118,13 @@ export default function WingFlyerBody({ id }: WidgetProps) {
   })
   const onObjectiveRef = useRef((o: ObjectiveSnapshot) => setObjective(o))
   const objDistRef = useRef<HTMLSpanElement>(null)
+  const hintElRef = useRef<HTMLDivElement>(null)
+  const hintTextRef = useRef((h: LandingHint) => hintWords(h, assist))
+  const hintsOnRef = useRef(hintsOn)
+  useEffect(() => {
+    hintTextRef.current = (h) => hintWords(h, assist)
+    hintsOnRef.current = hintsOn
+  }, [assist, hintsOn])
   useEffect(() => {
     if (airframeRef.current !== airframe) sim.resetRequested = 'hand'
     airframeRef.current = airframe
@@ -124,6 +147,9 @@ export default function WingFlyerBody({ id }: WidgetProps) {
       onPhase: onPhaseRef,
       onObjective: onObjectiveRef,
       objectiveDist: objDistRef,
+      hintEl: hintElRef,
+      hintText: hintTextRef,
+      hintsOn: hintsOnRef,
       view: viewRef,
       sound,
       fpvLevel: fpvLevelRef,
@@ -283,6 +309,7 @@ export default function WingFlyerBody({ id }: WidgetProps) {
       data-paused={paused ? 'true' : 'false'}
       data-help-seen={helpSeen ? 'on' : 'off'}
       data-sound={soundOn ? 'on' : 'off'}
+      data-landing-hints={hintsOn ? 'on' : 'off'}
       onMouseDown={(e) => e.stopPropagation()}
       onTouchStart={(e) => e.stopPropagation()}
       sx={{
@@ -363,6 +390,26 @@ export default function WingFlyerBody({ id }: WidgetProps) {
 
       {/* The standing goal: Take off ▸ Fly out ▸ Land (objective.ts). */}
       <ObjectiveChip objective={objective} distRef={objDistRef} flyOutDist={FLY_OUT_DIST} />
+      <Box
+        ref={hintElRef}
+        data-testid="wingflyer-hint"
+        sx={{
+          display: 'none',
+          position: 'absolute',
+          top: 86,
+          left: '50%',
+          transform: 'translateX(-50%)',
+          px: 1,
+          py: 0.2,
+          borderRadius: 1,
+          bgcolor: alpha('#1565c0', 0.75),
+          color: '#fff',
+          fontSize: 12,
+          fontWeight: 600,
+          whiteSpace: 'nowrap',
+          pointerEvents: 'none',
+        }}
+      />
 
       {/* FPV: a bank symbol at the centre (the level horizon hides the bank). */}
       {view === 'fpv' && phase !== 'preflight' && (
@@ -593,6 +640,7 @@ export default function WingFlyerBody({ id }: WidgetProps) {
         view={view}
         fpvLevel={fpvLevel}
         sound={soundOn}
+        landingHints={hintsOn}
         onChange={patch}
       />
       <WingHelpDialog open={helpOpen} onClose={closeHelp} assist={assist} />

@@ -17,7 +17,8 @@ import { mergeInput } from './wingInput'
 import PlaneMesh from './PlaneMesh'
 import type { WingView } from './views'
 import type { ObjectiveState } from './objective'
-import { FLY_OUT_DIST } from './objective'
+import { FLY_OUT_DIST, landingHint } from './objective'
+import type { LandingHint } from './objective'
 
 /** What the chip renders — a plain copy, so React state stays immutable. */
 export type ObjectiveSnapshot = Pick<ObjectiveState, 'takeoff' | 'flyout' | 'back' | 'land' | 'runway' | 'sink' | 'completed'>
@@ -60,6 +61,10 @@ export interface RigRefs {
   onObjective: MutableRefObject<(o: ObjectiveSnapshot) => void>
   /** The chip's live "fly out" distance (direct DOM write). */
   objectiveDist: MutableRefObject<HTMLElement | null>
+  /** Landing hint line: text per hint (null = hide); written directly. */
+  hintEl: MutableRefObject<HTMLElement | null>
+  hintText: MutableRefObject<(h: LandingHint) => string>
+  hintsOn: MutableRefObject<boolean>
   /** Called (rarely) when the phase or start kind changes — drives the
    * DOM buttons/banner; everything else is direct DOM writes. */
   onPhase: MutableRefObject<(phase: Phase, start: StartKind) => void>
@@ -360,6 +365,24 @@ function writeHud(
   const od = refs.objectiveDist.current
   if (od) od.textContent = `${Math.round(Math.min(dist, FLY_OUT_DIST))} / ${FLY_OUT_DIST} m`
   el.dataset.homeBearing = (rel * DEG).toFixed(1)
+  // Landing hint (pure decision in objective.ts; words from the body).
+  const hint: LandingHint = refs.hintsOn.current
+    ? landingHint({
+        landStep: !!(o.takeoff && o.flyout && !o.land),
+        airborne: !sim.g.onGround && sim.phase === 'flying',
+        homeDist: dist,
+        homeRel: rel,
+        offCentreline: Math.abs(s.pos.z - STRIP.z),
+        agl,
+      })
+    : null
+  el.dataset.hint = hint ?? 'none'
+  const he = refs.hintEl.current
+  if (he) {
+    const txt = hint ? refs.hintText.current(hint) : ''
+    if (he.textContent !== txt) he.textContent = txt
+    he.style.display = hint ? 'block' : 'none'
+  }
   const arrow = refs.homeArrow.current
   if (arrow) arrow.style.transform = `rotate(${(rel * DEG).toFixed(1)}deg)`
   const ht = refs.homeText.current

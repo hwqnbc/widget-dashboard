@@ -92,3 +92,41 @@ export function stepObjective(o: ObjectiveState, f: ObjectiveFacts): boolean {
   }
   return false
 }
+
+// --- landing hints -----------------------------------------------------------
+
+export type LandingHint = 'lineup' | 'follow' | 'low' | null
+
+/** Hints only while heading roughly toward the runway… */
+export const HINT_MAX_BEARING = (60 * Math.PI) / 180
+/** …inside this distance from the runway centre… */
+export const HINT_MAX_DIST = 320
+/** …and this far off the extended centreline counts as "lined up". */
+export const HINT_CORRIDOR = 25
+/** Below this height the final hint shows (the Trainer's flare height). */
+export const HINT_LOW_AGL = 6
+
+export interface HintFacts {
+  /** The objective is on its "land" step. */
+  landStep: boolean
+  airborne: boolean
+  homeDist: number
+  /** Bearing to the runway relative to the nose, radians. */
+  homeRel: number
+  /** Distance from the runway's extended centreline, metres. */
+  offCentreline: number
+  agl: number
+}
+
+/**
+ * Which landing hint to show, or null: `lineup` (far, not yet on the
+ * centreline), `follow` (lined up — follow the hoops down), `low` (under
+ * the flare height — let go / ease back). Pure; the body maps it to words
+ * per assist level.
+ */
+export function landingHint(f: HintFacts): LandingHint {
+  if (!f.landStep || !f.airborne) return null
+  if (f.agl < HINT_LOW_AGL) return 'low'
+  if (f.homeDist > HINT_MAX_DIST || Math.abs(f.homeRel) > HINT_MAX_BEARING) return null
+  return f.offCentreline <= HINT_CORRIDOR ? 'follow' : 'lineup'
+}

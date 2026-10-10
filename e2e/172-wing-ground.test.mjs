@@ -248,4 +248,16 @@ for (const level of ['trainer', 'normal']) {
   check('real sim: launch → out past 150 m → runway landing completes the goal with the runway mark', touch?.result === 'landed' && sim.objective.land && sim.objective.runway && sim.objective.completed === 1, `land ${sim.objective.land} runway ${sim.objective.runway} maxDist ${sim.objective.maxDist.toFixed(0)}`)
 }
 
+// --- landing hints (objective.ts landingHint) -----------------------------------
+{
+  const { HINT_CORRIDOR, HINT_LOW_AGL, HINT_MAX_BEARING, HINT_MAX_DIST, landingHint } = await import('./.bundle/objective.js')
+  const base = { landStep: true, airborne: true, homeDist: 200, homeRel: 0.1, offCentreline: 60, agl: 30 }
+  check('hint: far, heading home, off the centreline → "line up"', landingHint(base) === 'lineup')
+  check('hint: inside the corridor → "follow"', landingHint({ ...base, offCentreline: HINT_CORRIDOR - 1 }) === 'follow')
+  check('hint: under the flare height → "low" (even off the centreline)', landingHint({ ...base, agl: HINT_LOW_AGL - 1 }) === 'low')
+  check('hint: none when flying away from the runway', landingHint({ ...base, homeRel: HINT_MAX_BEARING + 0.1 }) === null)
+  check('hint: none when still far out', landingHint({ ...base, homeDist: HINT_MAX_DIST + 1 }) === null)
+  check('hint: none before the "land" step, or on the ground', landingHint({ ...base, landStep: false }) === null && landingHint({ ...base, airborne: false }) === null)
+}
+
 await finish()

@@ -28,7 +28,9 @@ const waitFor = async (pred, ms = 10000) => {
 
 // --- Trainer: launch, climb, fly out, dive, settle, land ---------------------------
 const obj = page.locator('[data-testid="wingflyer-objective"]')
+const hint = page.locator('[data-testid="wingflyer-hint"]')
 check('objective chip starts on "take off"', (await obj.getAttribute('data-step')) === 'takeoff')
+check('no landing hint before the land step', !(await hint.isVisible()) && (await str('data-hint')) === 'none')
 await page.click('[data-testid="wingflyer-launch"]')
 check('launch sfx counted', (await waitFor(async () => (await tel('data-sfx-launch')) === 1, 2000)))
 check('take-off ticks the objective', await waitFor(async () => (await obj.getAttribute('data-step')) === 'flyout', 3000))
@@ -53,9 +55,13 @@ for (let t = 0; t < 60000 && !back; t += 150) {
 }
 if (held) await page.keyboard.up(held)
 check('steering home inside 100 m → back', back, `home ${await str('data-home-dist')} m, crashes ${await str('data-crashes')}`)
+// Heading home inside 320 m: a landing hint is up (line up or follow).
+const hintNow = await str('data-hint')
+check('heading home → a landing hint shows', (hintNow === 'lineup' || hintNow === 'follow') && (await hint.isVisible()), `${hintNow}: "${await hint.textContent()}"`)
 await page.keyboard.down('ArrowUp')
 const low = await waitFor(async () => (await tel('data-agl')) < 4, 20000)
 await page.keyboard.up('ArrowUp')
+check('low → the Trainer "let go" hint', await waitFor(async () => (await str('data-hint')) === 'low', 2000) && /let go/i.test((await hint.textContent()) ?? ''), `"${await hint.textContent()}"`)
 check('↑ dives toward the ground without crashing (auto-flare)', low && (await tel('data-crashes')) === 0)
 const touched = await waitFor(async () => (await tel('data-landings')) >= 1 || (await tel('data-crashes')) > 0, 20000)
 check('let go low → touchdown is a LANDING', touched && (await str('data-touchdown')) === 'landed', `${await str('data-touchdown')} at ${await str('data-touch-sink')} m/s`)

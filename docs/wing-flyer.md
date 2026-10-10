@@ -93,6 +93,14 @@ input → fixed 120 Hz `stepSim` → mesh → camera → HUD), `IslandScene`,
   a "Runway!" mark; the landed banner reads "Nice landing! 0.6 m/s · ✓ on
   the runway" ("Butter!" under 0.6 m/s); a ×N count of completed runs. Round
   1b's Landing mission 1 is this checklist with stars.
+- **Landing hints** (play-test: "should we add a simple instruction on how
+  to land?" — yes, options 1 + 3): a one-line hint under the chip during the
+  land step, heading home inside 320 m — "Line up with the hoops" (off the
+  centreline) → "Push forward, follow the hoops" (inside the 25 m corridor)
+  → under 6 m "Let go — it lands itself" (Trainer) / "Ease back, touch
+  down" (Normal/Acro). Pure `landingHint` in `objective.ts`; words in the
+  body; `data-hint` telemetry; **Settings → Landing hints** (on by default).
+  The help dialog gained "Landing in 3 steps".
 - **Trainer over terrain** (found by the first live fly-out test): the
   approach-speed slowdown now needs nose-down stick or the settle state
   (not merely low-and-sinking); the released-stick altitude hold keeps at
@@ -621,7 +629,9 @@ Root `wingflyer-root`: `data-airframe`, `data-assist`, `data-view`,
 `data-paused`, `data-sound`, `data-sfx-{launch,touchdown,bounce,crash,
 panic}`, `data-draw-calls`, `data-triangles`, `data-objective`
 (`takeoff|flyout|land|done`), `data-objective-back`, `data-objective-runway`,
-`data-objective-done` (count), `data-max-dist`. Chip `wingflyer-objective`:
+`data-objective-done` (count), `data-max-dist`, `data-hint`
+(`none|lineup|follow|low`); root `data-landing-hints`; `wingflyer-hint`
+(the hint line). Chip `wingflyer-objective`:
 `data-step`, per-step `wingflyer-obj-{takeoff,flyout,land}` `data-done`,
 `wingflyer-obj-count`; banner `wingflyer-landed-banner`
 `data-objective-complete`. Round 1b adds the mission
