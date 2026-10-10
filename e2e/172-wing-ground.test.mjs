@@ -211,4 +211,41 @@ for (const level of ['trainer', 'normal']) {
   check(`${level}: past the edge with sticks released it turns back inside`, r < 440 && sim.crashes === 0, `r ${r.toFixed(0)} m, heading ${(att.heading / DEG).toFixed(0)}°`)
 }
 
+// --- Free Flight objective (objective.ts) -------------------------------------
+{
+  const { COME_BACK_DIST, FLY_OUT_DIST, createObjective, currentStep, resetObjective, stepObjective } = await import('./.bundle/objective.js')
+  const o = createObjective()
+  const landed = (onRunway, sink = 0.6) => ({ result: 'landed', sink, onRunway })
+  check('objective starts on "take off"', currentStep(o) === 'takeoff')
+  stepObjective(o, { airborne: true, homeDist: 10, touchdown: null })
+  check('airborne → take-off ✓, now "fly out"', o.takeoff && currentStep(o) === 'flyout')
+  stepObjective(o, { airborne: true, homeDist: 60, touchdown: landed(true) })
+  check('a landing BEFORE flying out does not complete the goal', !o.land && o.completed === 0)
+  stepObjective(o, { airborne: true, homeDist: FLY_OUT_DIST + 1, touchdown: null })
+  check('past 150 m → fly-out ✓, now "land"', o.flyout && !o.back && currentStep(o) === 'land')
+  stepObjective(o, { airborne: true, homeDist: COME_BACK_DIST + 50, touchdown: landed(false) })
+  check('a landing far out on the grass does not complete the goal (not back yet)', !o.land)
+  stepObjective(o, { airborne: true, homeDist: COME_BACK_DIST - 1, touchdown: null })
+  check('inside 100 m → back', o.back)
+  const done = stepObjective(o, { airborne: false, homeDist: 30, touchdown: landed(false, 0.9) })
+  check('landing on the grass completes the goal (no runway mark)', done && o.land && !o.runway && o.sink === 0.9 && o.completed === 1 && currentStep(o) === null)
+  resetObjective(o)
+  check('reset keeps the completed count, clears the steps', o.completed === 1 && currentStep(o) === 'takeoff' && o.maxDist === 0)
+  stepObjective(o, { airborne: true, homeDist: 200, touchdown: null })
+  stepObjective(o, { airborne: true, homeDist: 50, touchdown: null })
+  stepObjective(o, { airborne: false, homeDist: 20, touchdown: landed(true, 0.4) })
+  check('a runway landing earns the runway mark', o.land && o.runway && o.completed === 2)
+  check('a crash or bounce never completes it', (() => { const c = createObjective(); stepObjective(c, { airborne: true, homeDist: 200, touchdown: null }); stepObjective(c, { airborne: true, homeDist: 50, touchdown: null }); stepObjective(c, { airborne: false, homeDist: 20, touchdown: { result: 'bounce', sink: 3, onRunway: true } }); return !c.land })())
+}
+
+// --- the objective through the real sim: the Trainer approach from above completes it ---
+{
+  const sim = createWingSim()
+  resetSim(sim, 'trainer', island, 'hand')
+  // A launch, then teleport 200 m out and fly the approach (the approach
+  // helper starts the plane on the outermost hoop, ~210 m from the centre).
+  const touch = trainerApproach(sim)
+  check('real sim: launch → out past 150 m → runway landing completes the goal with the runway mark', touch?.result === 'landed' && sim.objective.land && sim.objective.runway && sim.objective.completed === 1, `land ${sim.objective.land} runway ${sim.objective.runway} maxDist ${sim.objective.maxDist.toFixed(0)}`)
+}
+
 await finish()

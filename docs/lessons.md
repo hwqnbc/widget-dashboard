@@ -2305,3 +2305,26 @@ carried over; these are the new ones.
     `pkill -f "vite --port 5199"` inside a Bash call killed that call's
     own shell (exit 144) because the pattern appears in its command line.
     List with `ps -eo pid,args` first and kill by PID.
+
+145. **"Low and sinking" is not "on approach" — and an altitude hold
+    must put airspeed first.** Wing Flyer's Trainer slowed to approach
+    speed whenever it was under 20 m and descending; every low banked turn
+    sinks a little, so a 45° turn over the hills east of the runway slowed
+    to 10 m/s, went mushy and flew into a 14 m hill (found by the first
+    live fly-out test). Key the approach slowdown on the pilot's INTENT
+    (nose-down stick, or the settle-to-land state), never on the sink
+    alone. The second half: the new altitude floor over terrain demanded a
+    20° climbing turn the trainer hasn't the power for — speed bled, the
+    stall-proofing refused nose-up, and it mushed down. Cap the hold's
+    climb demand by spare airspeed and by bank (a stall-proof assist keeps
+    speed and climbs with what's left), with a small always-allowed climb
+    when very low, where the ground is the nearer danger. Both were
+    invisible in the flat-ground node suites: fly the real island too.
+
+146. **A sandbox needs a visible goal from the first second.** Round 1a
+    shipped Free Flight with landing possible but nothing on screen saying
+    it was the point — the play-tester "could not tell the objective was to
+    land". A goal line that ticks (Take off ▸ Fly out ▸ Land) costs a pure
+    stepper + one chip, and becomes mission 1 for free. Ship the smallest
+    objective with the first playable, not with the missions round.
+

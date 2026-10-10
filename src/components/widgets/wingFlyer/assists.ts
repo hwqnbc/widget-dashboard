@@ -121,8 +121,15 @@ export const FLARE_SINK_HIGH = 2
 /** Throttle-stick position (−1..1) that turns a Trainer roll-out into a
  * touch-and-go. */
 export const GO_AROUND_STICK = 0.5
-/** Below this height while descending, the Trainer flies approach speed. */
+/** Below this height, while the pilot pushes the nose down (or the plane is
+ * settling), the Trainer flies approach speed. */
 export const APPROACH_AGL = 20
+/** Trainer altitude hold (sticks released) never holds lower than this
+ * above the ground under the plane — a hands-off flight over rising
+ * terrain climbs with it instead of flying into the hill. (The hold's
+ * proportional lag puts the plane ~3–4 m under a rising target, so the
+ * floor sits above the ~10 m that is actually kept.) */
+export const TRAINER_MIN_AGL = 15
 
 export function createAssist(): AssistState {
   return {
@@ -204,8 +211,10 @@ function vsPitch(s: PlaneState, vsT: number, gain = 0.04): number {
 /** Pitch attitude that holds altitude `alt`, radians: the flight-path angle
  * for a climb rate proportional to the altitude error, corrected by the
  * vertical-speed error (the attitude loop's integrator finds the trim). */
-function altHoldPitch(s: PlaneState, alt: number): number {
-  return vsPitch(s, clamp(0.6 * (alt - s.pos.y), -2.5, 2.5))
+function altHoldPitch(s: PlaneState, alt: number, climbCap = 3.5): number {
+  // ±3.5 m/s: enough to climb with a 12 % slope at the wing's cruise speed.
+  // `climbCap` lets the Trainer trade climb for airspeed (see below).
+  return vsPitch(s, clamp(0.6 * (alt - s.pos.y), -3.5, climbCap))
 }
 
 /**
@@ -351,7 +360,19 @@ export function stepAssist(
     pitchT = vsPitch(s, -FLARE_SINK_LOW)
   } else if (ry === 0) {
     if (Number.isNaN(a.holdAlt)) a.holdAlt = s.pos.y
-    pitchT = altHoldPitch(s, a.holdAlt)
+    // Terrain floor on the HELD altitude only (never against a held stick).
+    const floor = s.pos.y - agl + TRAINER_MIN_AGL
+    if (a.holdAlt < floor) a.holdAlt = floor
+    // Airspeed first (it is stall-proof): the climb demand fades to zero as
+    // the speed falls toward approach speed, and shrinks in a bank — a 20°
+    // climbing 45° turn is beyond the trainer's power and ended as a mush
+    // into a hill (lesson #145).
+    const lo = vs * 1.45
+    const room = clamp((s.airspeed - lo) / (spec.vAuthority - lo), 0, 1)
+    // …except very low, where the ground is the nearer danger: always allow
+    // a gentle climb there (the stall-proofing still caps the pitch).
+    const climbCap = Math.max(3.5 * room * (0.4 + 0.6 * Math.cos(a.att.bank)), agl < FLARE_AGL ? 1.5 : 0)
+    pitchT = altHoldPitch(s, a.holdAlt, climbCap)
   } else {
     a.holdAlt = Number.NaN
     pitchT = ry * TRAINER_PITCH
@@ -380,9 +401,12 @@ export function stepAssist(
   const hi = cruise * 1.25
   const ly = dead(sticks.left.y)
   let vT = ly >= 0 ? cruise + ly * (hi - cruise) : cruise + ly * (cruise - lo)
-  // On approach (low and descending) slow to approach speed, so a Trainer
-  // landing touches down slow enough to stop on the runway.
-  if (agl < APPROACH_AGL && s.vel.y < -0.3) vT = Math.min(vT, lo)
+  // On approach — low AND the pilot is pushing the nose down (or the plane
+  // is settling) — slow to approach speed, so a Trainer landing touches down
+  // slow enough to stop on the runway. Not merely "low and sinking": every
+  // low banked turn sinks a little, and slowing there is what put a
+  // play-test flight into a hill (lesson #145).
+  if (agl < APPROACH_AGL && s.vel.y < -0.3 && (ry < 0 || settle)) vT = Math.min(vT, lo)
   const err = vT - s.airspeed
   a.speedI = clamp(a.speedI + err * dt * 0.08, -0.6, 0.6)
   out.throttle = clamp(0.35 + 0.12 * err + a.speedI + 1.2 * Math.max(0, a.att.pitch), 0, 1)

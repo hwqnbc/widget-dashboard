@@ -16,6 +16,11 @@ import type { WingInput } from './wingInput'
 import { mergeInput } from './wingInput'
 import PlaneMesh from './PlaneMesh'
 import type { WingView } from './views'
+import type { ObjectiveState } from './objective'
+import { FLY_OUT_DIST } from './objective'
+
+/** What the chip renders — a plain copy, so React state stays immutable. */
+export type ObjectiveSnapshot = Pick<ObjectiveState, 'takeoff' | 'flyout' | 'back' | 'land' | 'runway' | 'sink' | 'completed'>
 import type { WingSound } from './wingSound'
 import { CRASH_PULSE, vibrate } from '../droneSim/haptics'
 import { createPlaneParts } from './planeParts'
@@ -51,6 +56,10 @@ export interface RigRefs {
   /** FPV bank symbol (rotated by the bank) and the TURN BACK warning. */
   bankSymbol: MutableRefObject<HTMLElement | null>
   edgeWarn: MutableRefObject<HTMLElement | null>
+  /** Called when the objective checklist changes (rare): re-renders the chip. */
+  onObjective: MutableRefObject<(o: ObjectiveSnapshot) => void>
+  /** The chip's live "fly out" distance (direct DOM write). */
+  objectiveDist: MutableRefObject<HTMLElement | null>
   /** Called (rarely) when the phase or start kind changes — drives the
    * DOM buttons/banner; everything else is direct DOM writes. */
   onPhase: MutableRefObject<(phase: Phase, start: StartKind) => void>
@@ -83,6 +92,7 @@ export default function PlaneRig({
   const camInit = useRef(false)
   const lastPhase = useRef<string>('')
   const lastSeq = useRef(0)
+  const lastObjSeq = useRef(-1)
 
   useFrame((state, frameDt) => {
     const { sim, input } = refs
@@ -149,6 +159,20 @@ export default function PlaneRig({
       flyingLive && !sim.g.onGround && (s.stalled || s.airspeed < vsWarn),
       flyingLive,
     )
+
+    if (sim.objectiveSeq !== lastObjSeq.current) {
+      lastObjSeq.current = sim.objectiveSeq
+      const o = sim.objective
+      refs.onObjective.current({
+        takeoff: o.takeoff,
+        flyout: o.flyout,
+        back: o.back,
+        land: o.land,
+        runway: o.runway,
+        sink: o.sink,
+        completed: o.completed,
+      })
+    }
 
     const phaseKey = sim.phase + ':' + sim.start
     if (phaseKey !== lastPhase.current) {
@@ -313,6 +337,13 @@ function writeHud(
   el.dataset.crashed = sim.phase === 'crashed' ? 'true' : 'false'
   el.dataset.crashes = String(sim.crashes)
   el.dataset.landings = String(sim.landings)
+  const o = sim.objective
+  el.dataset.objective = !o.takeoff ? 'takeoff' : !o.flyout ? 'flyout' : !o.land ? 'land' : 'done'
+  el.dataset.objectiveBack = o.back ? 'true' : 'false'
+  el.dataset.objectiveRunway = o.runway ? 'true' : 'false'
+  el.dataset.objectiveDone = String(o.completed)
+  el.dataset.maxDist = o.maxDist.toFixed(0)
+
   el.dataset.touchdown = sim.g.lastResult ?? 'none'
   el.dataset.touchSink = sim.g.lastSink.toFixed(2)
   el.dataset.inputSource = refs.input.source
@@ -323,6 +354,8 @@ function writeHud(
   const bearing = Math.atan2(dx, -dz)
   const rel = Math.atan2(Math.sin(bearing - _att.heading), Math.cos(bearing - _att.heading))
   el.dataset.homeDist = dist.toFixed(1)
+  const od = refs.objectiveDist.current
+  if (od) od.textContent = `${Math.round(Math.min(dist, FLY_OUT_DIST))} / ${FLY_OUT_DIST} m`
   el.dataset.homeBearing = (rel * DEG).toFixed(1)
   const arrow = refs.homeArrow.current
   if (arrow) arrow.style.transform = `rotate(${(rel * DEG).toFixed(1)}deg)`

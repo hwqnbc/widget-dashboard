@@ -59,6 +59,12 @@ export default function WingHelpDialog({
             from the strip.
           </Typography>
         </Section>
+        <Section title="The goal: take off, fly out, land">
+          <Typography variant="body2">
+            The line under the arrow ticks off <b>Take off ▸ Fly out 150 m ▸ Land</b>. Fly away from the runway
+            until it ticks, then come back and land — on the runway for the bonus mark.
+          </Typography>
+        </Section>
         <Section title="Land">
           <Typography variant="body2">
             The yellow arrow points home. Line up with the <b>yellow hoops</b> and fly down through them to the

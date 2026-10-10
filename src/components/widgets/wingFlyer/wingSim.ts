@@ -16,6 +16,8 @@ import type { IslandSpec } from './islandLayout'
 import { PILOT, STRIP, STRIP_Y, WORLD_HALF, isLandable, islandHeight } from './islandLayout'
 import type { PlaneCommand, PlaneState, StepOptions } from './planeModel'
 import { createPlaneState, forwardOf, quatFromEuler, stallSpeed, stepPlane } from './planeModel'
+import type { ObjectiveState } from './objective'
+import { createObjective, resetObjective, stepObjective } from './objective'
 
 export type Phase = 'preflight' | 'flying' | 'landed' | 'crashed'
 export type StartKind = 'hand' | 'runway'
@@ -45,6 +47,10 @@ export interface WingSim {
   /** Last ground event and a counter that bumps with each one. */
   lastEvent: GroundEvent | null
   eventSeq: number
+  /** Free Flight's standing goal (objective.ts); bumps `objectiveSeq` on
+   * every change so the DOM layer re-renders the chip only then. */
+  objective: ObjectiveState
+  objectiveSeq: number
 }
 
 export function createWingSim(): WingSim {
@@ -66,6 +72,8 @@ export function createWingSim(): WingSim {
     landings: 0,
     lastEvent: null,
     eventSeq: 0,
+    objective: createObjective(),
+    objectiveSeq: 0,
   }
 }
 
@@ -90,6 +98,8 @@ export function resetSim(sim: WingSim, airframe: AirframeId, island: IslandSpec,
   sim.launchRequested = false
   s.cmdRoll = s.cmdPitch = s.cmdYaw = 0
   sim.g = createGroundState()
+  resetObjective(sim.objective)
+  sim.objectiveSeq++
   setAssistMode(sim.a, 'fly')
   if (kind === 'runway') {
     placeOnGround(sim.g, s, airframe, island, RUNWAY_START.x, RUNWAY_START.z, STRIP.heading)
@@ -195,6 +205,15 @@ export function stepSim(
   }
   if (sim.phase === 'landed' && !sim.g.stopped) sim.phase = 'flying'
   softBoundary(s, h)
+  // The standing objective, from this step's facts.
+  const o = sim.objective
+  const before = o.takeoff + ':' + o.flyout + ':' + o.back + ':' + o.land
+  stepObjective(o, {
+    airborne: !sim.g.onGround && (sim.phase as Phase) !== 'crashed',
+    homeDist: Math.hypot(s.pos.x - STRIP.x, s.pos.z - STRIP.z),
+    touchdown: ev && ev.kind === 'touchdown' ? { result: ev.result, sink: ev.sink, onRunway: ev.onRunway } : null,
+  })
+  if (before !== o.takeoff + ':' + o.flyout + ':' + o.back + ':' + o.land) sim.objectiveSeq++
   if ((sim.phase as Phase) !== 'crashed' && hitsBuilding(island, s)) crash(sim)
   return ev
 }

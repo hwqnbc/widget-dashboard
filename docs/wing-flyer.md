@@ -83,6 +83,23 @@ input → fixed 120 Hz `stepSim` → mesh → camera → HUD), `IslandScene`,
 - **Performance**: 27 draw calls / ~46 k triangles in flight (hoops and
   runway paint instanced), 51 calls on the ground with the avatar; the HUD
   publishes `data-draw-calls` / `data-triangles`.
+- **Objective (the step-8 play-test: "I could not tell the objective
+  was to land")**: Free Flight carries a standing goal — a chip under the
+  home arrow, **Take off ▸ Fly out 150 m ▸ Land**, each step ✓ as it
+  happens, the fly-out step showing the live distance. Pure `objective.ts`
+  (stepped inside `wingSim.stepSim`): take-off = airborne; fly-out = 150 m
+  from the runway centre; the landing completes the goal only after the
+  fly-out AND coming back inside 100 m; grass completes it, the runway adds
+  a "Runway!" mark; the landed banner reads "Nice landing! 0.6 m/s · ✓ on
+  the runway" ("Butter!" under 0.6 m/s); a ×N count of completed runs. Round
+  1b's Landing mission 1 is this checklist with stars.
+- **Trainer over terrain** (found by the first live fly-out test): the
+  approach-speed slowdown now needs nose-down stick or the settle state
+  (not merely low-and-sinking); the released-stick altitude hold keeps at
+  least **15 m above the ground under the plane** (`TRAINER_MIN_AGL`) so a
+  hands-off flight climbs with a hill; and the hold's climb demand is capped
+  by spare airspeed and bank (airspeed first), with a gentle climb always
+  allowed under 6 m. Lesson #145.
 - **Shared code**: imported in place (decision R2, §13). The only change to another
   widget's file is `VirtualJoystick`'s optional, default-off `latchY` +
   `latchRef`; the drone/strike/tank suites re-ran green.
@@ -602,7 +619,12 @@ Root `wingflyer-root`: `data-airframe`, `data-assist`, `data-view`,
 `data-landings`, `data-crashes`, `data-crashed`, `data-home-dist`,
 `data-home-bearing`, `data-outside`, `data-input-source`, `data-view`,
 `data-paused`, `data-sound`, `data-sfx-{launch,touchdown,bounce,crash,
-panic}`, `data-draw-calls`, `data-triangles`. Round 1b adds the mission
+panic}`, `data-draw-calls`, `data-triangles`, `data-objective`
+(`takeoff|flyout|land|done`), `data-objective-back`, `data-objective-runway`,
+`data-objective-done` (count), `data-max-dist`. Chip `wingflyer-objective`:
+`data-step`, per-step `wingflyer-obj-{takeoff,flyout,land}` `data-done`,
+`wingflyer-obj-count`; banner `wingflyer-landed-banner`
+`data-objective-complete`. Round 1b adds the mission
 chip (`data-score`, `data-stars`, …).
 
 ### e2e suites (shipped, `e2e/README.md` has the detail)
@@ -684,6 +706,7 @@ could fly it; its play-test produced the landing-help decisions above.
 | 3 | Combat tone | **Gentle first, made easy:** balloons → ground targets → streamer cutting → dogfight → boss; cartoon effects; 3 hearts; fixed guns only; **aim assist on by default, generous** |
 | 4 | Name | **Wing Flyer** (`wingFlyer`) |
 | 5 | Launch | **B** — hand-launch for both planes **and** runway take-off for the trainer; Trainer assist auto-straightens and auto-rotates; Free Flight offers both buttons; missions set their own start; crash respawn is never at the runway; Landing 1 = take off, one lap, land |
+| 6 | Free Flight objective (after the 1a play-test) | **C**: a goal chip now, Round 1b's missions on top. "A lap" = **fly out 150 m and come back inside 100 m** (option 2); shown as a **progress chip under the HUD** (option 1); **grass completes it, the runway earns a "Runway!" mark** (option 3) |
 
 ---
 

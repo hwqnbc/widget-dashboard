@@ -223,4 +223,55 @@ for (const id of ['trainer', 'wing']) {
   check(`${id} trainer: steering right after launch still climbs to the hand-over height`, l.s.pos.y > 12 && minAlt > 1.5, `alt ${l.s.pos.y.toFixed(1)} m, min ${minAlt.toFixed(1)} m`)
 }
 
+// --- Trainer over terrain: hands-off never flies into a hill, and a low turn
+// keeps its speed (no spurious approach-speed slowdown) ------------------------
+for (const id of ['trainer', 'wing']) {
+  const spec = AIRFRAMES[id]
+  // Ground rises 1 m per 8 m flown (12 %), from 0 at x = 0.
+  const ground = (x) => Math.max(0, x / 8)
+  const t = sim(id, 'trainer', { alt: 15, heading: Math.PI / 2, throttle: 0.4 })
+  let minAgl = Infinity
+  {
+    const { s, a, cmd, opts } = t
+    for (let i = 0; i < Math.round(40 / STEP_DT); i++) {
+      const agl = s.pos.y - ground(s.pos.x)
+      stepAssist(a, 'trainer', s, spec, sticks(), { agl, onGround: false, landable: true }, STEP_DT, cmd, opts)
+      stepPlane(s, spec, cmd, STEP_DT, opts)
+      if (i > 120) minAgl = Math.min(minAgl, s.pos.y - ground(s.pos.x))
+    }
+  }
+  check(`${id} trainer: hands-off over rising ground climbs with it (≥ 9 m AGL)`, minAgl > 9 && !t.s.stalled, `min ${minAgl.toFixed(1)} m AGL, climbed to ${t.s.pos.y.toFixed(0)} m`)
+
+  const u = sim(id, 'trainer', { alt: 15, throttle: 0.4 })
+  let minV = Infinity
+  let minAlt = Infinity
+  fly(u, 20, sticks(1, 0), (s, i) => {
+    if (i > 240) {
+      minV = Math.min(minV, s.airspeed)
+      minAlt = Math.min(minAlt, s.pos.y)
+    }
+  })
+  check(`${id} trainer: a sustained full-bank turn at 15 m keeps speed and height`, minV > spec.vAuthority * 0.85 && minAlt > 12, `min ${minV.toFixed(1)} m/s, min alt ${minAlt.toFixed(1)} m`)
+
+  // The terrain floor demanding a climb WHILE banked (ground always 1 m
+  // under the plane): airspeed must win — no stall, no sink, speed ≥ approach.
+  const w = sim(id, 'trainer', { alt: 30, throttle: 0.4 })
+  let wMinV = Infinity
+  let wMinAlt = Infinity
+  let wStalled = false
+  {
+    const { s, a, cmd, opts } = w
+    for (let i = 0; i < Math.round(25 / STEP_DT); i++) {
+      stepAssist(a, 'trainer', s, spec, sticks(1, 0), { agl: 1, onGround: false, landable: false }, STEP_DT, cmd, opts)
+      stepPlane(s, spec, cmd, STEP_DT, opts)
+      if (i > 240) {
+        wMinV = Math.min(wMinV, s.airspeed)
+        wMinAlt = Math.min(wMinAlt, s.pos.y)
+        wStalled ||= s.stalled
+      }
+    }
+  }
+  check(`${id} trainer: a banked turn under a terrain-floor climb demand keeps speed and never sinks`, !wStalled && wMinV > stallSpeed(spec) * 1.4 && wMinAlt > 27, `min ${wMinV.toFixed(1)} m/s, min alt ${wMinAlt.toFixed(1)} m`)
+}
+
 await finish()

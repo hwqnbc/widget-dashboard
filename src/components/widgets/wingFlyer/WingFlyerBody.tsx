@@ -24,7 +24,9 @@ import { coerceAssist } from './assists'
 import { DEFAULT_ISLAND_SEED, buildIsland } from './islandLayout'
 import IslandScene, { FOG_FAR } from './IslandScene'
 import PlaneRig from './PlaneRig'
-import type { RigRefs } from './PlaneRig'
+import type { ObjectiveSnapshot, RigRefs } from './PlaneRig'
+import ObjectiveChip from './ObjectiveChip'
+import { FLY_OUT_DIST } from './objective'
 import { createWingSim } from './wingSim'
 import type { Phase, StartKind } from './wingSim'
 import { AIRFRAMES } from './airframes'
@@ -89,6 +91,17 @@ export default function WingFlyerBody({ id }: WidgetProps) {
     setPhase(p)
     setStart(st)
   })
+  const [objective, setObjective] = useState<ObjectiveSnapshot>({
+    takeoff: false,
+    flyout: false,
+    back: false,
+    land: false,
+    runway: false,
+    sink: 0,
+    completed: 0,
+  })
+  const onObjectiveRef = useRef((o: ObjectiveSnapshot) => setObjective(o))
+  const objDistRef = useRef<HTMLSpanElement>(null)
   useEffect(() => {
     if (airframeRef.current !== airframe) sim.resetRequested = 'hand'
     airframeRef.current = airframe
@@ -109,6 +122,8 @@ export default function WingFlyerBody({ id }: WidgetProps) {
       homeArrow: homeArrowRef,
       homeText: homeTextRef,
       onPhase: onPhaseRef,
+      onObjective: onObjectiveRef,
+      objectiveDist: objDistRef,
       view: viewRef,
       sound,
       fpvLevel: fpvLevelRef,
@@ -346,6 +361,9 @@ export default function WingFlyerBody({ id }: WidgetProps) {
         </Box>
       </Box>
 
+      {/* The standing goal: Take off ▸ Fly out ▸ Land (objective.ts). */}
+      <ObjectiveChip objective={objective} distRef={objDistRef} flyOutDist={FLY_OUT_DIST} />
+
       {/* FPV: a bank symbol at the centre (the level horizon hides the bank). */}
       {view === 'fpv' && phase !== 'preflight' && (
         <Box
@@ -437,9 +455,29 @@ export default function WingFlyerBody({ id }: WidgetProps) {
           {phase === 'landed' && (
             <Box
               data-testid="wingflyer-landed-banner"
-              sx={{ px: 1.5, py: 0.5, borderRadius: 1, bgcolor: alpha('#000', 0.45), color: '#fff', fontWeight: 700 }}
+              data-objective-complete={objective.land ? 'true' : 'false'}
+              sx={{
+                px: 1.5,
+                py: 0.5,
+                borderRadius: 1,
+                bgcolor: alpha('#000', 0.45),
+                color: '#fff',
+                fontWeight: 700,
+                textAlign: 'center',
+              }}
             >
-              Landed!
+              {objective.land
+                ? objective.sink < 0.6
+                  ? 'Butter! Goal complete'
+                  : 'Nice landing! Goal complete'
+                : 'Landed!'}
+              <Box component="span" sx={{ display: 'block', fontSize: 12, fontWeight: 500, opacity: 0.85 }}>
+                {objective.land
+                  ? `${objective.sink.toFixed(1)} m/s · ${objective.runway ? '✓ on the runway' : 'on the grass'}`
+                  : objective.takeoff && !objective.flyout
+                    ? `Fly out ${FLY_OUT_DIST} m and come back to complete the goal`
+                    : 'Come back to the runway to complete the goal'}
+              </Box>
             </Box>
           )}
           <Box sx={{ display: 'flex', gap: 1 }}>
