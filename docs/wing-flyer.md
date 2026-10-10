@@ -478,16 +478,18 @@ Endless challenge: waves mixing all of the above; best wave/score records.
 
 ---
 
-## 12. Architecture (proposed)
+## 12. Architecture (decided: import in place)
+
+Wing Flyer imports the reused pieces **in place** from `droneSim/`
+(`VirtualJoystick` + an optional default-off `latchY`, `externalInput`,
+`webAudio`, `haptics`, `boomClipT`/`crossedGate`, `OperatorFigure`) and
+`tankBattle/terrain.ts` (+ an optional scale parameter defaulting to Tank
+Battle's size) — the Drone Strike precedent. Existing widgets behave
+exactly as before. The `shared/` hoist is a later refactoring session
+(backlog → *Code health*).
 
 ```
 src/components/widgets/
-  shared/flight/          ← hoisted from droneSim (the "third drone widget"
-                            trigger in docs/drone-strike.md): VirtualJoystick
-                            (+ latchY), externalInput, webAudio, haptics,
-                            boomClipT/crossedGate geometry, sparkModel,
-                            combat pool — droneSim/droneStrike re-import
-  shared/terrain/         ← tankBattle/terrain.ts hoisted + scale param
   wingFlyer/
     WingFlyerWidget.tsx   eager shell: lazyWithReload(() => import('./WingFlyerBody'))
     WingFlyerBody.tsx     settings via useWidgetField, mode menu, HUD DOM
@@ -515,8 +517,8 @@ src/components/widgets/
   assist badge per star level; per-mode endless bests (touch-and-go
   streak, endless rings, longest soar, best combat wave/score). Included in the records-reset row
   and `161-records-all`.
-- **Shared-module hoist is its own commit** with the existing drone/strike/
-  tank suites re-run before anything new is added.
+- **The additive changes to `VirtualJoystick` and `terrain.ts` ship with
+  the existing drone/strike/tank suites re-run** to prove nothing changed.
 
 ### Test contract (data-*)
 
@@ -540,18 +542,45 @@ soaring (thermal climb measured) · combat · records.
 
 ---
 
-## 13. Delivery rounds (proposed)
+## 13. Delivery rounds (decided)
 
 | Round | Scope |
 | --- | --- |
 | **0. This note** | Design review with the user. |
-| **1. Core** | Shared-module hoist; `planeModel` + assists + physics suite; island + strip; both airframes; latching throttle; chase + FPV cameras; hand-launch + trainer runway take-off (shared ground model with the landing roll-out); landing classification; stars + assist badges; minimal HUD; auto-pause; sound; mode menu with **Free Flight** + **Landing** (missions 1–5) live, others "coming soon". |
+| **1a. Fly it** | `planeModel` + assists + physics suites; island + strip; both airframes; latching throttle; chase + FPV cameras; hand-launch (avatar holding the plane) + trainer runway take-off + landing roll-out; crash/respawn; minimal HUD; help overlay; auto-pause; settings; sound. **Free Flight only** — no mode menu yet. |
+| **1b. Score it** | Landing classification + scorecard; mode menu (all five modes, Rings/Soaring/Combat greyed "Coming soon"); Landing missions 1–5; stars + assist badges; records. |
 | **2. Rings** | Ring / balloon / limbo / pylon missions, stars, ghost; endless course. |
 | **3. Soaring** | `airModel` thermals + ridge, birds, variometer, battery, duration missions. |
 | **4. Combat** | Balloons → ground targets → streamers → enemy planes → boss; endless waves. |
 | **5. Polish** | Full OSD, Pilot view, licences, hub markers. |
 
 ---
+
+### Round 1 build decisions
+
+| # | Question | Decision |
+| --- | --- | --- |
+| R1 | Round size | **Split** into 1a "Fly it" and 1b "Score it" — try the flying feel before missions are built on it |
+| R2 | Shared code | **Import in place** from `droneSim/` and `tankBattle/` (as Drone Strike does); needed changes are additive and default-off (joystick `latchY`, terrain scale param) so existing widgets are unchanged. The `shared/` hoist is a future refactoring session (backlog) |
+| R3 | First-run help | **Help overlay** on the first flight (Tank Battle's pattern): sticks, Panic, Launch, keyboard keys; says throttle is automatic in Trainer; once per device, **?** reopens it |
+| R4 | Unfinished modes (1b) | Shown greyed **"Coming soon"** in the mode menu |
+| R5 | Pilot figure | Player 1's avatar `Model3D` (the Drone Sim operator) **stands** at the strip end, plane held at hand height; Launch flies it out of their hands — no new animation. Beside the strip for a runway start. Throw animation → backlog |
+
+### Round 1a step plan
+
+Each step ends with a check; the user can stop or redirect between steps.
+Checkpoints for the user to try the feel: after **step 4** and **step 7**.
+
+| Step | Builds | Check |
+| --- | --- | --- |
+| 1 | `planeModel.ts` — pure fixed-step flight model + airframe specs | node suite: stall speed, turn radius, glide ratio |
+| 2 | `assists.ts` — Trainer/Normal/Acro, Panic, launch + runway autopilots | node suite: release levels, Panic recovers inverted, stall protection |
+| 3 | Widget shell (catalog, registry, lazy chunk) + island (scaled terrain, strip, town, fog) | island renders |
+| 4 | Plane meshes + controls (latching throttle, keyboard, gamepad) + chase cam | **first flight — user checkpoint** |
+| 5 | Avatar at the strip, hand launch, runway take-off, roll-out, crash/respawn | launch → fly → land → crash → respawn |
+| 6 | FPV cam, minimal HUD, auto-pause, help overlay, settings panel | full 1a experience |
+| 7 | Sound, haptics, phone performance | **user checkpoint** |
+| 8 | e2e suites (170+), docs, lessons; drone/strike/tank suites re-run | build + lint + e2e green |
 
 ## 14. Decisions (all answered with the user)
 
@@ -626,6 +655,16 @@ Nothing is shipped yet; every item names the integration point it builds on.
 - Point-to-fly, tilt-to-steer (gyroAim plumbing), one-stick and
   left-handed layouts; rates/expo tuning panel (drone `Tuning` reuse);
   prop-torque swing on the runway take-off roll (Acro only); flaps button.
+- **Throw animation** — a real hand-launch throw for the avatar; best as a
+  shared `throw` action for every avatar (like the shared `walk` gait), so
+  other games can use it.
+
+### Code health
+- **`shared/` hoist (refactoring session)** — move the pieces Wing Flyer
+  imports in place (`VirtualJoystick`, `externalInput`, `webAudio`,
+  `haptics`, `boomClipT`/`crossedGate`, `sparkModel`, the combat pool,
+  `tankBattle/terrain`) into `components/widgets/shared/`, re-pointing
+  Drone Sim / Drone Strike / Tank Battle; re-run all their suites.
 
 ### Simulation depth
 - True aerodynamic moments mode ("Manual" below Acro); gusty turbulence;
