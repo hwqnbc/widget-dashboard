@@ -193,6 +193,21 @@ const consoleBundle = spawnSync(
 )
 if (consoleBundle.status !== 0) process.exit(consoleBundle.status ?? 1)
 
+// Wing Flyer's pure modules — its own flat pass, same reasoning.
+const wingBundle = spawnSync(
+  'npx',
+  [
+    'esbuild',
+    'src/components/widgets/wingFlyer/planeModel.ts',
+    'src/components/widgets/wingFlyer/airframes.ts',
+    '--bundle',
+    '--format=esm',
+    `--outdir=${join(here, '.bundle')}`,
+  ],
+  { cwd: root, stdio: 'inherit' },
+)
+if (wingBundle.status !== 0) process.exit(wingBundle.status ?? 1)
+
 // 2. Start the dev server and wait for it.
 const server = spawn('npx', ['vite', '--port', PORT, '--strictPort'], {
   cwd: root,
