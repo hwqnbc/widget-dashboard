@@ -566,6 +566,19 @@ soaring (thermal climb measured) · combat · records.
 | R4 | Unfinished modes (1b) | Shown greyed **"Coming soon"** in the mode menu |
 | R5 | Pilot figure | Player 1's avatar `Model3D` (the Drone Sim operator) **stands** at the strip end, plane held at hand height; Launch flies it out of their hands — no new animation. Beside the strip for a runway start. Throw animation → backlog |
 
+### Landing help (decided after the step-4 play-test)
+
+The step-4 build had no landing at all (any ground contact crashed), and the
+play-test showed a second, real problem: lining a plane up with the runway
+is hard. Decided for step 5: **land on grass** (any dry, gentle slope, not
+just the runway), **approach hoops** (6 per runway end on a 7° glide slope,
+drawn from the pure `approachPath` data), **home arrow + distance** (moved
+up from step 6), **Trainer auto-flare** (descent rate limited near the
+ground), a **bigger runway** (130×14 → 200×30 m) and **45° Trainer bank**
+(was 35° — too wide a turn to line up). **Auto-land** ("Land" button: an
+assist mode that flies the same `approachPath`) goes to the backlog — the
+path being data is what keeps it cheap to add later.
+
 ### Round 1a step plan
 
 Each step ends with a check; the user can stop or redirect between steps.
@@ -655,6 +668,10 @@ Nothing is shipped yet; every item names the integration point it builds on.
 - Point-to-fly, tilt-to-steer (gyroAim plumbing), one-stick and
   left-handed layouts; rates/expo tuning panel (drone `Tuning` reuse);
   prop-torque swing on the runway take-off roll (Acro only); flaps button.
+- **Auto-land ("Land" button)** — a Trainer assist mode that flies the
+  `approachPath` hoops and lands while the player watches (ArduPilot
+  RTL + LAND style); the approach path is already pure data and the assist
+  already has per-mode outer loops, so it is one more mode.
 - **Throw animation** — a real hand-launch throw for the avatar; best as a
   shared `throw` action for every avatar (like the shared `walk` gait), so
   other games can use it.

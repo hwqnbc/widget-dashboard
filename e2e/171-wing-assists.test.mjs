@@ -2,7 +2,7 @@
  * Wing Flyer assists suite (node only — no browser): drives the bundled
  * pure `assists` + `planeModel` with scripted stick positions, for BOTH
  * airframes, and checks each level's promise (docs/wing-flyer.md §4):
- * Trainer self-levels and holds altitude on release, keeps its 35° bank
+ * Trainer self-levels and holds altitude on release, keeps its 45° bank
  * limit, is stall-proof under a held full pull, and its auto-throttle holds
  * cruise; Normal banks to 60° at speed but STALL_PREVENTION shrinks the
  * limit toward 25° when slow, levels on release, and CAN stall on a hard
@@ -47,7 +47,7 @@ function fly(sim, seconds, stickFn, every) {
   const n = Math.round(seconds / STEP_DT)
   for (let i = 0; i < n; i++) {
     const st = typeof stickFn === 'function' ? stickFn(s, i) : stickFn
-    stepAssist(a, level, s, spec, st, s.pos.y, STEP_DT, cmd, opts)
+    stepAssist(a, level, s, spec, st, { agl: s.pos.y, onGround: false, landable: false }, STEP_DT, cmd, opts)
     stepPlane(s, spec, cmd, STEP_DT, opts)
     every?.(s, a, cmd)
   }
@@ -85,7 +85,7 @@ for (const id of ['trainer', 'wing']) {
       attitudeOf(s.q, att)
       maxBank = Math.max(maxBank, Math.abs(att.bank))
     })
-    check(`${id} trainer: full roll stick stays inside 35°`, maxBank < 37 * DEG && maxBank > 30 * DEG, `max ${(maxBank / DEG).toFixed(1)}°`)
+    check(`${id} trainer: full roll stick stays inside 45°`, maxBank < 47 * DEG && maxBank > 40 * DEG, `max ${(maxBank / DEG).toFixed(1)}°`)
   }
   {
     // Full back stick AND the speed stick at minimum, for 25 s.

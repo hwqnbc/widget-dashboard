@@ -41,6 +41,7 @@ export const WING_KEYS: ReadonlySet<string> = new Set([
   'ArrowLeft',
   'ArrowRight',
   'Space',
+  'Enter',
 ])
 
 /** Throttle ramp rates, per second of full deflection. */

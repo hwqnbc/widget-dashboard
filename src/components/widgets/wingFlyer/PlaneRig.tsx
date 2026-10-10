@@ -6,22 +6,17 @@ import type { Group, PerspectiveCamera } from 'three'
 import type { AirframeId } from './airframes'
 import { AIRFRAMES } from './airframes'
 import type { AssistLevel } from './assists'
-import { setAssistMode, stepAssist, triggerPanic } from './assists'
-import type { PlaneState } from './planeModel'
-import { advanceFixed, attitudeOf, forwardOf, resetPlane, stallSpeed, stepPlane } from './planeModel'
-import type { WingSim } from './wingSim'
+import { triggerPanic } from './assists'
+import { advanceFixed, attitudeOf, forwardOf, stallSpeed } from './planeModel'
+import type { Phase, StartKind, WingSim } from './wingSim'
+import { HAND, holdInHand, launchSim, resetSim, stepCrash, stepSim } from './wingSim'
 import type { IslandSpec } from './islandLayout'
-import { STRIP, STRIP_Y, WORLD_HALF, islandHeight } from './islandLayout'
+import { STRIP, islandHeight } from './islandLayout'
 import type { WingInput } from './wingInput'
 import { mergeInput } from './wingInput'
 import PlaneMesh from './PlaneMesh'
 import { createPlaneParts } from './planeParts'
 
-/** Seconds of crash tumble before the respawn. */
-export const CRASH_TIME = 0.9
-/** Airborne spawn (step 4 — the hand launch arrives in step 5): over the
- * runway's west end, heading east along it. */
-export const SPAWN_AGL = 40
 /** Chase camera: boom length/height (m) per airframe, and damping. */
 const CHASE_BACK: Record<AirframeId, number> = { trainer: 4.2, wing: 3.4 }
 const CHASE_UP = 1.3
@@ -37,6 +32,12 @@ export interface RigRefs {
   invertPitch: MutableRefObject<boolean>
   hud: MutableRefObject<HTMLElement | null>
   hudText: MutableRefObject<HTMLElement | null>
+  /** Home arrow (rotated toward the runway) + its distance label. */
+  homeArrow: MutableRefObject<HTMLElement | null>
+  homeText: MutableRefObject<HTMLElement | null>
+  /** Called (rarely) when the phase or start kind changes — drives the
+   * DOM buttons/banner; everything else is direct DOM writes. */
+  onPhase: MutableRefObject<(phase: Phase, start: StartKind) => void>
 }
 
 const _fwd = new Vector3()
@@ -46,33 +47,6 @@ const _up = new Vector3()
 const _q = new Quaternion()
 const _att = { heading: 0, pitch: 0, bank: 0 }
 const _f = { x: 0, y: 0, z: 0 }
-
-function respawn(sim: WingSim, airframe: AirframeId, input: WingInput) {
-  const spec = AIRFRAMES[airframe]
-  resetPlane(
-    sim.s,
-    { x: STRIP.x - STRIP.length / 2, y: STRIP_Y + SPAWN_AGL, z: STRIP.z },
-    STRIP.heading,
-    spec.vAuthority,
-    0,
-    0.45,
-  )
-  setAssistMode(sim.a, 'fly')
-  sim.acc = 0
-  sim.crash = 0
-  // Throttle stick to roughly cruise power (Normal/Acro).
-  input.throttle.current = -0.1
-}
-
-/** Ground or building contact under the plane (point + small radius). */
-function hitsSomething(island: IslandSpec, s: PlaneState): boolean {
-  const { x, y, z } = s.pos
-  if (y < islandHeight(island, x, z) + 0.25) return true
-  for (const b of island.buildings) {
-    if (Math.abs(x - b.x) < b.hw + 0.4 && Math.abs(z - b.z) < b.hd + 0.4 && y < b.y + b.h + 0.3) return true
-  }
-  return false
-}
 
 export default function PlaneRig({
   refs,
@@ -90,52 +64,57 @@ export default function PlaneRig({
   const parts = useRef(createPlaneParts()).current
   const hudTick = useRef(0)
   const camInit = useRef(false)
+  const lastPhase = useRef<string>('')
 
   useFrame((state, frameDt) => {
     const { sim, input } = refs
     const af = refs.airframe.current
     const spec = AIRFRAMES[af]
+    const level = refs.level.current
     const dt = Math.min(frameDt, 0.1)
     const s = sim.s
 
     if (sim.resetRequested) {
-      sim.resetRequested = false
-      respawn(sim, af, input)
+      resetSim(sim, af, island, sim.resetRequested)
+      sim.resetRequested = null
+      // Fresh start: throttle stick back to idle (Normal/Acro pilots push it).
+      input.throttle.current = -1
       camInit.current = false
     }
 
-    if (sim.crash > 0) {
-      // Cartoon tumble, then respawn.
-      sim.crash -= dt
-      s.vel.y -= 9.81 * dt
-      s.vel.x *= 0.96
-      s.vel.z *= 0.96
-      s.pos.x += s.vel.x * dt
-      s.pos.z += s.vel.z * dt
-      s.pos.y = Math.max(islandHeight(island, s.pos.x, s.pos.z) + 0.2, s.pos.y + s.vel.y * dt)
-      if (sim.crash <= 0) respawn(sim, af, input)
+    // Input is sampled even in preflight, so the throttle stick is live.
+    mergeInput(input, readPad(), dt, refs.invertPitch.current, sim.sticks)
+
+    if (sim.phase === 'preflight') {
+      holdInHand(sim)
+      input.panic = false
+      if (sim.launchRequested) {
+        sim.launchRequested = false
+        launchSim(sim, af)
+      }
+    } else if (sim.phase === 'crashed') {
+      stepCrash(sim, af, island, dt)
     } else {
-      mergeInput(input, readPad(), dt, refs.invertPitch.current, sim.sticks)
       if (input.panic) {
         input.panic = false
-        triggerPanic(sim.a)
+        if (!sim.g.onGround) triggerPanic(sim.a)
       }
       sim.acc = advanceFixed(sim.acc, dt, (h) => {
-        const agl = s.pos.y - islandHeight(island, s.pos.x, s.pos.z)
-        stepAssist(sim.a, refs.level.current, s, spec, sim.sticks, agl, h, sim.cmd, sim.opts)
-        stepPlaneSafe(s, spec, sim, h)
+        stepSim(sim, level, af, island, h)
       })
-      if (hitsSomething(island, s)) {
-        sim.crash = CRASH_TIME
-        sim.crashes++
-      }
+    }
+
+    const phaseKey = sim.phase + ':' + sim.start
+    if (phaseKey !== lastPhase.current) {
+      lastPhase.current = phaseKey
+      refs.onPhase.current(sim.phase, sim.start)
     }
 
     // --- model transform + surfaces ---
     const g = groupRef.current
     if (g) {
       g.position.set(s.pos.x, s.pos.y, s.pos.z)
-      if (sim.crash > 0) {
+      if (sim.phase === 'crashed') {
         g.rotation.x += dt * 9
         g.rotation.z += dt * 6
       } else {
@@ -171,6 +150,11 @@ export default function PlaneRig({
     _camTarget.y += CHASE_UP + _f.y * -1.5
     const ground = islandHeight(island, _camTarget.x, _camTarget.z) + 1.2
     if (_camTarget.y < ground) _camTarget.y = ground
+    if (sim.phase === 'preflight') {
+      // Three-quarter view of the pilot holding the plane, looking down the
+      // runway — the chase boom would sit right behind the pilot's head.
+      _camTarget.set(HAND.x - 3.2, HAND.y + 0.9, HAND.z + 5.2)
+    }
     if (!camInit.current) {
       cam.position.copy(_camTarget)
       camInit.current = true
@@ -180,6 +164,7 @@ export default function PlaneRig({
     // Look a little below the flight path so the plane sits just under the
     // screen centre — clear of the PANIC button and the thumbs.
     _look.set(s.pos.x + _f.x * 6, s.pos.y + _f.y * 6 - 0.4, s.pos.z + _f.z * 6)
+    if (sim.phase === 'preflight') _look.set(HAND.x + 6, HAND.y - 0.6, HAND.z - 1)
     // Partial roll: tilt the camera's up vector toward the plane's bank.
     const bank = Math.abs(_att.bank) < Math.PI / 2 ? _att.bank : 0
     _up.set(0, 1, 0).applyQuaternion(_q.setFromAxisAngle(_fwd, bank * CHASE_ROLL_FOLLOW))
@@ -206,15 +191,6 @@ export default function PlaneRig({
   )
 }
 
-function stepPlaneSafe(s: PlaneState, spec: (typeof AIRFRAMES)[AirframeId], sim: WingSim, h: number) {
-  stepPlane(s, spec, sim.cmd, h, sim.opts)
-  // Soft boundary: past the edge of the world, Trainer/Normal-style nudge is
-  // step 6; for now keep the plane from leaving the rendered terrain.
-  const lim = WORLD_HALF + 120
-  if (Math.abs(s.pos.x) > lim) s.vel.x -= Math.sign(s.pos.x) * 4 * h
-  if (Math.abs(s.pos.z) > lim) s.vel.z -= Math.sign(s.pos.z) * 4 * h
-}
-
 function readPad(): readonly number[] | null {
   const pads = typeof navigator !== 'undefined' && navigator.getGamepads ? navigator.getGamepads() : null
   if (!pads) return null
@@ -233,7 +209,8 @@ function writeHud(refs: RigRefs, sim: WingSim, island: IslandSpec, airframe: Air
   const agl = s.pos.y - islandHeight(island, s.pos.x, s.pos.z)
   const spec = AIRFRAMES[airframe]
   const vs = stallSpeed(spec)
-  const stallWarn = s.airspeed < vs * 1.2 || s.stalled
+  // Stall warning only means something in the air.
+  const stallWarn = !sim.g.onGround && sim.phase === 'flying' && (s.airspeed < vs * 1.2 || s.stalled)
   el.dataset.airspeed = s.airspeed.toFixed(2)
   el.dataset.alt = s.pos.y.toFixed(2)
   el.dataset.agl = agl.toFixed(2)
@@ -247,9 +224,27 @@ function writeHud(refs: RigRefs, sim: WingSim, island: IslandSpec, airframe: Air
   el.dataset.x = s.pos.x.toFixed(1)
   el.dataset.z = s.pos.z.toFixed(1)
   el.dataset.assistMode = sim.a.mode
-  el.dataset.crashed = sim.crash > 0 ? 'true' : 'false'
+  el.dataset.phase = sim.phase
+  el.dataset.start = sim.start
+  el.dataset.ground = sim.g.onGround ? 'ground' : 'air'
+  el.dataset.crashed = sim.phase === 'crashed' ? 'true' : 'false'
   el.dataset.crashes = String(sim.crashes)
+  el.dataset.landings = String(sim.landings)
+  el.dataset.touchdown = sim.g.lastResult ?? 'none'
+  el.dataset.touchSink = sim.g.lastSink.toFixed(2)
   el.dataset.inputSource = refs.input.source
+  // Home: bearing to the runway centre relative to the nose.
+  const dx = STRIP.x - s.pos.x
+  const dz = STRIP.z - s.pos.z
+  const dist = Math.hypot(dx, dz)
+  const bearing = Math.atan2(dx, -dz)
+  const rel = Math.atan2(Math.sin(bearing - _att.heading), Math.cos(bearing - _att.heading))
+  el.dataset.homeDist = dist.toFixed(1)
+  el.dataset.homeBearing = (rel * DEG).toFixed(1)
+  const arrow = refs.homeArrow.current
+  if (arrow) arrow.style.transform = `rotate(${(rel * DEG).toFixed(1)}deg)`
+  const ht = refs.homeText.current
+  if (ht) ht.textContent = `${Math.round(dist)} m`
   if (text) {
     text.textContent = `SPD ${s.airspeed.toFixed(0)} · ALT ${Math.max(0, agl).toFixed(0)} · THR ${Math.round(s.throttle * 100)}%`
     text.style.color = s.stalled ? '#ff5252' : stallWarn ? '#ffb300' : '#ffffff'

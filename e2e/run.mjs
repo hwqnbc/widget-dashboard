@@ -202,6 +202,8 @@ const wingBundle = spawnSync(
     'src/components/widgets/wingFlyer/airframes.ts',
     'src/components/widgets/wingFlyer/assists.ts',
     'src/components/widgets/wingFlyer/islandLayout.ts',
+    'src/components/widgets/wingFlyer/ground.ts',
+    'src/components/widgets/wingFlyer/wingSim.ts',
     '--bundle',
     '--format=esm',
     `--outdir=${join(here, '.bundle')}`,

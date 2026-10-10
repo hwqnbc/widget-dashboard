@@ -1,40 +1,214 @@
 /**
- * The one shared Wing Flyer sim object (lesson #41): created once by the
- * body, mutated by the rig every frame, read by the DOM layer. Pure.
+ * The one shared Wing Flyer sim object (lesson #41) and the pure step that
+ * drives it: assist → flight model → ground contact → buildings, plus the
+ * phase machine (preflight → flying → landed / crashed). Created once by
+ * the body, stepped by the rig every fixed sub-step, read by the DOM layer —
+ * and stepped directly by the node suites, so tests fly the exact code the
+ * game flies.
  */
-import type { AssistSticks, AssistState } from './assists'
-import { createAssist } from './assists'
+import type { AirframeId } from './airframes'
+import { AIRFRAMES } from './airframes'
+import type { AssistLevel, AssistSticks, AssistState } from './assists'
+import { createAssist, setAssistMode, startLaunch, startRollout, startRunway, stepAssist } from './assists'
+import type { GroundEvent, GroundState } from './ground'
+import { GEAR, createGroundState, placeOnGround, stepGround } from './ground'
+import type { IslandSpec } from './islandLayout'
+import { PILOT, STRIP, STRIP_Y, WORLD_HALF, isLandable, islandHeight } from './islandLayout'
 import type { PlaneCommand, PlaneState, StepOptions } from './planeModel'
-import { createPlaneState } from './planeModel'
+import { createPlaneState, forwardOf, quatFromEuler, stallSpeed, stepPlane } from './planeModel'
 
-/** Everything the rig mutates — one shared object, created once by the body
- * (lesson #41), so the DOM layer and the canvas read the same state. */
+export type Phase = 'preflight' | 'flying' | 'landed' | 'crashed'
+export type StartKind = 'hand' | 'runway'
+
 export interface WingSim {
   s: PlaneState
   a: AssistState
+  g: GroundState
   cmd: PlaneCommand
   opts: StepOptions
   sticks: AssistSticks
+  /** Fixed-step accumulator carry. */
   acc: number
-  /** Seconds left in the crash tumble (> 0 = crashed). */
-  crash: number
-  /** Request flags set by the DOM layer, consumed by the rig. */
-  resetRequested: boolean
-  /** Count of crashes this session (test contract). */
+  phase: Phase
+  /** How the current flight started / will start. */
+  start: StartKind
+  /** Seconds left in the crash tumble. */
+  crashTimer: number
+  /** Requests from the DOM layer, consumed by the rig. */
+  resetRequested: StartKind | null
+  launchRequested: boolean
+  /** Session tallies (test contract). */
   crashes: number
+  landings: number
+  /** Last ground event and a counter that bumps with each one. */
+  lastEvent: GroundEvent | null
+  eventSeq: number
 }
 
 export function createWingSim(): WingSim {
   return {
     s: createPlaneState(),
     a: createAssist(),
+    g: createGroundState(),
     cmd: { roll: 0, pitch: 0, yaw: 0, throttle: 0 },
     opts: {},
     sticks: { left: { x: 0, y: -1 }, right: { x: 0, y: 0 } },
     acc: 0,
-    crash: 0,
-    resetRequested: true,
+    phase: 'preflight',
+    start: 'hand',
+    crashTimer: 0,
+    resetRequested: 'hand',
+    launchRequested: false,
     crashes: 0,
+    landings: 0,
+    lastEvent: null,
+    eventSeq: 0,
   }
 }
 
+/** Seconds of crash tumble before the respawn. */
+export const CRASH_TIME = 0.9
+/** Where the plane is held for a hand launch: the pilot's raised hand. */
+export const HAND = { x: PILOT.x + 0.35, y: STRIP_Y + 1.75, z: PILOT.z - 0.2 } as const
+/** Hand-launch throw speed, × stall speed. */
+export const THROW_SPEED = 1.15
+/** Runway start: a few metres in from the west threshold, facing east. */
+export const RUNWAY_START = { x: STRIP.x - STRIP.length / 2 + 6, z: STRIP.z } as const
+
+/** Put the plane back at a start: in the pilot's hand, or (wheels only) on
+ * the runway threshold. The wing has no wheels → always the hand. */
+export function resetSim(sim: WingSim, airframe: AirframeId, island: IslandSpec, start: StartKind): void {
+  const spec = AIRFRAMES[airframe]
+  const kind: StartKind = start === 'runway' && spec.wheels ? 'runway' : 'hand'
+  const s = sim.s
+  sim.start = kind
+  sim.acc = 0
+  sim.crashTimer = 0
+  sim.launchRequested = false
+  s.cmdRoll = s.cmdPitch = s.cmdYaw = 0
+  sim.g = createGroundState()
+  setAssistMode(sim.a, 'fly')
+  if (kind === 'runway') {
+    placeOnGround(sim.g, s, airframe, island, RUNWAY_START.x, RUNWAY_START.z, STRIP.heading)
+    startRunway(sim.a, STRIP.heading)
+    s.throttle = 0
+    sim.phase = 'flying'
+  } else {
+    holdInHand(sim)
+    sim.phase = 'preflight'
+  }
+}
+
+/** Preflight: the plane sits in the pilot's hand, nose east, level. */
+export function holdInHand(sim: WingSim): void {
+  const s = sim.s
+  s.pos.x = HAND.x
+  s.pos.y = HAND.y
+  s.pos.z = HAND.z
+  s.vel.x = s.vel.y = s.vel.z = 0
+  quatFromEuler(STRIP.heading, 0, 0, s.q)
+  s.airspeed = 0
+  s.throttle = 0
+}
+
+const _f = { x: 0, y: 0, z: 0 }
+
+/** Throw the plane from the hand and start the launch autopilot. */
+export function launchSim(sim: WingSim, airframe: AirframeId): void {
+  const s = sim.s
+  const v = stallSpeed(AIRFRAMES[airframe]) * THROW_SPEED
+  forwardOf(s.q, _f)
+  s.vel.x = _f.x * v
+  s.vel.y = _f.y * v + 0.6
+  s.vel.z = _f.z * v
+  startLaunch(sim.a)
+  sim.phase = 'flying'
+}
+
+/** Ground or rooftop contact with a building (plane as a point + margin). */
+export function hitsBuilding(island: IslandSpec, s: PlaneState): boolean {
+  const { x, y, z } = s.pos
+  for (const b of island.buildings) {
+    if (Math.abs(x - b.x) < b.hw + 0.4 && Math.abs(z - b.z) < b.hd + 0.4 && y < b.y + b.h + 0.3) return true
+  }
+  return false
+}
+
+function crash(sim: WingSim) {
+  sim.phase = 'crashed'
+  sim.crashTimer = CRASH_TIME
+  sim.crashes++
+}
+
+/**
+ * One fixed physics sub-step while flying (or rolling). Handles every
+ * ground event and phase change; returns the event (or null).
+ */
+export function stepSim(
+  sim: WingSim,
+  level: AssistLevel,
+  airframe: AirframeId,
+  island: IslandSpec,
+  h: number,
+): GroundEvent | null {
+  if (sim.phase !== 'flying' && sim.phase !== 'landed') return null
+  const s = sim.s
+  const spec = AIRFRAMES[airframe]
+  const ground = islandHeight(island, s.pos.x, s.pos.z)
+  const agl = s.pos.y - GEAR[airframe].height - ground
+  stepAssist(
+    sim.a,
+    level,
+    s,
+    spec,
+    sim.sticks,
+    { agl, onGround: sim.g.onGround, landable: isLandable(island, s.pos.x, s.pos.z) },
+    h,
+    sim.cmd,
+    sim.opts,
+  )
+  stepPlane(s, spec, sim.cmd, h, sim.opts)
+  const ev = stepGround(sim.g, s, spec, island, h)
+  if (ev) {
+    sim.lastEvent = ev
+    sim.eventSeq++
+    if (ev.kind === 'touchdown') {
+      if (ev.result === 'crash') crash(sim)
+      else if (ev.result === 'landed') {
+        sim.landings++
+        startRollout(sim.a, s)
+      }
+    } else if (ev.kind === 'stopped') {
+      sim.phase = 'landed'
+    }
+  }
+  if (sim.phase === 'landed' && !sim.g.stopped) sim.phase = 'flying'
+  softBoundary(s, h)
+  if ((sim.phase as Phase) !== 'crashed' && hitsBuilding(island, s)) crash(sim)
+  return ev
+}
+
+/** Beyond the island the air turns the plane back: a gentle push toward the
+ * centre past WORLD_HALF, never an invisible wall. (Assist-driven steer-back
+ * and a HUD warning are step 6.) */
+export const BOUNDARY_PUSH = 3
+function softBoundary(s: PlaneState, h: number) {
+  const r = Math.hypot(s.pos.x, s.pos.z)
+  if (r <= WORLD_HALF) return
+  const k = (BOUNDARY_PUSH * Math.min(1, (r - WORLD_HALF) / 60) * h) / r
+  s.vel.x -= s.pos.x * k
+  s.vel.z -= s.pos.z * k
+}
+
+/** The crash tumble: fall and skid to rest, then respawn by hand launch. */
+export function stepCrash(sim: WingSim, airframe: AirframeId, island: IslandSpec, dt: number): void {
+  const s = sim.s
+  sim.crashTimer -= dt
+  s.vel.y -= 9.81 * dt
+  s.vel.x *= Math.exp(-3 * dt)
+  s.vel.z *= Math.exp(-3 * dt)
+  s.pos.x += s.vel.x * dt
+  s.pos.z += s.vel.z * dt
+  s.pos.y = Math.max(islandHeight(island, s.pos.x, s.pos.z) + 0.2, s.pos.y + s.vel.y * dt)
+  if (sim.crashTimer <= 0) resetSim(sim, airframe, island, 'hand')
+}

@@ -36,8 +36,8 @@ export const HEIGHT_SCALE = 3.2
 export const STRIP = {
   x: 0,
   z: 230,
-  length: 130,
-  width: 14,
+  length: 200,
+  width: 30,
   /** Flat-apron width around the runway before the hills resume. */
   apron: 30,
   /** Heading of the runway's take-off direction (rad; π/2 = east, +X). */
@@ -45,8 +45,9 @@ export const STRIP = {
 } as const
 export const STRIP_Y = LAND_BASE + 1
 
-/** Where the pilot stands: just off the west end of the runway. */
-export const PILOT = { x: STRIP.x - STRIP.length / 2 - 6, z: STRIP.z + STRIP.width / 2 + 3 } as const
+/** Where the pilot stands: beside the west end of the runway, facing
+ * along it (east). */
+export const PILOT = { x: STRIP.x - STRIP.length / 2 + 6, z: STRIP.z + STRIP.width / 2 + 4 } as const
 
 export const TOWN = { x: -170, z: -40, r: 75 } as const
 export const RIDGE = { x: 0, z: -300, halfLength: 220, width: 38, height: 55 } as const
@@ -106,6 +107,41 @@ export function onStrip(x: number, z: number): boolean {
   return Math.abs(x - STRIP.x) <= STRIP.length / 2 && Math.abs(z - STRIP.z) <= STRIP.width / 2
 }
 
+/** Approach glide slope, radians — steeper than full size (RC style). */
+export const GLIDE_SLOPE = (7 * Math.PI) / 180
+/** Approach guide: hoops from this far out (m) to the threshold. */
+export const APPROACH_LENGTH = 160
+export const APPROACH_HOOPS = 6
+
+export interface ApproachPoint {
+  x: number
+  y: number
+  z: number
+}
+
+/**
+ * The approach path onto one end of the runway: points along the extended
+ * centreline, outermost first, on the glide slope down to the touchdown
+ * aim point (a quarter of the way in). `end` = −1 lands EASTBOUND (comes in
+ * over the west end), +1 lands WESTBOUND. Pure data — the hoops draw it and
+ * a future auto-land assist flies it.
+ */
+export function approachPath(end: -1 | 1, hoops = APPROACH_HOOPS): ApproachPoint[] {
+  const aimX = STRIP.x + end * (STRIP.length / 4)
+  const pts: ApproachPoint[] = []
+  for (let i = hoops; i >= 1; i--) {
+    const d = (APPROACH_LENGTH / hoops) * i + STRIP.length / 4
+    pts.push({ x: aimX + end * d, y: STRIP_Y + 1.5 + d * Math.tan(GLIDE_SLOPE), z: STRIP.z })
+  }
+  return pts
+}
+
+/** Heading (rad) of a landing onto `end` (see approachPath). */
+export const landingHeading = (end: -1 | 1) => (end === -1 ? Math.PI / 2 : -Math.PI / 2)
+
+/** Max ground slope (rise/run) a plane can land on. */
+export const LANDABLE_SLOPE = 0.18
+
 /** Ground height (world y) at (x, z). The single source of truth. */
 export function islandHeight(spec: IslandSpec, x: number, z: number): number {
   // Rolling base from the tank terrain, stretched to island scale.
@@ -132,6 +168,21 @@ export function islandHeight(spec: IslandSpec, x: number, z: number): number {
 
 /** True when the ground at (x, z) is under water (sea or lake). */
 export const isWater = (spec: IslandSpec, x: number, z: number) => islandHeight(spec, x, z) < SEA_LEVEL
+
+/** Ground slope (gradient magnitude) at (x, z). */
+export function slopeAt(spec: IslandSpec, x: number, z: number): number {
+  const e = 1
+  const sx = (islandHeight(spec, x + e, z) - islandHeight(spec, x - e, z)) / (2 * e)
+  const sz = (islandHeight(spec, x, z + e) - islandHeight(spec, x, z - e)) / (2 * e)
+  return Math.hypot(sx, sz)
+}
+
+/** Can a plane touch down here? The runway, or dry, gentle grass. */
+export function isLandable(spec: IslandSpec, x: number, z: number): boolean {
+  if (onStrip(x, z)) return true
+  if (islandHeight(spec, x, z) < SEA_LEVEL + 0.3) return false
+  return slopeAt(spec, x, z) <= LANDABLE_SLOPE
+}
 
 const BUILDING_COUNT = 30
 const TREE_COUNT = 180

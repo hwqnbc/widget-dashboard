@@ -25,6 +25,7 @@ import type { AirframeSpec } from './airframes'
 import {
   GRAVITY,
   attitudeOf,
+  authority,
   stallSpeed,
   type Attitude,
   type PlaneCommand,
@@ -48,7 +49,18 @@ export interface AssistSticks {
 }
 
 /** What the assist is doing right now. */
-export type AssistMode = 'fly' | 'panic' | 'launch'
+/** `runway`: take-off roll (Trainer drives it); `rollout`: on the ground
+ * after a touchdown (Trainer brakes and keeps straight). */
+export type AssistMode = 'fly' | 'panic' | 'launch' | 'runway' | 'rollout'
+
+/** Where the plane is, as the assist needs to know it. */
+export interface AssistEnv {
+  /** Height above the ground under the plane, metres. */
+  agl: number
+  onGround: boolean
+  /** The ground below is somewhere a plane can touch down. */
+  landable: boolean
+}
 
 export interface AssistState {
   mode: AssistMode
@@ -62,12 +74,16 @@ export interface AssistState {
   speedI: number
   /** The attitude read this step (exposed for the HUD / tests). */
   att: Attitude
+  /** Heading to hold on the runway / roll-out, radians. */
+  runwayHeading: number
 }
 
 const DEG = Math.PI / 180
 
 /** Envelopes per level. */
-export const TRAINER_BANK = 35 * DEG
+/** 45° (not SAFE's tighter envelope): play-testing showed a 35° Trainer
+ * turned too wide to line up with the runway. */
+export const TRAINER_BANK = 45 * DEG
 export const TRAINER_PITCH = 20 * DEG
 export const NORMAL_BANK = 60 * DEG
 export const NORMAL_PITCH = 35 * DEG
@@ -84,9 +100,22 @@ export const PANIC_PITCH = 10 * DEG
 export const LAUNCH_MOTOR_DELAY = 0.3
 export const LAUNCH_CLIMB = 15 * DEG
 export const LAUNCH_HANDOVER_AGL = 15
-export const LAUNCH_MAX_TIME = 3
-/** Right-stick deflection that takes control back during a launch. */
+export const LAUNCH_MAX_TIME = 6
+/** Right-stick deflection that takes control back during a launch… */
 export const LAUNCH_ABORT_STICK = 0.3
+/** …but only after this long — a thumb already resting on the stick when
+ * Launch is pressed must not cancel the climb-out (stale-touch guard). */
+export const LAUNCH_ABORT_GRACE = 0.5
+/** Trainer auto-flare: below this height the descent rate is limited… */
+export const FLARE_AGL = 6
+/** …to this (m/s) at the ground, easing to FLARE_SINK_HIGH at FLARE_AGL. */
+export const FLARE_SINK_LOW = 0.5
+export const FLARE_SINK_HIGH = 2
+/** Throttle-stick position (−1..1) that turns a Trainer roll-out into a
+ * touch-and-go. */
+export const GO_AROUND_STICK = 0.5
+/** Below this height while descending, the Trainer flies approach speed. */
+export const APPROACH_AGL = 20
 
 export function createAssist(): AssistState {
   return {
@@ -96,6 +125,7 @@ export function createAssist(): AssistState {
     pitchI: 0,
     speedI: 0,
     att: { heading: 0, pitch: 0, bank: 0 },
+    runwayHeading: 0,
   }
 }
 
@@ -128,13 +158,17 @@ export function protectedBank(spec: AirframeSpec, airspeed: number, maxBank: num
 function attitudeRates(
   a: AssistState,
   s: PlaneState,
+  spec: AirframeSpec,
   bankT: number,
   pitchT: number,
   dt: number,
   out: PlaneCommand,
 ) {
   const { bank, pitch } = a.att
-  out.roll = 4 * wrapPi(bankT - bank)
+  // Airspeed scaling (what real flight controllers do): the model shrinks a
+  // rate command by its control authority when slow, so ask for more.
+  const gain = 1 / authority(spec, s.qbar)
+  out.roll = 4 * wrapPi(bankT - bank) * gain
   // Pitch only means "up" while roughly upright; inverted, roll first.
   const upright = Math.abs(bank) < 70 * DEG
   if (!upright) {
@@ -147,18 +181,24 @@ function attitudeRates(
     // Feed-forward: holding the nose on the horizon in a bank needs a
     // steady body pitch rate g·sin²φ / (V·cosφ).
     const ff = (GRAVITY * Math.sin(bank) ** 2) / (Math.max(s.airspeed, 4) * cb)
-    out.pitch = (3 * e + a.pitchI) / cb + ff
+    out.pitch = ((3 * e + a.pitchI) / cb) * gain + ff
   }
   out.yaw = 0
+}
+
+/** Pitch attitude for a target vertical speed (m/s), radians: the
+ * flight-path angle γ for that climb rate PLUS the angle of attack the wing
+ * is flying at (θ = γ + α), corrected by the vertical-speed error. */
+function vsPitch(s: PlaneState, vsT: number, gain = 0.04): number {
+  const v = Math.max(s.airspeed, 4)
+  return Math.asin(clamp(vsT / v, -0.5, 0.5)) + clamp(s.aoa, -0.1, 0.25) + gain * (vsT - s.vel.y)
 }
 
 /** Pitch attitude that holds altitude `alt`, radians: the flight-path angle
  * for a climb rate proportional to the altitude error, corrected by the
  * vertical-speed error (the attitude loop's integrator finds the trim). */
 function altHoldPitch(s: PlaneState, alt: number): number {
-  const vsT = clamp(0.6 * (alt - s.pos.y), -2.5, 2.5)
-  const v = Math.max(s.airspeed, 4)
-  return Math.asin(clamp(vsT / v, -0.5, 0.5)) + 0.04 * (vsT - s.vel.y)
+  return vsPitch(s, clamp(0.6 * (alt - s.pos.y), -2.5, 2.5))
 }
 
 /**
@@ -172,11 +212,12 @@ export function stepAssist(
   s: PlaneState,
   spec: AirframeSpec,
   sticks: AssistSticks,
-  agl: number,
+  env: AssistEnv,
   dt: number,
   out: PlaneCommand,
   opts: StepOptions,
 ): void {
+  const agl = env.agl
   attitudeOf(s.q, a.att)
   a.timer += dt
   const vs = stallSpeed(spec)
@@ -188,18 +229,74 @@ export function stepAssist(
 
   // --- shared modes --------------------------------------------------------
   if (a.mode === 'panic') {
-    attitudeRates(a, s, 0, PANIC_PITCH, dt, out)
+    attitudeRates(a, s, spec, 0, PANIC_PITCH, dt, out)
     out.throttle = 1
     if (a.timer >= PANIC_TIME) setAssistMode(a, 'fly')
     return
   }
   if (a.mode === 'launch') {
-    attitudeRates(a, s, 0, LAUNCH_CLIMB, dt, out)
+    attitudeRates(a, s, spec, 0, LAUNCH_CLIMB, dt, out)
     out.throttle = a.timer >= LAUNCH_MOTOR_DELAY ? 1 : 0
-    const stickTaken = Math.abs(sticks.right.x) > LAUNCH_ABORT_STICK || Math.abs(sticks.right.y) > LAUNCH_ABORT_STICK
+    const stickTaken =
+      a.timer > LAUNCH_ABORT_GRACE &&
+      (Math.abs(sticks.right.x) > LAUNCH_ABORT_STICK || Math.abs(sticks.right.y) > LAUNCH_ABORT_STICK)
     if (agl >= LAUNCH_HANDOVER_AGL || a.timer >= LAUNCH_MAX_TIME || stickTaken) {
       setAssistMode(a, 'fly')
     }
+    return
+  }
+
+  // --- take-off roll ---------------------------------------------------------
+  if (a.mode === 'runway') {
+    const hdgErr = wrapPi(a.runwayHeading - a.att.heading)
+    if (level === 'trainer') {
+      // The Trainer flies the whole take-off: full power, straight down the
+      // centreline, rotate at 1.25 v_s, then the launch climb-out.
+      out.roll = -4 * a.att.bank
+      out.yaw = 2.5 * hdgErr
+      const rotate = s.airspeed >= vs * 1.25
+      out.pitch = (rotate ? 3 * (10 * DEG - a.att.pitch) : -2 * a.att.pitch)
+      out.throttle = 1
+    } else {
+      out.roll = level === 'acro' ? rx * spec.maxRoll : 4 * (rx * NORMAL_BANK - a.att.bank)
+      out.pitch = level === 'acro' ? ry * spec.maxPitch : 3 * (ry * NORMAL_PITCH - a.att.pitch)
+      out.yaw = dead(sticks.left.x) * spec.maxYaw
+      out.throttle = manualThrottle
+    }
+    if (!env.onGround && agl > 0.5) {
+      if (level === 'trainer') {
+        setAssistMode(a, 'launch')
+        a.timer = LAUNCH_MOTOR_DELAY // motor already running; climb out
+      } else {
+        setAssistMode(a, 'fly')
+      }
+    }
+    return
+  }
+
+  // --- roll-out after a touchdown ----------------------------------------------
+  if (a.mode === 'rollout') {
+    if (!env.onGround) {
+      setAssistMode(a, 'fly')
+    } else if (level === 'trainer') {
+      if (sticks.left.y > GO_AROUND_STICK) {
+        // Touch-and-go: the Trainer takes off again along its heading.
+        a.runwayHeading = a.att.heading
+        setAssistMode(a, 'runway')
+        out.throttle = 1
+        return
+      }
+      out.roll = -4 * a.att.bank
+      out.pitch = -2 * a.att.pitch
+      out.yaw = 2.5 * wrapPi(a.runwayHeading - a.att.heading)
+      out.throttle = 0
+      return
+    }
+    // Normal / Acro: the pilot keeps control on the ground (rudder steers).
+    out.roll = 0
+    out.pitch = level === 'acro' ? ry * spec.maxPitch : 3 * (ry * NORMAL_PITCH - a.att.pitch)
+    out.yaw = dead(sticks.left.x) * spec.maxYaw
+    out.throttle = manualThrottle
     return
   }
 
@@ -218,7 +315,7 @@ export function stepAssist(
   // --- Normal: angle command, bank limited near the stall -------------------
   if (level === 'normal') {
     const maxBank = protectedBank(spec, s.airspeed, NORMAL_BANK)
-    attitudeRates(a, s, rx * maxBank, ry * NORMAL_PITCH, dt, out)
+    attitudeRates(a, s, spec, rx * maxBank, ry * NORMAL_PITCH, dt, out)
     out.throttle = manualThrottle
     a.holdAlt = Number.NaN
     return
@@ -227,18 +324,32 @@ export function stepAssist(
   // --- Trainer: small envelope, altitude + airspeed hold, stall-proof -------
   const maxBank = Math.min(TRAINER_BANK, protectedBank(spec, s.airspeed, TRAINER_BANK))
   let pitchT: number
-  if (ry === 0) {
+  const settle = ry === 0 && env.landable && agl < FLARE_AGL
+  if (settle) {
+    // Released low over landable ground: settle onto it gently instead of
+    // holding a few metres up forever.
+    a.holdAlt = Number.NaN
+    pitchT = vsPitch(s, -FLARE_SINK_LOW)
+  } else if (ry === 0) {
     if (Number.isNaN(a.holdAlt)) a.holdAlt = s.pos.y
     pitchT = altHoldPitch(s, a.holdAlt)
   } else {
     a.holdAlt = Number.NaN
     pitchT = ry * TRAINER_PITCH
   }
+  // Auto-flare: near the ground the descent rate is limited, easing from
+  // FLARE_SINK_HIGH at FLARE_AGL to FLARE_SINK_LOW at touchdown.
+  if (agl < FLARE_AGL && env.landable) {
+    const k = Math.max(0, agl) / FLARE_AGL
+    // Quadratic: firm near the ground, gentle where the flare begins.
+    const maxSink = FLARE_SINK_LOW + (FLARE_SINK_HIGH - FLARE_SINK_LOW) * k * k
+    pitchT = Math.max(pitchT, vsPitch(s, -maxSink, 0.1))
+  }
   // Stall-proof: nose-up authority fades out near the stall speed …
   const speedRoom = clamp((s.airspeed - vs * 1.1) / (vs * 0.4), 0, 1)
   if (pitchT > 0) pitchT *= speedRoom
   pitchT = clamp(pitchT, -TRAINER_PITCH, TRAINER_PITCH)
-  attitudeRates(a, s, rx * maxBank, pitchT, dt, out)
+  attitudeRates(a, s, spec, rx * maxBank, pitchT, dt, out)
   // … and the pitch command is clipped before α reaches the stall.
   const aoaLimit = spec.alphaCrit - TRAINER_AOA_MARGIN
   if (s.aoa > aoaLimit) out.pitch = Math.min(out.pitch, -4 * (s.aoa - aoaLimit))
@@ -249,10 +360,28 @@ export function stepAssist(
   const lo = vs * 1.45
   const hi = cruise * 1.25
   const ly = dead(sticks.left.y)
-  const vT = ly >= 0 ? cruise + ly * (hi - cruise) : cruise + ly * (cruise - lo)
+  let vT = ly >= 0 ? cruise + ly * (hi - cruise) : cruise + ly * (cruise - lo)
+  // On approach (low and descending) slow to approach speed, so a Trainer
+  // landing touches down slow enough to stop on the runway.
+  if (agl < APPROACH_AGL && s.vel.y < -0.3) vT = Math.min(vT, lo)
   const err = vT - s.airspeed
   a.speedI = clamp(a.speedI + err * dt * 0.08, -0.6, 0.6)
   out.throttle = clamp(0.35 + 0.12 * err + a.speedI + 1.2 * Math.max(0, a.att.pitch), 0, 1)
+  // Settling onto the ground: ease the power off.
+  if (settle && agl < FLARE_AGL * 0.6) out.throttle = Math.min(out.throttle, 0.15)
+}
+
+/** Start a take-off roll along `heading` (runway or after a stop). */
+export function startRunway(a: AssistState, heading: number): void {
+  setAssistMode(a, 'runway')
+  a.runwayHeading = heading
+}
+
+/** Enter the roll-out after a touchdown, holding the current heading. */
+export function startRollout(a: AssistState, s: PlaneState): void {
+  attitudeOf(s.q, a.att)
+  setAssistMode(a, 'rollout')
+  a.runwayHeading = a.att.heading
 }
 
 /** Enter Panic from any mode/level. */

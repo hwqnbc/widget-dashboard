@@ -8,7 +8,9 @@ import type { WidgetProps } from '../../../registry/widgetRegistry'
 import { useAppDispatch } from '../../../app/hooks'
 import { updateWidgetData } from '../../../features/widgets/widgetsSlice'
 import { useWidgetField } from '../../../features/widgets/useWidgetField'
-import { useSeatColor } from '../../../features/avatars/useSeatAvatars'
+import { useSeatAvatarId, useSeatColor } from '../../../features/avatars/useSeatAvatars'
+import { avatarVisualById } from '../../../registry/avatarRegistry'
+import NavigationIcon from '@mui/icons-material/Navigation'
 import { usePresentation } from '../../fullscreen/presentation'
 import { isTypingTarget } from '../../../utils/isTypingTarget'
 import { DAY_PALETTE, NIGHT_PALETTE } from '../droneSim/palettes'
@@ -22,6 +24,9 @@ import IslandScene, { FOG_FAR } from './IslandScene'
 import PlaneRig from './PlaneRig'
 import type { RigRefs } from './PlaneRig'
 import { createWingSim } from './wingSim'
+import type { Phase, StartKind } from './wingSim'
+import { AIRFRAMES } from './airframes'
+import AirfieldProps from './AirfieldProps'
 import { WING_KEYS, createWingInput } from './wingInput'
 import WingSettingsPanel from './WingSettingsPanel'
 
@@ -44,6 +49,9 @@ export default function WingFlyerBody({ id }: WidgetProps) {
   const mode = useTheme().palette.mode
   const palette = mode === 'dark' ? NIGHT_PALETTE : DAY_PALETTE
   const color = useSeatColor('toy')
+  // The pilot is Player 1 (seat 'toy'); its Model3D is resolved here because
+  // redux doesn't cross into the <Canvas> root (the Drone Sim pattern).
+  const OperatorModel = avatarVisualById[useSeatAvatarId('toy')].Model3D
   const { fullscreen } = usePresentation()
 
   const sim = useRef(createWingSim()).current
@@ -54,14 +62,33 @@ export default function WingFlyerBody({ id }: WidgetProps) {
   const invertRef = useRef(invertPitch)
   const hudRef = useRef<HTMLDivElement>(null)
   const hudTextRef = useRef<HTMLDivElement>(null)
+  const homeArrowRef = useRef<HTMLDivElement>(null)
+  const homeTextRef = useRef<HTMLDivElement>(null)
+  const [phase, setPhase] = useState<Phase>('preflight')
+  const [start, setStart] = useState<StartKind>('hand')
+  const onPhaseRef = useRef((p: Phase, st: StartKind) => {
+    setPhase(p)
+    setStart(st)
+  })
   useEffect(() => {
-    if (airframeRef.current !== airframe) sim.resetRequested = true
+    if (airframeRef.current !== airframe) sim.resetRequested = 'hand'
     airframeRef.current = airframe
     levelRef.current = assist
     invertRef.current = invertPitch
   }, [airframe, assist, invertPitch, sim])
   const refs = useMemo<RigRefs>(
-    () => ({ sim, input, airframe: airframeRef, level: levelRef, invertPitch: invertRef, hud: hudRef, hudText: hudTextRef }),
+    () => ({
+      sim,
+      input,
+      airframe: airframeRef,
+      level: levelRef,
+      invertPitch: invertRef,
+      hud: hudRef,
+      hudText: hudTextRef,
+      homeArrow: homeArrowRef,
+      homeText: homeTextRef,
+      onPhase: onPhaseRef,
+    }),
     [sim, input],
   )
 
@@ -88,6 +115,11 @@ export default function WingFlyerBody({ id }: WidgetProps) {
         if (!e.repeat) input.panic = true
         return
       }
+      if (e.code === 'Enter') {
+        // Enter = Launch from the hand (preflight only).
+        if (!e.repeat && sim.phase === 'preflight') sim.launchRequested = true
+        return
+      }
       input.keys.add(e.code)
     }
     const up = (e: KeyboardEvent) => input.keys.delete(e.code)
@@ -100,7 +132,7 @@ export default function WingFlyerBody({ id }: WidgetProps) {
       window.removeEventListener('keyup', up)
       window.removeEventListener('blur', clear)
     }
-  }, [input, settingsOpen])
+  }, [input, sim, settingsOpen])
 
   const onLeft = useCallback(
     (x: number, y: number) => {
@@ -136,6 +168,7 @@ export default function WingFlyerBody({ id }: WidgetProps) {
       data-airframe={airframe}
       data-assist={assist}
       data-invert-pitch={invertPitch ? 'on' : 'off'}
+      data-phase={phase}
       onMouseDown={(e) => e.stopPropagation()}
       onTouchStart={(e) => e.stopPropagation()}
       sx={{
@@ -151,6 +184,7 @@ export default function WingFlyerBody({ id }: WidgetProps) {
       <Box data-testid="wingflyer-canvas" sx={{ position: 'absolute', inset: 0 }}>
         <Canvas frameloop="always" dpr={[1, 1.75]} camera={{ fov: 60, near: 0.2, far: FOG_FAR + 60 }}>
           <IslandScene spec={island} palette={palette} />
+          <AirfieldProps operatorModel={OperatorModel} />
           <PlaneRig refs={refs} island={island} color={color} airframe={airframe} />
         </Canvas>
       </Box>
@@ -179,9 +213,95 @@ export default function WingFlyerBody({ id }: WidgetProps) {
         </Box>
       </Box>
 
+      {/* Home arrow: points at the runway, relative to the nose. */}
+      <Box
+        data-testid="wingflyer-home"
+        sx={{
+          position: 'absolute',
+          top: 40,
+          left: '50%',
+          transform: 'translateX(-50%)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 0.5,
+          px: 0.75,
+          borderRadius: 1,
+          bgcolor: alpha('#000', 0.3),
+          color: '#ffd54f',
+          fontFamily: 'monospace',
+          fontSize: 12,
+          pointerEvents: 'none',
+        }}
+      >
+        <Box ref={homeArrowRef} sx={{ display: 'grid', placeItems: 'center', transition: 'transform 150ms linear' }}>
+          <NavigationIcon sx={{ fontSize: 16 }} />
+        </Box>
+        <Box ref={homeTextRef} component="span">
+          —
+        </Box>
+      </Box>
+
+      {/* Start / landed controls. */}
+      {(phase === 'preflight' || phase === 'landed') && (
+        <Box
+          data-testid="wingflyer-start-panel"
+          sx={{
+            position: 'absolute',
+            left: '50%',
+            top: '42%',
+            transform: 'translate(-50%, -50%)',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: 1,
+          }}
+        >
+          {phase === 'landed' && (
+            <Box
+              data-testid="wingflyer-landed-banner"
+              sx={{ px: 1.5, py: 0.5, borderRadius: 1, bgcolor: alpha('#000', 0.45), color: '#fff', fontWeight: 700 }}
+            >
+              Landed!
+            </Box>
+          )}
+          <Box sx={{ display: 'flex', gap: 1 }}>
+            {phase === 'preflight' && start === 'hand' ? (
+              <Button
+                data-testid="wingflyer-launch"
+                variant="contained"
+                onClick={() => (sim.launchRequested = true)}
+                sx={{ fontWeight: 700, letterSpacing: 1 }}
+              >
+                Launch
+              </Button>
+            ) : (
+              <Button
+                data-testid="wingflyer-hand-launch"
+                variant="contained"
+                onClick={() => (sim.resetRequested = 'hand')}
+                sx={{ fontWeight: 700 }}
+              >
+                Hand launch
+              </Button>
+            )}
+            {AIRFRAMES[airframe].wheels && (
+              <Button
+                data-testid="wingflyer-runway"
+                variant="contained"
+                color="secondary"
+                onClick={() => (sim.resetRequested = 'runway')}
+                sx={{ fontWeight: 700 }}
+              >
+                Runway
+              </Button>
+            )}
+          </Box>
+        </Box>
+      )}
+
       <Box sx={{ position: 'absolute', top: 6, right: 6, display: 'flex', gap: 0.5 }}>
         <Tooltip title="Reset">
-          <IconButton size="small" data-testid="wingflyer-reset" sx={chip} onClick={() => (sim.resetRequested = true)}>
+          <IconButton size="small" data-testid="wingflyer-reset" sx={chip} onClick={() => (sim.resetRequested = 'hand')}>
             <RestartAltIcon fontSize="small" />
           </IconButton>
         </Tooltip>
