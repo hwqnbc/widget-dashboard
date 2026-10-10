@@ -309,7 +309,7 @@ export function defaultWidgetData(type: WidgetType): Record<string, unknown> {
         helpSeen: false,
       }
     case 'wingFlyer':
-      return { worldSeed: DEFAULT_ISLAND_SEED }
+      return { worldSeed: DEFAULT_ISLAND_SEED, airframe: 'trainer', assist: 'trainer', invertPitch: false }
     case 'modelViewer':
       // Bare string id — the model catalog itself lives in the lazy 3D chunk.
       return { model: 'legoSwatTruck', animate: true, autoRotate: false }

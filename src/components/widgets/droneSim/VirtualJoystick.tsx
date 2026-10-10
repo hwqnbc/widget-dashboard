@@ -11,6 +11,18 @@ export interface VirtualJoystickProps {
   /** Normalized -1..1 per axis (deadzone rescaled, y = +1 pushed up); (0,0) on release. */
   onChange: (x: number, y: number) => void
   sx?: SxProps<Theme>
+  /**
+   * Latching Y axis (an RC throttle stick): on release only X re-centres —
+   * Y stays where it was left, and a new touch continues from there (no
+   * jump to the finger). Y is linear with no deadzone. Off by default.
+   */
+  latchY?: boolean
+  /**
+   * With `latchY`: the latched Y value (-1..1), shared with the owner so a
+   * keyboard/gamepad/reset change moves the knob too. The stick writes it
+   * while dragging and re-syncs the knob from it while idle.
+   */
+  latchRef?: { current: number }
 }
 
 /**
@@ -26,12 +38,17 @@ export default function VirtualJoystick({
   testId,
   onChange,
   sx,
+  latchY = false,
+  latchRef,
 }: VirtualJoystickProps) {
   const theme = useTheme()
   const hitAreaRef = useRef<HTMLDivElement>(null)
   const baseRef = useRef<HTMLDivElement>(null)
   const knobRef = useRef<HTMLDivElement>(null)
   const pointerIdRef = useRef<number | null>(null)
+  /** Latched Y offset in px (screen-down positive) and the drag anchor. */
+  const latchDyRef = useRef(0)
+  const anchorYRef = useRef(0)
 
   const radius = size / 2
   const knobSize = Math.round(size * 0.42)
@@ -43,6 +60,21 @@ export default function VirtualJoystick({
       if (!base || !knob) return
       const rect = base.getBoundingClientRect()
       let dx = clientX - (rect.left + rect.width / 2)
+      if (latchY) {
+        // Square travel: X absolute from the centre (with deadzone), Y
+        // relative to where the drag started from the latched position.
+        dx = Math.max(-radius, Math.min(radius, dx))
+        const dy = Math.max(-radius, Math.min(radius, clientY - anchorYRef.current))
+        latchDyRef.current = dy
+        knob.style.transform = `translate(${dx}px, ${dy}px)`
+        let nx = dx / radius
+        if (Math.abs(nx) < DEADZONE) nx = 0
+        else nx = Math.sign(nx) * Math.min(1, (Math.abs(nx) - DEADZONE) / (1 - DEADZONE))
+        const ny = -dy / radius
+        if (latchRef) latchRef.current = ny
+        onChange(nx, ny)
+        return
+      }
       let dy = clientY - (rect.top + rect.height / 2)
       const dist = Math.hypot(dx, dy)
       if (dist > radius) {
@@ -65,18 +97,37 @@ export default function VirtualJoystick({
       }
       onChange(nx, ny)
     },
-    [onChange, radius],
+    [onChange, radius, latchY, latchRef],
   )
 
   const releasePointer = useCallback(() => {
     pointerIdRef.current = null
     const knob = knobRef.current
+    const keepY = latchY ? latchDyRef.current : 0
     if (knob) {
       knob.style.transition = 'transform 80ms'
-      knob.style.transform = 'translate(0px, 0px)'
+      knob.style.transform = `translate(0px, ${keepY}px)`
     }
-    onChange(0, 0)
-  }, [onChange])
+    onChange(0, latchY ? -keepY / radius : 0)
+  }, [onChange, latchY, radius])
+
+  // Latched stick, idle: follow the shared value (keyboard / gamepad /
+  // reset may have moved the throttle).
+  useEffect(() => {
+    if (!latchY || !latchRef) return
+    const id = window.setInterval(() => {
+      if (pointerIdRef.current !== null) return
+      const dy = -latchRef.current * radius
+      if (Math.abs(dy - latchDyRef.current) < 0.5) return
+      latchDyRef.current = dy
+      const knob = knobRef.current
+      if (knob) {
+        knob.style.transition = 'transform 80ms'
+        knob.style.transform = `translate(0px, ${dy}px)`
+      }
+    }, 100)
+    return () => window.clearInterval(id)
+  }, [latchY, latchRef, radius])
 
   // Belt-and-suspenders release: the local pointer handlers below assume the
   // browser always delivers a pointerup/pointercancel/lostpointercapture for
@@ -142,6 +193,9 @@ export default function VirtualJoystick({
         pointerIdRef.current = e.pointerId
         const knob = knobRef.current
         if (knob) knob.style.transition = 'none'
+        // Latched Y continues from where it was: anchor the drag so the
+        // current finger position maps to the current latched offset.
+        anchorYRef.current = e.clientY - latchDyRef.current
         apply(e.clientX, e.clientY)
       }}
       onPointerMove={(e) => {
