@@ -121,6 +121,38 @@ export function seriesStats(
   return { min, max, last: points[points.length - 1].v }
 }
 
+/** One vertical hour gridline on the sparkline. */
+export interface TrendTick {
+  x: number
+  label: string
+}
+
+/** Hour gridlines across the series' span: ticks at whole LOCAL hours,
+ * stepped (1/2/3 h by span) so a 24-h window draws ~8 lines; labels are
+ * `hh:00`. Same x normalization as sparklinePath. */
+export function trendTicks(points: TrendPoint[], w: number, pad = 3): TrendTick[] {
+  if (points.length < 2) return []
+  const HOUR = 3_600_000
+  const t0 = points[0].t
+  const t1 = points[points.length - 1].t
+  const span = t1 - t0 || 1
+  const hours = span / HOUR
+  const step = (hours <= 8 ? 1 : hours <= 16 ? 2 : 3) * HOUR
+  const first = new Date(t0)
+  first.setMinutes(0, 0, 0)
+  let t = first.getTime()
+  if (t < t0) t += HOUR
+  const out: TrendTick[] = []
+  for (; t <= t1; t += step) {
+    const d = new Date(t)
+    out.push({
+      x: pad + ((t - t0) / span) * (w - 2 * pad),
+      label: `${String(d.getHours()).padStart(2, '0')}:00`,
+    })
+  }
+  return out
+}
+
 /** Polyline path for a small SVG sparkline: x spread by timestamp, y by
  * value (inverted). '' under 2 points; a flat series pads its range ±1 so
  * it draws a midline instead of dividing by zero. */

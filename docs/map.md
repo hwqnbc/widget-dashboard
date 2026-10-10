@@ -212,7 +212,7 @@ on it works without a backend server or API key.
   then return one item PER HOUR, so yesterday + today merged (pure
   `parseHourly` → `lastHours` dedupe, newest 24) gives a rolling window —
   the smooth rolling 24-h PSI drawn solid, the spiky 1-h PM2.5 dashed,
-  paths from the pure `sparklinePath` (no chart library) with a per-series now/min/max legend (`seriesStats`), cached 10 min
+  paths from the pure `sparklinePath` (no chart library) with a per-series now/min/max legend (`seriesStats`) and hourly gridlines + hh:00 labels (`trendTicks` — the "roughly when"), cached 10 min
   per region in `envApi`. Long-range history (2014→) exists only as
   data.gov.sg CSV datasets — deliberately not pulled by the page. Data is transient; toggling on
   fetches when missing or older than 5 minutes — toggle off/on is the

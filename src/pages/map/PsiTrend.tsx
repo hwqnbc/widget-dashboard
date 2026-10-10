@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Box, Typography } from '@mui/material'
 import { fetchPsiTrend, type PsiTrendData } from './envApi'
-import { seriesStats, sparklinePath } from './envModel'
+import { seriesStats, sparklinePath, trendTicks } from './envModel'
 
 type TrendStatus = 'loading' | 'ready' | 'error'
 
@@ -68,6 +68,33 @@ export default function PsiTrend({ region }: { region: string }) {
             aria-label={`${region} region: PSI and PM2.5 over the last ${spanHours} hours`}
           >
             <rect x="0" y="0" width={W} height={H} rx="6" fill="#000" fillOpacity="0.05" />
+            {/* Hour gridlines: a faint line per tick, hh:00 labels along the
+                bottom (edge-clipped labels skipped) — the "roughly when". */}
+            {trendTicks(data.psi, W).map((tick) => (
+              <g key={tick.x}>
+                <line
+                  x1={tick.x}
+                  x2={tick.x}
+                  y1={0}
+                  y2={H}
+                  stroke="#607d8b"
+                  strokeOpacity="0.25"
+                  strokeWidth="1"
+                />
+                {tick.x >= 16 && tick.x <= W - 16 && (
+                  <text
+                    x={tick.x}
+                    y={H - 3}
+                    fontSize="9"
+                    fill="#607d8b"
+                    textAnchor="middle"
+                    fontFamily="system-ui, sans-serif"
+                  >
+                    {tick.label}
+                  </text>
+                )}
+              </g>
+            ))}
             <path d={sparklinePath(data.psi, W, H)} fill="none" stroke="#1976d2" strokeWidth="2" />
             <path
               d={sparklinePath(data.pm25, W, H)}

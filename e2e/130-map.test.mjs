@@ -109,6 +109,7 @@ import {
   psiBubble,
   seriesStats,
   sparklinePath,
+  trendTicks,
   WEATHER_ICONS,
 } from './.bundle/envModel.js'
 
@@ -1157,6 +1158,19 @@ await page.route('**/environment/2-hour-weather-forecast**', (route) => {
       seriesStats([]) === null,
     JSON.stringify(stats),
   )
+  // Hour gridlines: the 6-hour mock span steps hourly — ~5-6 ticks at whole
+  // local hours, ascending x inside the box, hh:00 labels.
+  const ticks = trendTicks(hourly, 260)
+  check(
+    'trendTicks: hourly lines across the span with hh:00 labels',
+    ticks.length >= 4 &&
+      ticks.length <= 7 &&
+      ticks.every((tk) => /^\d{2}:00$/.test(tk.label)) &&
+      ticks.every((tk) => tk.x >= 3 && tk.x <= 257) &&
+      ticks.every((tk, i, arr) => i === 0 || arr[i - 1].x < tk.x) &&
+      trendTicks([hourly[0]], 260).length === 0,
+    `n=${ticks.length} ${JSON.stringify(ticks.slice(0, 2))}`,
+  )
   const spark = sparklinePath(hourly, 260, 80)
   check(
     'sparkline path: M-start, finite coords, flat series safe, short series empty',
@@ -1346,6 +1360,8 @@ if (online) {
         infoText.includes('PM2.5'),
       infoText,
     )
+    const gridlines = await page.locator('[data-testid="map-psi-trend"] svg line').count()
+    check('trend draws hourly gridlines', gridlines >= 3, `lines=${gridlines}`)
     await page.locator('[data-testid="map-env-close"]').click()
     await page.waitForTimeout(500)
     check(
