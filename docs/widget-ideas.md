@@ -106,6 +106,11 @@ and the tank terrain are the expensive parts, and they already exist.
   rendered in 3D, with an avatar keeper posed through the `aimRef` seam.
 - **Avatar Run** — endless runner over the Drone Sim rooftops driven by the
   shared `walk` gait, which has never carried a player-controlled character.
+- **Wing Flyer (fixed-wing RC plane)** — *designed, not built:* full design
+  note in `docs/wing-flyer.md`. Reuses the drone sticks/input/audio (hoisted
+  to `shared/`), the tank terrain (scaled up) and the strike combat pool;
+  genuinely new is a 3D-attitude flight model that cannot hover — stall,
+  energy, banked turns — plus assists, landings and thermal soaring.
 - **Drone Delivery** — a non-combat mode on the Drone Sim flight model: collect
   parcels, drop them on marked rooftops against a clock. Reuses the gates and
   time-trial machinery the sim already has.
