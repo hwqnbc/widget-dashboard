@@ -38,6 +38,18 @@ silently breaking this one.
 
 ## Workflow
 
+**"clarify:" means discussion only.** When the user's message starts with
+`clarify:`, only discuss — answer, explain, research, ask questions. Do not
+edit files, commit, push or merge until the user explicitly says to.
+
+**Plan, design, discuss and clarify before building any new widget or
+feature.** Research it, write up the design (controls, gameplay,
+blindspots, architecture), and settle the open questions with the user
+**one question at a time** — don't move to the next question until the
+current one is fully clarified. Record the decisions in the feature's
+design note. Don't write implementation code until the user explicitly
+says to build (e.g. "OK").
+
 **Always pull the latest code before doing anything — no exceptions.** At the
 start of EVERY round, before reading code, planning, or editing a single file,
 pull the newest `origin/main` and rebase the current branch onto it (pull =
