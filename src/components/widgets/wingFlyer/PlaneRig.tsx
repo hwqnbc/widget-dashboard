@@ -316,8 +316,11 @@ function writeHud(
   const agl = s.pos.y - islandHeight(island, s.pos.x, s.pos.z)
   const spec = AIRFRAMES[airframe]
   const vs = stallSpeed(spec)
-  // Stall warning only means something in the air.
-  const stallWarn = !sim.g.onGround && sim.phase === 'flying' && (s.airspeed < vs * 1.2 || s.stalled)
+  // Stall state only means something in the air (parked, the airflow
+  // angle is noise and would paint the HUD red).
+  const airborne = !sim.g.onGround && sim.phase === 'flying'
+  const stalled = airborne && s.stalled
+  const stallWarn = airborne && (s.airspeed < vs * 1.2 || s.stalled)
   el.dataset.airspeed = s.airspeed.toFixed(2)
   el.dataset.alt = s.pos.y.toFixed(2)
   el.dataset.agl = agl.toFixed(2)
@@ -326,7 +329,7 @@ function writeHud(
   el.dataset.pitch = (_att.pitch * DEG).toFixed(1)
   el.dataset.heading = (((_att.heading * DEG) % 360 + 360) % 360).toFixed(1)
   el.dataset.aoa = (s.aoa * DEG).toFixed(1)
-  el.dataset.stall = s.stalled ? 'stalled' : stallWarn ? 'warn' : 'ok'
+  el.dataset.stall = stalled ? 'stalled' : stallWarn ? 'warn' : 'ok'
   el.dataset.vs = s.vel.y.toFixed(2)
   el.dataset.x = s.pos.x.toFixed(1)
   el.dataset.z = s.pos.z.toFixed(1)
@@ -380,6 +383,6 @@ function writeHud(
   if (sym) sym.style.transform = `translate(-50%, -50%) rotate(${(_att.bank * DEG).toFixed(1)}deg)`
   if (text) {
     text.textContent = `SPD ${s.airspeed.toFixed(0)} · ALT ${Math.max(0, agl).toFixed(0)} · THR ${Math.round(s.throttle * 100)}%`
-    text.style.color = s.stalled ? '#ff5252' : stallWarn ? '#ffb300' : '#ffffff'
+    text.style.color = stalled ? '#ff5252' : stallWarn ? '#ffb300' : '#ffffff'
   }
 }
