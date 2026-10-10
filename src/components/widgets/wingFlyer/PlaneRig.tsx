@@ -16,6 +16,8 @@ import type { WingInput } from './wingInput'
 import { mergeInput } from './wingInput'
 import PlaneMesh from './PlaneMesh'
 import type { WingView } from './views'
+import type { WingSound } from './wingSound'
+import { CRASH_PULSE, vibrate } from '../droneSim/haptics'
 import { createPlaneParts } from './planeParts'
 
 /** Chase camera: boom length/height (m) per airframe, and damping. */
@@ -43,6 +45,7 @@ export interface RigRefs {
   homeArrow: MutableRefObject<HTMLElement | null>
   homeText: MutableRefObject<HTMLElement | null>
   view: MutableRefObject<WingView>
+  sound: WingSound
   /** FPV ignores the plane's roll (the comfort default); the bank symbol shows it. */
   fpvLevel: MutableRefObject<boolean>
   /** FPV bank symbol (rotated by the bank) and the TURN BACK warning. */
@@ -79,6 +82,7 @@ export default function PlaneRig({
   const hudTick = useRef(0)
   const camInit = useRef(false)
   const lastPhase = useRef<string>('')
+  const lastSeq = useRef(0)
 
   useFrame((state, frameDt) => {
     const { sim, input } = refs
@@ -105,6 +109,7 @@ export default function PlaneRig({
       if (sim.launchRequested) {
         sim.launchRequested = false
         launchSim(sim, af)
+        refs.sound.play('launch')
       }
     } else if (sim.paused) {
       // Auto-paused: hold everything (the scene keeps rendering).
@@ -114,15 +119,43 @@ export default function PlaneRig({
     } else {
       if (input.panic) {
         input.panic = false
-        if (!sim.g.onGround) triggerPanic(sim.a)
+        if (!sim.g.onGround) {
+          triggerPanic(sim.a)
+          refs.sound.play('panic')
+        }
       }
       sim.acc = advanceFixed(sim.acc, dt, (h) => {
         stepSim(sim, level, af, island, h)
       })
     }
 
+    // --- sound + haptics from ground events / phase changes ---
+    if (sim.eventSeq !== lastSeq.current) {
+      lastSeq.current = sim.eventSeq
+      const ev = sim.lastEvent
+      if (ev?.kind === 'touchdown' && ev.result === 'landed') {
+        refs.sound.play('touchdown')
+        vibrate(20)
+      } else if (ev?.kind === 'touchdown' && ev.result === 'bounce') {
+        refs.sound.play('bounce')
+        vibrate(40)
+      }
+    }
+    const flyingLive = sim.phase === 'flying' && !sim.paused
+    const vsWarn = stallSpeed(spec) * 1.2
+    refs.sound.update(
+      flyingLive ? s.throttle : 0,
+      flyingLive ? s.airspeed : 0,
+      flyingLive && !sim.g.onGround && (s.stalled || s.airspeed < vsWarn),
+      flyingLive,
+    )
+
     const phaseKey = sim.phase + ':' + sim.start
     if (phaseKey !== lastPhase.current) {
+      if (sim.phase === 'crashed') {
+        refs.sound.play('crash')
+        vibrate(CRASH_PULSE)
+      }
       lastPhase.current = phaseKey
       refs.onPhase.current(sim.phase, sim.start)
     }
@@ -178,7 +211,7 @@ export default function PlaneRig({
       hudTick.current += dt
       if (hudTick.current >= 0.15) {
         hudTick.current = 0
-        writeHud(refs, sim, island, spec.id)
+        writeHud(refs, sim, island, spec.id, state.gl.info.render)
       }
       return
     }
@@ -224,7 +257,7 @@ export default function PlaneRig({
     hudTick.current += dt
     if (hudTick.current >= 0.15) {
       hudTick.current = 0
-      writeHud(refs, sim, island, spec.id)
+      writeHud(refs, sim, island, spec.id, state.gl.info.render)
     }
   })
 
@@ -244,7 +277,13 @@ function readPad(): readonly number[] | null {
 
 const DEG = 180 / Math.PI
 
-function writeHud(refs: RigRefs, sim: WingSim, island: IslandSpec, airframe: AirframeId) {
+function writeHud(
+  refs: RigRefs,
+  sim: WingSim,
+  island: IslandSpec,
+  airframe: AirframeId,
+  render: { calls: number; triangles: number },
+) {
   const s = sim.s
   const el = refs.hud.current
   const text = refs.hudText.current
@@ -289,7 +328,16 @@ function writeHud(refs: RigRefs, sim: WingSim, island: IslandSpec, airframe: Air
   if (arrow) arrow.style.transform = `rotate(${(rel * DEG).toFixed(1)}deg)`
   const ht = refs.homeText.current
   if (ht) ht.textContent = `${Math.round(dist)} m`
+  el.dataset.drawCalls = String(render.calls)
+  el.dataset.triangles = String(render.triangles)
   el.dataset.view = refs.view.current
+  const c = refs.sound.counts
+  el.dataset.sfxLaunch = String(c.launch)
+  el.dataset.sfxTouchdown = String(c.touchdown)
+  el.dataset.sfxBounce = String(c.bounce)
+  el.dataset.sfxCrash = String(c.crash)
+  el.dataset.sfxPanic = String(c.panic)
+  el.dataset.sound = refs.sound.enabled ? 'on' : 'off'
   el.dataset.paused = sim.paused ? 'true' : 'false'
   const outside = Math.hypot(s.pos.x, s.pos.z) > WORLD_HALF
   el.dataset.outside = outside ? 'true' : 'false'

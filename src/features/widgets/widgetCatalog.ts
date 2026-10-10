@@ -316,6 +316,7 @@ export function defaultWidgetData(type: WidgetType): Record<string, unknown> {
         invertPitch: false,
         view: 'chase',
         fpvLevel: true,
+        sound: false,
         helpSeen: false,
       }
     case 'modelViewer':

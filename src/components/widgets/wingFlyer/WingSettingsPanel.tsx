@@ -23,6 +23,7 @@ export const SETTINGS_DEFAULTS = {
   invertPitch: false,
   view: 'chase',
   fpvLevel: true,
+  sound: false,
 } as const
 
 /**
@@ -38,6 +39,7 @@ export default function WingSettingsPanel({
   invertPitch,
   view,
   fpvLevel,
+  sound,
   onChange,
 }: {
   open: boolean
@@ -47,6 +49,7 @@ export default function WingSettingsPanel({
   invertPitch: boolean
   view: WingView
   fpvLevel: boolean
+  sound: boolean
   onChange: (patch: Record<string, unknown>) => void
 }) {
   return (
@@ -146,6 +149,21 @@ export default function WingSettingsPanel({
               data-testid="wingflyer-invert-pitch"
               checked={invertPitch}
               onChange={(_, next) => onChange({ invertPitch: next })}
+            />
+          </ListItem>
+        </List>
+        <List dense subheader={<ListSubheader disableGutters>Sound</ListSubheader>}>
+          <ListItem disableGutters>
+            <ListItemText
+              primary="Sound effects"
+              secondary="Motor, wind, stall horn, touchdowns and crashes."
+              slotProps={{ primary: { sx: { fontWeight: 600 } }, secondary: { sx: { fontSize: 12 } } }}
+            />
+            <Switch
+              size="small"
+              data-testid="wingflyer-sound"
+              checked={sound}
+              onChange={(_, next) => onChange({ sound: next })}
             />
           </ListItem>
         </List>

@@ -9,6 +9,18 @@ import { SEA_LEVEL, STRIP, STRIP_Y, WORLD_HALF, islandHeight } from './islandLay
 const MESH_HALF = WORLD_HALF + 140
 /** Displaced-plane resolution (segments per side) — ~9 m cells. */
 const SEGMENTS = 128
+/** Runway paint: centre-line dashes (every 11 m) + a threshold bar at each
+ * end — x offset from the strip centre, width (x) and depth (z). */
+const RUNWAY_MARKS = [
+  ...Array.from({ length: Math.floor((STRIP.length - 20) / 11) }, (_, i) => ({
+    x: -STRIP.length / 2 + 12 + i * 11,
+    w: 5,
+    d: 0.6,
+  })),
+  { x: -STRIP.length / 2 + 2, w: 1.5, d: STRIP.width - 4 },
+  { x: STRIP.length / 2 - 2, w: 1.5, d: STRIP.width - 4 },
+]
+
 /** Fog: near/far, metres — also the main performance lever (far plane). */
 export const FOG_NEAR = 220
 export const FOG_FAR = 760
@@ -24,6 +36,7 @@ export default function IslandScene({ spec, palette }: { spec: IslandSpec; palet
   const blocksRef = useRef<InstancedMesh>(null)
   const trunksRef = useRef<InstancedMesh>(null)
   const canopiesRef = useRef<InstancedMesh>(null)
+  const marksRef = useRef<InstancedMesh>(null)
 
   const geometry = useMemo(() => {
     const geo = new PlaneGeometry(MESH_HALF * 2, MESH_HALF * 2, SEGMENTS, SEGMENTS)
@@ -87,6 +100,16 @@ export default function IslandScene({ spec, palette }: { spec: IslandSpec; palet
       trunks.instanceMatrix.needsUpdate = true
       canopies.instanceMatrix.needsUpdate = true
     }
+    // Runway paint — centre-line dashes + both threshold bars, one draw.
+    const marks = marksRef.current
+    if (marks) {
+      RUNWAY_MARKS.forEach((mk, i) => {
+        m.makeScale(mk.w, 1, mk.d)
+        m.setPosition(STRIP.x + mk.x, STRIP_Y + 0.05, STRIP.z)
+        marks.setMatrixAt(i, m)
+      })
+      marks.instanceMatrix.needsUpdate = true
+    }
   }, [spec])
 
   return (
@@ -113,20 +136,11 @@ export default function IslandScene({ spec, palette }: { spec: IslandSpec; palet
           <planeGeometry args={[STRIP.length, STRIP.width]} />
           <meshStandardMaterial color="#55595e" />
         </mesh>
-        {Array.from({ length: 11 }, (_, i) => (
-          <mesh key={i} position={[-STRIP.length / 2 + 10 + i * 11, 0.05, 0]} rotation-x={-Math.PI / 2}>
-            <planeGeometry args={[5, 0.5]} />
-            <meshBasicMaterial color="#f2f2f2" />
-          </mesh>
-        ))}
-        {/* Threshold bars at both ends. */}
-        {[-1, 1].map((end) => (
-          <mesh key={end} position={[end * (STRIP.length / 2 - 2), 0.05, 0]} rotation-x={-Math.PI / 2}>
-            <planeGeometry args={[1.2, STRIP.width - 2]} />
-            <meshBasicMaterial color="#f2f2f2" />
-          </mesh>
-        ))}
       </group>
+      <instancedMesh ref={marksRef} args={[undefined, undefined, RUNWAY_MARKS.length]}>
+        <boxGeometry args={[1, 0.02, 1]} />
+        <meshBasicMaterial color="#f2f2f2" />
+      </instancedMesh>
 
       <instancedMesh key={`blocks-${spec.buildings.length}`} ref={blocksRef} args={[undefined, undefined, spec.buildings.length]}>
         <boxGeometry args={[1, 1, 1]} />

@@ -34,6 +34,7 @@ import WingSettingsPanel from './WingSettingsPanel'
 import WingHelpDialog from './WingHelpDialog'
 import type { WingView } from './views'
 import { DEFAULT_VIEW, coerceView } from './views'
+import { createWingSound } from './wingSound'
 
 const coerceSeed = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : undefined)
 const coerceBool = (v: unknown) => (typeof v === 'boolean' ? v : undefined)
@@ -53,6 +54,7 @@ export default function WingFlyerBody({ id }: WidgetProps) {
   const view = useWidgetField<WingView>(id, 'view', 'chase', coerceView)
   const fpvLevel = useWidgetField(id, 'fpvLevel', true, coerceBool)
   const helpSeen = useWidgetField(id, 'helpSeen', false, coerceBool)
+  const soundOn = useWidgetField(id, 'sound', false, coerceBool)
   const island = useMemo(() => buildIsland(worldSeed), [worldSeed])
   const mode = useTheme().palette.mode
   const palette = mode === 'dark' ? NIGHT_PALETTE : DAY_PALETTE
@@ -64,6 +66,11 @@ export default function WingFlyerBody({ id }: WidgetProps) {
 
   const sim = useRef(createWingSim()).current
   const input = useRef(createWingInput()).current
+  const sound = useRef(createWingSound()).current
+  useEffect(() => {
+    sound.setEnabled(soundOn)
+    return () => sound.setEnabled(false)
+  }, [sound, soundOn])
   // Canvas props lag a frame (lesson #48) — the rig reads live refs.
   const airframeRef = useRef(airframe)
   const levelRef = useRef(assist)
@@ -103,11 +110,12 @@ export default function WingFlyerBody({ id }: WidgetProps) {
       homeText: homeTextRef,
       onPhase: onPhaseRef,
       view: viewRef,
+      sound,
       fpvLevel: fpvLevelRef,
       bankSymbol: bankSymbolRef,
       edgeWarn: edgeWarnRef,
     }),
-    [sim, input],
+    [sim, input, sound],
   )
 
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -171,12 +179,20 @@ export default function WingFlyerBody({ id }: WidgetProps) {
   // element's visibility drives the scrolled-away auto-pause.
   const rootRef = useRef<HTMLDivElement>(null)
   const [rootH, setRootH] = useState(0)
+  const [onScreen, setOnScreen] = useState(true)
   useEffect(() => {
     const el = rootRef.current
     if (!el) return
     const ro = new ResizeObserver((entries) => setRootH(Math.round(entries[0].contentRect.height)))
     ro.observe(el)
-    const io = new IntersectionObserver(([e]) => e.intersectionRatio < 0.3 && pause(), { threshold: [0.3] })
+    const io = new IntersectionObserver(
+      ([e]) => {
+        const shown = e.intersectionRatio >= 0.3
+        setOnScreen(shown)
+        if (!shown) pause()
+      },
+      { threshold: [0.3] },
+    )
     io.observe(el)
     return () => {
       ro.disconnect()
@@ -251,6 +267,7 @@ export default function WingFlyerBody({ id }: WidgetProps) {
       data-fpv-level={fpvLevel ? 'on' : 'off'}
       data-paused={paused ? 'true' : 'false'}
       data-help-seen={helpSeen ? 'on' : 'off'}
+      data-sound={soundOn ? 'on' : 'off'}
       onMouseDown={(e) => e.stopPropagation()}
       onTouchStart={(e) => e.stopPropagation()}
       sx={{
@@ -264,7 +281,13 @@ export default function WingFlyerBody({ id }: WidgetProps) {
       }}
     >
       <Box data-testid="wingflyer-canvas" sx={{ position: 'absolute', inset: 0 }}>
-        <Canvas frameloop="always" dpr={[1, 1.75]} camera={{ fov: 60, near: 0.2, far: FOG_FAR + 60 }}>
+        <Canvas
+          // Battery: stop continuous rendering while paused or scrolled away
+          // (nothing moves then; 'demand' still repaints on resize).
+          frameloop={paused || !onScreen ? 'demand' : 'always'}
+          dpr={[1, 1.75]}
+          camera={{ fov: 60, near: 0.2, far: FOG_FAR + 60 }}
+        >
           <IslandScene spec={island} palette={palette} />
           <AirfieldProps operatorModel={OperatorModel} />
           <PlaneRig refs={refs} island={island} color={color} airframe={airframe} />
@@ -531,6 +554,7 @@ export default function WingFlyerBody({ id }: WidgetProps) {
         invertPitch={invertPitch}
         view={view}
         fpvLevel={fpvLevel}
+        sound={soundOn}
         onChange={patch}
       />
       <WingHelpDialog open={helpOpen} onClose={closeHelp} assist={assist} />
