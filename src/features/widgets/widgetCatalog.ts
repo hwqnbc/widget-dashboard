@@ -2,6 +2,7 @@ import type { WidgetType } from './types'
 // Data-only modules (no components/React) — safe for the catalog to import.
 import { DEFAULT_SEED } from '../../components/widgets/droneSim/worldLayout'
 import { DEFAULT_TANK_SEED } from '../../components/widgets/tankBattle/terrain'
+import { DEFAULT_ISLAND_SEED } from '../../components/widgets/wingFlyer/islandLayout'
 import { DEFAULT_MAZE_SEED } from '../../components/widgets/mazeRunner/mazeModel'
 import { initialPosition } from '../../components/widgets/othelloModel'
 import { DEFAULT_ARROWS_SEED } from '../../components/widgets/arrowsModel'
@@ -119,6 +120,13 @@ export const WIDGET_CATALOG: WidgetMeta[] = [
     type: 'tankBattle',
     title: 'Tank Battle',
     description: 'Drive a tank over contoured terrain — hunt enemy armour',
+    defaultSize: { w: 6, h: 6, minW: 5, minH: 5 },
+    preferredOrientation: 'landscape',
+  },
+  {
+    type: 'wingFlyer',
+    title: 'Wing Flyer',
+    description: 'Fly an RC plane over a 3D island — trainer or FPV wing',
     defaultSize: { w: 6, h: 6, minW: 5, minH: 5 },
     preferredOrientation: 'landscape',
   },
@@ -300,6 +308,8 @@ export function defaultWidgetData(type: WidgetType): Record<string, unknown> {
         stickExpo: 0,
         helpSeen: false,
       }
+    case 'wingFlyer':
+      return { worldSeed: DEFAULT_ISLAND_SEED }
     case 'modelViewer':
       // Bare string id — the model catalog itself lives in the lazy 3D chunk.
       return { model: 'legoSwatTruck', animate: true, autoRotate: false }

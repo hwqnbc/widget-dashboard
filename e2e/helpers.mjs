@@ -1050,3 +1050,12 @@ export async function createTankPilot(page, context) {
 
   return { touch, touchStart, touchEnd, driveTo, engage, sticks: { L, R } }
 }
+
+/** Fresh dashboard with one Wing Flyer widget. */
+export async function addWingWidget(page) {
+  await page.goto(BASE_URL, { waitUntil: 'networkidle' })
+  await page.getByRole('button', { name: 'Add widget' }).click()
+  await page.getByRole('menuitem', { name: /Wing Flyer/ }).click()
+  await page.waitForSelector('[data-testid="wingflyer-root"]')
+  await page.waitForTimeout(600)
+}

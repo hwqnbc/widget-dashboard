@@ -15,6 +15,7 @@ export type WidgetType =
   | 'droneSim'
   | 'droneStrike'
   | 'tankBattle'
+  | 'wingFlyer'
   | 'modelViewer'
   | 'mazeRunner'
 

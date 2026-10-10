@@ -16,6 +16,7 @@ import ArcheryWidget from '../components/widgets/ArcheryWidget'
 import DroneSimWidget from '../components/widgets/droneSim/DroneSimWidget'
 import DroneStrikeWidget from '../components/widgets/droneStrike/DroneStrikeWidget'
 import TankBattleWidget from '../components/widgets/tankBattle/TankBattleWidget'
+import WingFlyerWidget from '../components/widgets/wingFlyer/WingFlyerWidget'
 import ModelViewerWidget from '../components/widgets/modelViewer/ModelViewerWidget'
 import MazeRunnerWidget from '../components/widgets/mazeRunner/MazeRunnerWidget'
 
@@ -42,6 +43,7 @@ export const widgetComponents: Record<WidgetType, ComponentType<WidgetProps>> = 
   droneSim: DroneSimWidget,
   droneStrike: DroneStrikeWidget,
   tankBattle: TankBattleWidget,
+  wingFlyer: WingFlyerWidget,
   modelViewer: ModelViewerWidget,
   mazeRunner: MazeRunnerWidget,
 }
