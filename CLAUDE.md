@@ -139,7 +139,8 @@ src/
   features/records/   recordsSlice — app-level game records (bests/stars/
                       tallies) that outlive widget instances: Car Park, Maze
                       Runner, Arrow Escape, Drone Sim (landing), Drone
-                      Strike, Tank Battle (docs/car-park.md *Records*)
+                      Strike, Tank Battle, Puppy Rescue (docs/car-park.md
+                      *Records*)
   features/avatars/   AvatarId/Seat types, avatarCatalog (name/colour), useSeatAvatars
   registry/           widgetRegistry: WidgetType -> component
                       avatarRegistry: AvatarId -> { Head, Figure, Celebration }
@@ -436,6 +437,18 @@ timer with per-size bests, a hot-seat two-player race where player 2 runs
 the MIRROR by default — toggleable — so watching player 1 solve it is no help,
 and a **2 Devices ghost race**: the netplay layer's first non-turn-based
 consumer, with a synced countdown and the opponent shown as a marker).
+See `docs/puppy-rescue.md` for the Puppy Rescue widget (the fifth WebGL
+widget — a stealth-rescue maze: free-moving dog (floating drag stick /
+arrows, no inertia, corner assist) frees caged puppies that follow in a
+breadcrumb conga line, past catchers with wall-clipped vision cones and a
+near/far "?" meter; caught = retry in <1 s; fixed portrait camera over the
+whole maze; a pure fixed-step `rescueModel` (catcher poses are pure
+functions of time) stepped by the widget's own rAF loop with the lazy
+`PuppyRescue3D` a pure view over the sim ref; an append-only ASCII-map
+level pack whose every level the e2e sweep re-proves 3-star-escapable via
+`rescuePlanner` (BFS over cell × puppies × time against inflated cones,
+replayed frame-exact through the real `step`); stars/best times/unlocks in
+`records.puppyRescue`).
 See `docs/map.md` for the Map page (the first page-level heavy feature —
 @arcgis/core lazy route chunk, free no-key `gray-vector`/`dark-gray-vector`
 basemaps following the theme toggle, 2D map / 3D globe switch, locate/pins/

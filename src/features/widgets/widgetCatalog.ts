@@ -144,6 +144,14 @@ export const WIDGET_CATALOG: WidgetMeta[] = [
     description: 'Find the way out — swipe or arrow keys',
     defaultSize: { w: 5, h: 6, minW: 4, minH: 5 },
   },
+  {
+    type: 'puppyRescue',
+    title: 'Puppy Rescue',
+    description: 'Sneak past the catchers and lead the puppies out',
+    // A tall card: every level is a portrait maze seen whole.
+    defaultSize: { w: 4, h: 8, minW: 3, minH: 6 },
+    preferredOrientation: 'portrait',
+  },
 ]
 
 export const widgetMetaByType = Object.fromEntries(
@@ -320,6 +328,10 @@ export function defaultWidgetData(type: WidgetType): Record<string, unknown> {
         landingHints: true,
         helpSeen: false,
       }
+    case 'puppyRescue':
+      // Progress (stars, bests, unlocks) lives in the records slice; the
+      // widget keeps only where you are and its settings.
+      return { level: 0, sound: true, unlockAll: false }
     case 'modelViewer':
       // Bare string id — the model catalog itself lives in the lazy 3D chunk.
       return { model: 'legoSwatTruck', animate: true, autoRotate: false }

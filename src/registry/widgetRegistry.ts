@@ -19,6 +19,7 @@ import TankBattleWidget from '../components/widgets/tankBattle/TankBattleWidget'
 import WingFlyerWidget from '../components/widgets/wingFlyer/WingFlyerWidget'
 import ModelViewerWidget from '../components/widgets/modelViewer/ModelViewerWidget'
 import MazeRunnerWidget from '../components/widgets/mazeRunner/MazeRunnerWidget'
+import PuppyRescueWidget from '../components/widgets/puppyRescue/PuppyRescueWidget'
 
 /** Props every widget component receives. */
 export interface WidgetProps {
@@ -46,4 +47,5 @@ export const widgetComponents: Record<WidgetType, ComponentType<WidgetProps>> = 
   wingFlyer: WingFlyerWidget,
   modelViewer: ModelViewerWidget,
   mazeRunner: MazeRunnerWidget,
+  puppyRescue: PuppyRescueWidget,
 }

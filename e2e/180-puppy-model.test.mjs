@@ -1,0 +1,279 @@
+/**
+ * Puppy Rescue — the pure model and the level pack, no browser.
+ *
+ * Rules, against hand-built maps: walls stop the dog and block sight; the
+ * cone's reach and width; the "?" meter fills faster up close and drains
+ * when hidden; touching a catcher is an instant catch; the door stays shut
+ * until the first puppy is freed; a puppy in the line is seen like the dog;
+ * stars; a catcher's pose is periodic; the route follower is frame-exact.
+ *
+ * And the load-bearing sweep: EVERY shipped level parses, has a unique id,
+ * its catchers' paths stay off the walls, nobody can see the start — and the
+ * planner finds a 3-star run (every puppy, never spotted) that, replayed
+ * through the real `step`, escapes with 3 stars. That is what lets levels be
+ * appended or tuned safely.
+ */
+import {
+  BUMP_R,
+  CELL_FRAMES,
+  CONE_HALF,
+  CONE_RANGE,
+  DOG_R,
+  FILL_FAR,
+  FILL_NEAR,
+  STEP,
+  guardPose,
+  initialState,
+  lineOfSight,
+  parseLevel,
+  routeInput,
+  seenAt,
+  starsFor,
+  step,
+} from './.bundle/rescueModel.js'
+import { LEVELS, TIERS } from './.bundle/rescueLevels.js'
+import { planLevel } from './.bundle/rescuePlanner.js'
+import { reporter } from './helpers.mjs'
+
+const { check, finish } = reporter('puppy-model')
+
+/** An open 5×7 room: dog at the bottom middle, cage top-left, exit top middle. */
+const room = (guards = [], extra = {}) =>
+  parseLevel({
+    id: 'test',
+    tier: 'sneak',
+    name: 'test',
+    map: [
+      '+-+-+E+-+-+',
+      '|C . . . .|',
+      '+ + + + + +',
+      '|. . . . .|',
+      '+ + + + + +',
+      '|. . . . .|',
+      '+ + +-+ + +',
+      '|. . . . .|',
+      '+ + + + + +',
+      '|. . . . .|',
+      '+ + + + + +',
+      '|. . . . .|',
+      '+ + + + + +',
+      '|. . D . .|',
+      '+-+-+-+-+-+',
+    ],
+    guards,
+    ...extra,
+  })
+const run = (level, s, ix, iy, frames) => {
+  for (let i = 0; i < frames; i++) step(level, s, ix, iy)
+}
+
+// ------------------------------------------------------------- 1. parsing
+{
+  const L = room()
+  check('map parses to 5×7 cells', L.cols === 5 && L.rows === 7)
+  check('dog start, cage and exit read off the map', L.start.x === 2.5 && L.start.y === 6.5 && L.cages.length === 1 && L.exitCol === 2)
+  let threw = false
+  try {
+    parseLevel({ id: 'bad', tier: 'sneak', name: '', map: ['+-+', '|.|', '+-+'], guards: [] })
+  } catch {
+    threw = true
+  }
+  check('a map without dog or exit is rejected', threw)
+}
+
+// ------------------------------------------------------- 2. moving + walls
+{
+  const L = room()
+  const s = initialState(L)
+  check('starts ready, clock still', s.status === 'ready' && s.t === 0)
+  run(L, s, 0, 0, 30)
+  check('no input → still ready (catchers wait for the first move)', s.status === 'ready' && s.t === 0)
+  run(L, s, 0, -1, CELL_FRAMES)
+  check('first move starts play; one cell takes exactly CELL_FRAMES steps', s.status === 'play' && Math.abs(s.y - 5.5) < 1e-9, s.y.toFixed(4))
+  run(L, s, 0, -1, CELL_FRAMES * 2)
+  // The wall stub under (2,2) (line 3, col 2) stops the dog below it.
+  check('a wall stops the dog', Math.abs(s.y - (3 + DOG_R + 0.07)) < 1e-6, s.y.toFixed(4))
+  const yStop = s.y
+  run(L, s, 0, 0, 1)
+  check('releasing stops instantly (no inertia)', s.y === yStop && s.v === 0)
+  // Corner assist: off-centre by 0.3, pushing up past a wall end slides on.
+  const s2 = initialState(L)
+  s2.x = 1.8
+  s2.y = 3.6
+  run(L, s2, 0, -1, CELL_FRAMES)
+  check('corner assist slides round a wall end', s2.y < 3.2, `x ${s2.x.toFixed(2)} y ${s2.y.toFixed(2)}`)
+}
+
+// ------------------------------------------------------------ 3. sight
+{
+  const L = room()
+  const g = { x: 2.5, y: 0.5, h: Math.PI / 2, v: 0 } // at the top, looking down
+  check('straight ahead inside the range is seen', seenAt(L, g, 2.5, 0.5 + CONE_RANGE - 0.1) > 0)
+  check('beyond the range is not', seenAt(L, g, 2.5, 0.5 + CONE_RANGE + 0.1) < 0)
+  const a = CONE_HALF + 0.05
+  check('outside the cone angle is not', seenAt(L, g, 2.5 + Math.sin(a) * 2, 0.5 + Math.cos(a) * 2) < 0)
+  check('just inside the angle is', seenAt(L, g, 2.5 + Math.sin(CONE_HALF - 0.05) * 2, 0.5 + Math.cos(CONE_HALF - 0.05) * 2) > 0)
+  check('a wall blocks sight', !lineOfSight(L, 2.5, 2.5, 2.5, 3.5) && seenAt(L, { x: 2.5, y: 2.2, h: Math.PI / 2, v: 0 }, 2.5, 3.6) < 0)
+}
+
+// ------------------------------------------------------- 4. the "?" meter
+{
+  const fillFrames = (x, y) => {
+    const L = room([{ path: [[2, 0]], facing: 180 }])
+    const s = initialState(L)
+    s.status = 'play'
+    s.x = x
+    s.y = y
+    let n = 0
+    while (s.status === 'play' && n < 200) {
+      step(L, s, 0, 0)
+      n++
+    }
+    return { n, s, d: Math.hypot(x - 2.5, y - 0.5) }
+  }
+  const near = fillFrames(2.5, 1.5)
+  const far = fillFrames(1.5, 3.8)
+  const exp = (d) => Math.ceil((FILL_NEAR + (FILL_FAR - FILL_NEAR) * (d / CONE_RANGE)) / STEP)
+  check('seen up close: caught after the near fill time', near.s.status === 'caught' && Math.abs(near.n - exp(near.d)) <= 1, `${near.n} vs ${exp(near.d)}`)
+  check('seen far away: slower', far.s.status === 'caught' && far.n > near.n && Math.abs(far.n - exp(far.d)) <= 1, `${far.n} vs ${exp(far.d)}`)
+  check('the catch names the catcher and the dog', near.s.caughtBy === 0 && near.s.caughtWho === -1)
+  // Drain: in the cone briefly, then out — the meter empties, no catch.
+  const L = room([{ path: [[2, 0]], facing: 180 }])
+  const s = initialState(L)
+  s.status = 'play'
+  s.x = 3.9
+  s.y = 2.0
+  run(L, s, -1, 0, 12) // into the cone edge
+  const mid = s.meter
+  run(L, s, 1, 0, 30) // back out
+  run(L, s, 0, 0, 60)
+  check('a glimpse fills, hiding drains', mid > 0 && s.meter === 0 && s.status === 'play' && s.spotted, `mid ${mid.toFixed(2)}`)
+  check('the first glimpse counts an alert', s.ev.alert === 1)
+}
+
+// --------------------------------------------- 5. bump, door, puppy line
+{
+  const L = room([{ path: [[2, 3]], facing: 0 }]) // facing up, dog comes from behind
+  const s = initialState(L)
+  s.status = 'play'
+  s.x = 2.5
+  s.y = 3.5 + BUMP_R + 0.2
+  run(L, s, 0, -1, 10)
+  check('walking into a catcher is an instant catch', s.status === 'caught' && s.caughtBy === 0)
+
+  const L2 = room()
+  const s2 = initialState(L2)
+  s2.status = 'play'
+  s2.x = 2.5
+  s2.y = 0.7
+  run(L2, s2, 0, -1, 10)
+  check('the door stays shut with no puppy', s2.status === 'play')
+  s2.x = 0.5
+  s2.y = 1.5
+  run(L2, s2, 0, -1, 30)
+  check('reaching the cage frees the puppy and unlocks the door', s2.order.length === 1 && s2.ev.freed === 1 && s2.ev.door === 1)
+  run(L2, s2, 0, 1, CELL_FRAMES * 3)
+  check('the puppy trails a fixed gap behind', s2.px.length === 1 && Math.abs(Math.hypot(s2.px[0] - s2.x, s2.py[0] - s2.y) - 0.55) < 0.02)
+  s2.x = 2.5
+  s2.y = 1.5
+  s2.trail = [2.5, 2.5, 2.5, 1.5]
+  run(L2, s2, 0, -1, 30)
+  check('through the open door: escaped', s2.status === 'escaped')
+  check('stars: escape + every puppy + unseen = 3', starsFor(L2, s2) === 3)
+  s2.spotted = true
+  check('spotted costs the third star', starsFor(L2, s2) === 2)
+
+  // A puppy in a cone is seen even when the dog isn't: the catcher looks
+  // along row 2; the dog is above the wall, its third puppy below it.
+  const L3 = parseLevel({
+    id: 'tail',
+    tier: 'sneak',
+    name: 'tail',
+    map: [
+      '+-+-+E+-+-+',
+      '|C . . . .|',
+      '+ + + + + +',
+      '|. . . . .|',
+      '+-+-+-+ + +',
+      '|. . . . .|',
+      '+ + + + + +',
+      '|. . D . .|',
+      '+-+-+-+-+-+',
+    ],
+    guards: [{ path: [[0, 2]], facing: 90 }],
+  })
+  const s3 = initialState(L3)
+  s3.status = 'play'
+  s3.order = [0, 0, 0]
+  s3.x = 2.5
+  s3.y = 1.5
+  s3.trail = [3.5, 2.5, 3.5, 1.5, 2.5, 1.5]
+  step(L3, s3, 0, 0)
+  const pupSeen = s3.seeing === 1 && seenAt(L3, s3.guards[0], s3.x, s3.y) < 0
+  let n = 0
+  while (s3.status === 'play' && n++ < 120) step(L3, s3, 0, 0)
+  check('a puppy in the cone gets the line caught (dog unseen)', pupSeen && s3.status === 'caught' && s3.caughtWho === 2, `who ${s3.caughtWho}`)
+}
+
+// ---------------------------------------------------- 6. patrols + routes
+{
+  const L = room([{ path: [[0, 3], [4, 3]], pause: 1 }])
+  const tr = L.guards[0]
+  const a = guardPose(tr, 0.7, {})
+  const b = guardPose(tr, 0.7 + tr.period, {})
+  check('a patrol is periodic', Math.abs(a.x - b.x) < 1e-9 && Math.abs(a.h - b.h) < 1e-9)
+  const mid = guardPose(tr, 4 / 1.5 / 2, {})
+  check('walking right, facing right', Math.abs(mid.h) < 1e-9 && mid.v > 0)
+  const s = initialState(room())
+  const Lr = room()
+  const c = { i: 0 }
+  const route = [{ x: 2.5, y: 4.5 }, { x: 3.5, y: 4.5 }]
+  let f = 0
+  while (c.i < route.length && f < 500) {
+    const [ix, iy] = routeInput(s, route, c)
+    if (c.i >= route.length) break
+    step(Lr, s, ix, iy)
+    f++
+  }
+  check('the route follower lands frame-exact (3 cells = 3×CELL_FRAMES)', f === 3 * CELL_FRAMES && Math.abs(s.x - 3.5) < 1e-9, `${f}`)
+}
+
+// ---------------------------------------------- 7. THE SWEEP: every level
+{
+  const ids = new Set()
+  check('pack is non-empty and tiers are known', LEVELS.length >= 10 && LEVELS.every((l) => TIERS.includes(l.tier)))
+  for (const spec of LEVELS) {
+    let L
+    try {
+      L = parseLevel(spec)
+    } catch (e) {
+      check(`${spec.id} parses`, false, e.message)
+      continue
+    }
+    check(`${spec.id} id is unique`, !ids.has(spec.id))
+    ids.add(spec.id)
+    const offWalls = spec.guards.every((g) =>
+      g.path.every((p, i) => i === 0 || lineOfSight(L, g.path[i - 1][0] + 0.5, g.path[i - 1][1] + 0.5, p[0] + 0.5, p[1] + 0.5)),
+    )
+    const startHidden = L.guards.every((tr) => seenAt(L, guardPose(tr, 0, {}), L.start.x, L.start.y) < 0)
+    check(`${spec.id} catchers walk clear of walls; the start is unseen`, offWalls && startHidden)
+    const plan = planLevel(L)
+    if (!plan) {
+      check(`${spec.id} has a 3-star run`, false, 'planner found none')
+      continue
+    }
+    const s = initialState(L)
+    const c = { i: 0 }
+    for (let k = 0; k < 60 * 120 && (s.status === 'ready' || s.status === 'play'); k++) {
+      const [ix, iy] = routeInput(s, plan.route, c)
+      step(L, s, ix, iy)
+    }
+    check(
+      `${spec.id} "${spec.name}": proven 3★ in ${plan.time.toFixed(1)}s`,
+      s.status === 'escaped' && starsFor(L, s) === 3 && !s.spotted,
+      `${s.status} stars ${starsFor(L, s)} pups ${s.order.length}/${L.cages.length}`,
+    )
+  }
+}
+
+await finish()

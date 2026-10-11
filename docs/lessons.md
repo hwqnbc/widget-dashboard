@@ -2356,3 +2356,36 @@ carried over; these are the new ones.
     says the physics does nothing, trace the model directly before
     "fixing" it.
 
+
+150. **A stealth game's cone must be ONE function — draw it with the
+    detection's own rays.** Puppy Rescue's floor wedge is a fan built from
+    `coneRays` (wall-clipped ray lengths), and detection is `seenAt` with
+    the same range, angle and the same wall runs (stretched by the wall
+    half-thickness so corners seal). The genre's top complaint is "I
+    couldn't tell what it could see"; two separate approximations
+    (a pretty mesh + a different test) is exactly how that happens.
+
+151. **To PROVE a real-time level, make time discrete where it matters.**
+    Pick the hero's speed so one cell is an integer number of fixed steps
+    (2.5 cells/s = 24 frames at 60 Hz), make every enemy pose a pure
+    function of time, and search (cell, goals-mask, time-step) with
+    moves/waits of exactly one cell-time. Then the route replays
+    frame-exact through the real `step` (a follower that steers straight
+    and lands exactly on each waypoint), and the e2e sweep re-proves every
+    level on every run. Check against an INFLATED enemy (longer/wider cone,
+    fatter bodies, earlier pickups) so "safe in the plan" survives the
+    continuous sim's in-between frames.
+
+152. **If nothing moves, the clock is irrelevant — dedupe globally.** With
+    only static catchers the time-expanded search is a plain BFS; a global
+    visited set (and no wait action) took a plan from ~1 s to ~20 ms, which
+    is what made a brute-force catcher placer (every cell × 8 facings)
+    run in seconds instead of half an hour.
+
+153. **Judge a guard by what it costs the best route, and filter the
+    artifacts.** "Guarded 3★ time vs unguarded time" says whether a catcher
+    matters at all (several first drafts had a catcher nobody ever had to
+    avoid). A greedy "maximise the detour" placer happily parks a catcher
+    staring into a wall beside the route — reject cones with a short mean
+    reach. And a walker in a 1-wide corridor with no side pockets is
+    unsolvable: the dog can never let it pass. Give patrols alcoves.

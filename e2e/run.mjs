@@ -214,6 +214,22 @@ const wingBundle = spawnSync(
 )
 if (wingBundle.status !== 0) process.exit(wingBundle.status ?? 1)
 
+// Puppy Rescue's pure model, level pack and planner — its own flat pass.
+const puppyBundle = spawnSync(
+  'npx',
+  [
+    'esbuild',
+    'src/components/widgets/puppyRescue/rescueModel.ts',
+    'src/components/widgets/puppyRescue/rescueLevels.ts',
+    'src/components/widgets/puppyRescue/rescuePlanner.ts',
+    '--bundle',
+    '--format=esm',
+    `--outdir=${join(here, '.bundle')}`,
+  ],
+  { cwd: root, stdio: 'inherit' },
+)
+if (puppyBundle.status !== 0) process.exit(puppyBundle.status ?? 1)
+
 // 2. Start the dev server and wait for it.
 const server = spawn('npx', ['vite', '--port', PORT, '--strictPort'], {
   cwd: root,

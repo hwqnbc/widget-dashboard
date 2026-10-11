@@ -1,0 +1,37 @@
+/**
+ * Puppy Rescue sound effects — synthesized on the shared Web Audio engine
+ * (no asset files). Each call is fire-and-forget and silent until
+ * `unlockAudio` has run from a gesture.
+ */
+import { noise, tone } from '../droneSim/webAudio'
+
+/** A puppy freed: a happy two-note yip. */
+export function playFreed(): void {
+  tone({ freq: 880, dur: 0.09, type: 'triangle', gain: 0.25, sweepTo: 1200 })
+  tone({ freq: 1100, dur: 0.12, type: 'triangle', gain: 0.25, sweepTo: 1500, delay: 0.1 })
+}
+
+/** The door unlocks (first puppy): a soft click-clunk. */
+export function playDoor(): void {
+  noise({ dur: 0.06, gain: 0.25, cutoff: 2500, delay: 0.22 })
+  tone({ freq: 330, dur: 0.12, type: 'square', gain: 0.12, delay: 0.24 })
+}
+
+/** A catcher starts noticing: rising "huh?". */
+export function playAlert(): void {
+  tone({ freq: 420, dur: 0.18, type: 'sine', gain: 0.22, sweepTo: 700 })
+}
+
+/** Caught: a falling "wah-wah" and a net swish. */
+export function playCaught(): void {
+  noise({ dur: 0.18, gain: 0.3, cutoff: 1800 })
+  tone({ freq: 520, dur: 0.22, type: 'sawtooth', gain: 0.16, sweepTo: 300, delay: 0.08 })
+  tone({ freq: 380, dur: 0.32, type: 'sawtooth', gain: 0.16, sweepTo: 180, delay: 0.3 })
+}
+
+/** Escaped: a bright little arpeggio. */
+export function playEscape(): void {
+  ;[523, 659, 784, 1047].forEach((f, i) =>
+    tone({ freq: f, dur: 0.16, type: 'triangle', gain: 0.22, delay: i * 0.09 }),
+  )
+}

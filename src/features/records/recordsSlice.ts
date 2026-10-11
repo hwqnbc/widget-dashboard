@@ -58,8 +58,20 @@ export interface TankBattleRecords {
   bestRoamMs: number
 }
 
+/** Puppy Rescue, keyed by level id (`"sneak:0"`). A level is escaped once
+ * it has a `stars` entry (1–3) — that is also what unlocks the next one.
+ * Stars and time are independent bests: the 3-star run need not be the
+ * fastest one. */
+export interface PuppyRescueRecords {
+  stars: Record<string, number>
+  bestMs: Record<string, number>
+  /** Lifetime escapes, repeats included. */
+  escapes: number
+}
+
 export interface RecordsState {
   carPark: CarParkRecords
+  puppyRescue: PuppyRescueRecords
   maze: MazeRecords
   arrows: ArrowsRecords
   droneSim: DroneSimRecords
@@ -73,6 +85,7 @@ const emptyArrows = (): ArrowsRecords => ({ solved: 0 })
 const emptyDroneSim = (): DroneSimRecords => ({ landingBest: 0 })
 const emptyDroneStrike = (): DroneStrikeRecords => ({ bestWave: 0, bestScore: 0 })
 const emptyTankBattle = (): TankBattleRecords => ({ bestWave: 0, bestScore: 0, bestRoamMs: 0 })
+const emptyPuppyRescue = (): PuppyRescueRecords => ({ stars: {}, bestMs: {}, escapes: 0 })
 
 const EMPTIES = {
   carPark: emptyCarPark,
@@ -81,6 +94,7 @@ const EMPTIES = {
   droneSim: emptyDroneSim,
   droneStrike: emptyDroneStrike,
   tankBattle: emptyTankBattle,
+  puppyRescue: emptyPuppyRescue,
 }
 export type GameKey = keyof typeof EMPTIES
 
@@ -98,6 +112,7 @@ const initialState: RecordsState = {
   droneSim: emptyDroneSim(),
   droneStrike: emptyDroneStrike(),
   tankBattle: emptyTankBattle(),
+  puppyRescue: emptyPuppyRescue(),
 }
 
 /** A finite number or the fallback — rehydrated namespaces and absorb
@@ -199,6 +214,17 @@ const recordsSlice = createSlice({
         t.bestRoamMs = minNonzero(t.bestRoamMs, Math.round(num(action.payload.roamMs)))
     },
 
+    /** A Puppy Rescue escape: stars max, time min-nonzero, tally +1. */
+    recordRescueEscape(state, action: PayloadAction<{ key: string; stars: number; ms: number }>) {
+      const { key } = action.payload
+      const stars = Math.max(1, Math.min(3, Math.floor(num(action.payload.stars, 1))))
+      const ms = Math.round(num(action.payload.ms))
+      const r = ensure(state, 'puppyRescue')
+      r.escapes += 1
+      r.stars[key] = Math.max(r.stars[key] ?? 0, stars)
+      if (ms > 0) r.bestMs[key] = minNonzero(r.bestMs[key] ?? 0, ms)
+    },
+
     /* One-time migrations from pre-slice widget data — same contract as
      * absorbCarParkRecords: monotone merges so several old instances
      * compose; only the arrows TALLY is additive, which is why the widget
@@ -258,6 +284,7 @@ export const {
   recordLanding,
   recordStrikeWave,
   recordTankClear,
+  recordRescueEscape,
   absorbMazeRecords,
   absorbArrowsRecords,
   absorbDroneSimRecords,
@@ -278,6 +305,7 @@ const FALLBACK_DRONESIM = emptyDroneSim()
 const FALLBACK_DRONESTRIKE = emptyDroneStrike()
 const FALLBACK_TANK = emptyTankBattle()
 const FALLBACK_CARPARK = emptyCarPark()
+const FALLBACK_PUPPY = emptyPuppyRescue()
 
 interface WithRecords {
   records: RecordsState
@@ -293,3 +321,5 @@ export const selectDroneStrikeRecords = (s: WithRecords): DroneStrikeRecords =>
   s.records.droneStrike ?? FALLBACK_DRONESTRIKE
 export const selectTankBattleRecords = (s: WithRecords): TankBattleRecords =>
   s.records.tankBattle ?? FALLBACK_TANK
+export const selectPuppyRescueRecords = (s: WithRecords): PuppyRescueRecords =>
+  s.records.puppyRescue ?? FALLBACK_PUPPY

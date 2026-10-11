@@ -1066,3 +1066,82 @@ export async function addWingWidget(page) {
   }
   await page.waitForTimeout(300)
 }
+
+/* ------------------------------------------------------------ Puppy Rescue */
+
+/** Fresh dashboard with one Puppy Rescue widget, the 3D canvas up. */
+export async function addPuppyWidget(page) {
+  await page.goto(BASE_URL, { waitUntil: 'networkidle' })
+  await page.getByRole('button', { name: 'Add widget' }).click()
+  await page.getByRole('menuitem', { name: /Puppy Rescue/ }).click()
+  await page.waitForSelector('[data-testid="puppy-root"]')
+  await page.waitForSelector('[data-testid="puppy-3d"] canvas', { timeout: 15000 })
+  await page.waitForFunction(() => !document.querySelector('.MuiModal-backdrop'), null, { timeout: 3000 })
+  await page.waitForTimeout(300)
+}
+
+/** The widget root's live telemetry (published every 50 ms). */
+export async function puppyState(page) {
+  return page.locator('[data-testid="puppy-root"]').evaluate((el) => ({
+    status: el.dataset.status ?? 'ready',
+    x: parseFloat(el.dataset.x ?? 'NaN'),
+    y: parseFloat(el.dataset.y ?? 'NaN'),
+    t: parseFloat(el.dataset.t ?? '0'),
+    pups: parseInt(el.dataset.pups ?? '0', 10),
+    meter: parseFloat(el.dataset.meter ?? '0'),
+    spotted: el.dataset.spotted === '1',
+    level: el.dataset.level,
+    unlocked: parseInt(el.dataset.unlocked ?? '0', 10),
+    sfxFreed: parseInt(el.dataset.sfxFreed ?? '0', 10),
+    sfxAlert: parseInt(el.dataset.sfxAlert ?? '0', 10),
+    sfxCaught: parseInt(el.dataset.sfxCaught ?? '0', 10),
+    sfxEscape: parseInt(el.dataset.sfxEscape ?? '0', 10),
+  }))
+}
+
+/**
+ * Walk the dog through cell-centre waypoints with the arrow keys,
+ * closed-loop on the published position: hold the key toward the next
+ * waypoint (they are axis-aligned) and let go just before it — the model's
+ * corner assist does the rest at a turn. Waits (`{until}`) are skipped:
+ * use this on routes past STATIC catchers only. Stops early when the run
+ * ends. Returns the final state.
+ */
+export async function drivePuppy(page, route, { timeout = 30000 } = {}) {
+  const t0 = Date.now()
+  let st = await puppyState(page)
+  for (const wp of route) {
+    if (!('x' in wp)) continue
+    for (;;) {
+      st = await puppyState(page)
+      if (st.status === 'escaped' || st.status === 'caught' || Date.now() - t0 > timeout) return st
+      const dx = wp.x - st.x
+      const dy = wp.y - st.y
+      const horiz = Math.abs(dx) >= Math.abs(dy)
+      const err = horiz ? dx : dy
+      if (Math.abs(err) < 0.12) break
+      const key = horiz ? (dx > 0 ? 'ArrowRight' : 'ArrowLeft') : dy > 0 ? 'ArrowDown' : 'ArrowUp'
+      // Long holds far out, short taps on the approach (0.25 cells ≈ 100 ms).
+      const hold = Math.max(25, Math.min(250, (Math.abs(err) - 0.1) * 400))
+      await page.keyboard.down(key)
+      await page.waitForTimeout(hold)
+      await page.keyboard.up(key)
+    }
+  }
+  // Last leg: nudge up into the door.
+  for (let i = 0; i < 20 && st.status === 'play'; i++) {
+    await page.keyboard.down('ArrowUp')
+    await page.waitForTimeout(100)
+    await page.keyboard.up('ArrowUp')
+    st = await puppyState(page)
+  }
+  return st
+}
+
+/** Open the Puppy Rescue ⚙ menu and click an item by test id. */
+export async function puppyMenu(page, testId) {
+  await page.locator('[data-testid="puppy-settings"]').click()
+  await page.locator(`[data-testid="${testId}"]`).click()
+  await page.keyboard.press('Escape')
+  await page.waitForTimeout(300)
+}
