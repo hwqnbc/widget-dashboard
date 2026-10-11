@@ -32,6 +32,11 @@ await page.reload({ waitUntil: 'networkidle' })
 await page.waitForSelector('[data-testid="wingflyer-root"]')
 await page.waitForTimeout(1200)
 check('help stays closed after reload', !(await page.locator('[data-testid="wingflyer-help-panel"]').isVisible()))
+// The start screen (Round 1b) is up on every mount: pick Free flight so the
+// rest of the suite sees the Free Flight widget (suite 178 owns the menu).
+check('the start screen is up behind the help', await page.locator('[data-testid="wingflyer-menu"]').isVisible())
+await page.click('[data-testid="wingflyer-mode-free"]')
+await page.waitForTimeout(300)
 await page.click('[data-testid="wingflyer-help"]')
 await page.waitForTimeout(300)
 check('? reopens the help', await page.locator('[data-testid="wingflyer-help-panel"]').isVisible())
@@ -124,6 +129,9 @@ check(
 await page.reload({ waitUntil: 'networkidle' })
 await page.waitForSelector('[data-testid="wingflyer-root"]')
 await page.waitForTimeout(1200)
+// The start screen is up again after the reload — pick Free flight.
+await page.click('[data-testid="wingflyer-mode-free"]')
+await page.waitForTimeout(300)
 check(
   'settings persist across reload',
   (await attr('data-airframe')) === 'wing' && (await attr('data-assist')) === 'acro' && (await attr('data-sound')) === 'on',

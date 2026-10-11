@@ -68,6 +68,9 @@ export interface ObjectiveFacts {
   homeDist: number
   /** A touchdown just happened this step (else null). */
   touchdown: { result: TouchResult; sink: number; onRunway: boolean } | null
+  /** How far out the fly-out step needs (default FLY_OUT_DIST; a mission
+   * without a fly-out passes 0 so the checklist goes straight to "land"). */
+  flyOutDist?: number
 }
 
 /**
@@ -80,7 +83,7 @@ export function stepObjective(o: ObjectiveState, f: ObjectiveFacts): boolean {
   if (f.airborne && !o.takeoff) o.takeoff = true
   if (o.takeoff) {
     if (f.homeDist > o.maxDist) o.maxDist = f.homeDist
-    if (!o.flyout && f.homeDist >= FLY_OUT_DIST) o.flyout = true
+    if (!o.flyout && f.homeDist >= (f.flyOutDist ?? FLY_OUT_DIST)) o.flyout = true
     if (o.flyout && !o.back && f.homeDist <= COME_BACK_DIST) o.back = true
   }
   if (f.touchdown && f.touchdown.result === 'landed' && o.flyout && o.back && !o.land) {

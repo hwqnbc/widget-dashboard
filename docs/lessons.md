@@ -2389,3 +2389,38 @@ carried over; these are the new ones.
     staring into a wall beside the route — reject cones with a short mean
     reach. And a walker in a 1-wide corridor with no side pockets is
     unsolvable: the dog can never let it pass. Give patrols alcoves.
+
+154. **Score where a good landing actually touches — measure it with the
+    sim before fixing the target.** The first scorecard aimed at the hoop
+    line's foot; a hands-off Trainer landing from the first hoop then
+    scored spot 0, because a flared plane floats ~85 m past the point
+    where its glide line meets the ground (aim point → flare → touch is
+    how every landing works). One node probe showed it; the touchdown
+    zone moved to the runway centre and the same landing scored 79. Any
+    "distance from the target" metric needs the sim's own best attempt
+    flown through it first, or it grades the model, not the player.
+
+155. **A verdict that must outlive a reset needs an explicit keep.** A
+    crash resolves a mission, then the tumble's respawn calls the same
+    `resetSim` every retry calls — which wiped the fail before the panel
+    could show it. The respawn passes `keepRun` and a resolved run is
+    only cleared by the next launch or an explicit retry. Whenever one
+    reset serves two callers (automatic vs user-driven), ask which state
+    each is allowed to clear.
+
+156. **An altitude hold with no power must become a speed hold.** The
+    Trainer's engine-out glide demanded a climb it could not fly; the
+    stall-proofing then capped the pitch and it mushed down at 1.1 v_s
+    with half its glide range. Dead-stick, the released-stick target is
+    best-glide airspeed (nose down when slow), and the slope hold only
+    ever lowers it. Same rule as the Trainer's airspeed-first climb cap
+    (#145): energy decides what an outer loop may ask for.
+
+157. **A start screen over the widget breaks every suite that clicks
+    through it.** Adding the mission menu made `173-wing-core` time out
+    on "the menu intercepts pointer events" — not on anything it was
+    testing. The shared `addWingWidget` helper now takes the mode and
+    picks it; suites with their own setup (or a reload) pick a row
+    first. When a feature adds a modal first screen, grep the suites
+    for every entry point (mount AND reload) the same day.
+

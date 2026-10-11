@@ -15,6 +15,7 @@ import type { AirframeId } from './airframes'
 import type { AssistLevel } from './assists'
 import type { WingView } from './views'
 import SettingsBackupRestoreIcon from '@mui/icons-material/SettingsBackupRestore'
+import DeleteSweepIcon from '@mui/icons-material/DeleteSweep'
 
 /** What "Reset settings" restores (the catalog defaults, minus the seed). */
 export const SETTINGS_DEFAULTS = {
@@ -25,6 +26,7 @@ export const SETTINGS_DEFAULTS = {
   fpvLevel: true,
   sound: false,
   landingHints: true,
+  unlockAll: false,
 } as const
 
 /**
@@ -42,7 +44,9 @@ export default function WingSettingsPanel({
   fpvLevel,
   sound,
   landingHints,
+  unlockAll,
   onChange,
+  onResetRecords,
 }: {
   open: boolean
   onClose: () => void
@@ -53,7 +57,10 @@ export default function WingSettingsPanel({
   fpvLevel: boolean
   sound: boolean
   landingHints: boolean
+  unlockAll: boolean
   onChange: (patch: Record<string, unknown>) => void
+  /** Wipe the mission stars / badges / best chain (confirmed by the caller). */
+  onResetRecords: () => void
 }) {
   return (
     <Dialog open={open} onClose={onClose} data-testid="wingflyer-settings-dialog" fullWidth maxWidth="xs">
@@ -166,6 +173,33 @@ export default function WingSettingsPanel({
               checked={landingHints}
               onChange={(_, next) => onChange({ landingHints: next })}
             />
+          </ListItem>
+        </List>
+        <List dense subheader={<ListSubheader disableGutters>Missions</ListSubheader>}>
+          <ListItem disableGutters>
+            <ListItemText
+              primary="Unlock all missions"
+              secondary="Off: each mission opens once the one before has a star."
+              slotProps={{ primary: { sx: { fontWeight: 600 } }, secondary: { sx: { fontSize: 12 } } }}
+            />
+            <Switch
+              size="small"
+              data-testid="wingflyer-unlock-all"
+              checked={unlockAll}
+              onChange={(_, next) => onChange({ unlockAll: next })}
+            />
+          </ListItem>
+          <ListItem disableGutters>
+            <Button
+              fullWidth
+              size="small"
+              color="warning"
+              startIcon={<DeleteSweepIcon />}
+              data-testid="wingflyer-reset-records"
+              onClick={onResetRecords}
+            >
+              Clear mission stars
+            </Button>
           </ListItem>
         </List>
         <List dense subheader={<ListSubheader disableGutters>Sound</ListSubheader>}>

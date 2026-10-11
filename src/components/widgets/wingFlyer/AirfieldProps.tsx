@@ -5,7 +5,10 @@ import { BufferGeometry, Color, Float32BufferAttribute, Line, LineBasicMaterial,
 import type { InstancedMesh } from 'three'
 import OperatorFigure from '../droneSim/OperatorFigure'
 import type { OperatorState } from '../droneSim/operatorWalk'
-import { HOOP_RADIUS, PILOT, STRIP_Y, approachPath } from './islandLayout'
+import { HOOP_RADIUS, PILOT, STRIP, STRIP_Y, approachPath } from './islandLayout'
+import type { PlayMode } from './missions'
+import { stopLineX } from './missions'
+import { SPOT_FULL, TOUCHDOWN_X } from './scorecard'
 import type { WingSim } from './wingSim'
 
 const HOOP_TUBE = 0.14
@@ -28,9 +31,13 @@ const COLOR_MISSED = new Color('#9e9e9e')
 export default function AirfieldProps({
   operatorModel,
   sim,
+  mode = 'free',
 }: {
   operatorModel?: ComponentType<{ action?: string }>
   sim: WingSim
+  /** What is being played: paints the short-field stop lines and, in any
+   * scored mode, the touchdown zone bars (scorecard.ts). */
+  mode?: PlayMode
 }) {
   // A standing operator (never walks here): drone-yaw heading −π/2 faces +X.
   const operator = useRef<OperatorState>({
@@ -110,6 +117,30 @@ export default function AirfieldProps({
       {lines.map((l, k) => (
         <primitive key={k} object={l} />
       ))}
+      {mode !== 'free' && (
+        // Touchdown zone: two broad bars either side of the runway centre,
+        // SPOT_FULL out — inside them the spot mark is full.
+        <group position={[0, STRIP_Y + 0.06, STRIP.z]} rotation-x={-Math.PI / 2} data-testid="wingflyer-touchdown-zone">
+          {[-1, 1].map((k) => (
+            <mesh key={k} position={[TOUCHDOWN_X + k * SPOT_FULL, 0, 0]}>
+              <planeGeometry args={[2, STRIP.width - 6]} />
+              <meshBasicMaterial color="#ffffff" transparent opacity={0.55} depthWrite={false} />
+            </mesh>
+          ))}
+        </group>
+      )}
+      {mode === 'short' && (
+        // Short field: the stop line for each landing direction (painted
+        // red across the strip) — stop before it.
+        <group position={[0, STRIP_Y + 0.07, STRIP.z]} rotation-x={-Math.PI / 2}>
+          {([-1, 1] as const).map((end) => (
+            <mesh key={end} position={[stopLineX(end), 0, 0]}>
+              <planeGeometry args={[1.5, STRIP.width]} />
+              <meshBasicMaterial color="#ff3d00" transparent opacity={0.85} depthWrite={false} />
+            </mesh>
+          ))}
+        </group>
+      )}
     </>
   )
 }

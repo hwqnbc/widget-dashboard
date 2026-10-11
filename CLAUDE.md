@@ -139,7 +139,8 @@ src/
   features/records/   recordsSlice — app-level game records (bests/stars/
                       tallies) that outlive widget instances: Car Park, Maze
                       Runner, Arrow Escape, Drone Sim (landing), Drone
-                      Strike, Tank Battle, Puppy Rescue (docs/car-park.md
+                      Strike, Tank Battle, Puppy Rescue, Wing Flyer
+                      (mission stars/badges/best chain) (docs/car-park.md
                       *Records*)
   features/avatars/   AvatarId/Seat types, avatarCatalog (name/colour), useSeatAvatars
   registry/           widgetRegistry: WidgetType -> component
@@ -426,8 +427,13 @@ ArduPlane FBWA + STALL_PREVENTION, acro) with Panic, the pure `wingSim`
 step shared by the rig and the node suites, hand launch from the pilot
 avatar / runway take-off / graded touchdowns with auto-flare, approach
 hoops and a home arrow, latching RC throttle (`VirtualJoystick` `latchY`),
-chase + FPV cameras, auto-pause; §0 is the as-built summary, Round 1b adds
-missions and stars).
+chase + FPV cameras, auto-pause; §0 is the as-built summary. Round 1b
+(§0b): a start screen with the Landing mode's five missions — First
+flight, Circuit, Short field, Crosswind, Engine out — each the Free Flight
+checklist plus one pass condition, scored by ONE landing scorecard
+(`scorecard.ts`: `(spot + centreline) × smoothness`, stars at 40/70/90),
+in-order unlocks with an unlock-all switch, an assist badge tied to the
+best star run, Touch and go chains, records in `records.wingFlyer`).
 See `docs/maze-runner.md` for the Maze Runner widget (seeded perfect maze —
 recursive-backtracker carve, only the seed persisted; the board's OWN aspect
 ratio picks the maze's proportions at generation time so rotating never

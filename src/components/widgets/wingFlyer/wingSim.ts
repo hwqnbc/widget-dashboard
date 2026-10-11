@@ -19,7 +19,9 @@ import { createPlaneState, forwardOf, quatFromEuler, stallSpeed, stepPlane } fro
 import type { ObjectiveState } from './objective'
 import { createObjective, resetObjective, stepObjective } from './objective'
 import type { ApproachState } from './approach'
-import { createApproach, onLine, passedCount, resetApproach, slopeTarget, stepApproach } from './approach'
+import { createApproach, hoopsInPlay, onLine, passedCount, resetApproach, slopeTarget, stepApproach } from './approach'
+import type { MissionRun, PlayMode } from './missions'
+import { createMissionRun, modeLateralHold, modeNeedsFlyout, modeWind, resetMissionRun, stepMission } from './missions'
 
 export type Phase = 'preflight' | 'flying' | 'landed' | 'crashed'
 export type StartKind = 'hand' | 'runway'
@@ -59,6 +61,11 @@ export interface WingSim {
   linedUp: boolean
   /** Previous step's x, for hoop crossings. */
   prevX: number
+  /** What is being played (missions.ts) and the live run; `missionSeq`
+   * bumps whenever the run changes something the panel/chip shows. */
+  mode: PlayMode
+  mission: MissionRun
+  missionSeq: number
 }
 
 export function createWingSim(): WingSim {
@@ -85,7 +92,18 @@ export function createWingSim(): WingSim {
     approach: createApproach(),
     linedUp: false,
     prevX: 0,
+    mode: 'free',
+    mission: createMissionRun('free'),
+    missionSeq: 0,
   }
+}
+
+/** Switch what is being played. Takes effect on the next reset (the body
+ * requests one right after). Sets the mode's wind. */
+export function setMode(sim: WingSim, mode: PlayMode): void {
+  sim.mode = mode
+  const wind = modeWind(mode)
+  sim.opts.wind = wind ? { x: wind.x, y: wind.y, z: wind.z } : undefined
 }
 
 /** Seconds of crash tumble before the respawn. */
@@ -99,7 +117,15 @@ export const RUNWAY_START = { x: STRIP.x - STRIP.length / 2 + 6, z: STRIP.z } as
 
 /** Put the plane back at a start: in the pilot's hand, or (wheels only) on
  * the runway threshold. The wing has no wheels → always the hand. */
-export function resetSim(sim: WingSim, airframe: AirframeId, island: IslandSpec, start: StartKind): void {
+export function resetSim(
+  sim: WingSim,
+  airframe: AirframeId,
+  island: IslandSpec,
+  start: StartKind,
+  /** Keep a RESOLVED mission run (the crash tumble's respawn: the panel
+   * still has to show the verdict; the next launch starts a fresh run). */
+  keepRun = false,
+): void {
   const spec = AIRFRAMES[airframe]
   const kind: StartKind = start === 'runway' && spec.wheels ? 'runway' : 'hand'
   const s = sim.s
@@ -111,9 +137,14 @@ export function resetSim(sim: WingSim, airframe: AirframeId, island: IslandSpec,
   sim.g = createGroundState()
   resetObjective(sim.objective)
   resetApproach(sim.approach)
+  if (!(keepRun && sim.mission.outcome !== 'flying')) {
+    resetMissionRun(sim.mission, sim.mode)
+    sim.missionSeq++
+  }
   sim.linedUp = false
   sim.objectiveSeq++
   setAssistMode(sim.a, 'fly')
+  sim.a.speedI = 0
   if (kind === 'runway') {
     placeOnGround(sim.g, s, airframe, island, RUNWAY_START.x, RUNWAY_START.z, STRIP.heading)
     startRunway(sim.a, STRIP.heading)
@@ -149,6 +180,10 @@ export function launchSim(sim: WingSim, airframe: AirframeId): void {
   s.vel.z = _f.z * v
   startLaunch(sim.a)
   sim.phase = 'flying'
+  if (sim.mission.outcome !== 'flying') {
+    resetMissionRun(sim.mission, sim.mode)
+    sim.missionSeq++
+  }
 }
 
 /** Ground or rooftop contact with a building (plane as a point + margin). */
@@ -191,9 +226,12 @@ export function stepSim(
     homeRel = Math.atan2(Math.sin(bearing - heading), Math.cos(bearing - heading))
   }
   const o0 = sim.objective
-  const landStep = o0.takeoff && o0.flyout && !o0.land
+  const needsFlyout = modeNeedsFlyout(sim.mode)
+  const landStep = o0.takeoff && (o0.flyout || !needsFlyout) && !o0.land
   sim.linedUp = landStep && !sim.g.onGround && onLine(sim.approach, { z: s.pos.z, heading })
   const slopeY = sim.linedUp ? slopeTarget(sim.approach, s.pos.x) : Number.NaN
+  // Crosswind drops the Trainer's lateral hold (the mission's own skill).
+  const lateralHold = modeLateralHold(sim.mode)
   stepAssist(
     sim.a,
     level,
@@ -207,14 +245,17 @@ export function stepSim(
       outside,
       homeRel,
       slopeY,
-      slopeZ: STRIP.z,
+      slopeZ: lateralHold ? STRIP.z : undefined,
       slopeHeading: sim.approach.end === null ? undefined : landingHeading(sim.approach.end),
       heading,
+      motorOut: sim.mission.motorOut,
     },
     h,
     sim.cmd,
     sim.opts,
   )
+  // Engine out: the motor is dead whatever any assist asks for.
+  if (sim.mission.motorOut) sim.cmd.throttle = 0
   stepPlane(s, spec, sim.cmd, h, sim.opts)
   const ev = stepGround(sim.g, s, spec, island, h)
   if (ev) {
@@ -235,10 +276,12 @@ export function stepSim(
   // The standing objective, from this step's facts.
   const o = sim.objective
   const before = o.takeoff + ':' + o.flyout + ':' + o.back + ':' + o.land
+  const airborne = !sim.g.onGround && (sim.phase as Phase) !== 'crashed'
   stepObjective(o, {
-    airborne: !sim.g.onGround && (sim.phase as Phase) !== 'crashed',
+    airborne,
     homeDist: Math.hypot(s.pos.x - STRIP.x, s.pos.z - STRIP.z),
     touchdown: ev && ev.kind === 'touchdown' ? { result: ev.result, sink: ev.sink, onRunway: ev.onRunway } : null,
+    flyOutDist: needsFlyout ? undefined : 0,
   })
   if (before !== o.takeoff + ':' + o.flyout + ':' + o.back + ':' + o.land) sim.objectiveSeq++
   // The approach (end choice + hoop tally) follows the objective's land step.
@@ -246,12 +289,39 @@ export function stepSim(
   const endBefore = sim.approach.end
   const scored = stepApproach(
     sim.approach,
-    { landStep: o.takeoff && o.flyout && !o.land, airborne: !sim.g.onGround, x: s.pos.x, y: s.pos.y, z: s.pos.z, heading },
+    { landStep: o.takeoff && (o.flyout || !needsFlyout) && !o.land, airborne: !sim.g.onGround, x: s.pos.x, y: s.pos.y, z: s.pos.z, heading },
     sim.prevX,
   )
   sim.prevX = s.pos.x
   if (scored || passedCount(sim.approach) !== passedBefore || endBefore !== sim.approach.end) sim.objectiveSeq++
   if ((sim.phase as Phase) !== 'crashed' && hitsBuilding(island, s)) crash(sim)
+  // The mission run: badge, engine cut, the landing score, the verdict.
+  const agl2 = s.pos.y - GEAR[airframe].height - islandHeight(island, s.pos.x, s.pos.z)
+  if (
+    stepMission(sim.mission, {
+      level,
+      airborne,
+      agl: agl2,
+      takeoff: o.takeoff,
+      flyout: o.flyout,
+      hoopsPassed: passedCount(sim.approach),
+      hoopsInPlay: hoopsInPlay(sim.approach),
+      event: ev,
+      crashed: (sim.phase as Phase) === 'crashed',
+      x: s.pos.x,
+      z: s.pos.z,
+      heading,
+    })
+  ) {
+    sim.missionSeq++
+  }
+  // Touch-and-go: lifting off again starts the next circuit's checklist
+  // (and a fresh approach), so every landing scores.
+  if (sim.mode === 'touchgo' && ev?.kind === 'liftoff' && o.land) {
+    resetObjective(o)
+    resetApproach(sim.approach)
+    sim.objectiveSeq++
+  }
   return ev
 }
 
@@ -277,5 +347,6 @@ export function stepCrash(sim: WingSim, airframe: AirframeId, island: IslandSpec
   s.pos.x += s.vel.x * dt
   s.pos.z += s.vel.z * dt
   s.pos.y = Math.max(islandHeight(island, s.pos.x, s.pos.z) + 0.2, s.pos.y + s.vel.y * dt)
-  if (sim.crashTimer <= 0) resetSim(sim, airframe, island, 'hand')
+  if (sim.crashTimer <= 0) resetSim(sim, airframe, island, 'hand', true)
 }
+

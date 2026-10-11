@@ -65,6 +65,15 @@ export default function WingHelpDialog({
             until it ticks, then come back and land — on the runway for the bonus mark.
           </Typography>
         </Section>
+        <Section title="Missions & stars">
+          <Typography variant="body2" component="div">
+            The menu lists five <b>Landing missions</b>, each adding one skill, and <b>Touch and go</b>. Every
+            landing gets one score: <b>spot</b> (touch down near the white bars at the middle of the runway)
+            + <b>line</b> (on the centreline), times <b>smoothness</b> (a soft touch; bounces cost). 40 ★ · 70 ★★ ·
+            90 ★★★ — in any assist; the letter beside the stars (T/N/A) is the lowest assist you flew it with.
+            A mission unlocks when the one before has a star (or Settings → Unlock all).
+          </Typography>
+        </Section>
         <Section title="Landing in 3 steps">
           <Typography variant="body2" component="div">
             <b>1. Line up</b> — the yellow arrow points home; aim for the <b>yellow hoops</b>.

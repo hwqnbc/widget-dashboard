@@ -1052,7 +1052,7 @@ export async function createTankPilot(page, context) {
 }
 
 /** Fresh dashboard with one Wing Flyer widget. */
-export async function addWingWidget(page) {
+export async function addWingWidget(page, mode = 'free') {
   await page.goto(BASE_URL, { waitUntil: 'networkidle' })
   await page.getByRole('button', { name: 'Add widget' }).click()
   await page.getByRole('menuitem', { name: /Wing Flyer/ }).click()
@@ -1064,6 +1064,9 @@ export async function addWingWidget(page) {
     await helpClose.click()
     await page.waitForTimeout(300)
   }
+  // The start screen (Round 1b): pick a mode — Free flight unless asked.
+  await page.waitForSelector('[data-testid="wingflyer-menu"]')
+  await page.click(`[data-testid="wingflyer-mode-${mode}"]`)
   await page.waitForTimeout(300)
 }
 

@@ -6,9 +6,12 @@ import RestartAltIcon from '@mui/icons-material/RestartAlt'
 import SettingsIcon from '@mui/icons-material/Settings'
 import HelpOutlineIcon from '@mui/icons-material/HelpOutlined'
 import VideocamIcon from '@mui/icons-material/Videocam'
+import ListAltIcon from '@mui/icons-material/ListAlt'
 import type { WidgetProps } from '../../../registry/widgetRegistry'
-import { useAppDispatch } from '../../../app/hooks'
+import { useAppDispatch, useAppSelector } from '../../../app/hooks'
 import { updateWidgetData } from '../../../features/widgets/widgetsSlice'
+import { recordWingChain, recordWingMission, resetGameRecords, selectWingFlyerRecords } from '../../../features/records/recordsSlice'
+import ConfirmDialog from '../ConfirmDialog'
 import { useWidgetField } from '../../../features/widgets/useWidgetField'
 import { useSeatAvatarId, useSeatColor } from '../../../features/avatars/useSeatAvatars'
 import { avatarVisualById } from '../../../registry/avatarRegistry'
@@ -28,6 +31,11 @@ import type { ObjectiveSnapshot, RigRefs } from './PlaneRig'
 import ObjectiveChip from './ObjectiveChip'
 import { FLY_OUT_DIST } from './objective'
 import type { LandingHint } from './objective'
+import type { PlayMode } from './missions'
+import { coerceMode, isMission, missionChecklist, missionIndex, missionUnlocked, nextMission } from './missions'
+import MissionMenu from './MissionMenu'
+import ScorecardPanel from './ScorecardPanel'
+import type { MissionSnapshot } from './ScorecardPanel'
 
 /** The landing hint words — short enough for a young reader. */
 function hintWords(h: LandingHint, assist: AssistLevel): string {
@@ -42,8 +50,8 @@ function hintWords(h: LandingHint, assist: AssistLevel): string {
       return ''
   }
 }
-import { createWingSim } from './wingSim'
-import type { Phase, StartKind } from './wingSim'
+import { createWingSim, setMode } from './wingSim'
+import type { Phase, StartKind, WingSim } from './wingSim'
 import { AIRFRAMES } from './airframes'
 import AirfieldProps from './AirfieldProps'
 import { WING_KEYS, createWingInput } from './wingInput'
@@ -73,16 +81,26 @@ export default function WingFlyerBody({ id }: WidgetProps) {
   const helpSeen = useWidgetField(id, 'helpSeen', false, coerceBool)
   const soundOn = useWidgetField(id, 'sound', false, coerceBool)
   const hintsOn = useWidgetField(id, 'landingHints', true, coerceBool)
+  const mode = useWidgetField<PlayMode>(id, 'mission', 'first', coerceMode)
+  const unlockAll = useWidgetField(id, 'unlockAll', false, coerceBool)
+  const records = useAppSelector(selectWingFlyerRecords)
   const island = useMemo(() => buildIsland(worldSeed), [worldSeed])
-  const mode = useTheme().palette.mode
-  const palette = mode === 'dark' ? NIGHT_PALETTE : DAY_PALETTE
+  const themeMode = useTheme().palette.mode
+  const palette = themeMode === 'dark' ? NIGHT_PALETTE : DAY_PALETTE
   const color = useSeatColor('toy')
   // The pilot is Player 1 (seat 'toy'); its Model3D is resolved here because
   // redux doesn't cross into the <Canvas> root (the Drone Sim pattern).
   const OperatorModel = avatarVisualById[useSeatAvatarId('toy')].Model3D
   const { fullscreen } = usePresentation()
 
-  const sim = useRef(createWingSim()).current
+  // The sim is created with the persisted mode so the rig's first reset
+  // already flies it (the mode's wind, the Trainer trims).
+  const simRef = useRef<WingSim | null>(null)
+  if (simRef.current === null) {
+    simRef.current = createWingSim()
+    setMode(simRef.current, mode)
+  }
+  const sim = simRef.current
   const input = useRef(createWingInput()).current
   const sound = useRef(createWingSound()).current
   useEffect(() => {
@@ -120,6 +138,33 @@ export default function WingFlyerBody({ id }: WidgetProps) {
     hoopsTotal: 6,
   })
   const onObjectiveRef = useRef((o: ObjectiveSnapshot) => setObjective(o))
+  const [mission, setMission] = useState<MissionSnapshot>({
+    mode,
+    outcome: 'flying',
+    fail: null,
+    motorOut: false,
+    score: 0,
+    stars: 0,
+    badge: 'acro',
+    chain: 0,
+    bestChain: 0,
+    chainBreak: null,
+    landing: null,
+  })
+  const lastOutcome = useRef<MissionSnapshot['outcome']>('flying')
+  const onMissionRef = useRef((m: MissionSnapshot) => {
+    setMission(m)
+    // The run just resolved: a judged mission landing / a finished chain
+    // goes to the app-level records (once — the outcome flips once per run).
+    if (m.outcome !== 'flying' && lastOutcome.current === 'flying') {
+      if (m.outcome === 'done' && isMission(m.mode)) {
+        dispatch(recordWingMission({ key: m.mode, stars: m.stars, score: m.score, assist: m.badge }))
+      } else if (m.mode === 'touchgo') {
+        dispatch(recordWingChain({ chain: m.bestChain }))
+      }
+    }
+    lastOutcome.current = m.outcome
+  })
   const objDistRef = useRef<HTMLSpanElement>(null)
   const hintElRef = useRef<HTMLDivElement>(null)
   const hintTextRef = useRef((h: LandingHint) => hintWords(h, assist))
@@ -128,6 +173,13 @@ export default function WingFlyerBody({ id }: WidgetProps) {
     hintTextRef.current = (h) => hintWords(h, assist)
     hintsOnRef.current = hintsOn
   }, [assist, hintsOn])
+  // A mode change (menu pick, Next) restarts in the hand under the new rules.
+  useEffect(() => {
+    if (sim.mode !== mode) {
+      setMode(sim, mode)
+      sim.resetRequested = 'hand'
+    }
+  }, [mode, sim])
   useEffect(() => {
     if (airframeRef.current !== airframe) sim.resetRequested = 'hand'
     airframeRef.current = airframe
@@ -149,6 +201,7 @@ export default function WingFlyerBody({ id }: WidgetProps) {
       homeText: homeTextRef,
       onPhase: onPhaseRef,
       onObjective: onObjectiveRef,
+      onMission: onMissionRef,
       objectiveDist: objDistRef,
       hintEl: hintElRef,
       hintText: hintTextRef,
@@ -164,6 +217,25 @@ export default function WingFlyerBody({ id }: WidgetProps) {
 
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [helpOpen, setHelpOpen] = useState(() => !helpSeen)
+  const [resetConfirm, setResetConfirm] = useState(false)
+  // The start screen: open on mount (it is where the stars live), on the
+  // scorecard's Menu button and the list button; a pick starts that mode.
+  const [menuOpen, setMenuOpen] = useState(true)
+  const pickMode = useCallback(
+    (m: PlayMode) => {
+      setMenuOpen(false)
+      if (m === mode) {
+        sim.resetRequested = 'hand'
+      } else {
+        dispatch(updateWidgetData({ id, data: { mission: m } }))
+      }
+    },
+    [dispatch, id, mode, sim],
+  )
+  const next = isMission(mode) ? nextMission(mode) : null
+  const nextOpen = next !== null && missionUnlocked(missionIndex(next), records.stars, unlockAll)
+  const showScorecard = mode !== 'free' && mission.outcome !== 'flying' && (phase === 'landed' || phase === 'preflight')
+  const steps = missionChecklist(mission, objective, { passed: objective.hoopsPassed, inPlay: objective.hoopsTotal })
   const patch = useCallback(
     (data: Record<string, unknown>) => {
       // Switching plane also switches to its natural camera.
@@ -211,8 +283,8 @@ export default function WingFlyerBody({ id }: WidgetProps) {
     }
   }, [pause])
   useEffect(() => {
-    if (settingsOpen || helpOpen) pause()
-  }, [settingsOpen, helpOpen, pause])
+    if (settingsOpen || helpOpen || menuOpen) pause()
+  }, [settingsOpen, helpOpen, menuOpen, pause])
   const fsSeen = useRef(fullscreen)
   useEffect(() => {
     if (fsSeen.current !== fullscreen) pause()
@@ -247,7 +319,7 @@ export default function WingFlyerBody({ id }: WidgetProps) {
   // Keyboard: window-level, guarded so typing in Notes is never stolen.
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
-      if (!WING_KEYS.has(e.code) || isTypingTarget(e.target) || settingsOpen || helpOpen) return
+      if (!WING_KEYS.has(e.code) || isTypingTarget(e.target) || settingsOpen || helpOpen || menuOpen) return
       e.preventDefault()
       if (e.code === 'Space') {
         if (!e.repeat) input.panic = true
@@ -270,7 +342,7 @@ export default function WingFlyerBody({ id }: WidgetProps) {
       window.removeEventListener('keyup', up)
       window.removeEventListener('blur', clear)
     }
-  }, [input, sim, settingsOpen, helpOpen])
+  }, [input, sim, settingsOpen, helpOpen, menuOpen])
 
   const onLeft = useCallback(
     (x: number, y: number) => {
@@ -313,6 +385,9 @@ export default function WingFlyerBody({ id }: WidgetProps) {
       data-help-seen={helpSeen ? 'on' : 'off'}
       data-sound={soundOn ? 'on' : 'off'}
       data-landing-hints={hintsOn ? 'on' : 'off'}
+      data-mission={mode}
+      data-unlock-all={unlockAll ? 'on' : 'off'}
+      data-menu={menuOpen ? 'open' : 'closed'}
       onMouseDown={(e) => e.stopPropagation()}
       onTouchStart={(e) => e.stopPropagation()}
       sx={{
@@ -334,7 +409,7 @@ export default function WingFlyerBody({ id }: WidgetProps) {
           camera={{ fov: 60, near: 0.2, far: FOG_FAR + 60 }}
         >
           <IslandScene spec={island} palette={palette} />
-          <AirfieldProps operatorModel={OperatorModel} sim={sim} />
+          <AirfieldProps operatorModel={OperatorModel} sim={sim} mode={mode} />
           <PlaneRig refs={refs} island={island} color={color} airframe={airframe} />
         </Canvas>
       </Box>
@@ -392,7 +467,13 @@ export default function WingFlyerBody({ id }: WidgetProps) {
       </Box>
 
       {/* The standing goal: Take off ▸ Fly out ▸ Land (objective.ts). */}
-      <ObjectiveChip objective={objective} distRef={objDistRef} flyOutDist={FLY_OUT_DIST} />
+      <ObjectiveChip
+        steps={steps}
+        distRef={objDistRef}
+        flyOutDist={FLY_OUT_DIST}
+        hoops={objective.hoopsScored > 0 && objective.hoopsTotal > 0 ? { passed: objective.hoopsPassed, total: objective.hoopsTotal } : null}
+        count={mode === 'free' ? objective.completed : 0}
+      />
       <Box
         ref={hintElRef}
         data-testid="wingflyer-hint"
@@ -465,7 +546,7 @@ export default function WingFlyerBody({ id }: WidgetProps) {
         TURN BACK
       </Box>
 
-      {paused && !settingsOpen && !helpOpen && (
+      {paused && !settingsOpen && !helpOpen && !menuOpen && (
         <Box
           data-testid="wingflyer-paused"
           onPointerDown={(e) => e.stopPropagation()}
@@ -487,8 +568,22 @@ export default function WingFlyerBody({ id }: WidgetProps) {
         </Box>
       )}
 
-      {/* Start / landed controls. */}
-      {(phase === 'preflight' || phase === 'landed') && (
+      {menuOpen && <MissionMenu mode={mode} records={records} unlockAll={unlockAll} onPick={pickMode} />}
+
+      {/* Start / landed controls — or the scorecard once a mission run resolved. */}
+      {showScorecard && !menuOpen && (
+        <Box sx={{ position: 'absolute', left: '50%', top: '42%', transform: 'translate(-50%, -50%)' }}>
+          <ScorecardPanel
+            run={mission}
+            recordBestChain={records.bestChain}
+            nextOpen={nextOpen}
+            onRetry={() => (sim.resetRequested = start)}
+            onNext={() => next && pickMode(next)}
+            onMenu={() => setMenuOpen(true)}
+          />
+        </Box>
+      )}
+      {(phase === 'preflight' || phase === 'landed') && !showScorecard && !menuOpen && (
         <Box
           data-testid="wingflyer-start-panel"
           sx={{
@@ -566,6 +661,11 @@ export default function WingFlyerBody({ id }: WidgetProps) {
       )}
 
       <Box sx={{ position: 'absolute', top: 6, right: 6, display: 'flex', gap: 0.5 }}>
+        <Tooltip title="Missions">
+          <IconButton size="small" data-testid="wingflyer-menu-open" sx={chip} onClick={() => setMenuOpen(true)}>
+            <ListAltIcon fontSize="small" />
+          </IconButton>
+        </Tooltip>
         <Tooltip title="Reset">
           <IconButton size="small" data-testid="wingflyer-reset" sx={chip} onClick={() => (sim.resetRequested = 'hand')}>
             <RestartAltIcon fontSize="small" />
@@ -646,7 +746,21 @@ export default function WingFlyerBody({ id }: WidgetProps) {
         fpvLevel={fpvLevel}
         sound={soundOn}
         landingHints={hintsOn}
+        unlockAll={unlockAll}
         onChange={patch}
+        onResetRecords={() => setResetConfirm(true)}
+      />
+      <ConfirmDialog
+        open={resetConfirm}
+        title="Clear mission stars?"
+        message="This clears every mission's stars, badges and the best touch-and-go chain on this device, and locks the missions again."
+        confirmLabel="Clear stars"
+        cancelLabel="Keep them"
+        onConfirm={() => {
+          setResetConfirm(false)
+          dispatch(resetGameRecords('wingFlyer'))
+        }}
+        onCancel={() => setResetConfirm(false)}
       />
       <WingHelpDialog open={helpOpen} onClose={closeHelp} assist={assist} />
     </Box>

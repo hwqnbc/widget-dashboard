@@ -206,6 +206,8 @@ const wingBundle = spawnSync(
     'src/components/widgets/wingFlyer/wingSim.ts',
     'src/components/widgets/wingFlyer/objective.ts',
     'src/components/widgets/wingFlyer/approach.ts',
+    'src/components/widgets/wingFlyer/missions.ts',
+    'src/components/widgets/wingFlyer/scorecard.ts',
     '--bundle',
     '--format=esm',
     `--outdir=${join(here, '.bundle')}`,
@@ -213,6 +215,21 @@ const wingBundle = spawnSync(
   { cwd: root, stdio: 'inherit' },
 )
 if (wingBundle.status !== 0) process.exit(wingBundle.status ?? 1)
+
+// The records slice (its star/badge policy is what the mission suite
+// proves) — its own flat pass, same reasoning.
+const recordsBundle = spawnSync(
+  'npx',
+  [
+    'esbuild',
+    'src/features/records/recordsSlice.ts',
+    '--bundle',
+    '--format=esm',
+    `--outdir=${join(here, '.bundle')}`,
+  ],
+  { cwd: root, stdio: 'inherit' },
+)
+if (recordsBundle.status !== 0) process.exit(recordsBundle.status ?? 1)
 
 // Puppy Rescue's pure model, level pack and planner — its own flat pass.
 const puppyBundle = spawnSync(

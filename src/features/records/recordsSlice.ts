@@ -69,8 +69,26 @@ export interface PuppyRescueRecords {
   escapes: number
 }
 
+/** Wing Flyer Landing missions, keyed by mission id (`"first"`). Stars
+ * are a max; `badge` is the assist level of the BEST star run (ties go to
+ * the harder level) so it always describes the stars beside it;
+ * `bestScore` the scorecard max; `bestChain` the longest touch-and-go
+ * chain; `landings` the lifetime scored-landing tally. */
+export interface WingFlyerRecords {
+  stars: Record<string, number>
+  badge: Record<string, WingAssistBadge>
+  bestScore: Record<string, number>
+  bestChain: number
+  landings: number
+}
+export type WingAssistBadge = 'trainer' | 'normal' | 'acro'
+const WING_BADGE_RANK: Record<WingAssistBadge, number> = { trainer: 0, normal: 1, acro: 2 }
+const wingBadge = (v: unknown): WingAssistBadge =>
+  v === 'normal' || v === 'acro' ? v : 'trainer'
+
 export interface RecordsState {
   carPark: CarParkRecords
+  wingFlyer: WingFlyerRecords
   puppyRescue: PuppyRescueRecords
   maze: MazeRecords
   arrows: ArrowsRecords
@@ -86,6 +104,7 @@ const emptyDroneSim = (): DroneSimRecords => ({ landingBest: 0 })
 const emptyDroneStrike = (): DroneStrikeRecords => ({ bestWave: 0, bestScore: 0 })
 const emptyTankBattle = (): TankBattleRecords => ({ bestWave: 0, bestScore: 0, bestRoamMs: 0 })
 const emptyPuppyRescue = (): PuppyRescueRecords => ({ stars: {}, bestMs: {}, escapes: 0 })
+const emptyWingFlyer = (): WingFlyerRecords => ({ stars: {}, badge: {}, bestScore: {}, bestChain: 0, landings: 0 })
 
 const EMPTIES = {
   carPark: emptyCarPark,
@@ -95,6 +114,7 @@ const EMPTIES = {
   droneStrike: emptyDroneStrike,
   tankBattle: emptyTankBattle,
   puppyRescue: emptyPuppyRescue,
+  wingFlyer: emptyWingFlyer,
 }
 export type GameKey = keyof typeof EMPTIES
 
@@ -113,6 +133,7 @@ const initialState: RecordsState = {
   droneStrike: emptyDroneStrike(),
   tankBattle: emptyTankBattle(),
   puppyRescue: emptyPuppyRescue(),
+  wingFlyer: emptyWingFlyer(),
 }
 
 /** A finite number or the fallback — rehydrated namespaces and absorb
@@ -225,6 +246,38 @@ const recordsSlice = createSlice({
       if (ms > 0) r.bestMs[key] = minNonzero(r.bestMs[key] ?? 0, ms)
     },
 
+    /** A Wing Flyer mission landed and judged: stars max; the badge follows
+     * the best star run (a better run takes its assist, an equal run keeps
+     * the harder of the two); score max; tally +1. 0-star runs still count
+     * a landing and a score but never set a badge. */
+    recordWingMission(
+      state,
+      action: PayloadAction<{ key: string; stars: number; score: number; assist: WingAssistBadge }>,
+    ) {
+      const { key } = action.payload
+      const stars = Math.max(0, Math.min(3, Math.floor(num(action.payload.stars))))
+      const score = Math.max(0, Math.round(num(action.payload.score)))
+      const assist = wingBadge(action.payload.assist)
+      const r = ensure(state, 'wingFlyer')
+      r.landings += 1
+      r.bestScore[key] = Math.max(r.bestScore[key] ?? 0, score)
+      const had = r.stars[key] ?? 0
+      if (stars > 0) {
+        if (stars > had) {
+          r.stars[key] = stars
+          r.badge[key] = assist
+        } else if (stars === had) {
+          const old = wingBadge(r.badge[key])
+          r.badge[key] = WING_BADGE_RANK[assist] >= WING_BADGE_RANK[old] ? assist : old
+        }
+      }
+    },
+    /** A touch-and-go chain ended: longest chain max. */
+    recordWingChain(state, action: PayloadAction<{ chain: number }>) {
+      const r = ensure(state, 'wingFlyer')
+      r.bestChain = Math.max(r.bestChain, Math.max(0, Math.floor(num(action.payload.chain))))
+    },
+
     /* One-time migrations from pre-slice widget data — same contract as
      * absorbCarParkRecords: monotone merges so several old instances
      * compose; only the arrows TALLY is additive, which is why the widget
@@ -290,6 +343,8 @@ export const {
   absorbDroneSimRecords,
   absorbDroneStrikeRecords,
   absorbTankBattleRecords,
+  recordWingMission,
+  recordWingChain,
   resetGameRecords,
 } = recordsSlice.actions
 export default recordsSlice.reducer
@@ -306,6 +361,7 @@ const FALLBACK_DRONESTRIKE = emptyDroneStrike()
 const FALLBACK_TANK = emptyTankBattle()
 const FALLBACK_CARPARK = emptyCarPark()
 const FALLBACK_PUPPY = emptyPuppyRescue()
+const FALLBACK_WING = emptyWingFlyer()
 
 interface WithRecords {
   records: RecordsState
@@ -323,3 +379,5 @@ export const selectTankBattleRecords = (s: WithRecords): TankBattleRecords =>
   s.records.tankBattle ?? FALLBACK_TANK
 export const selectPuppyRescueRecords = (s: WithRecords): PuppyRescueRecords =>
   s.records.puppyRescue ?? FALLBACK_PUPPY
+export const selectWingFlyerRecords = (s: WithRecords): WingFlyerRecords =>
+  s.records.wingFlyer ?? FALLBACK_WING

@@ -1,11 +1,13 @@
 # Wing Flyer — fixed-wing RC plane widget
 
-> **Status: Round 1a ("Fly it") is built** — Free Flight with both planes,
-> all three assists, hand launch / runway take-off / landing, chase + FPV
-> cameras, auto-pause, help, sound. §0 below is the as-built summary and
-> every deviation from the plan; §1–§15 are the design the rounds work
-> from (sections marked **(decided)** were agreed with the user). Round 1b
-> ("Score it": landing scorecard, mode menu, missions, stars) is next.
+> **Status: Rounds 1a ("Fly it") and 1b ("Score it") are built** — Free
+> Flight with both planes, all three assists, hand launch / runway take-off
+> / landing, chase + FPV cameras, auto-pause, help, sound; then the start
+> screen, the five Landing missions with stars and assist badges, the one
+> landing scorecard, touch-and-go chains and app-level records. §0 / §0b
+> below are the as-built summaries and every deviation from the plan;
+> §1–§15 are the design the rounds work from (sections marked
+> **(decided)** were agreed with the user). Round 2 ("Rings") is next.
 
 The dashboard's fourth WebGL widget (`wingFlyer`): fly a radio-controlled
 **fixed-wing** plane — a high-wing trainer or an FPV flying wing — over a
@@ -158,6 +160,74 @@ input → fixed 120 Hz `stepSim` → mesh → camera → HUD), `IslandScene`,
 - **Shared code**: imported in place (decision R2, §13). The only change to another
   widget's file is `VirtualJoystick`'s optional, default-off `latchY` +
   `latchRef`; the drone/strike/tank suites re-ran green.
+
+## 0b. As built — Round 1b ("Score it")
+
+New pure modules: `scorecard` (the one landing score), `missions` (the
+ladder, the run state machine, the checklist, the unlock gate, the badge
+helpers). React: `MissionMenu` (the start screen), `ScorecardPanel` (the
+post-landing card), `ObjectiveChip` generalised to any checklist. Records:
+`records.wingFlyer` (`recordWingMission` / `recordWingChain` /
+`resetGameRecords('wingFlyer')`, `selectWingFlyerRecords`). The seven
+design questions and their answers are in §13 *Round 1b decisions*.
+
+- **Start screen** (`wingflyer-menu`, open on every mount, the list
+  button and the scorecard's Menu reopen it): four game-mode chips
+  (Landing live; Rings / Soaring / Combat disabled "Soon" — decision R4),
+  then the rows **Free flight**, missions **1–5** (title, blurb, ★★★ with
+  the badge letter, a lock) and **Touch and go** (best chain). Picking a
+  row persists `mission` on the widget and restarts in the pilot's hand.
+- **The ladder** (`MISSIONS`): 1 **First flight** (take off, fly out
+  150 m, land on the runway) → 2 **Circuit** (…through all six hoops:
+  joining the line late fails on hoops) → 3 **Short field** (…and stop
+  before the red line painted 160 m from the threshold — a hands-off
+  Trainer float rolls to ~170 m, so push it down earlier) → 4
+  **Crosswind** (a steady 3 m/s wind across the strip via `StepOptions.wind`;
+  the Trainer's **lateral hold is off**, so the player crabs) → 5
+  **Engine out** (fly out, climb to 35 m: `motorOut` zeroes the throttle
+  whatever any assist asks; the Trainer then holds **best-glide speed**
+  instead of mushing after an altitude it cannot hold — `GLIDE_GAIN`,
+  env `motorOut`). The cut waits for the fly-out: cut over the strip the
+  plane has nowhere to lose its height; cut 150 m out at 35 m it glides
+  home with margin (L/D 8). Climbing far higher first still overshoots —
+  the mission's own lesson.
+- **One scorecard** (`scoreLanding`): `(spot + centreline) × smoothness`,
+  0–100. **Spot** (0–50) is distance along the runway from the **runway
+  centre** — not the hoop line's foot: a flared Trainer floats ~85 m past
+  that foot, which is how real landings work (aim point → flare → touch),
+  so the touchdown zone is painted as two white bars 15 m either side of
+  the centre (full marks inside, 0 at 70 m). **Centreline** (0–50): full
+  inside 2 m, 0 at the runway edge. **Smoothness**: ×1 at ≤ 0.5 m/s sink
+  sliding to ×0.3 at the 2 m/s landing limit, ×0.7 per bounce. Grass
+  scores 0 — every mission needs the runway. Stars ≥ 40 / 70 / 90. A
+  hands-off Trainer landing from the first hoop scores 79 (★★).
+- **Pass conditions** are judged at the stop (`judge`): `grass`,
+  `early` (landed before the fly-out / the cut), `hoops`, `overrun`, or a
+  `crash` the moment it happens. Pass → the scorecard's stars; fail → the
+  reason in words (`failWords`). The verdict **survives the crash
+  respawn** (`resetSim(…, keepRun)`) so the panel can show it, and clears
+  on the next launch or Retry.
+- **Badge** = the lowest assist flown during the run (tracked per step);
+  the records keep the badge of the **best star run**, ties to the harder
+  level — so the letter always describes the stars beside it (decision
+  1b-4 refines "d0+").
+- **Unlock in order** (a star on mission N opens N+1), with an **Unlock
+  all missions** switch in settings; **Clear mission stars** (confirmed)
+  wipes the namespace and locks them again.
+- **Touch and go**: every runway landing scoring ≥ 40 extends the chain;
+  a weak one, grass, a crash or a stop breaks it; lifting off again resets
+  the checklist and the approach so the next landing scores; the run's
+  best chain goes to the records when it ends.
+- **Scorecard panel** replaces the "Landed!" banner in any scored mode:
+  score, stars + badge (or the fail reason), the parts line (spot / line /
+  ×smoothness / sink), **Retry** (same start kind), **Next** (when passed
+  and the next mission is open) and **Menu**.
+- **Chip**: `missionChecklist` builds the mode's steps — Circuit shows
+  `Hoops n/6`, Short field `Stop before the line`, Crosswind `Land · wind
+  ↓`, Engine out `Climb to 35 m` → `Motor out!`, Touch and go `Chain ×n`;
+  Free Flight keeps its three steps and the `Runway!` mark.
+- Help gained a **Missions & stars** section. The motor cut plays the
+  Panic chirp as its cue.
 
 ## 1. Design pillars
 
@@ -437,7 +507,12 @@ to 200). The multiplication is the lesson: a hard landing wrecks the score
 however accurate it was. Ours: `(spot + centreline) × smoothness`, with bank
 at touchdown folded into smoothness, feeding the Landing mode's stars and a
 **"butter"** badge for sink < 0.5 m/s. Trainer assist **auto-flares** below 3 m AGL so
-young players can land by simply pointing at the strip.
+young players can land by simply pointing at the strip. *As built (§0b):
+`scorecard.ts` — spot 0–50 from the runway centre (15 m full / 70 m zero),
+centreline 0–50 (2 m full / edge zero), smoothness ×1 → ×0.3 over
+0.5 → 2 m/s sink, ×0.7 per bounce; bank is already a touchdown class
+(≤ 15° or it is not a landing), so it is not folded in; stars at 40 / 70 /
+90; the "butter" word stays on the Free Flight banner.*
 
 **Crash:** a short cartoon tumble + thud (reuse the drone's `stepCrash`
 shape and `crashThud`), then respawn — free flight: back to the hand-launch;
@@ -539,7 +614,10 @@ lap, land** — the whole cycle, in Trainer. Then missions escalate: long final,
 downwind → short strip → **crosswind** → engine-out glide to the strip →
 **spot landing** (aim circle) → touch-and-go chain. Scored by the
 scorecard (§7). Doubles as the tutorial (it teaches throttle, turning and
-the approach in order).
+the approach in order). *As built (§0b, decided in §13): five missions —
+First flight, Circuit, Short field, Crosswind, Engine out — plus Touch
+and go as the endless row; spot landing, night and other-end variants are
+in the backlog as later missions / modifiers.*
 
 **Rings.** Seeded ring courses over hills, through the valley and the town;
 the Drone Sim's `crossedGate` segment-vs-ring test reused. Variants per
@@ -684,8 +762,23 @@ chip `wingflyer-obj-hoops`; `data-hint`
 (the hint line). Chip `wingflyer-objective`:
 `data-step`, per-step `wingflyer-obj-{takeoff,flyout,land}` `data-done`,
 `wingflyer-obj-count`; banner `wingflyer-landed-banner`
-`data-objective-complete`. Round 1b adds the mission
-chip (`data-score`, `data-stars`, …).
+`data-objective-complete`. **Round 1b:** root `data-mission` (the
+`PlayMode`), `data-unlock-all`, `data-menu` (`open|closed`); HUD
+`data-mode`, `data-mission-outcome` (`flying|done|fail`),
+`data-mission-fail` (`none|crash|grass|early|hoops|overrun`),
+`data-mission-score`, `data-mission-stars`, `data-mission-badge`,
+`data-motor-out`, `data-chain`, `data-best-chain`, `data-bounces`,
+`data-wind` (`calm` or `x,z`); the chip's steps are now
+`wingflyer-obj-{takeoff,flyout,hoops,land,stop,climb,chain}`; the start
+screen `wingflyer-menu` with `wingflyer-game-{landing,rings,soaring,combat}`
+(`data-ready`), rows `wingflyer-mode-{free,first,circuit,short,crosswind,
+engineout,touchgo}` (`data-locked`), `wingflyer-badge` (`data-badge`),
+`wingflyer-best-chain`, the list button `wingflyer-menu-open`; the
+scorecard `wingflyer-scorecard` (`data-outcome`, `data-score`,
+`data-stars`, `data-badge`, `data-fail`, `data-chain`) with
+`wingflyer-scorecard-parts`, `wingflyer-retry`, `wingflyer-next`,
+`wingflyer-menu-button`; settings `wingflyer-unlock-all`,
+`wingflyer-reset-records`.
 
 ### e2e suites (shipped, `e2e/README.md` has the detail)
 
@@ -695,8 +788,13 @@ Panic, launch), `172-wing-ground` (touchdown classes, approach geometry,
 runway take-off, a full Trainer approach + landing + roll-out, touch-and-
 go, belly landing on grass, crash, soft edge). Browser: `173-wing-core`,
 `174-wing-input`, `175-wing-pause`, `176-wing-flight` (a live keyboard
-circuit that lands, then a crash). Planned for later rounds: rings,
-soaring, combat, records.
+circuit that lands, then a crash). Round 1b: `177-wing-missions` (node —
+the scorecard, the ladder, every pass condition through the real sim, the
+chain, the crash verdict, the records policy) and `178-wing-missions-ui`
+(browser — the start screen, a whole First flight mission to its
+scorecard, records across a reload, clear / unlock all, the other modes'
+contracts, the engine cut). Planned for later rounds: rings, soaring,
+combat.
 
 ---
 
@@ -706,7 +804,7 @@ soaring, combat, records.
 | --- | --- |
 | **0. This note** | Design review with the user. |
 | **1a. Fly it** | `planeModel` + assists + physics suites; island + strip; both airframes; latching throttle; chase + FPV cameras; hand-launch (avatar holding the plane) + trainer runway take-off + landing roll-out; crash/respawn; minimal HUD; help overlay; auto-pause; settings; sound. **Free Flight only** — no mode menu yet. |
-| **1b. Score it** | Landing classification + scorecard; mode menu (all five modes, Rings/Soaring/Combat greyed "Coming soon"); Landing missions 1–5; stars + assist badges; records. |
+| **1b. Score it** | Landing classification + scorecard; mode menu (all five modes, Rings/Soaring/Combat greyed "Coming soon"); Landing missions 1–5; stars + assist badges; records. **Shipped — §0b.** |
 | **2. Rings** | Ring / balloon / limbo / pylon missions, stars, ghost; endless course. |
 | **3. Soaring** | `airModel` thermals + ridge, birds, variometer, battery, duration missions. |
 | **4. Combat** | Balloons → ground targets → streamers → enemy planes → boss; endless waves. |
@@ -736,6 +834,18 @@ ground), a **bigger runway** (130×14 → 200×30 m) and **45° Trainer bank**
 (was 35° — too wide a turn to line up). **Auto-land** ("Land" button: an
 assist mode that flies the same `approachPath`) goes to the backlog — the
 path being data is what keeps it cheap to add later.
+
+### Round 1b decisions (one question at a time, before any code)
+
+| # | Question | Decision |
+| --- | --- | --- |
+| 1b-1 | The five Landing missions | **The original ladder**, one skill each: First flight → Circuit (all six hoops) → Short field (stop line) → Crosswind → Engine out. Alternatives weighed (other-end landing, night, touch-and-go chain, spot landing, gusts) go to the backlog as later missions / modifiers |
+| 1b-2 | How stars are earned | **One scorecard everywhere** — `(spot + centreline) × smoothness`, 0–100, stars at 40 / 70 / 90 — plus a per-mission **pass condition**; fail the condition and the landing earns nothing |
+| 1b-3 | Progression | **Unlock in order** (a star on N opens N+1) by default, with an **Unlock all missions** switch in settings |
+| 1b-4 | The assist badge | **Tied to the best star run** (ties go to the harder assist), so the badge always describes the stars beside it — a 1-star Acro run after a 3-star Trainer run keeps the T |
+| 1b-5 | Crosswind / Engine out on Trainer | **The missions trim the Trainer**: Crosswind drops the lateral hold, Engine out drops the throttle (the motor is dead); stall-proofing and self-level stay, so any assist can earn the stars and the badge records the help |
+| 1b-6 | The mode menu | **A start screen inside the widget** (mode tiles, mission rows with stars and badges, Free flight, a post-landing scorecard with Retry / Next / Menu) — not settings dropdowns, which is where a new player never looks |
+| 1b-7 | Endless touch-and-go | **Its own row** on the Landing list, no stars: the record is the best **chain** of consecutive runway landings scoring ≥ 40, broken by a crash, a weak landing or a stop; Free flight stays the relaxed sandbox |
 
 ### Round 1a step plan
 
@@ -768,6 +878,7 @@ could fly it; its play-test produced the landing-help decisions above.
 | 5 | Launch | **B** — hand-launch for both planes **and** runway take-off for the trainer; Trainer assist auto-straightens and auto-rotates; Free Flight offers both buttons; missions set their own start; crash respawn is never at the runway; Landing 1 = take off, one lap, land |
 | 7 | Landing feel (second play-test) | **Mixed** descent (Trainer slope hold, Normal rate push); Trainer push 10° / 3 m/s; left stick **AUTO · RUD** in Trainer, nudge removed; 10 m hoops + 5 m corridor + joining line, green/grey, "hoops n/6"; first hoop at 300 m, land from either end (chosen once heading home, hoops behind skipped), arrow to the next hoop ahead, end locked inside 300 m |
 | 6 | Free Flight objective (after the 1a play-test) | **C**: a goal chip now, Round 1b's missions on top. "A lap" = **fly out 150 m and come back inside 100 m** (option 2); shown as a **progress chip under the HUD** (option 1); **grass completes it, the runway earns a "Runway!" mark** (option 3) |
+| 8 | Round 1b (seven questions) | See §13 *Round 1b decisions*: the original five-mission ladder; one scorecard + pass conditions; unlock in order with an unlock-all switch; badge tied to the best star run; Crosswind / Engine out trim the Trainer; a start screen in the widget; Touch and go as its own chain-record row |
 
 ---
 
@@ -800,6 +911,17 @@ pass against web sources changed:
 Nothing is shipped yet; every item names the integration point it builds on.
 
 ### Gameplay & modes
+- **More Landing missions / modifiers** (the alternatives weighed in
+  1b-1): **spot landing** (no hoops, no slope hold — a painted bullseye
+  and your own judgement), **other-end landing** (must use the west
+  end: `approach.end` forced), **night landing** (dusk palette, runway
+  edge lights, lit hoops only), **gusty wind** (random gusts on
+  `StepOptions.wind` — needs fair scoring first), a **touch-and-go chain
+  of three** as a starred mission. Modifiers would stack on any mission
+  (`MissionSpec` already carries `wind`, `trainerLateralHold`).
+- **"Too high — circle" hint** for the engine-out glide (`landingHint`
+  gains a case when the plane is well above `slopeTarget` dead-stick);
+  a **windsock** by the strip showing the mission's wind.
 - **Open-world hub** — mission markers and hidden stunt gates placed in
   Free Flight (`missions.ts` specs rendered as world markers).
 - **Licence tests** — Beginner → Gold tiers gated by total stars; unlock

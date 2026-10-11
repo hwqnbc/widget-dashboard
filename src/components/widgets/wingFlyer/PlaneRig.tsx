@@ -28,6 +28,7 @@ export type ObjectiveSnapshot = Pick<ObjectiveState, 'takeoff' | 'flyout' | 'bac
   hoopsTotal: number
 }
 import type { WingSound } from './wingSound'
+import type { MissionSnapshot } from './ScorecardPanel'
 import { CRASH_PULSE, vibrate } from '../droneSim/haptics'
 import { createPlaneParts } from './planeParts'
 
@@ -64,6 +65,9 @@ export interface RigRefs {
   edgeWarn: MutableRefObject<HTMLElement | null>
   /** Called when the objective checklist changes (rare): re-renders the chip. */
   onObjective: MutableRefObject<(o: ObjectiveSnapshot) => void>
+  /** Called when the mission run changes (rare): the chip, the scorecard
+   * panel and the records dispatch. */
+  onMission: MutableRefObject<(m: MissionSnapshot) => void>
   /** The chip's live "fly out" distance (direct DOM write). */
   objectiveDist: MutableRefObject<HTMLElement | null>
   /** Landing hint line: text per hint (null = hide); written directly. */
@@ -104,6 +108,8 @@ export default function PlaneRig({
   const lastPhase = useRef<string>('')
   const lastSeq = useRef(0)
   const lastObjSeq = useRef(-1)
+  const lastMissionSeq = useRef(-1)
+  const lastMotorOut = useRef(false)
 
   useFrame((state, frameDt) => {
     const { sim, input } = refs
@@ -186,6 +192,29 @@ export default function PlaneRig({
         sink: o.sink,
         completed: o.completed,
       })
+    }
+
+    if (sim.missionSeq !== lastMissionSeq.current) {
+      lastMissionSeq.current = sim.missionSeq
+      const r = sim.mission
+      const l = r.landing
+      refs.onMission.current({
+        mode: r.mode,
+        outcome: r.outcome,
+        fail: r.fail,
+        motorOut: r.motorOut,
+        score: r.score,
+        stars: r.stars,
+        badge: r.badge,
+        chain: r.chain,
+        bestChain: r.bestChain,
+        chainBreak: r.chainBreak,
+        landing: l
+          ? { spot: l.spot, centre: l.centre, smooth: l.smooth, alongM: l.alongM, acrossM: l.acrossM, score: l.score, sink: l.sink }
+          : null,
+      })
+      if (r.motorOut && !lastMotorOut.current) refs.sound.play('panic')
+      lastMotorOut.current = r.motorOut
     }
 
     const phaseKey = sim.phase + ':' + sim.start
@@ -366,6 +395,19 @@ function writeHud(
   el.dataset.linedUp = sim.linedUp ? 'true' : 'false'
   el.dataset.hoopsPassed = String(passedCount(ap))
   el.dataset.hoopsScored = String(ap.next)
+  const r = sim.mission
+  el.dataset.mode = sim.mode
+  el.dataset.missionOutcome = r.outcome
+  el.dataset.missionFail = r.fail ?? 'none'
+  el.dataset.missionScore = String(r.score)
+  el.dataset.missionStars = String(r.stars)
+  el.dataset.missionBadge = r.badge
+  el.dataset.motorOut = r.motorOut ? 'true' : 'false'
+  el.dataset.chain = String(r.chain)
+  el.dataset.bestChain = String(r.bestChain)
+  el.dataset.bounces = String(r.bounces)
+  const w = sim.opts.wind
+  el.dataset.wind = w ? `${w.x.toFixed(1)},${w.z.toFixed(1)}` : 'calm'
 
   el.dataset.touchdown = sim.g.lastResult ?? 'none'
   el.dataset.touchSink = sim.g.lastSink.toFixed(2)

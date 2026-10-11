@@ -26,6 +26,7 @@ import {
   GRAVITY,
   attitudeOf,
   authority,
+  bestGlideSpeed,
   stallSpeed,
   type Attitude,
   type PlaneCommand,
@@ -74,7 +75,11 @@ export interface AssistEnv {
   slopeHeading?: number
   /** Plane heading, radians (compass style). */
   heading?: number
+  /** The motor is dead (engine-out mission): the Trainer glides at best
+   * glide speed instead of mushing after an altitude it cannot hold. */
+  motorOut?: boolean
 }
+
 
 /** Slope hold's lateral (localizer) hold: intercept angle per metre off
  * the centreline, its cap, and the bank cap. */
@@ -100,6 +105,11 @@ export interface AssistState {
 }
 
 const DEG = Math.PI / 180
+
+/** Engine-out glide: pitch gain per m/s of airspeed error (nose down when
+ * slow) and its cap. */
+export const GLIDE_GAIN = 2.5 * DEG
+export const GLIDE_PITCH_MAX = 12 * DEG
 
 /** Envelopes per level. */
 /** 45° (not SAFE's tighter envelope): play-testing showed a 35° Trainer
@@ -409,6 +419,10 @@ export function stepAssist(
     // a gentle climb there (the stall-proofing still caps the pitch).
     const climbCap = Math.max(3.5 * room * (0.4 + 0.6 * Math.cos(a.att.bank)), agl < FLARE_AGL ? 1.5 : 0)
     pitchT = altHoldPitch(s, a.holdAlt, climbCap)
+    // Dead-stick: never slower than best glide — the altitude hold would
+    // otherwise pitch for a climb it has no power for and mush down at
+    // the stall-proofing limit, with half the glide range.
+    if (env.motorOut) pitchT = Math.min(pitchT, clamp(-GLIDE_GAIN * (bestGlideSpeed(spec) - s.airspeed), -GLIDE_PITCH_MAX, GLIDE_PITCH_MAX))
   } else if (ry > 0) {
     a.holdAlt = Number.NaN
     pitchT = ry * TRAINER_PITCH

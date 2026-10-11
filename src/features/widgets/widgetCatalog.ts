@@ -327,6 +327,10 @@ export function defaultWidgetData(type: WidgetType): Record<string, unknown> {
         sound: false,
         landingHints: true,
         helpSeen: false,
+        // What is being played (missions.ts PlayMode); progress lives in
+        // the records slice. `unlockAll` lifts the in-order mission gate.
+        mission: 'first',
+        unlockAll: false,
       }
     case 'puppyRescue':
       // Progress (stars, bests, unlocks) lives in the records slice; the
