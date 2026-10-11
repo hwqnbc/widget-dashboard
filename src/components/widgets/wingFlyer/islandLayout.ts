@@ -109,9 +109,14 @@ export function onStrip(x: number, z: number): boolean {
 
 /** Approach glide slope, radians — steeper than full size (RC style). */
 export const GLIDE_SLOPE = (7 * Math.PI) / 180
-/** Approach guide: hoops from this far out (m) to the threshold. */
-export const APPROACH_LENGTH = 160
+/** Approach guide: hoops from this far out (m) past the aim point — the
+ * first hoop sits ~300 m from the runway centre (a longer run-in to settle
+ * onto the line after the turn-back; landing-feel round). */
+export const APPROACH_LENGTH = 200
 export const APPROACH_HOOPS = 6
+/** Hoop ring radius (m) and the pass corridor around a hoop's centre. */
+export const HOOP_RADIUS = 5
+export const HOOP_PASS = 5
 
 export interface ApproachPoint {
   x: number
@@ -134,6 +139,14 @@ export function approachPath(end: -1 | 1, hoops = APPROACH_HOOPS): ApproachPoint
     pts.push({ x: aimX + end * d, y: STRIP_Y + 1.5 + d * Math.tan(GLIDE_SLOPE), z: STRIP.z })
   }
   return pts
+}
+
+/** The glide-slope height (world y) at `x` for a landing onto `end` — the
+ * line the hoops sit on, continued down to the aim point. */
+export function slopeHeightAt(end: -1 | 1, x: number): number {
+  const aimX = STRIP.x + end * (STRIP.length / 4)
+  const d = Math.max(0, (x - aimX) * end)
+  return STRIP_Y + 1.5 + d * Math.tan(GLIDE_SLOPE)
 }
 
 /** Heading (rad) of a landing onto `end` (see approachPath). */

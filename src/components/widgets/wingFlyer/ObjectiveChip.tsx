@@ -76,7 +76,16 @@ export default function ObjectiveChip({
       <Box component="span" sx={{ color: IDLE }}>
         ▸
       </Box>
-      {step('land', o.land, o.land && o.runway ? 'Land · Runway!' : 'Land')}
+      {step(
+        'land',
+        o.land,
+        o.land && o.runway ? 'Land · Runway!' : 'Land',
+        active === 'land' && o.hoopsScored > 0 && o.hoopsTotal > 0 ? (
+          <Box component="span" data-testid="wingflyer-obj-hoops" sx={{ ml: 0.5, opacity: 0.9 }}>
+            hoops {o.hoopsPassed}/{o.hoopsTotal}
+          </Box>
+        ) : null,
+      )}
       {o.completed > 0 && (
         <Box component="span" data-testid="wingflyer-obj-count" sx={{ color: DONE, ml: 0.5 }}>
           ×{o.completed}

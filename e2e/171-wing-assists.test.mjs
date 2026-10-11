@@ -274,4 +274,28 @@ for (const id of ['trainer', 'wing']) {
   check(`${id} trainer: a banked turn under a terrain-floor climb demand keeps speed and never sinks`, !wStalled && wMinV > stallSpeed(spec) * 1.4 && wMinAlt > 27, `min ${wMinV.toFixed(1)} m/s, min alt ${wMinAlt.toFixed(1)} m`)
 }
 
+// --- Trainer gentle push (10°, ≤ 3 m/s) and Normal's rate push (A-lite) ----------
+for (const id of ['trainer', 'wing']) {
+  const spec = AIRFRAMES[id]
+  const t = sim(id, 'trainer', { alt: 150, throttle: 0.4 })
+  let minVs = 0
+  let settledVs = 0
+  let minPitch = 0
+  let k = 0
+  fly(t, 8, sticks(0, -1), (s) => {
+    attitudeOf(s.q, att)
+    minVs = Math.min(minVs, s.vel.y)
+    minPitch = Math.min(minPitch, att.pitch)
+    if (++k > 480) settledVs = Math.min(settledVs, s.vel.y)
+  })
+  check(`${id} trainer: full forward stick → ≤ 10° nose-down, descent settles ≤ 3.1 m/s (transient ≤ 3.8)`, minPitch > -11 * DEG && settledVs > -3.1 && minVs > -3.8, `pitch ${(minPitch / DEG).toFixed(1)}°, settled ${(-settledVs).toFixed(2)} / peak ${(-minVs).toFixed(2)} m/s`)
+  const n = sim(id, 'normal', { alt: 150, throttle: 0.5 })
+  let nMinVs = 0
+  let j = 0
+  fly(n, 8, sticks(0, -0.5, 0, 0), (s) => {
+    if (++j > 240) nMinVs = Math.min(nMinVs, s.vel.y)
+  })
+  check(`${id} normal: half forward stick → ~1.5 m/s descent (rate push), not a dive`, nMinVs < -1 && nMinVs > -2.2, `sink ${(-nMinVs).toFixed(2)} m/s`)
+}
+
 await finish()

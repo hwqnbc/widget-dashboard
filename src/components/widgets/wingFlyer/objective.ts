@@ -101,8 +101,6 @@ export type LandingHint = 'lineup' | 'follow' | 'low' | null
 export const HINT_MAX_BEARING = (60 * Math.PI) / 180
 /** …inside this distance from the runway centre… */
 export const HINT_MAX_DIST = 320
-/** …and this far off the extended centreline counts as "lined up". */
-export const HINT_CORRIDOR = 25
 /** Below this height the final hint shows (the Trainer's flare height). */
 export const HINT_LOW_AGL = 6
 
@@ -113,8 +111,8 @@ export interface HintFacts {
   homeDist: number
   /** Bearing to the runway relative to the nose, radians. */
   homeRel: number
-  /** Distance from the runway's extended centreline, metres. */
-  offCentreline: number
+  /** On the active approach corridor (approach.ts `linedUp`). */
+  linedUp: boolean
   agl: number
 }
 
@@ -128,5 +126,5 @@ export function landingHint(f: HintFacts): LandingHint {
   if (!f.landStep || !f.airborne) return null
   if (f.agl < HINT_LOW_AGL) return 'low'
   if (f.homeDist > HINT_MAX_DIST || Math.abs(f.homeRel) > HINT_MAX_BEARING) return null
-  return f.offCentreline <= HINT_CORRIDOR ? 'follow' : 'lineup'
+  return f.linedUp ? 'follow' : 'lineup'
 }

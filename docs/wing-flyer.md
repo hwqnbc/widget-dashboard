@@ -101,6 +101,53 @@ input → fixed 120 Hz `stepSim` → mesh → camera → HUD), `IslandScene`,
   down" (Normal/Acro). Pure `landingHint` in `objective.ts`; words in the
   body; `data-hint` telemetry; **Settings → Landing hints** (on by default).
   The help dialog gained "Landing in 3 steps".
+- **Landing feel (second play-test: "landing is a bit tough, I over-dip,
+  can't reach the first hoop, not sure about the throttle")** — decided
+  question by question (§13):
+  - **Descent:** Trainer **glide-slope hold** (A-full) — lined up on an
+    approach (within 10 m of the centreline and 35° of the landing heading)
+    with the stick released, the held altitude is `min(held, slope)`, so it
+    rides the hoop line down (and holds level until the line comes down to
+    it); the terrain floor is skipped there; approach speed applies — and with
+    the roll stick released it also **keeps the line** (a localizer-style
+    bank toward the centreline, intercept ≤ 25°, bank ≤ 20°): a released
+    plane keeps a small heading error and drifted out of the 10 m corridor
+    in seconds, whereupon the terrain floor took it back up to 15 m. The
+    hold **captures** inside the tight corridor (10 m / 35°) and is **kept**
+    inside a wide one (40 m / 60°, `CAPTURE_KEEP_*`): the first cut engaged
+    and disengaged on the same 10 m test, so a plane crossing the corridor
+    at 25° fell out of it in a second, before the lateral hold could turn. Normal
+    gets the **rate push** (A-lite): the forward stick commands a descent
+    RATE (full push 3 m/s, `NORMAL_MAX_SINK`) instead of a nose-down angle —
+    no over-dip possible; nose-up stays angle command. Acro unchanged.
+  - The hints follow: Trainer's "follow" line reads "Let go — it follows
+    the hoops"; Normal/Acro keep "Push forward, follow the hoops".
+  - **Trainer pitch:** nose-down is 10° at full stick (`TRAINER_PITCH_DOWN`)
+    and capped at 3 m/s (`TRAINER_MAX_SINK`); nose-up stays 20°. The rate
+    pushes use a stiffer vertical-speed gain (`RATE_GAIN`) than the hold.
+  - **Throttle stick:** in Trainer the left stick reads **AUTO · RUD** with
+    its up/down travel locked and drawn as a dim track (`VirtualJoystick`
+    `lockY`, additive and default-off); the cruise-speed nudge is gone, so
+    Trainer is one-stick flying. Help text updated.
+  - **Hoops:** 10 m across (`HOOP_RADIUS` 5), a 5 m pass corridor
+    (`HOOP_PASS`), a faint line joining each end's hoops; passed hoops turn
+    green, missed ones grey, all reset with the objective; the chip's land
+    step shows "hoops n/6" once any is scored. Pure tally in `approach.ts`.
+  - **Approach:** the first hoop is ~300 m out (`APPROACH_LENGTH` 200 past
+    the aim point). **Either end:** on the land step, once the plane is
+    heading HOME (the first cut locked at 150 m out while still flying away
+    and picked the far end), the end needing the smaller turn is chosen (20°
+    hysteresis), hoops already behind the plane are skipped (not counted —
+    "hoops n/4" when you join late), and the choice is **locked inside
+    300 m** (`LOCK_DIST`) — but only once committed, heading within 45° of
+    that landing direction (`LOCK_HEADING`): mid-turn, heading north, both
+    ends need 90° and the first cut locked the wrong one on that knife-edge. The home arrow points at the **next hoop ahead**
+    on that approach, then at the far threshold (straight ahead — the centre
+    under the plane would spin the arrow), else the runway centre; the other end's hoops dim.
+    Hints and the objective still judge by the runway centre. `wingSim`
+    steps the approach after the objective.
+  - The CLAUDE.md "clarify:/discuss:" rule now runs until the user says
+    **proceed**.
 - **Trainer over terrain** (found by the first live fly-out test): the
   approach-speed slowdown now needs nose-down stick or the settle state
   (not merely low-and-sinking); the released-stick altitude hold keeps at
@@ -629,7 +676,10 @@ Root `wingflyer-root`: `data-airframe`, `data-assist`, `data-view`,
 `data-paused`, `data-sound`, `data-sfx-{launch,touchdown,bounce,crash,
 panic}`, `data-draw-calls`, `data-triangles`, `data-objective`
 (`takeoff|flyout|land|done`), `data-objective-back`, `data-objective-runway`,
-`data-objective-done` (count), `data-max-dist`, `data-hint`
+`data-objective-done` (count), `data-max-dist`, `data-approach-end`
+(`none|east|west`), `data-approach-locked`, `data-lined-up`,
+`data-hoops-passed`, `data-hoops-scored`; left stick `data-lock-y`;
+chip `wingflyer-obj-hoops`; `data-hint`
 (`none|lineup|follow|low`); root `data-landing-hints`; `wingflyer-hint`
 (the hint line). Chip `wingflyer-objective`:
 `data-step`, per-step `wingflyer-obj-{takeoff,flyout,land}` `data-done`,
@@ -716,6 +766,7 @@ could fly it; its play-test produced the landing-help decisions above.
 | 3 | Combat tone | **Gentle first, made easy:** balloons → ground targets → streamer cutting → dogfight → boss; cartoon effects; 3 hearts; fixed guns only; **aim assist on by default, generous** |
 | 4 | Name | **Wing Flyer** (`wingFlyer`) |
 | 5 | Launch | **B** — hand-launch for both planes **and** runway take-off for the trainer; Trainer assist auto-straightens and auto-rotates; Free Flight offers both buttons; missions set their own start; crash respawn is never at the runway; Landing 1 = take off, one lap, land |
+| 7 | Landing feel (second play-test) | **Mixed** descent (Trainer slope hold, Normal rate push); Trainer push 10° / 3 m/s; left stick **AUTO · RUD** in Trainer, nudge removed; 10 m hoops + 5 m corridor + joining line, green/grey, "hoops n/6"; first hoop at 300 m, land from either end (chosen once heading home, hoops behind skipped), arrow to the next hoop ahead, end locked inside 300 m |
 | 6 | Free Flight objective (after the 1a play-test) | **C**: a goal chip now, Round 1b's missions on top. "A lap" = **fly out 150 m and come back inside 100 m** (option 2); shown as a **progress chip under the HUD** (option 1); **grass completes it, the runway earns a "Runway!" mark** (option 3) |
 
 ---

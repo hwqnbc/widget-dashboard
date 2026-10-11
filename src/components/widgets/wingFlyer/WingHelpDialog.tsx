@@ -42,8 +42,8 @@ export default function WingHelpDialog({
           <Typography variant="body2">
             {assist === 'trainer' ? (
               <>
-                In <b>Trainer</b> the throttle is <b>automatic</b> — you can ignore this stick. Up/down only nudges
-                how fast it flies.
+                In <b>Trainer</b> the throttle is <b>automatic</b> (the stick says AUTO): up/down does nothing,
+                left/right steers the rudder. Only the right stick matters.
               </>
             ) : (
               <>
@@ -69,13 +69,17 @@ export default function WingHelpDialog({
           <Typography variant="body2" component="div">
             <b>1. Line up</b> — the yellow arrow points home; aim for the <b>yellow hoops</b>.
             <br />
-            <b>2. Follow the hoops down</b> — push the right stick gently forward.
+            <b>2. Follow the hoops down</b> —{' '}
+            {assist === 'trainer'
+              ? 'once lined up, let go: the Trainer rides the hoop line down by itself (push forward only to go down faster — it never dives steeply).'
+              : 'push the right stick gently forward; it sets how fast you descend, so you can’t over-dip.'}
+            {' '}Missed a hoop? Fine — they are a guide, not a test.
             <br />
             <b>3. {assist === 'trainer' ? 'Let go low' : 'Ease back low'}</b> —{' '}
             {assist === 'trainer'
-              ? 'under the last hoop, release the sticks: the Trainer flares and settles itself.'
+              ? 'under the last hoop keep the sticks released: it flares and settles itself.'
               : 'just above the ground, pull back a little to touch down softly.'}
-            {' '}Flat grass works too. Hints appear on the way in (Settings → Landing hints).
+            {' '}Flat grass works too, from either end of the runway. Hints appear on the way in (Settings → Landing hints).
           </Typography>
         </Section>
         <Section title="In trouble?">

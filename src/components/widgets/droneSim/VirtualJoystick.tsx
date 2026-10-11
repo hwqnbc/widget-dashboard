@@ -23,6 +23,12 @@ export interface VirtualJoystickProps {
    * while dragging and re-syncs the knob from it while idle.
    */
   latchRef?: { current: number }
+  /**
+   * Y axis disabled: the knob only moves left/right (y reports 0) and the
+   * base shows a dimmed vertical track, for a control whose up/down is
+   * automatic (Wing Flyer's Trainer throttle). Off by default.
+   */
+  lockY?: boolean
 }
 
 /**
@@ -40,6 +46,7 @@ export default function VirtualJoystick({
   sx,
   latchY = false,
   latchRef,
+  lockY = false,
 }: VirtualJoystickProps) {
   const theme = useTheme()
   const hitAreaRef = useRef<HTMLDivElement>(null)
@@ -60,6 +67,15 @@ export default function VirtualJoystick({
       if (!base || !knob) return
       const rect = base.getBoundingClientRect()
       let dx = clientX - (rect.left + rect.width / 2)
+      if (lockY) {
+        dx = Math.max(-radius, Math.min(radius, dx))
+        knob.style.transform = `translate(${dx}px, 0px)`
+        let nx = dx / radius
+        if (Math.abs(nx) < DEADZONE) nx = 0
+        else nx = Math.sign(nx) * Math.min(1, (Math.abs(nx) - DEADZONE) / (1 - DEADZONE))
+        onChange(nx, 0)
+        return
+      }
       if (latchY) {
         // Square travel: X absolute from the centre (with deadzone), Y
         // relative to where the drag started from the latched position.
@@ -97,7 +113,7 @@ export default function VirtualJoystick({
       }
       onChange(nx, ny)
     },
-    [onChange, radius, latchY, latchRef],
+    [onChange, radius, latchY, latchRef, lockY],
   )
 
   const releasePointer = useCallback(() => {
@@ -182,6 +198,7 @@ export default function VirtualJoystick({
     <Box
       ref={hitAreaRef}
       data-testid={testId}
+      data-lock-y={lockY ? 'on' : undefined}
       onContextMenu={(e) => e.preventDefault()}
       onPointerDown={(e) => {
         if (pointerIdRef.current !== null) return
@@ -241,8 +258,25 @@ export default function VirtualJoystick({
           border: `1px solid ${alpha(theme.palette.common.white, 0.3)}`,
           display: 'grid',
           placeItems: 'center',
+          position: 'relative',
         }}
       >
+        {lockY && (
+          // The disabled up/down travel, drawn as a dim track.
+          <Box
+            sx={{
+              position: 'absolute',
+              left: '50%',
+              top: '12%',
+              bottom: '12%',
+              width: 6,
+              ml: '-3px',
+              borderRadius: 3,
+              bgcolor: alpha(theme.palette.common.white, 0.08),
+              border: `1px dashed ${alpha(theme.palette.common.white, 0.25)}`,
+            }}
+          />
+        )}
         <Box
           ref={knobRef}
           sx={{

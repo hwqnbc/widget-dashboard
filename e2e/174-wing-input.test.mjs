@@ -37,6 +37,10 @@ const setting = async (tid) => {
   await page.waitForTimeout(300)
 }
 
+// --- Trainer: the left stick is AUTO · RUD (throttle axis locked) -----------------
+const leftStick = page.locator('[data-testid="wingflyer-joystick-left"]')
+check('Trainer: left stick reads AUTO · RUD with the throttle axis locked', (await leftStick.getAttribute('data-lock-y')) === 'on' && /AUTO/.test((await leftStick.textContent()) ?? ''))
+
 // --- Enter launches -------------------------------------------------------------
 await page.keyboard.press('Enter')
 check('Enter launches from the hand', await waitFor(async () => (await root.getAttribute('data-phase')) === 'flying'))
@@ -81,6 +85,7 @@ await waitFor(async () => (await hud.getAttribute('data-assist-mode')) === 'fly'
 await setting('wingflyer-assist-normal')
 await page.click('[data-testid="wingflyer-paused"]').catch(() => {})
 await waitFor(async () => (await root.getAttribute('data-paused')) === 'false', 5000)
+check('Normal: left stick becomes THR · RUD (latching throttle)', (await leftStick.getAttribute('data-lock-y')) === null && /THR/.test((await leftStick.textContent()) ?? ''))
 const cdp = await context.newCDPSession(page)
 const L = await stickCenter(page, 'wingflyer-joystick-left')
 const R = await stickCenter(page, 'wingflyer-joystick-right')
@@ -136,6 +141,16 @@ check('input source = touch after a right-stick touch', (await hud.getAttribute(
 await setting('wingflyer-invert-pitch')
 await page.click('[data-testid="wingflyer-paused"]').catch(() => {})
 await waitFor(async () => (await root.getAttribute('data-paused')) === 'false', 5000)
-check('invert pitch: pulling back now dives', (await pitchFor(30)) < -8)
+// (Normal's forward command is a descent RATE now, so judge by the sink.)
+const vsFor = async (dy) => {
+  await touch('touchStart', [{ x: R.x, y: R.y, id: 2 }])
+  await touch('touchMove', [{ x: R.x, y: R.y + dy, id: 2 }])
+  await page.waitForTimeout(1500)
+  const v = await tel('data-vs')
+  await touch('touchEnd', [])
+  await waitFor(async () => Math.abs(await tel('data-pitch')) < 4, 4000)
+  return v
+}
+check('invert pitch: pulling back now descends (rate push)', (await vsFor(30)) < -0.8)
 
 await finish(browser)

@@ -18,10 +18,15 @@ import PlaneMesh from './PlaneMesh'
 import type { WingView } from './views'
 import type { ObjectiveState } from './objective'
 import { FLY_OUT_DIST, landingHint } from './objective'
+import { homeTarget, hoopsInPlay, passedCount } from './approach'
 import type { LandingHint } from './objective'
 
 /** What the chip renders — a plain copy, so React state stays immutable. */
-export type ObjectiveSnapshot = Pick<ObjectiveState, 'takeoff' | 'flyout' | 'back' | 'land' | 'runway' | 'sink' | 'completed'>
+export type ObjectiveSnapshot = Pick<ObjectiveState, 'takeoff' | 'flyout' | 'back' | 'land' | 'runway' | 'sink' | 'completed'> & {
+  hoopsPassed: number
+  hoopsScored: number
+  hoopsTotal: number
+}
 import type { WingSound } from './wingSound'
 import { CRASH_PULSE, vibrate } from '../droneSim/haptics'
 import { createPlaneParts } from './planeParts'
@@ -77,6 +82,7 @@ const _up = new Vector3()
 const _q = new Quaternion()
 const _att = { heading: 0, pitch: 0, bank: 0 }
 const _qp = { x: 0, y: 0, z: 0, w: 1 }
+const _home = { x: 0, z: 0 }
 const _f = { x: 0, y: 0, z: 0 }
 
 export default function PlaneRig({
@@ -169,6 +175,9 @@ export default function PlaneRig({
       lastObjSeq.current = sim.objectiveSeq
       const o = sim.objective
       refs.onObjective.current({
+        hoopsPassed: passedCount(sim.approach),
+        hoopsScored: sim.approach.next,
+        hoopsTotal: hoopsInPlay(sim.approach),
         takeoff: o.takeoff,
         flyout: o.flyout,
         back: o.back,
@@ -351,28 +360,43 @@ function writeHud(
   el.dataset.objectiveRunway = o.runway ? 'true' : 'false'
   el.dataset.objectiveDone = String(o.completed)
   el.dataset.maxDist = o.maxDist.toFixed(0)
+  const ap = sim.approach
+  el.dataset.approachEnd = ap.end === null ? 'none' : ap.end === -1 ? 'east' : 'west'
+  el.dataset.approachLocked = ap.locked ? 'true' : 'false'
+  el.dataset.linedUp = sim.linedUp ? 'true' : 'false'
+  el.dataset.hoopsPassed = String(passedCount(ap))
+  el.dataset.hoopsScored = String(ap.next)
 
   el.dataset.touchdown = sim.g.lastResult ?? 'none'
   el.dataset.touchSink = sim.g.lastSink.toFixed(2)
   el.dataset.inputSource = refs.input.source
-  // Home: bearing to the runway centre relative to the nose.
-  const dx = STRIP.x - s.pos.x
-  const dz = STRIP.z - s.pos.z
+  // Home: the runway centre — or, during the land step, the start of the
+  // active approach line (approach.ts), relative to the nose.
+  homeTarget(sim.approach, s.pos.x, _home)
+  const dx = _home.x - s.pos.x
+  const dz = _home.z - s.pos.z
   const dist = Math.hypot(dx, dz)
   const bearing = Math.atan2(dx, -dz)
   const rel = Math.atan2(Math.sin(bearing - _att.heading), Math.cos(bearing - _att.heading))
+  // The hint and the objective judge by the runway CENTRE (the arrow may
+  // point at a hoop).
+  const cdx = STRIP.x - s.pos.x
+  const cdz = STRIP.z - s.pos.z
+  const cDist = Math.hypot(cdx, cdz)
+  const cBearing = Math.atan2(cdx, -cdz)
+  const cRel = Math.atan2(Math.sin(cBearing - _att.heading), Math.cos(cBearing - _att.heading))
   el.dataset.homeDist = dist.toFixed(1)
   const od = refs.objectiveDist.current
-  if (od) od.textContent = `${Math.round(Math.min(dist, FLY_OUT_DIST))} / ${FLY_OUT_DIST} m`
+  if (od) od.textContent = `${Math.round(Math.min(cDist, FLY_OUT_DIST))} / ${FLY_OUT_DIST} m`
   el.dataset.homeBearing = (rel * DEG).toFixed(1)
   // Landing hint (pure decision in objective.ts; words from the body).
   const hint: LandingHint = refs.hintsOn.current
     ? landingHint({
         landStep: !!(o.takeoff && o.flyout && !o.land),
         airborne: !sim.g.onGround && sim.phase === 'flying',
-        homeDist: dist,
-        homeRel: rel,
-        offCentreline: Math.abs(s.pos.z - STRIP.z),
+        homeDist: cDist,
+        homeRel: cRel,
+        linedUp: sim.linedUp,
         agl,
       })
     : null

@@ -2328,3 +2328,31 @@ carried over; these are the new ones.
     stepper + one chip, and becomes mission 1 for free. Ship the smallest
     objective with the first playable, not with the missions round.
 
+147. **A beginner's "descend" control should command a RATE, not an
+    angle.** Wing Flyer's Trainer pitch stick set a nose-down angle (20° at
+    full stick) against a 7° glide slope, so every push over-shot the hoops
+    — the play-tester "tended to over-dip". A forward stick that sets a
+    descent rate (capped at 3 m/s) can't over-dip: the plane goes down as
+    fast as the push, no faster, and letting go holds. Keep the hold's
+    θ = γ + α open-loop estimate for altitude hold (it has an outer loop),
+    but give a rate command its own stiffer vertical-speed gain. The same
+    rule made the Trainer's "let go and ride the hoop line down" possible:
+    the slope is just a moving altitude target.
+
+148. **A guide the player can't fail must not be scored like a test —
+    and never wiped on success.** The approach hoops read as a test
+    ("I could not get through all the rings"). Making them 10 m across
+    with a pass corridor, colouring passed green and missed GREY (never
+    red), showing "hoops n/6" as information and keeping the tally after
+    the landing turned them back into help. The first version also reset
+    the tally the instant the goal completed (the land step ended) — the
+    banner would have shown 0/6 after a perfect approach; tie resets to the
+    objective's reset, not to its completion.
+
+149. **A test helper's callback signature is part of the contract — read
+    it before writing `(s, i)`.** Two new assist checks read 0 sink because
+    `fly()` passes `(state, assist, cmd)`, not a step index; `i > 240` was
+    comparing an object. The model was right the whole time. When a check
+    says the physics does nothing, trace the model directly before
+    "fixing" it.
+

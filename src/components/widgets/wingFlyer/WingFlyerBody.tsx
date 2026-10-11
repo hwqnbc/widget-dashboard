@@ -35,7 +35,7 @@ function hintWords(h: LandingHint, assist: AssistLevel): string {
     case 'lineup':
       return 'Line up with the hoops'
     case 'follow':
-      return 'Push forward, follow the hoops'
+      return assist === 'trainer' ? 'Let go — it follows the hoops' : 'Push forward, follow the hoops'
     case 'low':
       return assist === 'trainer' ? 'Let go — it lands itself' : 'Ease back, touch down'
     default:
@@ -115,6 +115,9 @@ export default function WingFlyerBody({ id }: WidgetProps) {
     runway: false,
     sink: 0,
     completed: 0,
+    hoopsPassed: 0,
+    hoopsScored: 0,
+    hoopsTotal: 6,
   })
   const onObjectiveRef = useRef((o: ObjectiveSnapshot) => setObjective(o))
   const objDistRef = useRef<HTMLSpanElement>(null)
@@ -331,7 +334,7 @@ export default function WingFlyerBody({ id }: WidgetProps) {
           camera={{ fov: 60, near: 0.2, far: FOG_FAR + 60 }}
         >
           <IslandScene spec={island} palette={palette} />
-          <AirfieldProps operatorModel={OperatorModel} />
+          <AirfieldProps operatorModel={OperatorModel} sim={sim} />
           <PlaneRig refs={refs} island={island} color={color} airframe={airframe} />
         </Canvas>
       </Box>
@@ -615,11 +618,13 @@ export default function WingFlyerBody({ id }: WidgetProps) {
       </Button>
 
       <VirtualJoystick
+        key={assist === 'trainer' ? 'auto' : 'thr'}
         size={stickSize}
-        label="THR · RUD"
+        label={assist === 'trainer' ? 'AUTO · RUD' : 'THR · RUD'}
         testId="wingflyer-joystick-left"
         onChange={onLeft}
-        latchY
+        latchY={assist !== 'trainer'}
+        lockY={assist === 'trainer'}
         latchRef={input.throttle}
         sx={{ position: 'absolute', left: inset, bottom: inset }}
       />

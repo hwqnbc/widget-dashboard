@@ -38,9 +38,12 @@ silently breaking this one.
 
 ## Workflow
 
-**"clarify:" means discussion only.** When the user's message starts with
-`clarify:`, only discuss — answer, explain, research, ask questions. Do not
-edit files, commit, push or merge until the user explicitly says to.
+**"clarify:" / "discuss:" means discussion only — until the user says
+"proceed".** When the user's message starts with `clarify:` or `discuss:`,
+only discuss — answer, explain, research, ask questions, one question at a
+time. Do not edit files, commit, push or merge, and do not start building,
+until the user explicitly says **"proceed"** (or "OK" to a build request).
+A "Merge" during discussion is still a merge of already-verified work.
 
 **Plan, design, discuss and clarify before building any new widget or
 feature.** Research it, write up the design (controls, gameplay,

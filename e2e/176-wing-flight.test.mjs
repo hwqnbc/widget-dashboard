@@ -58,6 +58,7 @@ check('steering home inside 100 m → back', back, `home ${await str('data-home-
 // Heading home inside 320 m: a landing hint is up (line up or follow).
 const hintNow = await str('data-hint')
 check('heading home → a landing hint shows', (hintNow === 'lineup' || hintNow === 'follow') && (await hint.isVisible()), `${hintNow}: "${await hint.textContent()}"`)
+check('an approach end is chosen for the land step', (await str('data-approach-end')) !== 'none', `${await str('data-approach-end')}, locked ${await str('data-approach-locked')}`)
 await page.keyboard.down('ArrowUp')
 const low = await waitFor(async () => (await tel('data-agl')) < 4, 20000)
 await page.keyboard.up('ArrowUp')
@@ -68,6 +69,7 @@ check('let go low → touchdown is a LANDING', touched && (await str('data-touch
 check('soft touchdown (< 1.2 m/s sink)', (await tel('data-touch-sink')) < 1.2, `${await str('data-touch-sink')} m/s`)
 check('touchdown sfx counted', (await tel('data-sfx-touchdown')) >= 1)
 check('rolls out and stops → phase landed', await waitFor(async () => (await root.getAttribute('data-phase')) === 'landed', 25000))
+check('the hoop tally survives the landing (a guide, never wiped on success)', (await tel('data-hoops-scored')) >= 0 && (await str('data-approach-end')) !== 'none')
 check('landing after the fly-out completes the goal', (await obj.getAttribute('data-step')) === 'done' && (await str('data-objective-done')) === '1')
 check('banner says the goal is complete + start buttons', (await page.locator('[data-testid="wingflyer-landed-banner"]').getAttribute('data-objective-complete')) === 'true' && (await page.locator('[data-testid="wingflyer-hand-launch"]').isVisible()) && (await page.locator('[data-testid="wingflyer-runway"]').isVisible()))
 check('chip shows the ×1 completed count', (await page.locator('[data-testid="wingflyer-obj-count"]').textContent()) === '×1')

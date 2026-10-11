@@ -64,7 +64,23 @@ export interface AssistEnv {
   outside?: boolean
   /** Bearing to home relative to the nose, radians (+ = home is right). */
   homeRel?: number
+  /** Lined up on an approach: the glide-slope height (world y) here, else
+   * NaN. The Trainer's slope hold follows it down (landing-feel round). */
+  slopeY?: number
+  /** …and the line itself: its z and the landing heading, for the lateral
+   * hold (a released plane keeps a small heading error and would drift
+   * out of the corridor within seconds otherwise). */
+  slopeZ?: number
+  slopeHeading?: number
+  /** Plane heading, radians (compass style). */
+  heading?: number
 }
+
+/** Slope hold's lateral (localizer) hold: intercept angle per metre off
+ * the centreline, its cap, and the bank cap. */
+export const LINE_INTERCEPT_PER_M = (2 * Math.PI) / 180
+export const LINE_INTERCEPT_MAX = (25 * Math.PI) / 180
+export const LINE_BANK_MAX = (20 * Math.PI) / 180
 
 
 export interface AssistState {
@@ -90,6 +106,16 @@ const DEG = Math.PI / 180
  * turned too wide to line up with the runway. */
 export const TRAINER_BANK = 45 * DEG
 export const TRAINER_PITCH = 20 * DEG
+/** Trainer nose-DOWN is gentler than nose-up: a full push is 10° and the
+ * descent is capped at TRAINER_MAX_SINK (play-test: "I tend to over-dip"). */
+export const TRAINER_PITCH_DOWN = 10 * DEG
+export const TRAINER_MAX_SINK = 3
+/** Normal's forward stick commands a DESCENT RATE (full push = this), not a
+ * nose-down angle — the rate-limited push (A-lite). Nose-up stays angle. */
+export const NORMAL_MAX_SINK = 3
+/** Vertical-speed correction gain for the rate pushes (rad per m/s of
+ * error) — stiffer than the altitude hold's, which has an outer loop. */
+export const RATE_GAIN = 0.12
 /** Bank the Trainer/Normal steer-back uses past the island edge. */
 export const STEER_BACK_BANK = 30 * DEG
 export const NORMAL_BANK = 60 * DEG
@@ -340,7 +366,8 @@ export function stepAssist(
 
   if (level === 'normal') {
     const maxBank = protectedBank(spec, s.airspeed, NORMAL_BANK)
-    attitudeRates(a, s, spec, steerBack ?? rx * maxBank, ry * NORMAL_PITCH, dt, out)
+    const pitchN = ry < 0 ? Math.max(-NORMAL_PITCH, vsPitch(s, ry * NORMAL_MAX_SINK, RATE_GAIN)) : ry * NORMAL_PITCH
+    attitudeRates(a, s, spec, steerBack ?? rx * maxBank, pitchN, dt, out)
     out.throttle = manualThrottle
     a.holdAlt = Number.NaN
     return
@@ -360,9 +387,18 @@ export function stepAssist(
     pitchT = vsPitch(s, -FLARE_SINK_LOW)
   } else if (ry === 0) {
     if (Number.isNaN(a.holdAlt)) a.holdAlt = s.pos.y
-    // Terrain floor on the HELD altitude only (never against a held stick).
-    const floor = s.pos.y - agl + TRAINER_MIN_AGL
-    if (a.holdAlt < floor) a.holdAlt = floor
+    const onSlope = env.slopeY !== undefined && Number.isFinite(env.slopeY)
+    if (onSlope) {
+      // Glide-slope hold (A-full): lined up on an approach with the stick
+      // released, ride the hoop line down — descend to it when above it,
+      // hold level until it comes down to us when below. No terrain floor
+      // here: the corridor is the strip apron and the slope ends on it.
+      a.holdAlt = Math.min(a.holdAlt, env.slopeY as number)
+    } else {
+      // Terrain floor on the HELD altitude only (never against a held stick).
+      const floor = s.pos.y - agl + TRAINER_MIN_AGL
+      if (a.holdAlt < floor) a.holdAlt = floor
+    }
     // Airspeed first (it is stall-proof): the climb demand fades to zero as
     // the speed falls toward approach speed, and shrinks in a bank — a 20°
     // climbing 45° turn is beyond the trainer's power and ended as a mush
@@ -373,9 +409,13 @@ export function stepAssist(
     // a gentle climb there (the stall-proofing still caps the pitch).
     const climbCap = Math.max(3.5 * room * (0.4 + 0.6 * Math.cos(a.att.bank)), agl < FLARE_AGL ? 1.5 : 0)
     pitchT = altHoldPitch(s, a.holdAlt, climbCap)
-  } else {
+  } else if (ry > 0) {
     a.holdAlt = Number.NaN
     pitchT = ry * TRAINER_PITCH
+  } else {
+    // Gentle push: 10° at full stick, and never faster than 3 m/s down.
+    a.holdAlt = Number.NaN
+    pitchT = Math.max(ry * TRAINER_PITCH_DOWN, vsPitch(s, -TRAINER_MAX_SINK, RATE_GAIN))
   }
   // Auto-flare: near the ground the descent rate is limited, easing from
   // FLARE_SINK_HIGH at FLARE_AGL to FLARE_SINK_LOW at touchdown.
@@ -389,24 +429,34 @@ export function stepAssist(
   const speedRoom = clamp((s.airspeed - vs * 1.1) / (vs * 0.4), 0, 1)
   if (pitchT > 0) pitchT *= speedRoom
   pitchT = clamp(pitchT, -TRAINER_PITCH, TRAINER_PITCH)
-  attitudeRates(a, s, spec, steerBack ?? rx * maxBank, pitchT, dt, out)
+  // Slope hold, lateral: with the roll stick released, bank gently to track
+  // the centreline (intercept heading = landing heading + a small angle
+  // proportional to the offset), so "let go" rides the whole hoop line.
+  let bankT = steerBack ?? rx * maxBank
+  if (rx === 0 && env.slopeY !== undefined && Number.isFinite(env.slopeY) && env.slopeZ !== undefined && env.slopeHeading !== undefined && env.heading !== undefined) {
+    const h = env.heading
+    const latErr = (env.slopeZ - s.pos.z) * Math.sin(h) // + = line is to the right
+    const intercept = clamp(latErr * LINE_INTERCEPT_PER_M, -LINE_INTERCEPT_MAX, LINE_INTERCEPT_MAX)
+    const hdgErr = wrapPi(env.slopeHeading + intercept - h)
+    bankT = clamp(1.5 * hdgErr, -LINE_BANK_MAX, LINE_BANK_MAX)
+  }
+  attitudeRates(a, s, spec, bankT, pitchT, dt, out)
   // … and the pitch command is clipped before α reaches the stall.
   const aoaLimit = spec.alphaCrit - TRAINER_AOA_MARGIN
   if (s.aoa > aoaLimit) out.pitch = Math.min(out.pitch, -4 * (s.aoa - aoaLimit))
 
-  // Auto-throttle: hold a target airspeed the left stick nudges between a
-  // safe slow speed and a little above cruise.
+  // Auto-throttle: hold cruise. (The left stick's up/down does nothing in
+  // Trainer — it is labelled AUTO; the rudder axis still works.)
   const cruise = spec.vAuthority
   const lo = vs * 1.45
-  const hi = cruise * 1.25
-  const ly = dead(sticks.left.y)
-  let vT = ly >= 0 ? cruise + ly * (hi - cruise) : cruise + ly * (cruise - lo)
+  let vT = cruise
   // On approach — low AND the pilot is pushing the nose down (or the plane
   // is settling) — slow to approach speed, so a Trainer landing touches down
   // slow enough to stop on the runway. Not merely "low and sinking": every
   // low banked turn sinks a little, and slowing there is what put a
   // play-test flight into a hill (lesson #145).
-  if (agl < APPROACH_AGL && s.vel.y < -0.3 && (ry < 0 || settle)) vT = Math.min(vT, lo)
+  const onSlopeNow = env.slopeY !== undefined && Number.isFinite(env.slopeY) && ry === 0
+  if ((agl < APPROACH_AGL && s.vel.y < -0.3 && (ry < 0 || settle)) || onSlopeNow) vT = Math.min(vT, lo)
   const err = vT - s.airspeed
   a.speedI = clamp(a.speedI + err * dt * 0.08, -0.6, 0.6)
   out.throttle = clamp(0.35 + 0.12 * err + a.speedI + 1.2 * Math.max(0, a.att.pitch), 0, 1)

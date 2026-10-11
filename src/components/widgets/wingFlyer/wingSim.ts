@@ -13,11 +13,13 @@ import { createAssist, setAssistMode, startLaunch, startRollout, startRunway, st
 import type { GroundEvent, GroundState } from './ground'
 import { GEAR, createGroundState, placeOnGround, stepGround } from './ground'
 import type { IslandSpec } from './islandLayout'
-import { PILOT, STRIP, STRIP_Y, WORLD_HALF, isLandable, islandHeight } from './islandLayout'
+import { PILOT, STRIP, STRIP_Y, WORLD_HALF, isLandable, islandHeight, landingHeading } from './islandLayout'
 import type { PlaneCommand, PlaneState, StepOptions } from './planeModel'
 import { createPlaneState, forwardOf, quatFromEuler, stallSpeed, stepPlane } from './planeModel'
 import type { ObjectiveState } from './objective'
 import { createObjective, resetObjective, stepObjective } from './objective'
+import type { ApproachState } from './approach'
+import { createApproach, onLine, passedCount, resetApproach, slopeTarget, stepApproach } from './approach'
 
 export type Phase = 'preflight' | 'flying' | 'landed' | 'crashed'
 export type StartKind = 'hand' | 'runway'
@@ -51,6 +53,12 @@ export interface WingSim {
    * every change so the DOM layer re-renders the chip only then. */
   objective: ObjectiveState
   objectiveSeq: number
+  /** The approach: active runway end + hoop tally (approach.ts). */
+  approach: ApproachState
+  /** Lined up on the active approach this step (hints, slope hold). */
+  linedUp: boolean
+  /** Previous step's x, for hoop crossings. */
+  prevX: number
 }
 
 export function createWingSim(): WingSim {
@@ -74,6 +82,9 @@ export function createWingSim(): WingSim {
     eventSeq: 0,
     objective: createObjective(),
     objectiveSeq: 0,
+    approach: createApproach(),
+    linedUp: false,
+    prevX: 0,
   }
 }
 
@@ -99,6 +110,8 @@ export function resetSim(sim: WingSim, airframe: AirframeId, island: IslandSpec,
   s.cmdRoll = s.cmdPitch = s.cmdYaw = 0
   sim.g = createGroundState()
   resetObjective(sim.objective)
+  resetApproach(sim.approach)
+  sim.linedUp = false
   sim.objectiveSeq++
   setAssistMode(sim.a, 'fly')
   if (kind === 'runway') {
@@ -170,20 +183,34 @@ export function stepSim(
   const ground = islandHeight(island, s.pos.x, s.pos.z)
   const agl = s.pos.y - GEAR[airframe].height - ground
   const outside = Math.hypot(s.pos.x, s.pos.z) > WORLD_HALF
+  forwardOf(s.q, _f)
+  const heading = Math.atan2(_f.x, -_f.z)
   let homeRel = 0
   if (outside) {
-    forwardOf(s.q, _f)
     const bearing = Math.atan2(STRIP.x - s.pos.x, -(STRIP.z - s.pos.z))
-    const heading = Math.atan2(_f.x, -_f.z)
     homeRel = Math.atan2(Math.sin(bearing - heading), Math.cos(bearing - heading))
   }
+  const o0 = sim.objective
+  const landStep = o0.takeoff && o0.flyout && !o0.land
+  sim.linedUp = landStep && !sim.g.onGround && onLine(sim.approach, { z: s.pos.z, heading })
+  const slopeY = sim.linedUp ? slopeTarget(sim.approach, s.pos.x) : Number.NaN
   stepAssist(
     sim.a,
     level,
     s,
     spec,
     sim.sticks,
-    { agl, onGround: sim.g.onGround, landable: isLandable(island, s.pos.x, s.pos.z), outside, homeRel },
+    {
+      agl,
+      onGround: sim.g.onGround,
+      landable: isLandable(island, s.pos.x, s.pos.z),
+      outside,
+      homeRel,
+      slopeY,
+      slopeZ: STRIP.z,
+      slopeHeading: sim.approach.end === null ? undefined : landingHeading(sim.approach.end),
+      heading,
+    },
     h,
     sim.cmd,
     sim.opts,
@@ -214,6 +241,16 @@ export function stepSim(
     touchdown: ev && ev.kind === 'touchdown' ? { result: ev.result, sink: ev.sink, onRunway: ev.onRunway } : null,
   })
   if (before !== o.takeoff + ':' + o.flyout + ':' + o.back + ':' + o.land) sim.objectiveSeq++
+  // The approach (end choice + hoop tally) follows the objective's land step.
+  const passedBefore = passedCount(sim.approach)
+  const endBefore = sim.approach.end
+  const scored = stepApproach(
+    sim.approach,
+    { landStep: o.takeoff && o.flyout && !o.land, airborne: !sim.g.onGround, x: s.pos.x, y: s.pos.y, z: s.pos.z, heading },
+    sim.prevX,
+  )
+  sim.prevX = s.pos.x
+  if (scored || passedCount(sim.approach) !== passedBefore || endBefore !== sim.approach.end) sim.objectiveSeq++
   if ((sim.phase as Phase) !== 'crashed' && hitsBuilding(island, s)) crash(sim)
   return ev
 }
