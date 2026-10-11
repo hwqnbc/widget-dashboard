@@ -14,7 +14,7 @@ tiers.
 
 | # | Question | Decision |
 |---|---|---|
-| 1 | How does the dog move? | **Free movement**: drag anywhere for a floating stick, or use arrows/WASD. No inertia, so the dog stops when you let go, and corner assist slides it into gaps. |
+| 1 | How does the dog move? | **Free movement**: drag anywhere for a floating stick (any direction, full speed past a 10 px dead zone, leashed ring; revised after play-testing), or use arrows/WASD. No inertia, so the dog stops when you let go, and corner assist slides it into gaps. |
 | 2 | What happens when you're spotted? | **Caught = retry in under a second** (Round 1). Easy mode (the netted puppy goes back to its cage) and Arcade mode (catchers chase, then search) come later as difficulty settings. |
 | 3 | 2D or 3D? | **3D only**, low-poly toy look like the screenshots, in a lazy three.js chunk. A 2D view is in the backlog. |
 | 4 | Camera | **Fixed portrait**: the whole maze is always visible from a tilted camera fitted to the card, with the exit at the top. Fullscreen prefers portrait. |
@@ -36,13 +36,25 @@ cost of a star.
   edges, and maps are 5×7 to 7×11 cells. Row 0 is the top, where the exit
   door is.
 - **Dog.** It moves at 2.5 cells/s (`DOG_SPEED`), chosen so one cell takes
-  exactly 24 fixed steps (`CELL_FRAMES`). Speed is the stick deflection,
-  and letting go stops it at once.
+  exactly 24 fixed steps (`CELL_FRAMES`). Letting go stops it at once.
   - **Collision:** the dog is a circle (r 0.26) sliding along wall
     capsules (half-thickness 0.07), so you never catch on a corner.
   - **Corner assist:** if the main axis is mostly blocked and you're
     within 0.45 of a cell-centre line, the dog slides onto it, Pac-Man
     style. That turns "push up just past a gap" into a clean turn.
+- **Touch control (the floating stick), as revised after play-testing.**
+  Put a thumb down anywhere on the stage and a ring appears there.
+  - **Any direction:** the dog goes where the thumb points from the ring
+    centre. There's no 4-way snap; the user preferred free direction.
+  - **Full speed after a small push:** past a 10 px dead zone
+    (`DRAG_DEAD_PX`) the dog runs at full speed, with no ramp. The first
+    version ramped speed with deflection across a 28–56 px throw, so a
+    held thumb crawled until it was shoved out ("doesn't move fast enough
+    till I push and shift my thumb").
+  - **The ring is a leash:** once the thumb slides past the ring (24–32 px
+    radius), the ring centre is dragged along behind it. Turning back costs
+    only about a ring radius plus the dead zone, never a long drag home.
+  - **Lift to stop.** The arrow keys and WASD don't change.
 - **Cones.** 75° wide (`CONE_HALF` = 37.5°) and 3.5 cells long. Walls block
   them: the cone drawn on the floor is built from the same rays
   (`coneRays`) that the detection test (`seenAt`) uses, so what you see is

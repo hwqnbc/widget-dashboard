@@ -9,7 +9,9 @@
  * the puppy and escapes unseen: 3 stars, the records slice keeps them, level
  * 2 unlocks, Next level goes there. On level 2, walking straight up the
  * watched corridor gets the dog caught — and back at the start within a
- * second. A touch drag anywhere on the stage steers (floating stick). The ⚙
+ * second. A touch drag anywhere steers (floating stick): a resting thumb
+ * stays put, a small push is full speed, a thumb slid far reverses with a
+ * short move back, release stops. The ⚙
  * menu: Unlock all opens every level, Sound toggles, Reset records clears
  * the stars and re-locks.
  */
@@ -90,7 +92,11 @@ await addPuppyWidget(page)
   await page.keyboard.up('ArrowUp')
   const st = await puppyState(page)
   check('walking into the cone gets the dog caught', caught && st.spotted, st.status)
-  check('the caught banner shows', (await page.locator('[data-testid="puppy-caught"]').count()) === 1)
+  const banner = await page
+    .locator('[data-testid="puppy-caught"]')
+    .waitFor({ timeout: 800 })
+    .then(() => true, () => false)
+  check('the caught banner shows', banner)
   check('sfx: the alert and the catch', st.sfxAlert >= 1 && st.sfxCaught === 1)
   const t0 = Date.now()
   const back = await waitStatus('ready', 3000)
@@ -101,26 +107,46 @@ await addPuppyWidget(page)
 
 // ---------------------------------------------- 5. touch: floating stick
 {
+  // Level 2's bottom row is open wall to wall — steer along it.
   const box = await page.locator('[data-testid="puppy-stage"]').boundingBox()
   const x = box.x + box.width * 0.5
-  const y = box.y + box.height * 0.75
+  const y = box.y + box.height * 0.8
   const before = await puppyState(page)
   const cdp = await context.newCDPSession(page)
-  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y, id: 7 }] })
-  for (let i = 1; i <= 5; i++) {
-    await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x, y: y - i * 14, id: 7 }] })
-    await page.waitForTimeout(30)
-  }
+  const touch = (type, px) =>
+    cdp.send('Input.dispatchTouchEvent', { type, touchPoints: type === 'touchEnd' ? [] : [{ x: px, y, id: 7 }] })
+  await touch('touchStart', x)
+  await touch('touchMove', x + 7)
+  await page.waitForTimeout(250)
+  const still = await puppyState(page)
+  check('a resting thumb (inside the 10 px dead zone) does not move the dog', Math.abs(still.x - before.x) < 1e-3)
+  // A SMALL push (14 px) is already full speed: ~2.5 cells/s.
+  await touch('touchMove', x + 14)
+  const a0 = await puppyState(page)
   await page.waitForTimeout(400)
-  const mid = await puppyState(page)
-  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
+  const a1 = await puppyState(page)
+  const speed = (a1.x - a0.x) / (a1.t - a0.t)
+  check('a small push runs the dog at full speed', speed > 2.2, `${speed.toFixed(2)} cells/s`)
+  // Slide the thumb far right (past the ring), then back just 45 px: the
+  // touch point trailed the thumb, so that short move already reverses.
+  for (let i = 1; i <= 8; i++) {
+    await touch('touchMove', x + 14 + i * 25)
+    await page.waitForTimeout(20)
+  }
   await page.waitForTimeout(150)
-  const a = await puppyState(page)
+  await touch('touchMove', x + 14 + 8 * 25 - 45)
+  await page.waitForTimeout(80)
+  const r0 = await puppyState(page)
   await page.waitForTimeout(300)
-  const b = await puppyState(page)
+  const r1 = await puppyState(page)
+  check('a thumb slid far away reverses with a short move back', r1.x < r0.x - 0.4, `${r0.x} → ${r1.x}`)
+  await touch('touchEnd')
+  await page.waitForTimeout(150)
+  const e0 = await puppyState(page)
+  await page.waitForTimeout(300)
+  const e1 = await puppyState(page)
   await cdp.detach()
-  check('dragging up anywhere walks the dog up', mid.status === 'play' && mid.y < before.y - 0.3, `${before.y} → ${mid.y}`)
-  check('letting go stops it dead', Math.abs(a.y - b.y) < 1e-3)
+  check('letting go stops it dead', Math.abs(e0.x - e1.x) < 1e-3 && e1.status === 'play')
   await page.locator('[data-testid="puppy-restart"]').click()
 }
 

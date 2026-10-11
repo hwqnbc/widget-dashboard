@@ -2424,3 +2424,12 @@ carried over; these are the new ones.
     first. When a feature adds a modal first screen, grep the suites
     for every entry point (mount AND reload) the same day.
 
+158. **A held drag stick should run at full speed past a small dead zone
+    — not ramp with deflection.** Puppy Rescue's first stick scaled speed
+    by how far the thumb was from its touch point (a 28–56 px throw); the
+    play-tester held still and the dog crawled until they "pushed and
+    shifted" their thumb. For a game whose hero has one speed, make the
+    stick pure direction: ~10 px dead zone, then full speed. Pair it with a
+    LEASHED touch point (dragged along when the thumb slides past the
+    ring, keep the ring small ~30 px) so reversing is a short move — the
+    leash radius is exactly the cost of turning back.

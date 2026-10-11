@@ -43,8 +43,10 @@ const PuppyRescue3D = lazyWithReload(() => import('./PuppyRescue3D'), 'puppy3d')
 const CAUGHT_MS = 900
 /** Telemetry publish interval (ms). */
 const PUBLISH_MS = 50
-/** Drag stick: dead zone as a fraction of the throw. */
-const DRAG_DEAD = 0.12
+/** Drag stick: a thumb this far (px) from its touch point runs the dog at
+ * FULL speed — no push-harder ramp (holding a ramped stick felt sluggish
+ * until the thumb was shoved out; play-test feedback). Inside it: still. */
+const DRAG_DEAD_PX = 10
 
 const coerceLevel = (v: unknown): number | undefined =>
   Number.isInteger(v) && (v as number) >= 0 && (v as number) < LEVELS.length ? (v as number) : undefined
@@ -113,7 +115,18 @@ export default function PuppyRescueWidget({ id }: WidgetProps) {
   const ringRef = useRef<HTMLDivElement>(null)
   const knobRef = useRef<HTMLDivElement>(null)
   const keys = useRef(new Set<string>())
-  const drag = useRef<{ id: number; ox: number; oy: number; r: number; ix: number; iy: number } | null>(null)
+  const drag = useRef<{
+    id: number
+    /** Touch point (client px) — dragged along behind a thumb that slides past the ring. */
+    ox: number
+    oy: number
+    /** Stage origin (client px), for placing the ring. */
+    sx: number
+    sy: number
+    r: number
+    ix: number
+    iy: number
+  } | null>(null)
   const soundRef = useRef(sound)
   soundRef.current = sound
   const bestRef = useRef(records.bestMs)
@@ -293,9 +306,11 @@ export default function PuppyRescueWidget({ id }: WidgetProps) {
     unlockAudio()
     if (drag.current) return
     const rect = e.currentTarget.getBoundingClientRect()
-    const r = Math.max(28, Math.min(56, Math.min(rect.width, rect.height) * 0.09))
+    // Small ring: speed no longer grows with the push, so the ring is only a
+    // leash — and its radius is what turning back costs once it trails.
+    const r = Math.max(24, Math.min(32, Math.min(rect.width, rect.height) * 0.07))
     e.currentTarget.setPointerCapture(e.pointerId)
-    drag.current = { id: e.pointerId, ox: e.clientX, oy: e.clientY, r, ix: 0, iy: 0 }
+    drag.current = { id: e.pointerId, ox: e.clientX, oy: e.clientY, sx: rect.left, sy: rect.top, r, ix: 0, iy: 0 }
     showRing(e.clientX - rect.left, e.clientY - rect.top, r)
   }
   const onMove = (e: ReactPointerEvent<HTMLDivElement>) => {
@@ -303,15 +318,24 @@ export default function PuppyRescueWidget({ id }: WidgetProps) {
     if (!d || e.pointerId !== d.id) return
     let dx = e.clientX - d.ox
     let dy = e.clientY - d.oy
-    const len = Math.hypot(dx, dy)
+    let len = Math.hypot(dx, dy)
     if (len > d.r) {
-      dx *= d.r / len
-      dy *= d.r / len
+      // The thumb slid past the ring: drag the touch point along behind it,
+      // so turning back is always a short move, never a long drag home.
+      d.ox = e.clientX - (dx / len) * d.r
+      d.oy = e.clientY - (dy / len) * d.r
+      dx = e.clientX - d.ox
+      dy = e.clientY - d.oy
+      len = d.r
+      if (ringRef.current) {
+        ringRef.current.style.left = `${d.ox - d.sx - d.r}px`
+        ringRef.current.style.top = `${d.oy - d.sy - d.r}px`
+      }
     }
     if (knobRef.current) knobRef.current.style.transform = `translate(${dx}px, ${dy}px)`
-    const m = Math.min(1, len / d.r)
-    const k = m < DRAG_DEAD ? 0 : (m - DRAG_DEAD) / (1 - DRAG_DEAD) / Math.max(1e-6, Math.hypot(dx, dy))
-    // Screen up = up the map (the camera looks from the bottom edge).
+    // Any direction, full speed once past the dead zone. Screen up = up the
+    // map (the camera looks from the bottom edge).
+    const k = len < DRAG_DEAD_PX ? 0 : 1 / len
     d.ix = dx * k
     d.iy = dy * k
   }
