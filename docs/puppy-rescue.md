@@ -158,8 +158,8 @@ the start.
 | Patrol 1 · On Patrol | `patrol:0` | 1 walker across the middle hall | 6.4 s | 5.6 s |
 | Patrol 2 · Two Halls | `patrol:1` | 2 walkers, offset phases | 14.0 s | 12.0 s |
 | Patrol 3 · Corner Watch | `patrol:2` | L-shaped walker + static | 14.8 s | 9.6 s |
-| Patrol 4 · Busy Shelter | `patrol:3` | see `rescueLevels.ts` (layout after screenshot 1) | ≈21 s | 14.4 s |
-| Patrol 5 · Great Escape | `patrol:4` | central-hall walker + more, 4 puppies | ≈17 s+ | 13.6 s |
+| Patrol 4 · Busy Shelter | `patrol:3` | 2 side-corridor walkers + 1 static (layout after screenshot 1; side corridors have alcoves) | 29.2 s | 14.4 s |
+| Patrol 5 · Great Escape | `patrol:4` | central-hall walker + side walker + static, 4 puppies | 30.8 s | 13.6 s |
 
 Times are the planner's optimum. A human takes longer.
 

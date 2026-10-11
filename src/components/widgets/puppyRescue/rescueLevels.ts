@@ -313,6 +313,7 @@ export const LEVELS: readonly LevelSpec[] = [
     guards: [
       { path: [[0, 3], [0, 8]], pause: 1.2 },
       { path: [[6, 7], [6, 3]], pause: 1.2, phase: 1.5 },
+      { path: [[5, 5]], facing: 180 },
     ],
   },
   {
@@ -347,6 +348,8 @@ export const LEVELS: readonly LevelSpec[] = [
     ],
     guards: [
       { path: [[3, 1], [3, 9]], pause: 1.2 },
+      { path: [[0, 4], [2, 4]] },
+      { path: [[6, 6]], facing: 270 },
     ],
   },
   // </levels>

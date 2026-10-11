@@ -90,7 +90,7 @@ const run = (level, s, ix, iy, frames) => {
   check('no input → still ready (catchers wait for the first move)', s.status === 'ready' && s.t === 0)
   run(L, s, 0, -1, CELL_FRAMES)
   check('first move starts play; one cell takes exactly CELL_FRAMES steps', s.status === 'play' && Math.abs(s.y - 5.5) < 1e-9, s.y.toFixed(4))
-  run(L, s, 0, -1, CELL_FRAMES * 2)
+  run(L, s, 0, -1, CELL_FRAMES * 4)
   // The wall stub under (2,2) (line 3, col 2) stops the dog below it.
   check('a wall stops the dog', Math.abs(s.y - (3 + DOG_R + 0.07)) < 1e-6, s.y.toFixed(4))
   const yStop = s.y
@@ -108,8 +108,10 @@ const run = (level, s, ix, iy, frames) => {
 {
   const L = room()
   const g = { x: 2.5, y: 0.5, h: Math.PI / 2, v: 0 } // at the top, looking down
-  check('straight ahead inside the range is seen', seenAt(L, g, 2.5, 0.5 + CONE_RANGE - 0.1) > 0)
-  check('beyond the range is not', seenAt(L, g, 2.5, 0.5 + CONE_RANGE + 0.1) < 0)
+  // 20° off the axis, clear of the wall stub under (2,2).
+  const at = (d) => [2.5 + Math.sin(0.35) * d, 0.5 + Math.cos(0.35) * d]
+  check('inside the range is seen', seenAt(L, g, ...at(CONE_RANGE - 0.1)) > 0)
+  check('beyond the range is not', seenAt(L, g, ...at(CONE_RANGE + 0.1)) < 0)
   const a = CONE_HALF + 0.05
   check('outside the cone angle is not', seenAt(L, g, 2.5 + Math.sin(a) * 2, 0.5 + Math.cos(a) * 2) < 0)
   check('just inside the angle is', seenAt(L, g, 2.5 + Math.sin(CONE_HALF - 0.05) * 2, 0.5 + Math.cos(CONE_HALF - 0.05) * 2) > 0)
