@@ -19,7 +19,7 @@ export const LEVELS: readonly LevelSpec[] = [
     id: 'sneak:0',
     tier: 'sneak',
     name: "First Rescue",
-    tip: "Drag anywhere (or use the arrow keys) to move. Free the puppy, then reach the green door — keep out of the red cone!",
+    tip: "Steer with the stick below (or the arrow keys). Free the puppy, then reach the green door — keep out of the red cone!",
     map: [
       '+-+-+E+-+-+',
       '|. . . . .|',

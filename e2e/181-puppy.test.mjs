@@ -9,13 +9,14 @@
  * the puppy and escapes unseen: 3 stars, the records slice keeps them, level
  * 2 unlocks, Next level goes there. On level 2, walking straight up the
  * watched corridor gets the dog caught — and back at the start within a
- * second. A touch drag anywhere steers (floating stick): a resting thumb
- * stays put, a small push is full speed, a thumb slid far reverses with a
- * short move back, release stops. The ⚙
- * menu: Unlock all opens every level, Sound toggles, Reset records clears
+ * second. The fixed stick in the strip under the maze steers (a drag on the
+ * maze doesn't): a resting thumb stays put, a small push is full speed,
+ * across the centre reverses, the stick never moves, release stops. The ⚙
+ * menu: Unlock all opens every level, Stick → Left moves the stick, Sound
+ * toggles, Reset records clears
  * the stars and re-locks.
  */
-import { addPuppyWidget, drivePuppy, launch, puppyMenu, puppyState, reporter } from './helpers.mjs'
+import { addPuppyWidget, drivePuppy, launch, puppyMenu, puppyState, reporter, stickCenter } from './helpers.mjs'
 import { initialState, parseLevel } from './.bundle/rescueModel.js'
 import { LEVELS } from './.bundle/rescueLevels.js'
 import { planLevel } from './.bundle/rescuePlanner.js'
@@ -105,41 +106,48 @@ await addPuppyWidget(page)
   check('back at the start, ready, in about a second', back && dt < 1500 && Math.abs(r.y - s0.y) < 1e-3, `${dt} ms`)
 }
 
-// ---------------------------------------------- 5. touch: floating stick
+// ------------------------------------- 5. touch: the fixed stick (strip)
 {
   // Level 2's bottom row is open wall to wall — steer along it.
-  const box = await page.locator('[data-testid="puppy-stage"]').boundingBox()
-  const x = box.x + box.width * 0.5
-  const y = box.y + box.height * 0.8
   const before = await puppyState(page)
   const cdp = await context.newCDPSession(page)
-  const touch = (type, px) =>
-    cdp.send('Input.dispatchTouchEvent', { type, touchPoints: type === 'touchEnd' ? [] : [{ x: px, y, id: 7 }] })
-  await touch('touchStart', x)
-  await touch('touchMove', x + 7)
+  const touch = (type, x, y) =>
+    cdp.send('Input.dispatchTouchEvent', { type, touchPoints: type === 'touchEnd' ? [] : [{ x, y, id: 7 }] })
+  // A drag on the MAZE no longer steers.
+  const box = await page.locator('[data-testid="puppy-stage"]').boundingBox()
+  const mx = box.x + box.width / 2
+  const my = box.y + box.height * 0.8
+  await touch('touchStart', mx, my)
+  for (let i = 1; i <= 5; i++) await touch('touchMove', mx + i * 15, my)
+  await page.waitForTimeout(300)
+  await touch('touchEnd')
+  const after = await puppyState(page)
+  check('dragging on the maze does not move the dog', Math.abs(after.x - before.x) < 1e-3 && after.status === 'ready')
+  // The stick: a resting thumb stays put, a small push is full speed.
+  const c = await stickCenter(page, 'puppy-stick')
+  const strip = await page.locator('[data-testid="puppy-stick-strip"]').boundingBox()
+  check('the stick sits in its strip below the maze, centred by default',
+    strip.y >= box.y + box.height - 1 && Math.abs(c.x - (strip.x + strip.width / 2)) < 4)
+  await touch('touchStart', c.x, c.y)
+  await touch('touchMove', c.x + 3, c.y)
   await page.waitForTimeout(250)
   const still = await puppyState(page)
-  check('a resting thumb (inside the 10 px dead zone) does not move the dog', Math.abs(still.x - before.x) < 1e-3)
-  // A SMALL push (14 px) is already full speed: ~2.5 cells/s.
-  await touch('touchMove', x + 14)
+  check('a resting thumb on the stick does not move the dog', Math.abs(still.x - before.x) < 1e-3)
+  await touch('touchMove', c.x + 14, c.y)
   const a0 = await puppyState(page)
   await page.waitForTimeout(400)
   const a1 = await puppyState(page)
   const speed = (a1.x - a0.x) / (a1.t - a0.t)
-  check('a small push runs the dog at full speed', speed > 2.2, `${speed.toFixed(2)} cells/s`)
-  // Slide the thumb far right (past the ring), then back just 45 px: the
-  // touch point trailed the thumb, so that short move already reverses.
-  for (let i = 1; i <= 8; i++) {
-    await touch('touchMove', x + 14 + i * 25)
-    await page.waitForTimeout(20)
-  }
-  await page.waitForTimeout(150)
-  await touch('touchMove', x + 14 + 8 * 25 - 45)
+  check('a small push on the stick runs the dog at full speed', speed > 2.2, `${speed.toFixed(2)} cells/s`)
+  // The stick never moves: across its centre is a reverse.
+  await touch('touchMove', c.x - 14, c.y)
   await page.waitForTimeout(80)
   const r0 = await puppyState(page)
   await page.waitForTimeout(300)
   const r1 = await puppyState(page)
-  check('a thumb slid far away reverses with a short move back', r1.x < r0.x - 0.4, `${r0.x} → ${r1.x}`)
+  check('pushing the other way reverses', r1.x < r0.x - 0.4, `${r0.x} → ${r1.x}`)
+  const c2 = await stickCenter(page, 'puppy-stick')
+  check('the stick stayed put while steering', Math.abs(c2.x - c.x) < 1 && Math.abs(c2.y - c.y) < 1)
   await touch('touchEnd')
   await page.waitForTimeout(150)
   const e0 = await puppyState(page)
@@ -157,6 +165,11 @@ await addPuppyWidget(page)
   await page.locator('[data-testid="puppy-level"] select').selectOption(String(LEVELS.length - 1))
   await page.waitForTimeout(400)
   check('…and the last level can be picked', (await puppyState(page)).level === LEVELS[LEVELS.length - 1].id)
+  await puppyMenu(page, 'puppy-stick-left')
+  const strip = await page.locator('[data-testid="puppy-stick-strip"]').boundingBox()
+  const left = await stickCenter(page, 'puppy-stick')
+  check('Stick → Left moves the stick to the left of its strip',
+    (await page.locator('[data-testid="puppy-root"]').getAttribute('data-stick')) === 'left' && left.x < strip.x + strip.width / 3)
   await puppyMenu(page, 'puppy-sound')
   check('Sound toggles off', (await page.locator('[data-testid="puppy-root"]').getAttribute('data-sound')) === 'off')
   await page.locator('[data-testid="puppy-settings"]').click()
@@ -171,6 +184,7 @@ await addPuppyWidget(page)
   await page.reload({ waitUntil: 'networkidle' })
   await page.waitForSelector('[data-testid="puppy-root"]')
   check('the chosen level survives a reload', (await puppyState(page)).level === LEVELS[LEVELS.length - 1].id)
+  check('…and so does the stick position', (await page.locator('[data-testid="puppy-root"]').getAttribute('data-stick')) === 'left')
 }
 
 await finish(browser)

@@ -2433,3 +2433,15 @@ carried over; these are the new ones.
     LEASHED touch point (dragged along when the thumb slides past the
     ring, keep the ring small ~30 px) so reversing is a short move — the
     leash radius is exactly the cost of turning back.
+
+159. **A stick that moves under the thumb gives it no home — fix the
+    stick and give it its own strip.** Puppy Rescue's floating stick
+    (appearing wherever you touched, later also leashed to a sliding
+    thumb) kept relocating its centre, and the play-tester read every
+    relocation as "the joystick keeps shifting" — two rounds of tuning
+    speed and leash never fixed it. A fixed `VirtualJoystick` in a strip
+    under a portrait board did: the thumb always finds the same centre,
+    the stick never covers the board (a stick over a bottom-start maze
+    would hide the hero exactly at the first move), and the strip soaks
+    up the vertical slack a tilted board leaves in a tall card. Make the
+    position switchable (Left/Centre/Right) rather than guessing hands.

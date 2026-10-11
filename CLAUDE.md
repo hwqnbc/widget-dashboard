@@ -444,8 +444,9 @@ the MIRROR by default — toggleable — so watching player 1 solve it is no hel
 and a **2 Devices ghost race**: the netplay layer's first non-turn-based
 consumer, with a synced countdown and the opponent shown as a marker).
 See `docs/puppy-rescue.md` for the Puppy Rescue widget (the fifth WebGL
-widget — a stealth-rescue maze: free-moving dog (floating drag stick /
-arrows, no inertia, corner assist) frees caged puppies that follow in a
+widget — a stealth-rescue maze: free-moving dog (a fixed `VirtualJoystick`
+in a strip under the maze — any direction, full speed past a small dead
+zone, Left/Centre/Right — or arrows; no inertia, corner assist) frees caged puppies that follow in a
 breadcrumb conga line, past catchers with wall-clipped vision cones and a
 near/far "?" meter; caught = retry in <1 s; fixed portrait camera over the
 whole maze; a pure fixed-step `rescueModel` (catcher poses are pure

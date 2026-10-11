@@ -47,12 +47,15 @@ function CameraRig({ level }: { level: Level }) {
   useLayoutEffect(() => {
     camera.aspect = size.width / Math.max(1, size.height)
     camera.updateProjectionMatrix()
-    const hx = level.cols / 2 + 0.15
-    const hz = level.rows / 2 + 0.15
+    // Hug the maze: its floor + wall tops, plus headroom only for the door's
+    // ▼▼ marker (lesson: empty bands above/below waste a portrait card).
+    const hx = level.cols / 2 + 0.08
+    const hz = level.rows / 2 + 0.08
     const corners: Vector3[] = []
-    for (const x of [-hx, hx]) for (const z of [-hz - 0.4, hz]) for (const y of [0, 1.1]) corners.push(new Vector3(x, y, z))
+    for (const x of [-hx, hx]) for (const z of [-hz, hz]) for (const y of [0, 0.5]) corners.push(new Vector3(x, y, z))
+    corners.push(new Vector3(level.exitCol + 0.5 - level.cols / 2, 1.3, -hz))
     const dir = new Vector3(0, Math.sin(ELEVATION), Math.cos(ELEVATION))
-    const look = new Vector3(0, 0, 0.15)
+    const look = new Vector3(0, 0, 0)
     const p = new Vector3()
     let d = 15
     for (let k = 0; k < 8; k++) {
@@ -64,7 +67,7 @@ function CameraRig({ level }: { level: Level }) {
         p.copy(q).project(camera)
         m = Math.max(m, Math.abs(p.x), Math.abs(p.y))
       }
-      d *= m / 0.95
+      d *= m / 0.985
     }
     camera.position.copy(look).addScaledVector(dir, d)
     camera.lookAt(look)

@@ -1,5 +1,4 @@
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { PointerEvent as ReactPointerEvent } from 'react'
 import {
   Box,
   Button,
@@ -11,6 +10,8 @@ import {
   NativeSelect,
   Stack,
   Switch,
+  ToggleButton,
+  ToggleButtonGroup,
   Typography,
 } from '@mui/material'
 import SettingsIcon from '@mui/icons-material/Settings'
@@ -30,6 +31,7 @@ import type { WidgetProps } from '../../../registry/widgetRegistry'
 import { isTypingTarget } from '../../../utils/isTypingTarget'
 import { lazyWithReload } from '../../../utils/lazyWithReload'
 import { unlockAudio } from '../droneSim/webAudio'
+import VirtualJoystick from '../droneSim/VirtualJoystick'
 import ConfirmDialog from '../ConfirmDialog'
 import { STEP, initialState, parseLevel, starsFor, step, type Status } from './rescueModel'
 import { LEVELS, TIERS, TIER_LABEL, levelLabel } from './rescueLevels'
@@ -43,10 +45,16 @@ const PuppyRescue3D = lazyWithReload(() => import('./PuppyRescue3D'), 'puppy3d')
 const CAUGHT_MS = 900
 /** Telemetry publish interval (ms). */
 const PUBLISH_MS = 50
-/** Drag stick: a thumb this far (px) from its touch point runs the dog at
- * FULL speed — no push-harder ramp (holding a ramped stick felt sluggish
- * until the thumb was shoved out; play-test feedback). Inside it: still. */
-const DRAG_DEAD_PX = 10
+/** The fixed stick: past this much deflection (of the joystick's own
+ * dead-zone-rescaled output, ≈10 px on the default stick) the dog runs at
+ * FULL speed — no push-harder ramp (a ramped stick felt sluggish; lesson
+ * #158). Inside it: still. */
+const STICK_DEAD = 0.15
+/** Stick knob base diameter (px) and the control strip's height. */
+const STICK_SIZE = 76
+type StickSide = 'left' | 'center' | 'right'
+const coerceSide = (v: unknown): StickSide | undefined =>
+  v === 'left' || v === 'center' || v === 'right' ? v : undefined
 
 const coerceLevel = (v: unknown): number | undefined =>
   Number.isInteger(v) && (v as number) >= 0 && (v as number) < LEVELS.length ? (v as number) : undefined
@@ -87,6 +95,7 @@ export default function PuppyRescueWidget({ id }: WidgetProps) {
   const levelIdx = useWidgetField(id, 'level', 0, coerceLevel)
   const sound = useWidgetField(id, 'sound', true)
   const unlockAll = useWidgetField(id, 'unlockAll', false)
+  const stickSide = useWidgetField<StickSide>(id, 'stickSide', 'center', coerceSide)
   const records = useAppSelector(selectPuppyRescueRecords)
   const setData = useCallback(
     (data: Record<string, unknown>) => dispatch(updateWidgetData({ id, data })),
@@ -112,21 +121,10 @@ export default function PuppyRescueWidget({ id }: WidgetProps) {
 
   const rootRef = useRef<HTMLDivElement>(null)
   const timerRef = useRef<HTMLSpanElement>(null)
-  const ringRef = useRef<HTMLDivElement>(null)
-  const knobRef = useRef<HTMLDivElement>(null)
   const keys = useRef(new Set<string>())
-  const drag = useRef<{
-    id: number
-    /** Touch point (client px) — dragged along behind a thumb that slides past the ring. */
-    ox: number
-    oy: number
-    /** Stage origin (client px), for placing the ring. */
-    sx: number
-    sy: number
-    r: number
-    ix: number
-    iy: number
-  } | null>(null)
+  /** The fixed stick's latest output in MAP axes (written by its onChange —
+   * zero React renders while steering). */
+  const stick = useRef({ ix: 0, iy: 0 })
   const soundRef = useRef(sound)
   soundRef.current = sound
   const bestRef = useRef(records.bestMs)
@@ -171,8 +169,8 @@ export default function PuppyRescueWidget({ id }: WidgetProps) {
     let prevStatus: Status = 'ready'
     let prevSpotted = false
     const input = (): [number, number] => {
-      const d = drag.current
-      if (d) return [d.ix, d.iy]
+      const st = stick.current
+      if (st.ix !== 0 || st.iy !== 0) return [st.ix, st.iy]
       let ix = 0
       let iy = 0
       for (const k of keys.current) {
@@ -290,61 +288,19 @@ export default function PuppyRescueWidget({ id }: WidgetProps) {
     }
   }, [])
 
-  /* ---- drag anywhere: a floating stick appears where the finger lands */
-  const showRing = (x: number, y: number, r: number) => {
-    const ring = ringRef.current
-    const knob = knobRef.current
-    if (!ring || !knob) return
-    ring.style.display = 'block'
-    ring.style.width = ring.style.height = `${r * 2}px`
-    ring.style.left = `${x - r}px`
-    ring.style.top = `${y - r}px`
-    knob.style.transform = 'translate(0px, 0px)'
-  }
-  const onDown = (e: ReactPointerEvent<HTMLDivElement>) => {
-    e.stopPropagation()
-    unlockAudio()
-    if (drag.current) return
-    const rect = e.currentTarget.getBoundingClientRect()
-    // Small ring: speed no longer grows with the push, so the ring is only a
-    // leash — and its radius is what turning back costs once it trails.
-    const r = Math.max(24, Math.min(32, Math.min(rect.width, rect.height) * 0.07))
-    e.currentTarget.setPointerCapture(e.pointerId)
-    drag.current = { id: e.pointerId, ox: e.clientX, oy: e.clientY, sx: rect.left, sy: rect.top, r, ix: 0, iy: 0 }
-    showRing(e.clientX - rect.left, e.clientY - rect.top, r)
-  }
-  const onMove = (e: ReactPointerEvent<HTMLDivElement>) => {
-    const d = drag.current
-    if (!d || e.pointerId !== d.id) return
-    let dx = e.clientX - d.ox
-    let dy = e.clientY - d.oy
-    let len = Math.hypot(dx, dy)
-    if (len > d.r) {
-      // The thumb slid past the ring: drag the touch point along behind it,
-      // so turning back is always a short move, never a long drag home.
-      d.ox = e.clientX - (dx / len) * d.r
-      d.oy = e.clientY - (dy / len) * d.r
-      dx = e.clientX - d.ox
-      dy = e.clientY - d.oy
-      len = d.r
-      if (ringRef.current) {
-        ringRef.current.style.left = `${d.ox - d.sx - d.r}px`
-        ringRef.current.style.top = `${d.oy - d.sy - d.r}px`
-      }
+  /* ---- the fixed stick: any direction, full speed past the dead zone */
+  const onStick = useCallback((x: number, y: number) => {
+    const m = Math.hypot(x, y)
+    const st = stick.current
+    if (m < STICK_DEAD) {
+      st.ix = 0
+      st.iy = 0
+    } else {
+      // Stick up (+y) = up the map (−y): the camera looks from the bottom edge.
+      st.ix = x / m
+      st.iy = -y / m
     }
-    if (knobRef.current) knobRef.current.style.transform = `translate(${dx}px, ${dy}px)`
-    // Any direction, full speed once past the dead zone. Screen up = up the
-    // map (the camera looks from the bottom edge).
-    const k = len < DRAG_DEAD_PX ? 0 : 1 / len
-    d.ix = dx * k
-    d.iy = dy * k
-  }
-  const onUp = (e: ReactPointerEvent<HTMLDivElement>) => {
-    const d = drag.current
-    if (!d || e.pointerId !== d.id) return
-    drag.current = null
-    if (ringRef.current) ringRef.current.style.display = 'none'
-  }
+  }, [])
 
   const goTo = (i: number) => {
     if (i === levelIdx) restart()
@@ -371,6 +327,7 @@ export default function PuppyRescueWidget({ id }: WidgetProps) {
       data-unlocked={unlockedCount}
       data-run={run}
       data-sound={sound ? 'on' : 'off'}
+      data-stick={stickSide}
       sx={{
         height: '100%',
         display: 'flex',
@@ -419,11 +376,6 @@ export default function PuppyRescueWidget({ id }: WidgetProps) {
 
       <Box
         data-testid="puppy-stage"
-        onPointerDown={onDown}
-        onPointerMove={onMove}
-        onPointerUp={onUp}
-        onPointerCancel={onUp}
-        onLostPointerCapture={onUp}
         sx={{ flex: 1, minHeight: 0, position: 'relative', borderRadius: 1, overflow: 'hidden', touchAction: 'none', bgcolor: '#48d3f2' }}
       >
         <Box data-testid="puppy-3d" sx={{ position: 'absolute', inset: 0 }}>
@@ -436,34 +388,6 @@ export default function PuppyRescueWidget({ id }: WidgetProps) {
           >
             <PuppyRescue3D sim={simRef} levelKey={`${spec.id}`} />
           </Suspense>
-        </Box>
-
-        {/* the floating stick */}
-        <Box
-          ref={ringRef}
-          sx={{
-            display: 'none',
-            position: 'absolute',
-            borderRadius: '50%',
-            border: '2px solid rgba(255,255,255,0.8)',
-            bgcolor: 'rgba(255,255,255,0.15)',
-            pointerEvents: 'none',
-          }}
-        >
-          <Box
-            ref={knobRef}
-            sx={{
-              position: 'absolute',
-              left: '50%',
-              top: '50%',
-              width: 26,
-              height: 26,
-              ml: '-13px',
-              mt: '-13px',
-              borderRadius: '50%',
-              bgcolor: 'rgba(255,255,255,0.9)',
-            }}
-          />
         </Box>
 
         {status === 'ready' && (
@@ -575,6 +499,25 @@ export default function PuppyRescueWidget({ id }: WidgetProps) {
         </IconButton>
       </Stack>
 
+      {/* The fixed stick, in its own strip under the maze: it never moves,
+          so the thumb has a home, and it never covers the board. */}
+      <Box
+        data-testid="puppy-stick-strip"
+        data-side={stickSide}
+        onPointerDownCapture={() => unlockAudio()}
+        sx={{
+          flexShrink: 0,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: stickSide === 'left' ? 'flex-start' : stickSide === 'right' ? 'flex-end' : 'center',
+          px: 1,
+          borderRadius: 1,
+          bgcolor: '#2a2554',
+        }}
+      >
+        <VirtualJoystick size={STICK_SIZE} label="MOVE" testId="puppy-stick" onChange={onStick} sx={{ py: 0.75 }} />
+      </Box>
+
       <Menu anchorEl={menuEl} open={menuEl !== null} onClose={() => setMenuEl(null)}>
         <MenuItem onClick={() => setData({ sound: !sound })} data-testid="puppy-sound">
           <ListItemText>Sound</ListItemText>
@@ -583,6 +526,21 @@ export default function PuppyRescueWidget({ id }: WidgetProps) {
         <MenuItem onClick={() => setData({ unlockAll: !unlockAll })} data-testid="puppy-unlock-all">
           <ListItemText>Unlock all levels</ListItemText>
           <Switch size="small" checked={unlockAll} edge="end" />
+        </MenuItem>
+        <MenuItem disableRipple sx={{ gap: 1 }}>
+          <ListItemText>Stick</ListItemText>
+          <ToggleButtonGroup
+            size="small"
+            exclusive
+            value={stickSide}
+            onChange={(_, v: StickSide | null) => v && setData({ stickSide: v })}
+          >
+            {(['left', 'center', 'right'] as const).map((v) => (
+              <ToggleButton key={v} value={v} data-testid={`puppy-stick-${v}`} sx={{ py: 0.1, px: 1, textTransform: 'none' }}>
+                {v === 'center' ? 'Centre' : v === 'left' ? 'Left' : 'Right'}
+              </ToggleButton>
+            ))}
+          </ToggleButtonGroup>
         </MenuItem>
         <MenuItem
           data-testid="puppy-reset-records"
