@@ -312,3 +312,60 @@ export function Blob({ r = 0.22, ring = false }: { r?: number; ring?: boolean })
     </mesh>
   )
 }
+
+const GOLD = '#f5b301'
+const GOLD_DARK = '#c98a00'
+
+/** The gold key: a ring bow, a shaft and two teeth, lying flat-ish. */
+export function GoldKey() {
+  return (
+    <group>
+      <mesh position={[-0.16, 0, 0]} rotation={[Math.PI / 2, 0, 0]}>
+        <torusGeometry args={[0.1, 0.04, 8, 16]} />
+        <meshStandardMaterial color={GOLD} roughness={0.45} metalness={0.3} />
+      </mesh>
+      <mesh position={[0.06, 0, 0]}>
+        <boxGeometry args={[0.3, 0.05, 0.06]} />
+        <meshStandardMaterial color={GOLD} roughness={0.45} metalness={0.3} />
+      </mesh>
+      {[0.12, 0.2].map((x) => (
+        <mesh key={x} position={[x, 0, 0.06]}>
+          <boxGeometry args={[0.04, 0.05, 0.08]} />
+          <meshStandardMaterial color={GOLD} roughness={0.45} metalness={0.3} />
+        </mesh>
+      ))}
+    </group>
+  )
+}
+
+/** The golden padlock that seals the pen: bars across the gap plus a fat
+ * lock body. The scene lifts it away when it opens. `horiz`: the edge runs
+ * along x (else along z). */
+export function Padlock({ horiz }: { horiz: boolean }) {
+  return (
+    <group rotation={[0, horiz ? 0 : Math.PI / 2, 0]}>
+      {[-0.35, -0.12, 0.12, 0.35].map((x) => (
+        <mesh key={x} position={[x, 0.22, 0]}>
+          <boxGeometry args={[0.05, 0.44, 0.05]} />
+          <meshStandardMaterial color={GOLD_DARK} roughness={0.6} />
+        </mesh>
+      ))}
+      <mesh position={[0, 0.42, 0]}>
+        <boxGeometry args={[0.96, 0.05, 0.06]} />
+        <meshStandardMaterial color={GOLD_DARK} roughness={0.6} />
+      </mesh>
+      <mesh position={[0, 0.24, 0.06]}>
+        <boxGeometry args={[0.3, 0.26, 0.14]} />
+        <meshStandardMaterial color={GOLD} roughness={0.45} metalness={0.3} />
+      </mesh>
+      <mesh position={[0, 0.42, 0.06]}>
+        <torusGeometry args={[0.1, 0.03, 8, 16, Math.PI]} />
+        <meshStandardMaterial color="#cfd6dd" roughness={0.4} metalness={0.4} />
+      </mesh>
+      <mesh position={[0, 0.22, 0.135]}>
+        <circleGeometry args={[0.035, 10]} />
+        <meshStandardMaterial color="#3b2a00" />
+      </mesh>
+    </group>
+  )
+}

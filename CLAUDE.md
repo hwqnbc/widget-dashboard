@@ -455,7 +455,11 @@ functions of time) stepped by the widget's own rAF loop with the lazy
 level pack whose every level the e2e sweep re-proves 3-star-escapable via
 `rescuePlanner` (BFS over cell × puppies × time against inflated cones,
 replayed frame-exact through the real `step`); stars/best times/unlocks in
-`records.puppyRescue`).
+`records.puppyRescue`; Round 2 added sweeping **sentries** (a `sweep` arc
+on a static catcher) and the **gold key → padlocked pen** (`K`/`L`/`P` map
+chars — the padlock edge blocks movement and sight until opened, the pen's
+crowd joins at the tighter `PEN_GAP`; the planner carries key/pen bits and
+the freeing order) — 20 levels in four tiers).
 See `docs/map.md` for the Map page (the first page-level heavy feature —
 @arcgis/core lazy route chunk, free no-key `gray-vector`/`dark-gray-vector`
 basemaps following the theme toggle, 2D map / 3D globe switch, locate/pins/

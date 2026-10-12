@@ -2445,3 +2445,18 @@ carried over; these are the new ones.
     would hide the hero exactly at the first move), and the strip soaks
     up the vertical slack a tilted board leaves in a tall card. Make the
     position switchable (Left/Centre/Right) rather than guessing hands.
+
+160. **When followers stop being uniform, the search needs their ORDER,
+    not just their count.** Puppy Rescue's planner placed the puppy line
+    by count × one gap — fine while every puppy trailed at 0.55. Pen
+    puppies huddle at 0.3, so who joined when now decides where each one
+    stands. Each search node carries its freeing order (an array shared
+    until it changes — cheap), while the dedupe key keeps ignoring it.
+    A mask bit says WHAT you have; anything that shapes geometry needs
+    the sequence.
+
+161. **Never lay a tip over a portrait board — put it beside.** Once the
+    camera hugged the maze, the "move to start" overlay sat exactly on the
+    top rows: the door and two cages, i.e. the goals the tip talks about.
+    A slim banner between the picker and the board costs a few pixels of
+    board for a few seconds and hides nothing.

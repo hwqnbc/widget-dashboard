@@ -15,6 +15,10 @@
  */
 import {
   BUMP_R,
+  FOLLOW_GAP,
+  PEN_GAP,
+  canStep,
+  puppyCount,
   CELL_FRAMES,
   CONE_HALF,
   CONE_RANGE,
@@ -238,6 +242,81 @@ const run = (level, s, ix, iy, frames) => {
     f++
   }
   check('the route follower lands frame-exact (3 cells = 3×CELL_FRAMES)', f === 3 * CELL_FRAMES && Math.abs(s.x - 3.5) < 1e-9, `${f}`)
+}
+
+// ------------------------------------------- 6b. sentries (Round 2)
+{
+  const L = room([{ path: [[2, 3]], facing: 180, sweep: 120 }])
+  const tr = L.guards[0]
+  const hs = []
+  for (let t = 0; t < tr.period; t += 0.05) hs.push(guardPose(tr, t, {}).h)
+  const down = Math.PI / 2
+  const minH = Math.min(...hs)
+  const maxH = Math.max(...hs)
+  check('a sentry sweeps its arc (±60° about its facing) and back', Math.abs(minH - (down - Math.PI / 3)) < 0.02 && Math.abs(maxH - (down + Math.PI / 3)) < 0.02,
+    `${((minH * 180) / Math.PI).toFixed(0)}°…${((maxH * 180) / Math.PI).toFixed(0)}°`)
+  const p0 = guardPose(tr, 0.3, {})
+  check('…without moving off its spot', p0.x === 2.5 && p0.y === 3.5 && p0.v === 0)
+  // 120° at 45°/s + 2 × 0.6 s pauses
+  check('…on a period of 2·arc/rate + 2·pause', Math.abs(tr.period - (2 * 120 / 45 + 1.2)) < 1e-9, tr.period.toFixed(3))
+}
+
+// --------------------------------------- 6c. key, padlock, pen (Round 2)
+{
+  // A pen of 2 cells (4 pups) behind a padlock on the line under row 1.
+  const L = parseLevel({
+    id: 'pen',
+    tier: 'key',
+    name: 'pen',
+    map: [
+      '+-+-+E+-+-+',
+      '|P P|. . .|',
+      '+-+L+ + + +',
+      '|. . . . K|',
+      '+ + + + + +',
+      '|. . . . .|',
+      '+ + + + + +',
+      '|. . D . .|',
+      '+-+-+-+-+-+',
+    ],
+    guards: [],
+  })
+  check('pen cells hold two puppies each; the key and padlock parse', L.pen.length === 4 && L.key && L.lock && L.lock.horiz && puppyCount(L) === 4)
+  check('the padlock edge blocks a step until the pen is open', !canStep(L, 1, 1, 0, -1) && canStep(L, 1, 1, 0, -1, true))
+  check('the padlock blocks sight while shut', !lineOfSight(L, 1.5, 1.6, 1.5, 0.4) && lineOfSight(L, 1.5, 1.6, 1.5, 0.4, false))
+  let threw = false
+  try {
+    parseLevel({ id: 'nokey', tier: 'key', name: '', map: ['+-+E+', '|P D|', '+-+-+'], guards: [] })
+  } catch {
+    threw = true
+  }
+  check('a pen without key + padlock is rejected', threw)
+
+  const s = initialState(L)
+  s.status = 'play'
+  s.x = 1.5
+  s.y = 1.5
+  run(L, s, 0, -1, 30)
+  check('without the key the padlock stays shut (the dog stops at it)', !s.penOpen && s.y > 1.3, s.y.toFixed(2))
+  s.x = 4.5
+  s.y = 2.5
+  run(L, s, 0, -1, 24)
+  check('walking over the key picks it up', s.hasKey && s.ev.key === 1)
+  s.x = 1.5
+  s.y = 2.5
+  s.trail = [3.5, 2.5, 1.5, 2.5]
+  run(L, s, 0, -1, 30)
+  check('carrying the key to the padlock opens it: the whole pen joins', s.penOpen && !s.hasKey && s.ev.unlock === 1 && s.order.length === 4, `pups ${s.order.length}`)
+  check('the door opens with them (first puppies freed)', s.ev.door === 1)
+  run(L, s, 0, 1, 48)
+  const d01 = Math.hypot(s.px[1] - s.px[0], s.py[1] - s.py[0])
+  const d0 = Math.hypot(s.px[0] - s.x, s.py[0] - s.y)
+  check('pen puppies huddle at PEN_GAP (0.3), not FOLLOW_GAP', Math.abs(d01 - PEN_GAP) < 0.02 && Math.abs(d0 - PEN_GAP) < 0.02 && PEN_GAP < FOLLOW_GAP,
+    `${d0.toFixed(2)} / ${d01.toFixed(2)}`)
+  s.x = 1.5
+  s.y = 1.5
+  run(L, s, 0, -1, 40)
+  check('once open, the padlock edge lets the dog through', s.y < 0.9, s.y.toFixed(2))
 }
 
 // ---------------------------------------------- 7. THE SWEEP: every level

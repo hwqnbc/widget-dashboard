@@ -15,7 +15,7 @@ import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { BufferAttribute, BufferGeometry, Color, DoubleSide, Vector3 } from 'three'
 import type { Group, Mesh, MeshBasicMaterial, PerspectiveCamera } from 'three'
 import { WALL_HALF, coneRays, doorOpen, type Level, type RescueState } from './rescueModel'
-import { AlertMark, Blob, Cage, Catcher, Dog, GoalMarker } from './puppyModels'
+import { AlertMark, Blob, Cage, Catcher, Dog, GoalMarker, GoldKey, Padlock } from './puppyModels'
 import { HERO_COAT, PUP_COATS, newAnim } from './puppyLook'
 
 export interface SimView {
@@ -215,7 +215,7 @@ function ConeActor({ sim, g }: { sim: RefObject<SimView>; g: number }) {
     const { level, s } = sim.current
     const p = s.guards[g]
     if (!p) return
-    coneRays(level, p, rays)
+    coneRays(level, p, rays, !s.penOpen)
     const pos = geom.attributes.position as BufferAttribute
     const ox = wx(level, p.x)
     const oz = wz(level, p.y)
@@ -266,6 +266,8 @@ function HeroActor({ sim }: { sim: RefObject<SimView> }) {
 
 /** A puppy: sits in its cage until freed, then trots in its slot of the
  * line. Cage + marker vanish on release. */
+/** A puppy: waits at home (in a cage, or sitting in the pen) until freed,
+ * then trots in its slot of the line. Cage + marker vanish on release. */
 function PuppyActor({ sim, i }: { sim: RefObject<SimView>; i: number }) {
   const ref = useRef<Group>(null)
   const cage = useRef<Group>(null)
@@ -273,7 +275,8 @@ function PuppyActor({ sim, i }: { sim: RefObject<SimView>; i: number }) {
   const walking = useRef<Group>(null)
   const anim = useMemo(newAnim, [])
   const { level } = sim.current
-  const c = level.cages[i]
+  const caged = i < level.cages.length
+  const c = caged ? level.cages[i] : level.pen[i - level.cages.length]
   useFrame((_, dt) => {
     const { s } = sim.current
     if (!ref.current) return
@@ -299,14 +302,16 @@ function PuppyActor({ sim, i }: { sim: RefObject<SimView>; i: number }) {
   const coat = PUP_COATS[i % PUP_COATS.length]
   return (
     <>
-      <group position={[wx(level, c.x), 0, wz(level, c.y)]}>
-        <group ref={cage}>
-          <Cage />
-          <GoalMarker y={0.95} />
+      {caged && (
+        <group position={[wx(level, c.x), 0, wz(level, c.y)]}>
+          <group ref={cage}>
+            <Cage />
+            <GoalMarker y={0.95} />
+          </group>
         </group>
-      </group>
+      )}
       <group ref={ref}>
-        <group scale={0.95}>
+        <group scale={caged ? 0.95 : 0.72}>
           <group ref={sitting}>
             <Dog coat={coat} anim={anim} sitting />
           </group>
@@ -314,6 +319,86 @@ function PuppyActor({ sim, i }: { sim: RefObject<SimView>; i: number }) {
             <Blob r={0.26} />
             <Dog coat={coat} anim={anim} seed={i * 1.7} />
           </group>
+        </group>
+      </group>
+    </>
+  )
+}
+
+/** The gold key on the floor (bobbing, ▼▼ over it), then carried above
+ * the dog's head, gone once the padlock opens. */
+function KeyActor({ sim }: { sim: RefObject<SimView> }) {
+  const ground = useRef<Group>(null)
+  const carried = useRef<Group>(null)
+  const spin = useRef<Group>(null)
+  const { level } = sim.current
+  const k = level.key
+  useFrame(({ clock }) => {
+    const { s } = sim.current
+    const t = clock.elapsedTime
+    const onFloor = !s.hasKey && !s.penOpen
+    if (ground.current) ground.current.visible = onFloor
+    if (spin.current) {
+      spin.current.rotation.y = t * 1.6
+      spin.current.position.y = 0.3 + Math.sin(t * 3) * 0.05
+    }
+    if (carried.current) {
+      carried.current.visible = s.hasKey
+      carried.current.position.set(wx(level, s.x), 1.0 + Math.sin(t * 4) * 0.04, wz(level, s.y))
+      carried.current.rotation.y = t * 2
+    }
+  })
+  if (!k) return null
+  return (
+    <>
+      <group ref={ground} position={[wx(level, k.x), 0, wz(level, k.y)]}>
+        <group ref={spin} scale={1.3}>
+          <GoldKey />
+        </group>
+        <GoalMarker y={0.95} />
+      </group>
+      <group ref={carried} visible={false} scale={0.9}>
+        <GoldKey />
+      </group>
+    </>
+  )
+}
+
+/** The padlock edge: lifts and shrinks away when opened; a ▼▼ over it
+ * while the dog carries the key. The pen floor is tinted gold. */
+function LockActor({ sim }: { sim: RefObject<SimView> }) {
+  const lock = useRef<Group>(null)
+  const marker = useRef<Group>(null)
+  const { level } = sim.current
+  const L = level.lock
+  useFrame((_, dt) => {
+    const { s } = sim.current
+    if (lock.current) {
+      const want = s.penOpen ? 0 : 1
+      const k = lock.current.scale.x + (want - lock.current.scale.x) * (1 - Math.exp(-8 * Math.min(dt, 0.1)))
+      lock.current.scale.setScalar(k)
+      lock.current.position.y = (1 - k) * 0.8
+      lock.current.visible = k > 0.02
+    }
+    if (marker.current) marker.current.visible = s.hasKey && !s.penOpen
+  })
+  if (!L) return null
+  return (
+    <>
+      {level.pen.map((p, j) =>
+        j % 2 === 0 ? (
+          <mesh key={j} position={[wx(level, Math.floor(p.x) + 0.5), 0.003, wz(level, p.y)]} rotation={[-Math.PI / 2, 0, 0]}>
+            <planeGeometry args={[0.96, 0.96]} />
+            <meshBasicMaterial color="#9a86ff" transparent opacity={0.55} depthWrite={false} />
+          </mesh>
+        ) : null,
+      )}
+      <group position={[wx(level, L.x), 0, wz(level, L.y)]}>
+        <group ref={lock}>
+          <Padlock horiz={L.horiz} />
+        </group>
+        <group ref={marker} visible={false}>
+          <GoalMarker y={0.95} />
         </group>
       </group>
     </>
@@ -340,7 +425,9 @@ export default function PuppyRescue3D({ sim, levelKey }: PuppyRescue3DProps) {
         {level.guards.map((_, g) => (
           <ConeActor key={`c${g}`} sim={sim} g={g} />
         ))}
-        {level.cages.map((_, i) => (
+        <LockActor sim={sim} />
+        <KeyActor sim={sim} />
+        {[...level.cages, ...level.pen].map((_, i) => (
           <PuppyActor key={`p${i}`} sim={sim} i={i} />
         ))}
         {level.guards.map((_, g) => (

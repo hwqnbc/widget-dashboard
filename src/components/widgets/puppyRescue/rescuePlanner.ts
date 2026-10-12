@@ -19,9 +19,11 @@ import {
   CELL_FRAMES,
   CONE_HALF,
   CONE_RANGE,
-  FOLLOW_GAP,
+  KEY_R,
+  LOCK_R,
   STEP,
   canStep,
+  gapOf,
   guardPose,
   pointBack,
   seenAt,
@@ -51,7 +53,10 @@ const DIRS: [number, number][] = [
 
 interface Node {
   cell: number
+  /** Bits 0..n-1: cages freed; bit n: holding the key; bit n+1: pen open. */
   mask: number
+  /** Puppy indices in line order (shared until it changes). */
+  ord: readonly number[]
   parent: Node | null
   /** Index into DIRS (4 = wait). */
   act: number
@@ -65,28 +70,19 @@ export interface Plan {
   states: number
 }
 
-const popcount = (m: number) => {
-  let c = 0
-  while (m) {
-    c += m & 1
-    m >>= 1
-  }
-  return c
-}
-
 /** Seen by any catcher (inflated), as the planner judges it. */
-function exposed(level: Level, poses: Pose[], x: number, y: number): boolean {
+function exposed(level: Level, poses: Pose[], x: number, y: number, shut: boolean): boolean {
   const R = CONE_RANGE + M_RANGE
   const H = CONE_HALF + M_HALF
   for (const p of poses) {
     const d = Math.hypot(x - p.x, y - p.y)
     if (d - M_BODY > R) continue
     if (
-      seenAt(level, p, x, y, R, H) >= 0 ||
-      seenAt(level, p, x + M_BODY, y, R, H) >= 0 ||
-      seenAt(level, p, x - M_BODY, y, R, H) >= 0 ||
-      seenAt(level, p, x, y + M_BODY, R, H) >= 0 ||
-      seenAt(level, p, x, y - M_BODY, R, H) >= 0
+      seenAt(level, p, x, y, R, H, shut) >= 0 ||
+      seenAt(level, p, x + M_BODY, y, R, H, shut) >= 0 ||
+      seenAt(level, p, x - M_BODY, y, R, H, shut) >= 0 ||
+      seenAt(level, p, x, y + M_BODY, R, H, shut) >= 0 ||
+      seenAt(level, p, x, y - M_BODY, R, H, shut) >= 0
     )
       return true
   }
@@ -95,13 +91,20 @@ function exposed(level: Level, poses: Pose[], x: number, y: number): boolean {
 
 export function planLevel(level: Level, maxTime = 90): Plan | null {
   const { cols, cages, guards } = level
-  const full = (1 << cages.length) - 1
+  const nc = cages.length
+  const KEY = 1 << nc
+  const PEN = 1 << (nc + 1)
+  /** Every puppy freed: all cage bits, plus the pen when there is one. */
+  const goal = (1 << nc) - 1 + (level.pen.length ? PEN : 0)
+  const space = 1 << (nc + 2)
   const cageAt = new Map<number, number>()
   cages.forEach((c, i) => cageAt.set(Math.floor(c.y) * cols + Math.floor(c.x), i))
+  const penIdx = level.pen.map((_, j) => nc + j)
   const exitCell = level.exitCol
   const startCell = Math.floor(level.start.y) * cols + Math.floor(level.start.x)
   const cx = (cell: number) => (cell % cols) + 0.5
   const cy = (cell: number) => Math.floor(cell / cols) + 0.5
+  const lineLen = (ord: readonly number[]) => ord.reduce((t, i) => t + gapOf(level, i), 0)
 
   // Per-layer catcher poses at each sample time.
   const poseBuf: Pose[][] = Array.from({ length: SAMPLES + 1 }, () =>
@@ -131,7 +134,7 @@ export function planLevel(level: Level, maxTime = 90): Plan | null {
   const timeless = guards.every((g) => g.legs.length === 1)
   const visited = new Set<number>()
   let layer = new Map<number, Node>()
-  layer.set(startCell * (full + 1), { cell: startCell, mask: 0, parent: null, act: 4 })
+  layer.set(startCell * space, { cell: startCell, mask: 0, ord: [], parent: null, act: 4 })
   let states = 1
   const maxK = Math.ceil(maxTime / TAU)
   for (let k = 0; k < maxK; k++) {
@@ -147,42 +150,61 @@ export function planLevel(level: Level, maxTime = 90): Plan | null {
         // The clock starts on the first move — the dog can't open by waiting.
         // (Nor is waiting ever useful when nothing moves.)
         if (a === 4 && (k === 0 || timeless)) continue
-        if (a < 4 && !canStep(level, x0, y0, dx, dy)) continue
+        if (a < 4 && !canStep(level, x0, y0, dx, dy, (node.mask & PEN) !== 0)) continue
         const cell = (y0 + dy) * cols + (x0 + dx)
         let mask = node.mask
+        let ord = node.ord
         const ci = cageAt.get(cell)
         // Walking through the exit cell with a partial line would end the
         // run early in the real game (the door is open) — not a 3-star.
-        if (cell === exitCell && mask !== 0 && mask !== full) continue
-        const need = popcount(mask | (ci !== undefined ? 1 << ci : 0)) * FOLLOW_GAP
+        const anyPup = (mask & ~KEY) !== 0
+        if (cell === exitCell && anyPup && (mask & ~KEY) !== goal) continue
+        // Room for the longest line this move could end with.
+        const need =
+          lineLen(ord) +
+          (ci !== undefined && !(mask & (1 << ci)) ? gapOf(level, ci) : 0) +
+          (level.lock && !(mask & PEN) ? lineLen(penIdx) : 0)
         if (need > 0) history(node, need)
         let ok = true
         for (let i = 1; i <= SAMPLES && ok; i++) {
           const f = i / SAMPLES
           const x = cx(node.cell) + dx * f
           const y = cy(node.cell) + dy * f
-          if (ci !== undefined && Math.hypot(x - cx(cell), y - cy(cell)) < CAGE_R + M_CAGE) mask |= 1 << ci
+          // Pickups fire a little EARLY here (margins): the line grows and
+          // the padlock opens sooner than in the game — the safe direction.
+          if (ci !== undefined && !(mask & (1 << ci)) && Math.hypot(x - cx(cell), y - cy(cell)) < CAGE_R + M_CAGE) {
+            mask |= 1 << ci
+            ord = [...ord, ci]
+          }
+          if (level.key && !(mask & (KEY | PEN)) && Math.hypot(x - level.key.x, y - level.key.y) < KEY_R + M_CAGE)
+            mask |= KEY
+          if (level.lock && mask & KEY && Math.hypot(x - level.lock.x, y - level.lock.y) < LOCK_R + M_CAGE) {
+            mask = (mask & ~KEY) | PEN
+            ord = [...ord, ...penIdx]
+          }
+          const shut = !(mask & PEN)
           const poses = poseBuf[i]
           for (const p of poses) if (Math.hypot(x - p.x, y - p.y) < BUMP_R + M_BUMP) ok = false
-          if (!ok || exposed(level, poses, x, y)) {
+          if (!ok || exposed(level, poses, x, y, shut)) {
             ok = false
             break
           }
-          const nf = popcount(mask)
-          for (let j = 0; j < nf; j++) {
-            pointBack(trail, trail.length, x, y, (j + 1) * FOLLOW_GAP, pb)
-            if (exposed(level, poses, pb.x, pb.y)) {
+          let back = 0
+          for (let j = 0; j < ord.length; j++) {
+            back += gapOf(level, ord[j])
+            pointBack(trail, trail.length, x, y, back, pb)
+            if (exposed(level, poses, pb.x, pb.y, shut)) {
               ok = false
               break
             }
           }
         }
         if (!ok) continue
-        const key = cell * (full + 1) + mask
+        const key = cell * space + mask
         if (next.has(key) || (timeless && visited.has(key))) continue
         if (timeless) visited.add(key)
-        const child: Node = { cell, mask, parent: node, act: a }
-        if (cell === exitCell && mask === full) return { route: toRoute(child, cols), time: (k + 1) * TAU, states }
+        const child: Node = { cell, mask, ord, parent: node, act: a }
+        if (cell === exitCell && (mask & ~KEY) === goal) return { route: toRoute(child, cols), time: (k + 1) * TAU, states }
         next.set(key, child)
         states++
       }

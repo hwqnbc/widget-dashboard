@@ -35,3 +35,17 @@ export function playEscape(): void {
     tone({ freq: f, dur: 0.16, type: 'triangle', gain: 0.22, delay: i * 0.09 }),
   )
 }
+
+/** The gold key picked up: a bright jingle. */
+export function playKey(): void {
+  tone({ freq: 1320, dur: 0.07, type: 'triangle', gain: 0.2 })
+  tone({ freq: 1760, dur: 0.1, type: 'triangle', gain: 0.2, delay: 0.07 })
+  tone({ freq: 2093, dur: 0.14, type: 'triangle', gain: 0.18, delay: 0.14 })
+}
+
+/** The padlock opens: a heavy clunk, then a happy crowd yip. */
+export function playUnlock(): void {
+  noise({ dur: 0.09, gain: 0.35, cutoff: 1400 })
+  tone({ freq: 220, dur: 0.16, type: 'square', gain: 0.14, delay: 0.02 })
+  ;[880, 990, 1175].forEach((f, i) => tone({ freq: f, dur: 0.1, type: 'triangle', gain: 0.18, delay: 0.2 + i * 0.07 }))
+}

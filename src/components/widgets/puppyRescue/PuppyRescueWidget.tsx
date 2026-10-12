@@ -17,6 +17,7 @@ import {
 import SettingsIcon from '@mui/icons-material/Settings'
 import RestartIcon from '@mui/icons-material/RestartAlt'
 import PetsIcon from '@mui/icons-material/Pets'
+import KeyIcon from '@mui/icons-material/Key'
 import VisibilityIcon from '@mui/icons-material/Visibility'
 import VisibilityOffIcon from '@mui/icons-material/VisibilityOff'
 import { useAppDispatch, useAppSelector } from '../../../app/hooks'
@@ -33,9 +34,9 @@ import { lazyWithReload } from '../../../utils/lazyWithReload'
 import { unlockAudio } from '../droneSim/webAudio'
 import VirtualJoystick from '../droneSim/VirtualJoystick'
 import ConfirmDialog from '../ConfirmDialog'
-import { STEP, initialState, parseLevel, starsFor, step, type Status } from './rescueModel'
+import { STEP, initialState, parseLevel, puppyCount, starsFor, step, type Status } from './rescueModel'
 import { LEVELS, TIERS, TIER_LABEL, levelLabel } from './rescueLevels'
-import { playAlert, playCaught, playDoor, playEscape, playFreed } from './rescueSounds'
+import { playAlert, playCaught, playDoor, playEscape, playFreed, playKey, playUnlock } from './rescueSounds'
 import type { SimView } from './PuppyRescue3D'
 
 /** three.js stays in its own lazy chunk. */
@@ -113,6 +114,7 @@ export default function PuppyRescueWidget({ id }: WidgetProps) {
   const [status, setStatus] = useState<Status>('ready')
   const [pups, setPups] = useState(0)
   const [spotted, setSpotted] = useState(false)
+  const [hasKey, setHasKey] = useState(false)
   const [caughtWho, setCaughtWho] = useState(-1)
   const [result, setResult] = useState<Result | null>(null)
   const [menuEl, setMenuEl] = useState<HTMLElement | null>(null)
@@ -136,6 +138,7 @@ export default function PuppyRescueWidget({ id }: WidgetProps) {
     setStatus('ready')
     setPups(0)
     setSpotted(false)
+    setHasKey(false)
     setCaughtWho(-1)
     setResult(null)
     setRun((r) => r + 1)
@@ -146,6 +149,7 @@ export default function PuppyRescueWidget({ id }: WidgetProps) {
     setStatus('ready')
     setPups(0)
     setSpotted(false)
+    setHasKey(false)
     setCaughtWho(-1)
     setResult(null)
   }, [level])
@@ -164,7 +168,8 @@ export default function PuppyRescueWidget({ id }: WidgetProps) {
     let last = performance.now()
     let acc = 0
     let lastPub = 0
-    let seen = { freed: 0, alert: 0, door: 0 }
+    let seen = { freed: 0, alert: 0, door: 0, key: 0, unlock: 0 }
+    let prevKey = false
     let seenS: unknown = null
     let prevStatus: Status = 'ready'
     let prevSpotted = false
@@ -191,6 +196,7 @@ export default function PuppyRescueWidget({ id }: WidgetProps) {
         // A new attempt: re-baseline the event diff.
         seenS = s
         seen = { ...s.ev }
+        prevKey = s.hasKey
         prevStatus = s.status
         prevSpotted = s.spotted
       }
@@ -215,6 +221,18 @@ export default function PuppyRescueWidget({ id }: WidgetProps) {
         if (root) root.dataset.sfxFreed = String(Number(root.dataset.sfxFreed ?? 0) + 1)
       }
       if (s.ev.door !== seen.door && sfx) playDoor()
+      if (s.ev.key !== seen.key) {
+        if (sfx) playKey()
+        if (root) root.dataset.sfxKey = String(Number(root.dataset.sfxKey ?? 0) + 1)
+      }
+      if (s.ev.unlock !== seen.unlock) {
+        if (sfx) playUnlock()
+        if (root) root.dataset.sfxUnlock = String(Number(root.dataset.sfxUnlock ?? 0) + 1)
+      }
+      if (s.hasKey !== prevKey) {
+        prevKey = s.hasKey
+        setHasKey(s.hasKey)
+      }
       if (s.ev.alert !== seen.alert) {
         if (sfx) playAlert()
         if (root) root.dataset.sfxAlert = String(Number(root.dataset.sfxAlert ?? 0) + 1)
@@ -239,7 +257,7 @@ export default function PuppyRescueWidget({ id }: WidgetProps) {
             stars,
             ms,
             pups: s.order.length,
-            total: lv.cages.length,
+            total: puppyCount(lv),
             spotted: s.spotted,
             newBest: prev === 0 || ms < prev,
           })
@@ -257,6 +275,8 @@ export default function PuppyRescueWidget({ id }: WidgetProps) {
         ds.y = s.y.toFixed(3)
         ds.t = s.t.toFixed(2)
         ds.pups = String(s.order.length)
+        ds.key = s.hasKey ? '1' : '0'
+        ds.pen = s.penOpen ? '1' : '0'
         ds.meter = s.meter.toFixed(2)
         ds.spotted = s.spotted ? '1' : '0'
         ds.seeing = String(s.seeing)
@@ -310,7 +330,7 @@ export default function PuppyRescueWidget({ id }: WidgetProps) {
   const myStars = records.stars[spec.id] ?? 0
   const myBest = records.bestMs[spec.id] ?? 0
   const next = levelIdx + 1 < LEVELS.length ? levelIdx + 1 : -1
-  const total = level.cages.length
+  const total = puppyCount(level)
   const unlockedCount = LEVELS.reduce((n, _, i) => n + (unlocked(i) ? 1 : 0), 0)
 
   return (
@@ -363,6 +383,9 @@ export default function PuppyRescueWidget({ id }: WidgetProps) {
             )
           })}
         </NativeSelect>
+        {hasKey && (
+          <KeyIcon data-testid="puppy-key" fontSize="small" sx={{ color: '#f5b301' }} titleAccess="Carrying the key" />
+        )}
         <Stack direction="row" spacing={0.25} sx={{ alignItems: 'center' }} data-testid="puppy-count" data-pups={pups} data-total={total}>
           <PetsIcon fontSize="small" sx={{ color: pups === total ? 'success.main' : 'text.secondary' }} />
           <Typography variant="body2" sx={{ fontWeight: 700 }}>
@@ -373,6 +396,37 @@ export default function PuppyRescueWidget({ id }: WidgetProps) {
           <SettingsIcon fontSize="small" />
         </IconButton>
       </Stack>
+
+      {/* The tip: a slim banner ABOVE the maze (never over it — the door and
+          cages stay visible while you read), gone on the first move. */}
+      {status === 'ready' && (
+        <Box
+          data-testid="puppy-tip"
+          sx={{
+            flexShrink: 0,
+            px: 1,
+            py: 0.5,
+            borderRadius: 1,
+            bgcolor: '#2a2554',
+            color: 'common.white',
+            textAlign: 'center',
+            lineHeight: 1.25,
+          }}
+        >
+          <Typography variant="caption" component="div" sx={{ fontWeight: 800, lineHeight: 1.3 }}>
+            {levelLabel(levelIdx)} · {spec.name}
+            <Box component="span" sx={{ fontWeight: 400, opacity: 0.75 }}>
+              {' '}
+              — move to start
+            </Box>
+          </Typography>
+          {spec.tip && (
+            <Typography variant="caption" component="div" sx={{ opacity: 0.9, lineHeight: 1.3 }}>
+              {spec.tip}
+            </Typography>
+          )}
+        </Box>
+      )}
 
       <Box
         data-testid="puppy-stage"
@@ -389,36 +443,6 @@ export default function PuppyRescueWidget({ id }: WidgetProps) {
             <PuppyRescue3D sim={simRef} levelKey={`${spec.id}`} />
           </Suspense>
         </Box>
-
-        {status === 'ready' && (
-          <Box
-            data-testid="puppy-tip"
-            sx={{
-              position: 'absolute',
-              left: 8,
-              right: 8,
-              top: 8,
-              p: 1,
-              borderRadius: 2,
-              bgcolor: 'rgba(20,16,60,0.78)',
-              color: 'common.white',
-              pointerEvents: 'none',
-              textAlign: 'center',
-            }}
-          >
-            <Typography variant="subtitle2" sx={{ fontWeight: 800 }}>
-              {levelLabel(levelIdx)} · {spec.name}
-            </Typography>
-            {spec.tip && (
-              <Typography variant="body2" sx={{ opacity: 0.9 }}>
-                {spec.tip}
-              </Typography>
-            )}
-            <Typography variant="caption" sx={{ opacity: 0.75 }}>
-              Move to start
-            </Typography>
-          </Box>
-        )}
 
         {status === 'caught' && (
           <Box

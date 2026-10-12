@@ -7,8 +7,9 @@ patrol, and each one has a red **vision cone**. Stay out of every cone,
 and keep your tail out of them too.
 
 Modelled on the "Dog Rescue" style of mobile ads (two reference screenshots
-supplied by the user). Round 1 ships the playable core: 10 levels in two
-tiers.
+supplied by the user). Round 1 shipped the playable core: 10 levels in two
+tiers. Round 2 added **sweeping sentries** and the **gold key → padlocked
+pen**, bringing the pack to 20 levels in four tiers.
 
 ## Decisions (settled with the user before building)
 
@@ -24,6 +25,16 @@ tiers.
 | 8 | Name | **Puppy Rescue** |
 | 9 | Hero | One orange/tan pup; freed puppies come in 4 coat colours. "Pick your dog" is in the backlog. |
 | 10 | Catchers | A new chunky model: dark round body, white collar, hat, red-handled net. |
+
+### Round 2 decisions (sentries, key and pen)
+
+| # | Question | Decision |
+|---|---|---|
+| R2-1 | How does the pen count toward the stars? | **The pen is the goal.** In a key-and-pen level, the "every puppy" star needs the whole pen crowd out of the door. |
+| R2-2 | How long does the line get? | **Pen puppies huddle closer**, at `PEN_GAP` = 0.3 cells (caged puppies keep 0.55), so a pen of 6–8 makes a tail of about 2–2½ cells. |
+| R2-3 | How do sentries move? | **A smooth sweep back and forth** across a 90–120° arc (default 45°/s), with a 0.6 s pause at each end. |
+| R2-4 | Tier order | **Sentry first (levels 11–15), then Key & Pen (16–20).** Key & Pen levels use all three catcher types. |
+| R2-5 | The tip covering the maze | **A compact banner above the maze**, gone on the first move. |
 
 **Detail I chose myself (not asked):** the door opens once the **first**
 puppy is freed. That way you can't skip a level with 0 puppies and still
@@ -93,9 +104,35 @@ cost of a star.
   - **Static:** one point and a facing (any angle, including diagonals).
   - **Back-and-forth walkers:** waypoints, 0.6× the dog's speed, a pause
     with a 180° turn at each end, and 0.3 s turns at inner corners.
+  - **Sentries (Round 2):** one point plus `sweep` (total arc, °) around
+    `facing`. The cone turns smoothly at `sweepRate` (default
+    `SWEEP_RATE` = 45°/s) from one edge of the arc to the other, holds
+    `pause` (default 0.6 s), and turns back. Facing is still a pure
+    function of time, so the planner treats sentries like walkers (time
+    matters), with no special code.
   - **Loops:** supported (`loop: true`) but not used yet. They're Round 4.
+- **Gold key, padlock and pen (Round 2).**
+  - **Key:** a key in the maze (`K`) is picked up within `KEY_R` (0.5).
+    It floats above the dog (and a key icon shows in the HUD) until it's
+    used.
+  - **Padlock:** an edge (`L`) that blocks movement **and** sight like a
+    wall while shut.
+  - **Opening:** carrying the key within `LOCK_R` (0.65) of the padlock's
+    centre opens it. The padlock lifts away and the edge becomes open floor.
+  - **The pen joins at once:** its `PEN_PER_CELL` (2) puppies per `P`
+    cell join the end of the line together, huddled at `PEN_GAP`. That
+    counts as one "freed" event (one yip), and opens the door if it's the
+    first rescue.
+  - **Stars:** the pen counts toward "every puppy"
+    (`puppyCount = cages + pen`).
+  - **Parse check:** a level must have all of key, padlock and pen, or none
+    of them; anything else is rejected at parse time.
 - **The clock** (and the catchers) start on the first move. A level always
   opens in the same state, and you get time to read the tip.
+- **The tip** is a slim banner between the level picker and the maze, never
+  over it, so the door and cages stay visible. It disappears on the first
+  move. (Round 1's overlay covered the top rows once the camera hugged the
+  maze.)
 
 ## Architecture
 
@@ -159,6 +196,15 @@ puzzles ship as a pack). Every level is **proven** escapable with 3 stars:
 - When every catcher is static, nothing depends on the clock, so the search
   is a plain BFS with a global visited set. That takes milliseconds,
   against about a second for patrol levels.
+- **Round 2: key and pen in the search.**
+  - The state mask gains a "holding the key" bit and a "pen open" bit.
+  - The padlock edge is passable only with pen-open (`canStep(…, penOpen)`),
+    and it blocks sight until then (`seenAt(…, shut)`).
+  - The goal mask is every cage plus the pen.
+  - Each node also carries the **freeing order**. Caged and pen puppies
+    sit at different gaps, so the order decides where each one stands in
+    the line. The dedupe key still ignores it, the same accepted
+    incompleteness as the trail history.
 
 The e2e sweep (`180-puppy-model`) re-proves every level on every run. It
 also checks that catchers' paths don't cross walls and that nobody can see
@@ -186,6 +232,16 @@ the start.
 | Patrol 3 · Corner Watch | `patrol:2` | L-shaped walker + static | 14.8 s | 9.6 s |
 | Patrol 4 · Busy Shelter | `patrol:3` | 2 side-corridor walkers + 1 static (layout after screenshot 1; side corridors have alcoves) | 29.2 s | 14.4 s |
 | Patrol 5 · Great Escape | `patrol:4` | central-hall walker + side walker + static, 4 puppies | 30.8 s | 13.6 s |
+| Sentry 1 · Searchlight | `sentry:0` | 1 sentry sweeping 100° across the middle hall | 12.0 s | 6.4 s |
+| Sentry 2 · Two Lights | `sentry:1` | 2 sentries (90°) at opposite hall ends | 15.6 s | 12.0 s |
+| Sentry 3 · Sweep & Walk | `sentry:2` | sentry (110°) + walker | 21.6 s | 11.2 s |
+| Sentry 4 · Lighthouse | `sentry:3` | central sentry (120°, sneak behind it) + diagonal static, 3 pups | 10.0 s | 8.8 s |
+| Sentry 5 · Night Shift | `sentry:4` | 2 sentries + walker, 3 pups | 16.4 s | 8.8 s |
+| Key & Pen 1 · Golden Key | `key:0` | 1 static (teaches key → padlock → pen of 6) | 8.0 s | 8.0 s |
+| Key & Pen 2 · Long Tail | `key:1` | hall walker vs a tail of 8 pen pups | 14.8 s | 13.6 s |
+| Key & Pen 3 · Locked In | `key:2` | sentry (120°, 40°/s) watching the padlock; cage + pen of 6 | 12.4 s | 8.8 s |
+| Key & Pen 4 · Key Run | `key:3` | walker + static; key far from the pen; cage + pen of 8 | 18.0 s | 14.4 s |
+| Key & Pen 5 · Great Breakout | `key:4` | sentry + walker + static; 2 cages + pen of 6 | 18.8 s | 9.6 s |
 
 Times are the planner's optimum. A human takes longer.
 
@@ -212,15 +268,16 @@ Times are the planner's optimum. A human takes longer.
   - Live telemetry every 50 ms: `data-status` (ready|play|caught|escaped),
     `data-x`/`data-y` (map cells), `data-t`, `data-pups`, `data-meter`,
     `data-spotted`, `data-seeing` (catcher bitmask), `data-guards`
-    (x,y,h per catcher).
-  - SFX counters: `data-sfx-freed`/`-alert`/`-caught`/`-escape`.
+    (x,y,h per catcher), `data-key` (carrying), `data-pen` (padlock open).
+  - SFX counters: `data-sfx-freed`/`-alert`/`-caught`/`-escape`/`-key`/`-unlock`.
 - **Hooks:**
   - Controls and readouts: `puppy-level` (NativeSelect; the `<select>` is
     inside), `puppy-count` (`data-pups`/`data-total`), `puppy-settings`,
     `puppy-stage` (the maze area, not a control), `puppy-stick` (the
     joystick) inside `puppy-stick-strip` (`data-side`), `puppy-3d`, `puppy-timer`,
-    `puppy-unseen` (`data-spotted`), `puppy-restart`.
-  - Overlays: `puppy-tip` (ready), `puppy-caught`, `puppy-escaped`
+    `puppy-unseen` (`data-spotted`), `puppy-restart`, `puppy-key` (HUD key
+    icon, present while carrying), `puppy-tip` (the banner, while ready).
+  - Overlays: `puppy-caught`, `puppy-escaped`
     (`data-stars`), `puppy-next`, `puppy-again`.
   - ⚙ menu items: `puppy-sound`, `puppy-unlock-all`,
     `puppy-stick-left`/`-center`/`-right`, `puppy-reset-records`.
@@ -237,12 +294,17 @@ npm run e2e puppy        # 180-puppy-model (pure + the level sweep), 181-puppy (
 Each item names the seam it builds on.
 
 **Next rounds (agreed order)**
-- **Round 2: rotating sentries.** A static catcher whose facing sweeps
-  ±60–90°. This is a new leg kind in `buildTrack` (turn legs only); the
-  planner needs no change because it's a pure function of time.
-- **Round 2: gold key → padlocked pen** (screenshot 2). A key pickup plus
-  a pen holding many puppies behind a padlock edge. The edge becomes
-  passable once the key is held, so the planner adds a key bit to the mask.
+- ~~**Round 2: rotating sentries.**~~ Shipped; see *Catchers* and the
+  Sentry tier.
+- ~~**Round 2: gold key → padlocked pen.**~~ Shipped; see *Gold key,
+  padlock and pen* and the Key & Pen tier.
+- **Snap-turn sentries** (from the Round 2 discussion, not chosen): a
+  catcher that holds a direction, then turns 90° quickly. This would be a
+  turn leg with a short `dur` between long holds in `buildTrack`.
+- **Several keys and pens per level**, or a coloured key per padlock. This
+  generalises the single `lock`/`key` to arrays plus one mask bit per key.
+- **Pen pack behaviour:** the crowd bunches into a blob instead of single
+  file (Round 2 option C). The detection would test a cluster of points.
 - **Round 3: hiding spots.** Bushes or boxes: cells where the dog (not its
   tail) is unseen while it stands still. Add a `hide` cell flag in the map
   and a skip in `seenAt` for the dog.

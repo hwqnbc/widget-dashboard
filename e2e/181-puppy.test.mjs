@@ -42,6 +42,9 @@ await addPuppyWidget(page)
   const L1 = parseLevel(LEVELS[0])
   check('fresh card: level 1, ready, only level 1 unlocked', st.level === LEVELS[0].id && st.status === 'ready' && st.unlocked === 1)
   check('the tip names the level', (await page.locator('[data-testid="puppy-tip"]').textContent()).includes(LEVELS[0].name))
+  const tipBox = await page.locator('[data-testid="puppy-tip"]').boundingBox()
+  const stageBox = await page.locator('[data-testid="puppy-stage"]').boundingBox()
+  check('the tip is a banner ABOVE the maze, not over it', tipBox.y + tipBox.height <= stageBox.y + 1)
   check('the dog sits on the start', Math.abs(st.x - L1.start.x) < 1e-3 && Math.abs(st.y - L1.start.y) < 1e-3, `${st.x},${st.y}`)
   const locked = await page.locator('[data-testid="puppy-level"] select option').nth(1).isDisabled()
   check('level 2 is locked in the picker', locked)
@@ -162,6 +165,20 @@ await addPuppyWidget(page)
 {
   await puppyMenu(page, 'puppy-unlock-all')
   check('Unlock all opens every level', (await puppyState(page)).unlocked === LEVELS.length)
+  // Key & Pen 1, by the planner's route: key → padlock → the whole pen out.
+  const keyIdx = LEVELS.findIndex((l) => l.tier === 'key')
+  await page.locator('[data-testid="puppy-level"] select').selectOption(String(keyIdx))
+  await page.waitForTimeout(400)
+  {
+    const L = parseLevel(LEVELS[keyIdx])
+    const plan = planLevel(L)
+    const st = await drivePuppy(page, plan.route, { timeout: 45000 })
+    check('Key & Pen 1: key picked up, padlock opened, whole pen escaped unseen',
+      st.status === 'escaped' && st.pups === L.cages.length + L.pen.length && !st.spotted, `${st.status} pups ${st.pups}`)
+    const sfx = await page.locator('[data-testid="puppy-root"]').evaluate((el) => [el.dataset.sfxKey, el.dataset.sfxUnlock])
+    check('sfx: key jingle + padlock clunk', sfx[0] === '1' && sfx[1] === '1', sfx.join(','))
+    check('…3 stars', (await page.locator('[data-testid="puppy-escaped"]').getAttribute('data-stars')) === '3')
+  }
   await page.locator('[data-testid="puppy-level"] select').selectOption(String(LEVELS.length - 1))
   await page.waitForTimeout(400)
   check('…and the last level can be picked', (await puppyState(page)).level === LEVELS[LEVELS.length - 1].id)
@@ -185,6 +202,20 @@ await addPuppyWidget(page)
   await page.waitForSelector('[data-testid="puppy-root"]')
   check('the chosen level survives a reload', (await puppyState(page)).level === LEVELS[LEVELS.length - 1].id)
   check('…and so does the stick position', (await page.locator('[data-testid="puppy-root"]').getAttribute('data-stick')) === 'left')
+  // The new tiers continue the chain: escaping Patrol 5 opens Sentry 1.
+  await page.evaluate((ids) => {
+    const root = JSON.parse(window.localStorage.getItem('persist:testsite'))
+    const rec = JSON.parse(root.records)
+    rec.puppyRescue = { stars: Object.fromEntries(ids.map((id) => [id, 1])), bestMs: {}, escapes: ids.length }
+    root.records = JSON.stringify(rec)
+    window.localStorage.setItem('persist:testsite', JSON.stringify(root))
+  }, LEVELS.filter((l) => l.tier === 'sneak' || l.tier === 'patrol').map((l) => l.id))
+  await page.reload({ waitUntil: 'networkidle' })
+  await page.waitForSelector('[data-testid="puppy-root"]')
+  const firstSentry = LEVELS.findIndex((l) => l.tier === 'sentry')
+  const opts = page.locator('[data-testid="puppy-level"] select option')
+  check('escaping every Sneak + Patrol level unlocks Sentry 1, and only it',
+    (await puppyState(page)).unlocked === firstSentry + 1 && !(await opts.nth(firstSentry).isDisabled()) && (await opts.nth(firstSentry + 1).isDisabled()))
 }
 
 await finish(browser)

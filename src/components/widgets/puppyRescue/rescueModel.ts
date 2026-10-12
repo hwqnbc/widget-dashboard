@@ -46,6 +46,16 @@ export const DRAIN_S = 1
 export const CAGE_R = 0.6
 /** Gap between dog and first puppy, and between puppies (cells of path). */
 export const FOLLOW_GAP = 0.55
+/** Pen puppies huddle tighter — a crowd of 6–8 stays a playable ~2 cells. */
+export const PEN_GAP = 0.3
+/** Pen puppies per `P` cell (sat side by side). */
+export const PEN_PER_CELL = 2
+/** Picking up the key / opening the padlock (distance to its centre). */
+export const KEY_R = 0.5
+export const LOCK_R = 0.65
+/** Sentry defaults: sweep rate (°/s) and the pause at each end (s). */
+export const SWEEP_RATE = 45
+export const SWEEP_PAUSE = 0.6
 /** Half thickness of a wall (cells). */
 export const WALL_HALF = 0.07
 /** Corner assist: within this of a cell-centre line, a blocked move slides
@@ -58,14 +68,19 @@ const ESCAPE_Y = 0.55
 
 /* ------------------------------------------------------------------ level */
 
-export type Tier = 'sneak' | 'patrol'
+export type Tier = 'sneak' | 'patrol' | 'sentry' | 'key'
 
 export interface GuardSpec {
   /** Waypoints in CELL coords (the catcher walks between cell centres). One
    * point = a static catcher. */
   path: [number, number][]
-  /** Static catchers: facing in degrees, 0 = up the map, 90 = right. */
+  /** Static catchers: facing in degrees, 0 = up the map, 90 = right. With
+   * `sweep`, the CENTRE of the arc. */
   facing?: number
+  /** Sentry: sweep the cone back and forth across this arc (total °). */
+  sweep?: number
+  /** Sentry sweep rate (°/s, default `SWEEP_RATE`). */
+  sweepRate?: number
   speed?: number
   /** Pause at each end of a back-and-forth walk (s). */
   pause?: number
@@ -84,9 +99,11 @@ export interface LevelSpec {
   tip?: string
   /**
    * ASCII map, (2·rows+1) lines of (2·cols+1) chars. Odd/odd chars are cells
-   * (`.` floor, `D` dog start, `C` a caged puppy); chars between them are
-   * edges (`-`, `|` or `#` wall, anything else open); even/even chars are
-   * posts (ignored — write `+`). One `E` on the top border is the exit door.
+   * (`.` floor, `D` dog start, `C` a caged puppy, `K` the gold key, `P` a
+   * pen cell holding `PEN_PER_CELL` pen puppies); chars between them are
+   * edges (`-`, `|` or `#` wall, `L` the padlock — a wall until opened with
+   * the key, anything else open); even/even chars are posts (ignored —
+   * write `+`). One `E` on the top border is the exit door.
    */
   map: string[]
   guards: GuardSpec[]
@@ -127,6 +144,13 @@ export interface Level {
   vWall: Uint8Array
   start: { x: number; y: number }
   cages: { x: number; y: number }[]
+  /** Pen puppies (sitting spots). Puppy index `cages.length + j`. */
+  pen: { x: number; y: number }[]
+  /** The gold key's cell centre, if the level has one. */
+  key: { x: number; y: number } | null
+  /** The padlock edge: its segment (blocks movement and sight while shut),
+   * its centre, and the grid edge it occupies. */
+  lock: { seg: Seg; sight: Seg; x: number; y: number; horiz: boolean; ex: number; ey: number } | null
   exitCol: number
   guards: GuardTrack[]
 }
@@ -148,6 +172,13 @@ export function parseLevel(spec: LevelSpec): Level {
   const hWall = new Uint8Array((rows + 1) * cols)
   const vWall = new Uint8Array(rows * (cols + 1))
   let exitCol = -1
+  let lock: Level['lock'] = null
+  const setLock = (horiz: boolean, ex: number, ey: number) => {
+    if (lock) throw new Error(`${spec.id}: one padlock per level`)
+    const seg: Seg = horiz ? [ex, ey, ex + 1, ey] : [ex, ey, ex, ey + 1]
+    const sight: Seg = horiz ? [ex - WALL_HALF, ey, ex + 1 + WALL_HALF, ey] : [ex, ey - WALL_HALF, ex, ey + 1 + WALL_HALF]
+    lock = { seg, sight, x: horiz ? ex + 0.5 : ex, y: horiz ? ey : ey + 0.5, horiz, ex, ey }
+  }
   for (let y = 0; y <= rows; y++)
     for (let x = 0; x < cols; x++) {
       const c = lines[2 * y][2 * x + 1]
@@ -156,42 +187,61 @@ export function parseLevel(spec: LevelSpec): Level {
         exitCol = x
       }
       if (c === '-' || c === '#' || c === 'E') hWall[y * cols + x] = 1
+      if (c === 'L') {
+        hWall[y * cols + x] = 2
+        setLock(true, x, y)
+      }
     }
   for (let y = 0; y < rows; y++)
-    for (let x = 0; x <= cols; x++) if (isWall(lines[2 * y + 1][2 * x])) vWall[y * (cols + 1) + x] = 1
+    for (let x = 0; x <= cols; x++) {
+      const c = lines[2 * y + 1][2 * x]
+      if (isWall(c)) vWall[y * (cols + 1) + x] = 1
+      if (c === 'L') {
+        vWall[y * (cols + 1) + x] = 2
+        setLock(false, x, y)
+      }
+    }
   if (exitCol < 0) throw new Error(`${spec.id}: no exit`)
   let start: { x: number; y: number } | null = null
   const cages: { x: number; y: number }[] = []
+  const pen: { x: number; y: number }[] = []
+  let key: { x: number; y: number } | null = null
   for (let y = 0; y < rows; y++)
     for (let x = 0; x < cols; x++) {
       const c = lines[2 * y + 1][2 * x + 1]
       if (c === 'D') start = { x: x + 0.5, y: y + 0.5 }
       else if (c === 'C') cages.push({ x: x + 0.5, y: y + 0.5 })
+      else if (c === 'K') key = { x: x + 0.5, y: y + 0.5 }
+      else if (c === 'P')
+        for (let k = 0; k < PEN_PER_CELL; k++)
+          pen.push({ x: x + 0.5 + (k - (PEN_PER_CELL - 1) / 2) * 0.42, y: y + 0.5 })
     }
   if (!start) throw new Error(`${spec.id}: no dog start`)
+  if ((pen.length > 0) !== (lock !== null) || (lock !== null) !== (key !== null))
+    throw new Error(`${spec.id}: a pen needs a padlock and a key (and vice versa)`)
   // Merge edge walls into runs: horizontal per line, vertical per column.
   const walls: Seg[] = []
   for (let y = 0; y <= rows; y++) {
     let x = 0
     while (x < cols) {
-      if (!hWall[y * cols + x]) {
+      if (hWall[y * cols + x] !== 1) {
         x++
         continue
       }
       const x0 = x
-      while (x < cols && hWall[y * cols + x]) x++
+      while (x < cols && hWall[y * cols + x] === 1) x++
       walls.push([x0, y, x, y])
     }
   }
   for (let x = 0; x <= cols; x++) {
     let y = 0
     while (y < rows) {
-      if (!vWall[y * (cols + 1) + x]) {
+      if (vWall[y * (cols + 1) + x] !== 1) {
         y++
         continue
       }
       const y0 = y
-      while (y < rows && vWall[y * (cols + 1) + x]) y++
+      while (y < rows && vWall[y * (cols + 1) + x] === 1) y++
       walls.push([x, y0, x, y])
     }
   }
@@ -208,21 +258,30 @@ export function parseLevel(spec: LevelSpec): Level {
     vWall,
     start,
     cages,
+    pen,
+    key,
+    lock,
     exitCol,
     guards: spec.guards.map(buildTrack),
   }
 }
 
-/** True when the edge between cell (x,y) and its neighbour (dx,dy) is open. */
-export function canStep(level: Level, x: number, y: number, dx: number, dy: number): boolean {
+/** True when the edge between cell (x,y) and its neighbour (dx,dy) is open.
+ * The padlock edge is open only once the pen is (`penOpen`). */
+export function canStep(level: Level, x: number, y: number, dx: number, dy: number, penOpen = false): boolean {
   const { cols, rows } = level
   const nx = x + dx
   const ny = y + dy
   if (nx < 0 || ny < 0 || nx >= cols || ny >= rows) return false
-  if (dx === 1) return !level.vWall[y * (cols + 1) + x + 1]
-  if (dx === -1) return !level.vWall[y * (cols + 1) + x]
-  if (dy === 1) return !level.hWall[(y + 1) * cols + x]
-  return !level.hWall[y * cols + x]
+  const e =
+    dx === 1
+      ? level.vWall[y * (cols + 1) + x + 1]
+      : dx === -1
+        ? level.vWall[y * (cols + 1) + x]
+        : dy === 1
+          ? level.hWall[(y + 1) * cols + x]
+          : level.hWall[y * cols + x]
+  return e === 0 || (e === 2 && penOpen)
 }
 
 /* ----------------------------------------------------------------- guards */
@@ -234,6 +293,19 @@ function buildTrack(g: GuardSpec): GuardTrack {
   const push = (dur: number, x0: number, y0: number, x1: number, y1: number, h0: number, h1: number) => {
     legs.push({ t0: t, dur, x0, y0, x1, y1, h0, h1 })
     t += dur
+  }
+  if (pts.length === 1 && g.sweep) {
+    // Sentry: sweep the arc and back, pausing at each end.
+    const [x, y] = pts[0]
+    const c = facingToRad(g.facing ?? 180)
+    const half = ((g.sweep / 2) * Math.PI) / 180
+    const turn = g.sweep / (g.sweepRate ?? SWEEP_RATE)
+    const pause = g.pause ?? SWEEP_PAUSE
+    push(turn, x, y, x, y, c - half, c + half)
+    push(pause, x, y, x, y, c + half, c + half)
+    push(turn, x, y, x, y, c + half, c - half)
+    push(pause, x, y, x, y, c - half, c - half)
+    return { legs, period: t, phase: g.phase ?? 0 }
   }
   if (pts.length === 1) {
     const h = facingToRad(g.facing ?? 180)
@@ -305,9 +377,11 @@ function crosses(px: number, py: number, qx: number, qy: number, s: Seg): boolea
   return true
 }
 
-/** Clear line of sight between two points (no wall run in between). */
-export function lineOfSight(level: Level, ax: number, ay: number, bx: number, by: number): boolean {
+/** Clear line of sight between two points (no wall run in between). The
+ * padlock blocks it while `shut`. */
+export function lineOfSight(level: Level, ax: number, ay: number, bx: number, by: number, shut = true): boolean {
   for (const s of level.sight) if (crosses(ax, ay, bx, by, s)) return false
+  if (shut && level.lock && crosses(ax, ay, bx, by, level.lock.sight)) return false
   return true
 }
 
@@ -323,19 +397,32 @@ export function seenAt(
   py: number,
   range = CONE_RANGE,
   half = CONE_HALF,
+  shut = true,
 ): number {
   const dx = px - g.x
   const dy = py - g.y
   const d = Math.hypot(dx, dy)
   if (d > range) return -1
   if (d > 1e-6 && Math.abs(wrapAngle(Math.atan2(dy, dx) - g.h)) > half) return -1
-  return lineOfSight(level, g.x, g.y, px, py) ? d : -1
+  return lineOfSight(level, g.x, g.y, px, py, shut) ? d : -1
 }
 
 /** Distance along ray (ox,oy)+t·(dx,dy) to the first wall, capped at `max`. */
-export function rayLength(level: Level, ox: number, oy: number, dx: number, dy: number, max: number): number {
+export function rayLength(
+  level: Level,
+  ox: number,
+  oy: number,
+  dx: number,
+  dy: number,
+  max: number,
+  shut = true,
+): number {
   let best = max
-  for (const [ax, ay, bx, by] of level.sight) {
+  const n = level.sight.length
+  for (let i = 0; i <= n; i++) {
+    const seg = i < n ? level.sight[i] : shut && level.lock ? level.lock.sight : null
+    if (!seg) break
+    const [ax, ay, bx, by] = seg
     const ex = bx - ax
     const ey = by - ay
     const den = dx * ey - dy * ex
@@ -349,11 +436,11 @@ export function rayLength(level: Level, ox: number, oy: number, dx: number, dy: 
 
 /** Fill `out` (length n) with ray lengths fanning across the cone — the
  * view draws the wedge from these, clipped by walls exactly like `seenAt`. */
-export function coneRays(level: Level, g: Pose, out: Float32Array): Float32Array {
+export function coneRays(level: Level, g: Pose, out: Float32Array, shut = true): Float32Array {
   const n = out.length
   for (let i = 0; i < n; i++) {
     const a = g.h - CONE_HALF + (2 * CONE_HALF * i) / (n - 1)
-    out[i] = rayLength(level, g.x, g.y, Math.cos(a), Math.sin(a), CONE_RANGE)
+    out[i] = rayLength(level, g.x, g.y, Math.cos(a), Math.sin(a), CONE_RANGE, shut)
   }
   return out
 }
@@ -368,6 +455,8 @@ export interface Events {
   freed: number
   alert: number
   door: number
+  key: number
+  unlock: number
 }
 
 export interface RescueState {
@@ -380,9 +469,14 @@ export interface RescueState {
   v: number
   /** Dog path history, flat x,y pairs, oldest first. */
   trail: number[]
-  /** Cage indices in the order they were opened (= puppy line order). */
+  /** Puppy indices in the order they joined (= puppy line order): cage i is
+   * `i`, pen puppy j is `cages.length + j`. */
   order: number[]
   freed: boolean[]
+  /** Carrying the gold key (picked up, padlock not yet opened). */
+  hasKey: boolean
+  /** The padlock is open: its edge no longer blocks, the pen has joined. */
+  penOpen: boolean
   /** Puppy positions/facings, parallel to `order`. */
   px: number[]
   py: number[]
@@ -413,6 +507,8 @@ export function initialState(level: Level): RescueState {
     trail: [level.start.x, level.start.y],
     order: [],
     freed: level.cages.map(() => false),
+    hasKey: false,
+    penOpen: false,
     px: [],
     py: [],
     ph: [],
@@ -423,14 +519,17 @@ export function initialState(level: Level): RescueState {
     status: 'ready',
     caughtBy: -1,
     caughtWho: -1,
-    ev: { freed: 0, alert: 0, door: 0 },
+    ev: { freed: 0, alert: 0, door: 0, key: 0, unlock: 0 },
   }
   level.guards.forEach((g, i) => guardPose(g, 0, s.guards[i]))
   return s
 }
 
 export const doorOpen = (s: RescueState) => s.order.length > 0
-export const allFreed = (level: Level, s: RescueState) => s.order.length === level.cages.length
+export const puppyCount = (level: Level) => level.cages.length + level.pen.length
+export const allFreed = (level: Level, s: RescueState) => s.order.length === puppyCount(level)
+/** Path gap in front of puppy `idx` (a pen puppy huddles closer). */
+export const gapOf = (level: Level, idx: number) => (idx >= level.cages.length ? PEN_GAP : FOLLOW_GAP)
 
 /** Stars for a finished run: escaped, every puppy, never spotted. */
 export function starsFor(level: Level, s: RescueState): number {
@@ -479,12 +578,17 @@ export function pointBack(
 
 /* -------------------------------------------------------------- collision */
 
-/** Push a circle at (x,y) radius r out of every wall capsule. */
-function resolve(level: Level, p: { x: number; y: number }, r: number): void {
+/** Push a circle at (x,y) radius r out of every wall capsule (and the
+ * padlock edge while it's `shut`). */
+function resolve(level: Level, p: { x: number; y: number }, r: number, shut: boolean): void {
   const rr = r + WALL_HALF
+  const nw = level.walls.length
   for (let iter = 0; iter < 3; iter++) {
     let moved = false
-    for (const [ax, ay, bx, by] of level.walls) {
+    for (let i = 0; i <= nw; i++) {
+      const seg = i < nw ? level.walls[i] : shut && level.lock ? level.lock.seg : null
+      if (!seg) break
+      const [ax, ay, bx, by] = seg
       const ex = bx - ax
       const ey = by - ay
       const len2 = ex * ex + ey * ey
@@ -549,7 +653,7 @@ export function step(level: Level, s: RescueState, ix: number, iy: number): void
     for (let k = 0; k < n; k++) {
       scratchP.x += (ix / mag) * (dist / n)
       scratchP.y += (iy / mag) * (dist / n)
-      resolve(level, scratchP, DOG_R)
+      resolve(level, scratchP, DOG_R, !s.penOpen)
     }
     // Corner assist: mostly-blocked along the main axis → slide toward the
     // cell-centre line of the cross axis, so a turn into a gap just works.
@@ -562,14 +666,14 @@ export function step(level: Level, s: RescueState, ix: number, iy: number): void
         const off = c - scratchP.y
         if (Math.abs(off) < ASSIST && Math.abs(off) > 1e-4) {
           scratchP.y += Math.sign(off) * Math.min(Math.abs(off), want)
-          resolve(level, scratchP, DOG_R)
+          resolve(level, scratchP, DOG_R, !s.penOpen)
         }
       } else {
         const c = Math.floor(scratchP.x) + 0.5
         const off = c - scratchP.x
         if (Math.abs(off) < ASSIST && Math.abs(off) > 1e-4) {
           scratchP.x += Math.sign(off) * Math.min(Math.abs(off), want)
-          resolve(level, scratchP, DOG_R)
+          resolve(level, scratchP, DOG_R, !s.penOpen)
         }
       }
     }
@@ -597,13 +701,29 @@ export function step(level: Level, s: RescueState, ix: number, iy: number): void
     }
   }
 
+  // --- the gold key, then the padlock: the whole pen joins the line
+  if (level.key && !s.hasKey && !s.penOpen && Math.hypot(s.x - level.key.x, s.y - level.key.y) < KEY_R) {
+    s.hasKey = true
+    s.ev.key += 1
+  }
+  if (level.lock && s.hasKey && !s.penOpen && Math.hypot(s.x - level.lock.x, s.y - level.lock.y) < LOCK_R) {
+    s.hasKey = false
+    s.penOpen = true
+    s.ev.unlock += 1
+    if (s.order.length === 0) s.ev.door += 1
+    for (let j = 0; j < level.pen.length; j++) s.order.push(level.cages.length + j)
+    s.ev.freed += 1
+  }
+
   // --- the puppy line
   const nf = s.order.length
   s.px.length = nf
   s.py.length = nf
   s.ph.length = nf
+  let back = 0
   for (let j = 0; j < nf; j++) {
-    pointBack(s.trail, s.trail.length, s.x, s.y, (j + 1) * FOLLOW_GAP, scratchB)
+    back += gapOf(level, s.order[j])
+    pointBack(s.trail, s.trail.length, s.x, s.y, back, scratchB)
     s.px[j] = scratchB.x
     s.py[j] = scratchB.y
     s.ph[j] = scratchB.h
@@ -618,7 +738,7 @@ export function step(level: Level, s: RescueState, ix: number, iy: number): void
   for (let g = 0; g < level.guards.length; g++) {
     const p = guardPose(level.guards[g], s.t, s.guards[g])
     if (Math.hypot(s.x - p.x, s.y - p.y) < BUMP_R) bump = g
-    const d = seenAt(level, p, s.x, s.y)
+    const d = seenAt(level, p, s.x, s.y, CONE_RANGE, CONE_HALF, !s.penOpen)
     if (d >= 0) {
       seeing |= 1 << g
       if (d < nearest) {
@@ -628,7 +748,7 @@ export function step(level: Level, s: RescueState, ix: number, iy: number): void
       }
     }
     for (let j = 0; j < nf; j++) {
-      const dj = seenAt(level, p, s.px[j], s.py[j])
+      const dj = seenAt(level, p, s.px[j], s.py[j], CONE_RANGE, CONE_HALF, !s.penOpen)
       if (dj >= 0) {
         seeing |= 1 << g
         if (dj < nearest) {
