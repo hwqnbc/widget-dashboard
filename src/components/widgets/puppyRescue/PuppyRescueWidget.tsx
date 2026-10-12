@@ -36,7 +36,7 @@ import VirtualJoystick from '../droneSim/VirtualJoystick'
 import ConfirmDialog from '../ConfirmDialog'
 import { STEP, initialState, parseLevel, puppyCount, starsFor, step, type Status } from './rescueModel'
 import { LEVELS, TIERS, TIER_LABEL, levelLabel } from './rescueLevels'
-import { playAlert, playCaught, playDoor, playEscape, playFreed, playKey, playUnlock } from './rescueSounds'
+import { playAlert, playCaught, playDoor, playEscape, playFreed, playKey, playRustle, playUnlock } from './rescueSounds'
 import type { SimView } from './PuppyRescue3D'
 
 /** three.js stays in its own lazy chunk. */
@@ -115,6 +115,7 @@ export default function PuppyRescueWidget({ id }: WidgetProps) {
   const [pups, setPups] = useState(0)
   const [spotted, setSpotted] = useState(false)
   const [hasKey, setHasKey] = useState(false)
+  const [hidden, setHidden] = useState(false)
   const [caughtWho, setCaughtWho] = useState(-1)
   const [result, setResult] = useState<Result | null>(null)
   const [menuEl, setMenuEl] = useState<HTMLElement | null>(null)
@@ -139,6 +140,7 @@ export default function PuppyRescueWidget({ id }: WidgetProps) {
     setPups(0)
     setSpotted(false)
     setHasKey(false)
+    setHidden(false)
     setCaughtWho(-1)
     setResult(null)
     setRun((r) => r + 1)
@@ -150,6 +152,7 @@ export default function PuppyRescueWidget({ id }: WidgetProps) {
     setPups(0)
     setSpotted(false)
     setHasKey(false)
+    setHidden(false)
     setCaughtWho(-1)
     setResult(null)
   }, [level])
@@ -168,7 +171,8 @@ export default function PuppyRescueWidget({ id }: WidgetProps) {
     let last = performance.now()
     let acc = 0
     let lastPub = 0
-    let seen = { freed: 0, alert: 0, door: 0, key: 0, unlock: 0 }
+    let seen = { freed: 0, alert: 0, door: 0, key: 0, unlock: 0, hide: 0 }
+    let prevHidden = false
     let prevKey = false
     let seenS: unknown = null
     let prevStatus: Status = 'ready'
@@ -197,6 +201,7 @@ export default function PuppyRescueWidget({ id }: WidgetProps) {
         seenS = s
         seen = { ...s.ev }
         prevKey = s.hasKey
+        prevHidden = s.hidden
         prevStatus = s.status
         prevSpotted = s.spotted
       }
@@ -228,6 +233,14 @@ export default function PuppyRescueWidget({ id }: WidgetProps) {
       if (s.ev.unlock !== seen.unlock) {
         if (sfx) playUnlock()
         if (root) root.dataset.sfxUnlock = String(Number(root.dataset.sfxUnlock ?? 0) + 1)
+      }
+      if (s.ev.hide !== seen.hide) {
+        if (sfx) playRustle()
+        if (root) root.dataset.sfxHide = String(Number(root.dataset.sfxHide ?? 0) + 1)
+      }
+      if (s.hidden !== prevHidden) {
+        prevHidden = s.hidden
+        setHidden(s.hidden)
       }
       if (s.hasKey !== prevKey) {
         prevKey = s.hasKey
@@ -276,6 +289,7 @@ export default function PuppyRescueWidget({ id }: WidgetProps) {
         ds.t = s.t.toFixed(2)
         ds.pups = String(s.order.length)
         ds.key = s.hasKey ? '1' : '0'
+        ds.hidden = s.hidden ? '1' : '0'
         ds.pen = s.penOpen ? '1' : '0'
         ds.meter = s.meter.toFixed(2)
         ds.spotted = s.spotted ? '1' : '0'
@@ -383,6 +397,15 @@ export default function PuppyRescueWidget({ id }: WidgetProps) {
             )
           })}
         </NativeSelect>
+        {hidden && (
+          <Box
+            data-testid="puppy-hidden"
+            title="Hidden in a bush"
+            sx={{ display: 'flex', alignItems: 'center', px: 0.5, borderRadius: 1, bgcolor: '#2e7d32', color: 'common.white' }}
+          >
+            <VisibilityOffIcon sx={{ fontSize: 16 }} />
+          </Box>
+        )}
         {hasKey && (
           <KeyIcon data-testid="puppy-key" fontSize="small" sx={{ color: '#f5b301' }} titleAccess="Carrying the key" />
         )}

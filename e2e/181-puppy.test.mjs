@@ -179,6 +179,30 @@ await addPuppyWidget(page)
     check('sfx: key jingle + padlock clunk', sfx[0] === '1' && sfx[1] === '1', sfx.join(','))
     check('…3 stars', (await page.locator('[data-testid="puppy-escaped"]').getAttribute('data-stars')) === '3')
   }
+  // Hide 1: wait for the corridor walker to pass, slip in behind it and
+  // stand still in the alcove bush — hidden (badge + telemetry + rustle).
+  const hideIdx = LEVELS.findIndex((l) => l.tier === 'hide')
+  await page.locator('[data-testid="puppy-level"] select').selectOption(String(hideIdx))
+  await page.waitForTimeout(400)
+  {
+    await page.keyboard.down('ArrowRight')
+    await page.waitForTimeout(60)
+    await page.keyboard.up('ArrowRight')
+    await page
+      .waitForFunction(() => parseFloat(document.querySelector('[data-testid="puppy-root"]')?.dataset.t ?? '0') >= 6.6, null, { timeout: 12000 })
+      .catch(() => {})
+    const st = await drivePuppy(page, [{ x: 0.5, y: 9.5 }, { x: 3.5, y: 9.5 }, { x: 3.5, y: 5.5 }, { x: 2.5, y: 5.5 }], { timeout: 15000 })
+    await page.waitForTimeout(250)
+    const h = await page.locator('[data-testid="puppy-root"]').evaluate((el) => [el.dataset.hidden, el.dataset.sfxHide, el.dataset.status])
+    check('Hide 1: standing still in the bush hides the dog (telemetry + rustle)', st.status === 'play' && h[0] === '1' && Number(h[1]) >= 1 && h[2] === 'play', h.join(','))
+    check('…and the HUD shows the hidden badge', (await page.locator('[data-testid="puppy-hidden"]').count()) === 1)
+    // Telemetry publishes every 50 ms — hold long enough to be sampled.
+    await page.keyboard.down('ArrowRight')
+    await page.waitForTimeout(150)
+    const moving = await page.locator('[data-testid="puppy-root"]').evaluate((el) => el.dataset.hidden)
+    await page.keyboard.up('ArrowRight')
+    check('moving reveals it again', moving === '0')
+  }
   await page.locator('[data-testid="puppy-level"] select').selectOption(String(LEVELS.length - 1))
   await page.waitForTimeout(400)
   check('…and the last level can be picked', (await puppyState(page)).level === LEVELS[LEVELS.length - 1].id)

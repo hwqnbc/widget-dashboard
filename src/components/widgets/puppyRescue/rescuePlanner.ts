@@ -89,7 +89,11 @@ function exposed(level: Level, poses: Pose[], x: number, y: number, shut: boolea
   return false
 }
 
-export function planLevel(level: Level, maxTime = 90): Plan | null {
+/**
+ * `noHide`: treat bushes as plain floor — the e2e sweep uses it to prove a
+ * Hide level genuinely needs its bushes.
+ */
+export function planLevel(level: Level, maxTime = 90, noHide = false): Plan | null {
   const { cols, cages, guards } = level
   const nc = cages.length
   const KEY = 1 << nc
@@ -165,6 +169,8 @@ export function planLevel(level: Level, maxTime = 90): Plan | null {
           (ci !== undefined && !(mask & (1 << ci)) ? gapOf(level, ci) : 0) +
           (level.lock && !(mask & PEN) ? lineLen(penIdx) : 0)
         if (need > 0) history(node, need)
+        // Waiting in a bush hides the dog (only the dog, only standing still).
+        const dogHidden = !noHide && a === 4 && level.bush[node.cell] === 1
         let ok = true
         for (let i = 1; i <= SAMPLES && ok; i++) {
           const f = i / SAMPLES
@@ -185,7 +191,7 @@ export function planLevel(level: Level, maxTime = 90): Plan | null {
           const shut = !(mask & PEN)
           const poses = poseBuf[i]
           for (const p of poses) if (Math.hypot(x - p.x, y - p.y) < BUMP_R + M_BUMP) ok = false
-          if (!ok || exposed(level, poses, x, y, shut)) {
+          if (!ok || (!dogHidden && exposed(level, poses, x, y, shut))) {
             ok = false
             break
           }

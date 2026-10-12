@@ -369,3 +369,25 @@ export function Padlock({ horiz }: { horiz: boolean }) {
     </group>
   )
 }
+
+/** A round leafy bush — a hiding spot. Matte clustered spheres. */
+export function Bush() {
+  const leaves: [number, number, number, number, string][] = [
+    [0, 0.22, 0, 0.3, '#2f9e44'],
+    [-0.22, 0.17, 0.08, 0.22, '#37b24d'],
+    [0.22, 0.17, 0.06, 0.22, '#2b8a3e'],
+    [0.05, 0.16, 0.24, 0.2, '#40c057'],
+    [-0.06, 0.16, -0.22, 0.2, '#2f9e44'],
+    [0.02, 0.4, 0.02, 0.2, '#51cf66'],
+  ]
+  return (
+    <group>
+      {leaves.map(([x, y, z, r, c], i) => (
+        <mesh key={i} position={[x, y, z]}>
+          <sphereGeometry args={[r, 10, 8]} />
+          <meshStandardMaterial color={c} roughness={0.95} />
+        </mesh>
+      ))}
+    </group>
+  )
+}

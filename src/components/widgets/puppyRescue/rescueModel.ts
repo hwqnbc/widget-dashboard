@@ -68,7 +68,7 @@ const ESCAPE_Y = 0.55
 
 /* ------------------------------------------------------------------ level */
 
-export type Tier = 'sneak' | 'patrol' | 'sentry' | 'key'
+export type Tier = 'sneak' | 'patrol' | 'sentry' | 'key' | 'hide'
 
 export interface GuardSpec {
   /** Waypoints in CELL coords (the catcher walks between cell centres). One
@@ -100,7 +100,8 @@ export interface LevelSpec {
   /**
    * ASCII map, (2·rows+1) lines of (2·cols+1) chars. Odd/odd chars are cells
    * (`.` floor, `D` dog start, `C` a caged puppy, `K` the gold key, `P` a
-   * pen cell holding `PEN_PER_CELL` pen puppies); chars between them are
+   * pen cell holding `PEN_PER_CELL` pen puppies, `B` a bush — standing
+   * still in one hides the dog); chars between them are
    * edges (`-`, `|` or `#` wall, `L` the padlock — a wall until opened with
    * the key, anything else open); even/even chars are posts (ignored —
    * write `+`). One `E` on the top border is the exit door.
@@ -146,6 +147,10 @@ export interface Level {
   cages: { x: number; y: number }[]
   /** Pen puppies (sitting spots). Puppy index `cages.length + j`. */
   pen: { x: number; y: number }[]
+  /** Bush cells (hiding spots): `bush[y*cols+x]` = 1. */
+  bush: Uint8Array
+  /** Bush cell centres, for drawing. */
+  bushes: { x: number; y: number }[]
   /** The gold key's cell centre, if the level has one. */
   key: { x: number; y: number } | null
   /** The padlock edge: its segment (blocks movement and sight while shut),
@@ -205,6 +210,8 @@ export function parseLevel(spec: LevelSpec): Level {
   let start: { x: number; y: number } | null = null
   const cages: { x: number; y: number }[] = []
   const pen: { x: number; y: number }[] = []
+  const bush = new Uint8Array(rows * cols)
+  const bushes: { x: number; y: number }[] = []
   let key: { x: number; y: number } | null = null
   for (let y = 0; y < rows; y++)
     for (let x = 0; x < cols; x++) {
@@ -212,6 +219,10 @@ export function parseLevel(spec: LevelSpec): Level {
       if (c === 'D') start = { x: x + 0.5, y: y + 0.5 }
       else if (c === 'C') cages.push({ x: x + 0.5, y: y + 0.5 })
       else if (c === 'K') key = { x: x + 0.5, y: y + 0.5 }
+      else if (c === 'B') {
+        bush[y * cols + x] = 1
+        bushes.push({ x: x + 0.5, y: y + 0.5 })
+      }
       else if (c === 'P')
         for (let k = 0; k < PEN_PER_CELL; k++)
           pen.push({ x: x + 0.5 + (k - (PEN_PER_CELL - 1) / 2) * 0.42, y: y + 0.5 })
@@ -261,6 +272,8 @@ export function parseLevel(spec: LevelSpec): Level {
     pen,
     key,
     lock,
+    bush,
+    bushes,
     exitCol,
     guards: spec.guards.map(buildTrack),
   }
@@ -457,6 +470,8 @@ export interface Events {
   door: number
   key: number
   unlock: number
+  /** Times the dog settled into a bush (for the rustle sfx). */
+  hide: number
 }
 
 export interface RescueState {
@@ -475,6 +490,9 @@ export interface RescueState {
   freed: boolean[]
   /** Carrying the gold key (picked up, padlock not yet opened). */
   hasKey: boolean
+  /** Standing still in a bush this frame: cones can't see the dog (its
+   * puppies, and a catcher's touch, still count). */
+  hidden: boolean
   /** The padlock is open: its edge no longer blocks, the pen has joined. */
   penOpen: boolean
   /** Puppy positions/facings, parallel to `order`. */
@@ -508,6 +526,7 @@ export function initialState(level: Level): RescueState {
     order: [],
     freed: level.cages.map(() => false),
     hasKey: false,
+    hidden: false,
     penOpen: false,
     px: [],
     py: [],
@@ -519,7 +538,7 @@ export function initialState(level: Level): RescueState {
     status: 'ready',
     caughtBy: -1,
     caughtWho: -1,
-    ev: { freed: 0, alert: 0, door: 0, key: 0, unlock: 0 },
+    ev: { freed: 0, alert: 0, door: 0, key: 0, unlock: 0, hide: 0 },
   }
   level.guards.forEach((g, i) => guardPose(g, 0, s.guards[i]))
   return s
@@ -701,6 +720,12 @@ export function step(level: Level, s: RescueState, ix: number, iy: number): void
     }
   }
 
+  // --- hiding: still, in a bush cell
+  const inBush = level.bush[Math.floor(s.y) * level.cols + Math.floor(s.x)] === 1
+  const hidden = inBush && moved <= 1e-5
+  if (hidden && !s.hidden) s.ev.hide += 1
+  s.hidden = hidden
+
   // --- the gold key, then the padlock: the whole pen joins the line
   if (level.key && !s.hasKey && !s.penOpen && Math.hypot(s.x - level.key.x, s.y - level.key.y) < KEY_R) {
     s.hasKey = true
@@ -738,7 +763,7 @@ export function step(level: Level, s: RescueState, ix: number, iy: number): void
   for (let g = 0; g < level.guards.length; g++) {
     const p = guardPose(level.guards[g], s.t, s.guards[g])
     if (Math.hypot(s.x - p.x, s.y - p.y) < BUMP_R) bump = g
-    const d = seenAt(level, p, s.x, s.y, CONE_RANGE, CONE_HALF, !s.penOpen)
+    const d = s.hidden ? -1 : seenAt(level, p, s.x, s.y, CONE_RANGE, CONE_HALF, !s.penOpen)
     if (d >= 0) {
       seeing |= 1 << g
       if (d < nearest) {

@@ -49,3 +49,9 @@ export function playUnlock(): void {
   tone({ freq: 220, dur: 0.16, type: 'square', gain: 0.14, delay: 0.02 })
   ;[880, 990, 1175].forEach((f, i) => tone({ freq: f, dur: 0.1, type: 'triangle', gain: 0.18, delay: 0.2 + i * 0.07 }))
 }
+
+/** Settling into a bush: a soft leafy rustle. */
+export function playRustle(): void {
+  noise({ dur: 0.14, gain: 0.16, cutoff: 3200 })
+  noise({ dur: 0.1, gain: 0.1, cutoff: 2400, delay: 0.09 })
+}

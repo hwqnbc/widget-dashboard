@@ -15,7 +15,7 @@ import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { BufferAttribute, BufferGeometry, Color, DoubleSide, Vector3 } from 'three'
 import type { Group, Mesh, MeshBasicMaterial, PerspectiveCamera } from 'three'
 import { WALL_HALF, coneRays, doorOpen, type Level, type RescueState } from './rescueModel'
-import { AlertMark, Blob, Cage, Catcher, Dog, GoalMarker, GoldKey, Padlock } from './puppyModels'
+import { AlertMark, Blob, Bush, Cage, Catcher, Dog, GoalMarker, GoldKey, Padlock } from './puppyModels'
 import { HERO_COAT, PUP_COATS, newAnim } from './puppyLook'
 
 export interface SimView {
@@ -251,8 +251,9 @@ function HeroActor({ sim }: { sim: RefObject<SimView> }) {
     ref.current.rotation.y = yawOf(s.h)
     anim.v = s.status === 'play' ? s.v : 0
     anim.hop = s.status === 'escaped' ? 1 : 0
-    // Caught: a little shiver.
+    // Caught: a little shiver. Hidden: crouched down into the bush.
     ref.current.position.x += s.status === 'caught' ? Math.sin(clock.elapsedTime * 60) * 0.02 : 0
+    ref.current.position.y = s.hidden ? -0.18 : 0
   })
   return (
     <group ref={ref}>
@@ -424,6 +425,11 @@ export default function PuppyRescue3D({ sim, levelKey }: PuppyRescue3DProps) {
         <Door sim={sim} />
         {level.guards.map((_, g) => (
           <ConeActor key={`c${g}`} sim={sim} g={g} />
+        ))}
+        {level.bushes.map((b, i) => (
+          <group key={`b${i}`} position={[wx(level, b.x), 0, wz(level, b.y)]} scale={1.15}>
+            <Bush />
+          </group>
         ))}
         <LockActor sim={sim} />
         <KeyActor sim={sim} />

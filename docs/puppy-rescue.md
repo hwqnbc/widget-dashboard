@@ -9,7 +9,8 @@ and keep your tail out of them too.
 Modelled on the "Dog Rescue" style of mobile ads (two reference screenshots
 supplied by the user). Round 1 shipped the playable core: 10 levels in two
 tiers. Round 2 added **sweeping sentries** and the **gold key → padlocked
-pen**, bringing the pack to 20 levels in four tiers.
+pen**, bringing the pack to 20 levels in four tiers. Round 3 added
+**hiding spots (bushes)** and a fifth tier, **Hide**, for 25 levels.
 
 ## Decisions (settled with the user before building)
 
@@ -35,6 +36,15 @@ pen**, bringing the pack to 20 levels in four tiers.
 | R2-3 | How do sentries move? | **A smooth sweep back and forth** across a 90–120° arc (default 45°/s), with a 0.6 s pause at each end. |
 | R2-4 | Tier order | **Sentry first (levels 11–15), then Key & Pen (16–20).** Key & Pen levels use all three catcher types. |
 | R2-5 | The tip covering the maze | **A compact banner above the maze**, gone on the first move. |
+
+### Round 3 decisions (hiding spots)
+
+| # | Question | Decision |
+|---|---|---|
+| R3-0 | What's next? | **Hiding spots now; the Bark lure in its own later round.** Bark pulls a catcher off its fixed track, which breaks the "pose is a pure function of time" rule the solver depends on. |
+| R3-1 | How does hiding work? | **Hidden only while standing still** in a bush. Moving, even inside it, reveals the dog. Puppies are never hidden. |
+| R3-2 | Can a catcher catch a hidden dog by walking into it? | **Yes.** Touching still catches, so a bush on a walker's route is a trap. |
+| R3-3 | Where do the levels go? | **A new Hide tier, levels 21–25, after Key & Pen.** |
 
 **Detail I chose myself (not asked):** the door opens once the **first**
 puppy is freed. That way you can't skip a level with 0 puppies and still
@@ -127,6 +137,15 @@ cost of a star.
     (`puppyCount = cages + pen`).
   - **Parse check:** a level must have all of key, padlock and pen, or none
     of them; anything else is rejected at parse time.
+- **Bushes (Round 3).**
+  - **Map:** a `B` cell is walkable floor with a leafy bush on it.
+  - **Hidden:** the dog is hidden when it's in a bush cell and didn't move
+    this frame (`RescueState.hidden`). Cones skip it entirely, and a
+    hidden dog never turns a cone hot.
+  - **Not covered:** puppies are always tested; a catcher's touch
+    (`BUMP_R`) still nets the dog.
+  - **Feedback:** settling in plays a rustle (`ev.hide`), the dog crouches
+    into the leaves, and a green "hidden" badge shows in the HUD.
 - **The clock** (and the catchers) start on the first move. A level always
   opens in the same state, and you get time to read the tip.
 - **The tip** is a slim banner between the level picker and the maze, never
@@ -196,6 +215,12 @@ puzzles ship as a pack). Every level is **proven** escapable with 3 stars:
 - When every catcher is static, nothing depends on the clock, so the search
   is a plain BFS with a global visited set. That takes milliseconds,
   against about a second for patrol levels.
+- **Round 3: bushes in the search.** A *wait* action in a bush cell hides
+  the dog for that whole step; every move sample counts as visible. That
+  matches the game, where the frame the dog arrives it's still moving.
+  `planLevel(level, maxTime, noHide)` can ignore bushes, and the sweep
+  uses it to prove each Hide level **needs** its bushes: unsolvable, or at
+  least 3 s slower, without them. All five are unsolvable without.
 - **Round 2: key and pen in the search.**
   - The state mask gains a "holding the key" bit and a "pen open" bit.
   - The padlock edge is passable only with pen-open (`canStep(…, penOpen)`),
@@ -209,6 +234,18 @@ puzzles ship as a pack). Every level is **proven** escapable with 3 stars:
 The e2e sweep (`180-puppy-model`) re-proves every level on every run. It
 also checks that catchers' paths don't cross walls and that nobody can see
 the start.
+
+**What made a bush necessary (Round 3 authoring).**
+- A single sentry sweeping an open hall never forced the bush: there's
+  always a cell the cone isn't on.
+- A sentry looking down a long corridor didn't either: most of it was
+  beyond the cone's 3.5-cell reach.
+- The pattern that works is a **walker in a one-cell corridor with the
+  bush in a side alcove**. The dog can't pass the walker, so it waits in
+  the alcove while the walker goes by, then follows behind it.
+- Puppies are never hidden, so each Hide level puts the bush **before**
+  the rescues, or keeps the tail out of the corridor (for example, the key
+  at the bottom and the pen by the door).
 
 **Authoring workflow used for Round 1** (scratch tooling, not committed):
 1. Sketch the walls.
@@ -242,6 +279,11 @@ the start.
 | Key & Pen 3 · Locked In | `key:2` | sentry (120°, 40°/s) watching the padlock; cage + pen of 6 | 12.4 s | 8.8 s |
 | Key & Pen 4 · Key Run | `key:3` | walker + static; key far from the pen; cage + pen of 8 | 18.0 s | 14.4 s |
 | Key & Pen 5 · Great Breakout | `key:4` | sentry + walker + static; 2 cages + pen of 6 | 18.8 s | 9.6 s |
+| Hide 1 · In the Bushes | `hide:0` | corridor walker; alcove bush to let it pass | 17.2 s | 7.6 s |
+| Hide 2 · Blind Spot | `hide:1` | the same, as a cross corridor | 12.4 s | 7.6 s |
+| Hide 3 · Two Hedges | `hide:2` | two corridor walkers in a row, two bushes | 19.2 s | 8.4 s |
+| Hide 4 · Garden Pen | `hide:3` | corridor walker + bush; key at the bottom, pen by the door | 16.4 s | 9.2 s |
+| Hide 5 · Hide and Seek | `hide:4` | two walkers, two bushes, cage + key + pen of 4 | 30.4 s | 13.6 s |
 
 Times are the planner's optimum. A human takes longer.
 
@@ -268,15 +310,17 @@ Times are the planner's optimum. A human takes longer.
   - Live telemetry every 50 ms: `data-status` (ready|play|caught|escaped),
     `data-x`/`data-y` (map cells), `data-t`, `data-pups`, `data-meter`,
     `data-spotted`, `data-seeing` (catcher bitmask), `data-guards`
-    (x,y,h per catcher), `data-key` (carrying), `data-pen` (padlock open).
-  - SFX counters: `data-sfx-freed`/`-alert`/`-caught`/`-escape`/`-key`/`-unlock`.
+    (x,y,h per catcher), `data-key` (carrying), `data-pen` (padlock open),
+    `data-hidden` (still in a bush).
+  - SFX counters: `data-sfx-freed`/`-alert`/`-caught`/`-escape`/`-key`/`-unlock`/`-hide`.
 - **Hooks:**
   - Controls and readouts: `puppy-level` (NativeSelect; the `<select>` is
     inside), `puppy-count` (`data-pups`/`data-total`), `puppy-settings`,
     `puppy-stage` (the maze area, not a control), `puppy-stick` (the
     joystick) inside `puppy-stick-strip` (`data-side`), `puppy-3d`, `puppy-timer`,
     `puppy-unseen` (`data-spotted`), `puppy-restart`, `puppy-key` (HUD key
-    icon, present while carrying), `puppy-tip` (the banner, while ready).
+    icon, present while carrying), `puppy-hidden` (HUD hidden badge),
+    `puppy-tip` (the banner, while ready).
   - Overlays: `puppy-caught`, `puppy-escaped`
     (`data-stars`), `puppy-next`, `puppy-again`.
   - ⚙ menu items: `puppy-sound`, `puppy-unlock-all`,
@@ -305,9 +349,14 @@ Each item names the seam it builds on.
   generalises the single `lock`/`key` to arrays plus one mask bit per key.
 - **Pen pack behaviour:** the crowd bunches into a blob instead of single
   file (Round 2 option C). The detection would test a cluster of points.
-- **Round 3: hiding spots.** Bushes or boxes: cells where the dog (not its
-  tail) is unseen while it stands still. Add a `hide` cell flag in the map
-  and a skip in `seenAt` for the dog.
+- ~~**Round 3: hiding spots.**~~ Shipped as bushes; see *Bushes* and the
+  Hide tier.
+- **Boxes and hay bales:** other hiding-spot looks, or a box you can push
+  into position (a movable `bush` cell; the planner would need it in the
+  state).
+- **Puppies that hide too:** a "huddle" command that tucks the line into
+  a bush with the dog. This would change the rule that puppies are always
+  tested.
 - **Round 3: Bark lure.** A button with a cooldown. The nearest catcher
   walks to the sound and back, which needs a catcher state that departs
   from its track (the start of the Arcade AI).

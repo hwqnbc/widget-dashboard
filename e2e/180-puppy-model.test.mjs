@@ -319,6 +319,63 @@ const run = (level, s, ix, iy, frames) => {
   check('once open, the padlock edge lets the dog through', s.y < 0.9, s.y.toFixed(2))
 }
 
+// --------------------------------------------- 6d. bushes (Round 3)
+{
+  // A catcher at the top looks straight down the middle column; a bush sits
+  // in its cone at (2,3).
+  const L = parseLevel({
+    id: 'bush',
+    tier: 'hide',
+    name: 'bush',
+    map: [
+      '+-+-+E+-+-+',
+      '|C . . . .|',
+      '+ + + + + +',
+      '|. . . . .|',
+      '+ + + + + +',
+      '|. . . . .|',
+      '+ + + + + +',
+      '|. . B . .|',
+      '+ + + + + +',
+      '|. . . . .|',
+      '+ + + + + +',
+      '|. . D . .|',
+      '+-+-+-+-+-+',
+    ],
+    guards: [{ path: [[2, 0]], facing: 180 }],
+  })
+  check('bush cells parse', L.bushes.length === 1 && L.bush[3 * 5 + 2] === 1)
+  const s = initialState(L)
+  s.status = 'play'
+  s.x = 2.5
+  s.y = 3.5
+  step(L, s, 0, 0)
+  check('standing still in a bush: hidden, unseen', s.hidden && s.seeing === 0 && s.meter === 0 && s.ev.hide === 1)
+  run(L, s, 0, 0, 90)
+  check('…for as long as the dog stays still', s.status === 'play' && s.meter === 0 && !s.spotted)
+  step(L, s, 1, 0)
+  check('moving — even inside the bush — reveals the dog', !s.hidden && s.seeing === 1, `x ${s.x.toFixed(2)}`)
+  // A puppy beside the hidden dog is still seen.
+  const s2 = initialState(L)
+  s2.status = 'play'
+  s2.order = [0]
+  s2.freed = [true]
+  s2.x = 2.5
+  s2.y = 3.5
+  s2.trail = [2.5, 2.5, 2.5, 3.5] // came down from above: the puppy trails in the cone
+  step(L, s2, 0, 0)
+  check('puppies are never hidden: the line still gets seen', s2.hidden && s2.seeing === 1)
+  // Touching still catches: a walker through the bush cell.
+  const Lw = parseLevel({ ...L.spec, guards: [{ path: [[2, 1], [2, 5]], pause: 0.5 }] })
+  const s3 = initialState(Lw)
+  s3.status = 'play'
+  s3.x = 2.5
+  s3.y = 3.5
+  let n = 0
+  while (s3.status === 'play' && n++ < 300) step(Lw, s3, 0, 0)
+  check('a catcher walking into the bush still nets the hidden dog', s3.status === 'caught' && s3.caughtWho === -1 && s3.hidden)
+}
+
 // ---------------------------------------------- 7. THE SWEEP: every level
 {
   const ids = new Set()
@@ -348,6 +405,11 @@ const run = (level, s, ix, iy, frames) => {
     for (let k = 0; k < 60 * 120 && (s.status === 'ready' || s.status === 'play'); k++) {
       const [ix, iy] = routeInput(s, plan.route, c)
       step(L, s, ix, iy)
+    }
+    if (spec.tier === 'hide') {
+      const noBush = planLevel(L, 90, true)
+      check(`${spec.id} genuinely needs its bushes`, !noBush || noBush.time >= plan.time + 3,
+        noBush ? `${noBush.time.toFixed(1)}s without` : 'unsolvable without')
     }
     check(
       `${spec.id} "${spec.name}": proven 3★ in ${plan.time.toFixed(1)}s`,

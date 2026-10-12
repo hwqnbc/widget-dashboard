@@ -2460,3 +2460,14 @@ carried over; these are the new ones.
     top rows: the door and two cages, i.e. the goals the tip talks about.
     A slim banner between the picker and the board costs a few pixels of
     board for a few seconds and hides nothing.
+
+162. **Prove a helper mechanic is NECESSARY, not just allowed.** Puppy
+    Rescue's first Hide drafts were all solvable — and exactly as fast with
+    the bushes ignored, i.e. the "hiding" tier taught nothing. The fix was
+    a planner switch (`noHide`) and a sweep check: each Hide level must be
+    unsolvable (or clearly slower) without its bushes. And the pattern
+    that passes is structural, not tuning: a walker in a 1-wide corridor
+    with the bush in a side alcove — the dog can't pass it, so it must
+    hide. An open hall or a sentry down a long corridor never needed the
+    bush however the sweep was tuned (some cell is always unwatched, or
+    out of the cone's reach).
