@@ -461,7 +461,10 @@ chars — the padlock edge blocks movement and sight until opened, the pen's
 crowd joins at the tighter `PEN_GAP`; the planner carries key/pen bits and
 the freeing order); Round 3 added **bushes** (`B` — standing still in one
 hides the dog, never its puppies, never from a catcher's touch; the planner
-proves each Hide level needs them) — 25 levels in five tiers).
+proves each Hide level needs them) — 25 levels in five tiers; Round 4 added
+the optional **Bark lure** (nearest catcher in earshot walks over, looks,
+walks back — a per-catcher route clock pauses while lured, so a run with
+no barks is bit-identical and every proof stands; 6 s cooldown).
 See `docs/map.md` for the Map page (the first page-level heavy feature —
 @arcgis/core lazy route chunk, free no-key `gray-vector`/`dark-gray-vector`
 basemaps following the theme toggle, 2D map / 3D globe switch, locate/pins/

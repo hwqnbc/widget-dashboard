@@ -11,6 +11,7 @@ supplied by the user). Round 1 shipped the playable core: 10 levels in two
 tiers. Round 2 added **sweeping sentries** and the **gold key → padlocked
 pen**, bringing the pack to 20 levels in four tiers. Round 3 added
 **hiding spots (bushes)** and a fifth tier, **Hide**, for 25 levels.
+Round 4 added the **Bark lure**, an optional tool available in every level.
 
 ## Decisions (settled with the user before building)
 
@@ -45,6 +46,16 @@ pen**, bringing the pack to 20 levels in four tiers. Round 3 added
 | R3-1 | How does hiding work? | **Hidden only while standing still** in a bush. Moving, even inside it, reveals the dog. Puppies are never hidden. |
 | R3-2 | Can a catcher catch a hidden dog by walking into it? | **Yes.** Touching still catches, so a bush on a walker's route is a trap. |
 | R3-3 | Where do the levels go? | **A new Hide tier, levels 21–25, after Key & Pen.** |
+
+### Round 4 decisions (the Bark lure)
+
+| # | Question | Decision |
+|---|---|---|
+| R4-0 | What's next? | **The Bark lure, as an optional helper.** Every level stays proven 3-star-escapable without it. |
+| R4-1 | What does a catcher do when it hears a bark? | **Walk over and investigate:** the nearest catcher within about 4 cells (through walls) walks the shortest path there, cone on, looks around for about 2 s, walks back and resumes its route exactly where it left. |
+| R4-2 | How often can you bark? | **Unlimited, with a 6 s cooldown**, shown as a filling ring on the button. Barking never counts as being spotted. |
+| R4-3 | Which levels? | **Every level, no new tier**, with a short first-use tip. |
+| defaults | Controls and feedback | The button sits opposite the stick in the strip (right when the stick is centred); **Space** or **B** also bark. Static catchers and sentries leave their post too. A woof, an expanding ring and a "?" over the drawn catcher. |
 
 **Detail I chose myself (not asked):** the door opens once the **first**
 puppy is freed. That way you can't skip a level with 0 puppies and still
@@ -146,6 +157,30 @@ cost of a star.
     (`BUMP_R`) still nets the dog.
   - **Feedback:** settling in plays a rustle (`ev.hide`), the dog crouches
     into the leaves, and a green "hidden" badge shows in the HUD.
+- **Bark (Round 4).** `bark(level, s)`, from the button, Space or B, makes
+  a woof and starts the 6 s cooldown (`BARK_COOLDOWN`), whether or not
+  anyone hears it.
+  - **Who hears:** the nearest catcher within `BARK_R` (4 cells, straight
+    line, through walls) that has a walkable cell path to the dog's cell
+    (`ev.heard`).
+  - **The lure** (`RescueState.lure[g]`), step by step:
+    - **go:** walks the BFS cell path at patrol speed, facing where it
+      walks, cone on.
+    - **look:** a ±60° sweep about its arrival heading for `LURE_LOOK`
+      (2 s).
+    - **back:** walks the same path back to the exact spot it left.
+    - **turn:** eases (0.4 s) to its route's heading, then rejoins the
+      route.
+  - **Each catcher has its own route clock** (`gclock[g]`). It ticks with
+    the game clock while on the route and pauses while lured, so the
+    catcher resumes exactly where it left. Without a bark it equals `t`
+    bit for bit, which is why every existing proof still holds.
+  - **Re-barking:** a bark while a catcher is already lured re-targets it
+    and keeps its original departure point.
+  - **Still dangerous:** a lured catcher still sees and still catches, so
+    barking with nowhere to go gets you netted.
+  - **The solver never barks.** Bark only ever makes a level easier or
+    faster.
 - **The clock** (and the catchers) start on the first move. A level always
   opens in the same state, and you get time to read the tip.
 - **The tip** is a slim banner between the level picker and the maze, never
@@ -289,7 +324,7 @@ Times are the planner's optimum. A human takes longer.
 
 ## Persisted state
 
-- **Widget `data`:** `{ level, sound, unlockAll, stickSide }`. That's only where you
+- **Widget `data`:** `{ level, sound, unlockAll, stickSide, barkTipSeen }`. That's only where you
   are and the settings.
 - **App-level records** (`records.puppyRescue`, survives removing the
   widget): `stars[levelId]` (best 1–3), `bestMs[levelId]` (fastest escape,
@@ -311,8 +346,9 @@ Times are the planner's optimum. A human takes longer.
     `data-x`/`data-y` (map cells), `data-t`, `data-pups`, `data-meter`,
     `data-spotted`, `data-seeing` (catcher bitmask), `data-guards`
     (x,y,h per catcher), `data-key` (carrying), `data-pen` (padlock open),
-    `data-hidden` (still in a bush).
-  - SFX counters: `data-sfx-freed`/`-alert`/`-caught`/`-escape`/`-key`/`-unlock`/`-hide`.
+    `data-hidden` (still in a bush), `data-bark-cd` (cooldown seconds
+    left), `data-lured` (bitmask of catchers drawn by a bark).
+  - SFX counters: `data-sfx-freed`/`-alert`/`-caught`/`-escape`/`-key`/`-unlock`/`-hide`/`-bark`/`-heard`.
 - **Hooks:**
   - Controls and readouts: `puppy-level` (NativeSelect; the `<select>` is
     inside), `puppy-count` (`data-pups`/`data-total`), `puppy-settings`,
@@ -320,6 +356,8 @@ Times are the planner's optimum. A human takes longer.
     joystick) inside `puppy-stick-strip` (`data-side`), `puppy-3d`, `puppy-timer`,
     `puppy-unseen` (`data-spotted`), `puppy-restart`, `puppy-key` (HUD key
     icon, present while carrying), `puppy-hidden` (HUD hidden badge),
+    `puppy-bark` (the Bark button in the strip; `data-ready` 1/0),
+    `puppy-bark-tip` (the first-use line in the tip banner),
     `puppy-tip` (the banner, while ready).
   - Overlays: `puppy-caught`, `puppy-escaped`
     (`data-stars`), `puppy-next`, `puppy-again`.
@@ -357,9 +395,15 @@ Each item names the seam it builds on.
 - **Puppies that hide too:** a "huddle" command that tucks the line into
   a bush with the dog. This would change the rule that puppies are always
   tested.
-- **Round 3: Bark lure.** A button with a cooldown. The nearest catcher
-  walks to the sound and back, which needs a catcher state that departs
-  from its track (the start of the Arcade AI).
+- ~~**Round 3/4: Bark lure.**~~ Shipped in Round 4 as an optional tool;
+  see *Bark*. Its lure state (paused route clock, BFS walk, look, walk
+  back) is the base for the Arcade chase below.
+- **Bark levels:** a tier designed around luring (doorway guards). The
+  solver can't prove a bark is *needed* unless it learns to bark. That
+  would mean a "bark here" action in the search, with the lured catcher's
+  state in the node.
+- **Treat throw:** throw a treat to a spot instead of barking from where
+  you stand (lure at a distance), on the same `lure` seam.
 - **Round 4: waypoint loops, doors and switches.** `loop: true` already
   works. Doors are edges toggled by a pressure plate.
 

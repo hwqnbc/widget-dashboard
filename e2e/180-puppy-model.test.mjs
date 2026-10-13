@@ -14,6 +14,9 @@
  * appended or tuned safely.
  */
 import {
+  BARK_COOLDOWN,
+  BARK_R,
+  bark,
   BUMP_R,
   FOLLOW_GAP,
   PEN_GAP,
@@ -26,6 +29,7 @@ import {
   FILL_FAR,
   FILL_NEAR,
   STEP,
+  facingToRad,
   guardPose,
   initialState,
   lineOfSight,
@@ -374,6 +378,93 @@ const run = (level, s, ix, iy, frames) => {
   let n = 0
   while (s3.status === 'play' && n++ < 300) step(Lw, s3, 0, 0)
   check('a catcher walking into the bush still nets the hidden dog', s3.status === 'caught' && s3.caughtWho === -1 && s3.hidden)
+}
+
+// ------------------------------------------- 6e. the bark lure (Round 4)
+{
+  const open = (guards) =>
+    parseLevel({
+      id: 'bark',
+      tier: 'sneak',
+      name: 'bark',
+      map: [
+        '+-+-+E+-+-+',
+        '|C . . . .|',
+        '+ + + + + +',
+        '|. . . . .|',
+        '+ + + + + +',
+        '|. . . . .|',
+        '+ + + + + +',
+        '|. . . . .|',
+        '+ + + + + +',
+        '|. . . . .|',
+        '+ + + + + +',
+        '|. . . . .|',
+        '+ + + + + +',
+        '|. . D . .|',
+        '+-+-+-+-+-+',
+      ],
+      guards,
+    })
+  // No barks: every catcher's route clock IS the game clock — bit for bit.
+  {
+    const L = open([{ path: [[0, 2], [4, 2]] }, { path: [[4, 4]], facing: 0, sweep: 90 }])
+    const s = initialState(L)
+    s.status = 'play'
+    for (let i = 0; i < 600; i++) step(L, s, 0, 0)
+    check('without a bark, each route clock equals the game clock exactly', s.gclock.every((c) => c === s.t) && s.lure.every((l) => l === null))
+  }
+  // Range + cooldown.
+  {
+    const L = open([{ path: [[2, 0]], facing: 0 }]) // far up, looking at the wall
+    const s = initialState(L)
+    s.status = 'play'
+    step(L, s, 0, 0)
+    check('a catcher beyond BARK_R does not hear', bark(L, s) === -1 && s.ev.bark === 1 && s.ev.heard === 0 && s.lure[0] === null)
+    check('…but the bark still used up the cooldown', Math.abs(s.barkCd - BARK_COOLDOWN) < 1e-9)
+    check('a second bark inside the cooldown does nothing', bark(L, s) === -1 && s.ev.bark === 1)
+    for (let i = 0; i < BARK_COOLDOWN * 60 + 2; i++) step(L, s, 0, 0)
+    check('the cooldown runs out', s.barkCd === 0)
+  }
+  // Nearest in range answers; walk there, look, walk back, resume.
+  {
+    const L = open([
+      { path: [[2, 3]], facing: 0 }, // 3 cells up from the dog, looking away
+      { path: [[0, 0]], facing: 90 },
+    ])
+    const s = initialState(L)
+    s.status = 'play'
+    step(L, s, 0, 0)
+    const g = bark(L, s)
+    check('the nearest catcher in range is drawn', g === 0 && s.lure[0]?.mode === 'go' && s.ev.heard === 1 && Math.hypot(s.guards[0].x - s.x, s.guards[0].y - s.y) <= BARK_R)
+    // Slip out of the way, up and to the side, behind its back.
+    s.x = 4.5
+    s.y = 0.5
+    s.trail = [4.5, 0.5]
+    const modes = new Set()
+    let arrived = false
+    let n = 0
+    while (s.lure[0] && s.status === 'play' && n++ < 1200) {
+      step(L, s, 0, 0)
+      if (s.lure[0]) modes.add(s.lure[0].mode)
+      if (s.lure[0]?.mode === 'look' && Math.hypot(s.guards[0].x - 2.5, s.guards[0].y - 6.5) < 1e-6) arrived = true
+    }
+    check('it walks to the bark spot, looks around, walks back, turns onto its route', arrived && ['go', 'look', 'back', 'turn'].every((m) => modes.has(m)), [...modes].join('>'))
+    const p = s.guards[0]
+    check('…and resumes exactly where it left (position + facing)', s.status === 'play' && Math.abs(p.x - 2.5) < 1e-9 && Math.abs(p.y - 3.5) < 1e-9 && Math.abs(p.h - facingToRad(0)) < 1e-9)
+    check('its route clock paused while it was away', s.gclock[0] < s.t - 2 && s.gclock[1] === s.t, `${s.gclock[0].toFixed(2)} vs ${s.t.toFixed(2)}`)
+  }
+  // A lured catcher still sees — barking from in front of it is a bad idea.
+  {
+    const L = open([{ path: [[2, 3]], facing: 0 }])
+    const s = initialState(L)
+    s.status = 'play'
+    step(L, s, 0, 0)
+    bark(L, s)
+    let n = 0
+    while (s.status === 'play' && n++ < 600) step(L, s, 0, 0)
+    check('a lured catcher walking onto the dog still catches it', s.status === 'caught' && s.caughtBy === 0)
+  }
 }
 
 // ---------------------------------------------- 7. THE SWEEP: every level

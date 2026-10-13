@@ -2471,3 +2471,13 @@ carried over; these are the new ones.
     hide. An open hall or a sentry down a long corridor never needed the
     bush however the sweep was tuned (some cell is always unwatched, or
     out of the cone's reach).
+
+163. **Add reactive AI to a provable timeline by pausing a per-actor
+    clock.** Puppy Rescue's proofs rest on "a catcher's pose is a pure
+    function of time". The Bark lure needed catchers to leave their
+    routes. Giving each catcher its OWN route clock — ticking with the
+    game clock, paused while lured — keeps the route a pure function of
+    that clock, lets a lured catcher resume exactly where it left, and
+    makes a run without barks bit-identical to before (a check asserts
+    `gclock === t`). New interaction, zero proofs invalidated. Make the
+    new verb optional and the planner never needs to model it.

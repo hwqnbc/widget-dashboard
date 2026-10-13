@@ -55,3 +55,10 @@ export function playRustle(): void {
   noise({ dur: 0.14, gain: 0.16, cutoff: 3200 })
   noise({ dur: 0.1, gain: 0.1, cutoff: 2400, delay: 0.09 })
 }
+
+/** A bark: a short gruff "woof" — a falling square tone over a noise puff. */
+export function playBark(): void {
+  noise({ dur: 0.08, gain: 0.25, cutoff: 900 })
+  tone({ freq: 420, dur: 0.14, type: 'square', gain: 0.2, sweepTo: 180 })
+  tone({ freq: 380, dur: 0.12, type: 'square', gain: 0.16, sweepTo: 170, delay: 0.17 })
+}

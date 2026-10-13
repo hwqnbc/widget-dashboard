@@ -49,6 +49,7 @@ await addPuppyWidget(page)
   const locked = await page.locator('[data-testid="puppy-level"] select option').nth(1).isDisabled()
   check('level 2 is locked in the picker', locked)
   check('pup counter 0/1', (await page.locator('[data-testid="puppy-count"]').getAttribute('data-pups')) === '0')
+  check('a fresh card explains Bark in the tip', (await page.locator('[data-testid="puppy-bark-tip"]').count()) === 1)
 }
 
 // ------------------------------------------------ 2. first move + restart
@@ -60,10 +61,20 @@ await addPuppyWidget(page)
   const st = await puppyState(page)
   check('a key press starts the run and moves the dog up', st.status === 'play' && st.y < 6.3 && st.t > 0, `${st.status} y ${st.y}`)
   check('the tip is gone once playing', (await page.locator('[data-testid="puppy-tip"]').count()) === 0)
+  // Bark (Space): nobody is in earshot on level 1, but it barks and recharges.
+  await page.keyboard.press('Space')
+  await page.waitForTimeout(150)
+  const b = await page.locator('[data-testid="puppy-root"]').evaluate((el) => [el.dataset.sfxBark, el.dataset.sfxHeard, el.dataset.barkCd])
+  const ready = await page.locator('[data-testid="puppy-bark"]').getAttribute('data-ready')
+  check('Space barks: sfx counted, nobody near enough to hear, cooldown running', b[0] === '1' && (b[1] ?? '0') === '0' && parseFloat(b[2]) > 5 && ready === '0', b.join(','))
+  await page.keyboard.press('Space')
+  await page.waitForTimeout(100)
+  check('…and a second bark inside the cooldown is ignored', (await page.locator('[data-testid="puppy-root"]').getAttribute('data-sfx-bark')) === '1')
   await page.locator('[data-testid="puppy-restart"]').click()
   await page.waitForTimeout(200)
   const r = await puppyState(page)
   check('Restart: back to ready on the start', r.status === 'ready' && Math.abs(r.y - 6.5) < 1e-3)
+  check('after the first bark the Bark tip is retired', (await page.locator('[data-testid="puppy-bark-tip"]').count()) === 0)
 }
 
 // ------------------------------------- 3. level 1 by the planner's route
@@ -202,6 +213,26 @@ await addPuppyWidget(page)
     const moving = await page.locator('[data-testid="puppy-root"]').evaluate((el) => el.dataset.hidden)
     await page.keyboard.up('ArrowRight')
     check('moving reveals it again', moving === '0')
+  }
+  // Sentry 4: the corner catcher is within earshot of the start — the Bark
+  // button draws it off its post (telemetry: lured bit + it moves).
+  {
+    const idx = LEVELS.findIndex((l) => l.id === 'sentry:3')
+    await page.locator('[data-testid="puppy-level"] select').selectOption(String(idx))
+    await page.waitForTimeout(400)
+    await page.keyboard.down('ArrowRight')
+    await page.waitForTimeout(40)
+    await page.keyboard.up('ArrowRight')
+    await page.waitForTimeout(100)
+    const g0 = (await page.locator('[data-testid="puppy-root"]').getAttribute('data-guards')).split(';')[1]
+    const btn = await page.locator('[data-testid="puppy-bark"]').boundingBox()
+    const cdp = await context.newCDPSession(page)
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: btn.x + btn.width / 2, y: btn.y + btn.height / 2, id: 9 }] })
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] })
+    await cdp.detach()
+    await page.waitForTimeout(700)
+    const st = await page.locator('[data-testid="puppy-root"]').evaluate((el) => [el.dataset.lured, el.dataset.sfxHeard, el.dataset.guards.split(';')[1]])
+    check('the Bark button draws the nearest catcher off its post', (Number(st[0]) & 2) === 2 && Number(st[1]) >= 1 && st[2] !== g0, `${g0} → ${st[2]}`)
   }
   await page.locator('[data-testid="puppy-level"] select').selectOption(String(LEVELS.length - 1))
   await page.waitForTimeout(400)

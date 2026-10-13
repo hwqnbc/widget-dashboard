@@ -34,9 +34,9 @@ import { lazyWithReload } from '../../../utils/lazyWithReload'
 import { unlockAudio } from '../droneSim/webAudio'
 import VirtualJoystick from '../droneSim/VirtualJoystick'
 import ConfirmDialog from '../ConfirmDialog'
-import { STEP, initialState, parseLevel, puppyCount, starsFor, step, type Status } from './rescueModel'
+import { BARK_COOLDOWN, STEP, bark, initialState, parseLevel, puppyCount, starsFor, step, type Status } from './rescueModel'
 import { LEVELS, TIERS, TIER_LABEL, levelLabel } from './rescueLevels'
-import { playAlert, playCaught, playDoor, playEscape, playFreed, playKey, playRustle, playUnlock } from './rescueSounds'
+import { playAlert, playBark, playCaught, playDoor, playEscape, playFreed, playKey, playRustle, playUnlock } from './rescueSounds'
 import type { SimView } from './PuppyRescue3D'
 
 /** three.js stays in its own lazy chunk. */
@@ -97,6 +97,7 @@ export default function PuppyRescueWidget({ id }: WidgetProps) {
   const sound = useWidgetField(id, 'sound', true)
   const unlockAll = useWidgetField(id, 'unlockAll', false)
   const stickSide = useWidgetField<StickSide>(id, 'stickSide', 'center', coerceSide)
+  const barkTipSeen = useWidgetField(id, 'barkTipSeen', false)
   const records = useAppSelector(selectPuppyRescueRecords)
   const setData = useCallback(
     (data: Record<string, unknown>) => dispatch(updateWidgetData({ id, data })),
@@ -125,6 +126,13 @@ export default function PuppyRescueWidget({ id }: WidgetProps) {
   const rootRef = useRef<HTMLDivElement>(null)
   const timerRef = useRef<HTMLSpanElement>(null)
   const keys = useRef(new Set<string>())
+  /** A bark asked for (button / Space / B) — consumed by the next step. */
+  const barkReq = useRef(false)
+  const barkBtn = useRef<HTMLDivElement>(null)
+  const barkSeenRef = useRef(barkTipSeen)
+  barkSeenRef.current = barkTipSeen
+  const setDataRef = useRef(setData)
+  setDataRef.current = setData
   /** The fixed stick's latest output in MAP axes (written by its onChange —
    * zero React renders while steering). */
   const stick = useRef({ ix: 0, iy: 0 })
@@ -171,7 +179,8 @@ export default function PuppyRescueWidget({ id }: WidgetProps) {
     let last = performance.now()
     let acc = 0
     let lastPub = 0
-    let seen = { freed: 0, alert: 0, door: 0, key: 0, unlock: 0, hide: 0 }
+    let seen = { freed: 0, alert: 0, door: 0, key: 0, unlock: 0, hide: 0, bark: 0, heard: 0 }
+    let lastRing = -1
     let prevHidden = false
     let prevKey = false
     let seenS: unknown = null
@@ -210,6 +219,10 @@ export default function PuppyRescueWidget({ id }: WidgetProps) {
         let n = 0
         while (acc >= STEP && n < 8) {
           const [ix, iy] = input()
+          if (barkReq.current) {
+            barkReq.current = false
+            bark(lv, s)
+          }
           step(lv, s, ix, iy)
           acc -= STEP
           n++
@@ -233,6 +246,19 @@ export default function PuppyRescueWidget({ id }: WidgetProps) {
       if (s.ev.unlock !== seen.unlock) {
         if (sfx) playUnlock()
         if (root) root.dataset.sfxUnlock = String(Number(root.dataset.sfxUnlock ?? 0) + 1)
+      }
+      if (s.ev.bark !== seen.bark) {
+        if (sfx) playBark()
+        if (root) root.dataset.sfxBark = String(Number(root.dataset.sfxBark ?? 0) + 1)
+        if (!barkSeenRef.current) setDataRef.current({ barkTipSeen: true })
+      }
+      if (s.ev.heard !== seen.heard && root) root.dataset.sfxHeard = String(Number(root.dataset.sfxHeard ?? 0) + 1)
+      // The Bark button's recharge ring (a conic fill), written directly.
+      const ring = Math.round((1 - s.barkCd / BARK_COOLDOWN) * 100)
+      if (ring !== lastRing && barkBtn.current) {
+        lastRing = ring
+        barkBtn.current.style.background = `conic-gradient(#ffd60a ${ring}%, rgba(255,255,255,0.15) 0)`
+        barkBtn.current.dataset.ready = ring >= 100 ? '1' : '0'
       }
       if (s.ev.hide !== seen.hide) {
         if (sfx) playRustle()
@@ -290,6 +316,8 @@ export default function PuppyRescueWidget({ id }: WidgetProps) {
         ds.pups = String(s.order.length)
         ds.key = s.hasKey ? '1' : '0'
         ds.hidden = s.hidden ? '1' : '0'
+        ds.barkCd = s.barkCd.toFixed(2)
+        ds.lured = String(s.lure.reduce((m, l, g) => (l ? m | (1 << g) : m), 0))
         ds.pen = s.penOpen ? '1' : '0'
         ds.meter = s.meter.toFixed(2)
         ds.spotted = s.spotted ? '1' : '0'
@@ -305,7 +333,14 @@ export default function PuppyRescueWidget({ id }: WidgetProps) {
   // don't block keys, so the sim's own status gates the effect.
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
-      if (isTypingTarget(e.target) || !KEY_DIRS[e.key]) return
+      if (isTypingTarget(e.target)) return
+      if (e.key === ' ' || e.key === 'b' || e.key === 'B') {
+        e.preventDefault()
+        unlockAudio()
+        if (!e.repeat) barkReq.current = true
+        return
+      }
+      if (!KEY_DIRS[e.key]) return
       e.preventDefault()
       unlockAudio()
       keys.current.add(e.key)
@@ -448,6 +483,11 @@ export default function PuppyRescueWidget({ id }: WidgetProps) {
               {spec.tip}
             </Typography>
           )}
+          {!barkTipSeen && (
+            <Typography data-testid="puppy-bark-tip" variant="caption" component="div" sx={{ color: '#ffd60a', lineHeight: 1.3 }}>
+              New: BARK (or Space) lures the nearest catcher over — then sneak past. Recharges in {BARK_COOLDOWN} s.
+            </Typography>
+          )}
         </Box>
       )}
 
@@ -560,9 +600,64 @@ export default function PuppyRescueWidget({ id }: WidgetProps) {
           px: 1,
           borderRadius: 1,
           bgcolor: '#2a2554',
+          position: 'relative',
         }}
       >
         <VirtualJoystick size={STICK_SIZE} label="MOVE" testId="puppy-stick" onChange={onStick} sx={{ py: 0.75 }} />
+        {/* Bark: opposite the stick. The ring fills as it recharges. */}
+        <Box
+          sx={{
+            position: 'absolute',
+            top: '50%',
+            transform: 'translateY(-50%)',
+            ...(stickSide === 'right' ? { left: 16 } : { right: 16 }),
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: 0.5,
+          }}
+        >
+          <Box
+            ref={barkBtn}
+            role="button"
+            aria-label="Bark"
+            data-testid="puppy-bark"
+            data-ready="1"
+            onPointerDown={(e) => {
+              e.stopPropagation()
+              unlockAudio()
+              barkReq.current = true
+            }}
+            sx={{
+              width: 58,
+              height: 58,
+              borderRadius: '50%',
+              p: '4px',
+              background: 'conic-gradient(#ffd60a 100%, rgba(255,255,255,0.15) 0)',
+              cursor: 'pointer',
+              touchAction: 'none',
+              userSelect: 'none',
+            }}
+          >
+            <Box
+              sx={{
+                width: '100%',
+                height: '100%',
+                borderRadius: '50%',
+                bgcolor: '#3b3470',
+                color: 'common.white',
+                display: 'grid',
+                placeItems: 'center',
+                fontSize: 22,
+              }}
+            >
+              🐾
+            </Box>
+          </Box>
+          <Typography variant="caption" sx={{ color: 'rgba(255,255,255,0.8)', letterSpacing: 1, lineHeight: 1 }}>
+            BARK
+          </Typography>
+        </Box>
       </Box>
 
       <Menu anchorEl={menuEl} open={menuEl !== null} onClose={() => setMenuEl(null)}>

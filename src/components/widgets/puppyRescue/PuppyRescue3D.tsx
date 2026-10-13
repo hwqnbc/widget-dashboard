@@ -171,8 +171,10 @@ function CatcherActor({ sim, g }: { sim: RefObject<SimView>; g: number }) {
     anim.v = s.status === 'play' ? p.v : 0
     anim.swing = caught ? Math.min(1, anim.swing + dt * 4) : 0
     const seeing = (s.seeing >> g) & 1
+    // "?" also while a bark has it investigating.
+    const lured = s.lure[g] !== null && s.status === 'play'
     if (mark.current) {
-      mark.current.visible = caught || (seeing === 1 && s.status === 'play')
+      mark.current.visible = caught || ((seeing === 1 || lured) && s.status === 'play')
       mark.current.quaternion.copy(camera.quaternion)
       const k = caught ? 1.3 : 0.8 + s.meter * 0.6
       mark.current.scale.setScalar(k)
@@ -406,6 +408,29 @@ function LockActor({ sim }: { sim: RefObject<SimView> }) {
   )
 }
 
+/** The bark: a yellow ring expanding from where the dog barked. */
+function BarkRing({ sim }: { sim: RefObject<SimView> }) {
+  const ref = useRef<Mesh>(null)
+  useFrame(() => {
+    const { level, s } = sim.current
+    const m = ref.current
+    if (!m) return
+    const age = s.barkT < 0 ? 9 : s.t - s.barkT
+    m.visible = age >= 0 && age < 0.7
+    if (!m.visible) return
+    const k = 0.3 + (age / 0.7) * 3.7 // grows out to about the hearing range
+    m.position.set(wx(level, s.barkX), 0.03, wz(level, s.barkY))
+    m.scale.set(k, k, k)
+    ;(m.material as MeshBasicMaterial).opacity = 0.7 * (1 - age / 0.7)
+  })
+  return (
+    <mesh ref={ref} rotation={[-Math.PI / 2, 0, 0]} visible={false}>
+      <ringGeometry args={[0.9, 1, 40]} />
+      <meshBasicMaterial color="#ffd60a" transparent opacity={0.7} depthWrite={false} side={DoubleSide} />
+    </mesh>
+  )
+}
+
 export default function PuppyRescue3D({ sim, levelKey }: PuppyRescue3DProps) {
   const { level } = sim.current
   return (
@@ -440,6 +465,7 @@ export default function PuppyRescue3D({ sim, levelKey }: PuppyRescue3DProps) {
           <CatcherActor key={`g${g}`} sim={sim} g={g} />
         ))}
         <HeroActor sim={sim} />
+        <BarkRing sim={sim} />
       </group>
     </Canvas>
   )

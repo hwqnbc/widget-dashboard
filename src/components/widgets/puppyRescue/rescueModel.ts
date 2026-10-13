@@ -53,6 +53,12 @@ export const PEN_PER_CELL = 2
 /** Picking up the key / opening the padlock (distance to its centre). */
 export const KEY_R = 0.5
 export const LOCK_R = 0.65
+/** Bark lure: hearing range (cells, through walls), cooldown (s), the
+ * look-around at the bark spot (s) and the turn back onto the route (s). */
+export const BARK_R = 4
+export const BARK_COOLDOWN = 6
+export const LURE_LOOK = 2
+const LURE_TURN = 0.4
 /** Sentry defaults: sweep rate (°/s) and the pause at each end (s). */
 export const SWEEP_RATE = 45
 export const SWEEP_PAUSE = 0.6
@@ -472,6 +478,25 @@ export interface Events {
   unlock: number
   /** Times the dog settled into a bush (for the rustle sfx). */
   hide: number
+  /** Barks made, and barks that drew a catcher. */
+  bark: number
+  heard: number
+}
+
+/** A catcher drawn off its route by a bark. Its route clock is paused
+ * while it's away, so it resumes exactly where it left. */
+export interface Lure {
+  mode: 'go' | 'look' | 'back' | 'turn'
+  /** Waypoints (flat x,y) of the current walk, and the next one's index. */
+  pts: number[]
+  i: number
+  /** Where it left its route — the walk back ends here. */
+  ox: number
+  oy: number
+  /** Seconds into 'look' / 'turn'; the heading the look sweeps around /
+   * the turn starts from. */
+  tt: number
+  h0: number
 }
 
 export interface RescueState {
@@ -500,6 +525,15 @@ export interface RescueState {
   py: number[]
   ph: number[]
   guards: Pose[]
+  /** Each catcher's route clock (== t unless a bark drew it away). */
+  gclock: number[]
+  /** Lured catchers (null = on its route). */
+  lure: (Lure | null)[]
+  /** Seconds until the next bark; and when / where the last bark was. */
+  barkCd: number
+  barkT: number
+  barkX: number
+  barkY: number
   /** Bit i set: catcher i sees someone this frame. */
   seeing: number
   /** "?" meter 0..1; 1 = caught. */
@@ -532,13 +566,19 @@ export function initialState(level: Level): RescueState {
     py: [],
     ph: [],
     guards: level.guards.map(() => ({ x: 0, y: 0, h: 0, v: 0 })),
+    gclock: level.guards.map(() => 0),
+    lure: level.guards.map(() => null),
+    barkCd: 0,
+    barkT: -1,
+    barkX: 0,
+    barkY: 0,
     seeing: 0,
     meter: 0,
     spotted: false,
     status: 'ready',
     caughtBy: -1,
     caughtWho: -1,
-    ev: { freed: 0, alert: 0, door: 0, key: 0, unlock: 0, hide: 0 },
+    ev: { freed: 0, alert: 0, door: 0, key: 0, unlock: 0, hide: 0, bark: 0, heard: 0 },
   }
   level.guards.forEach((g, i) => guardPose(g, 0, s.guards[i]))
   return s
@@ -639,6 +679,153 @@ function resolve(level: Level, p: { x: number; y: number }, r: number, shut: boo
 const scratchP = { x: 0, y: 0 }
 const scratchB = { x: 0, y: 0, h: 0 }
 
+/* ------------------------------------------------------------------ bark */
+
+/** Cell path (centres, flat) from cell a to cell b by BFS, or null. */
+function cellPath(level: Level, ax: number, ay: number, bx: number, by: number, penOpen: boolean): number[] | null {
+  const { cols, rows } = level
+  const start = ay * cols + ax
+  const goal = by * cols + bx
+  const prev = new Int32Array(cols * rows).fill(-2)
+  prev[start] = -1
+  const q = [start]
+  for (let qi = 0; qi < q.length; qi++) {
+    const c = q[qi]
+    if (c === goal) break
+    const x = c % cols
+    const y = (c - x) / cols
+    for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
+      if (!canStep(level, x, y, dx, dy, penOpen)) continue
+      const n = (y + dy) * cols + x + dx
+      if (prev[n] !== -2) continue
+      prev[n] = c
+      q.push(n)
+    }
+  }
+  if (prev[goal] === -2) return null
+  const out: number[] = []
+  for (let c = goal; c >= 0; c = prev[c]) out.push((c % cols) + 0.5, Math.floor(c / cols) + 0.5)
+  // reverse pairs
+  const r: number[] = []
+  for (let i = out.length - 2; i >= 0; i -= 2) r.push(out[i], out[i + 1])
+  return r
+}
+
+/**
+ * Bark: the nearest catcher within `BARK_R` (through walls) that can walk
+ * to the dog's cell heads there. Returns the catcher index, or -1 (on
+ * cooldown, nobody in range, or not playing). Starts the cooldown either way.
+ */
+export function bark(level: Level, s: RescueState): number {
+  if (s.status !== 'play' || s.barkCd > 0) return -1
+  s.barkCd = BARK_COOLDOWN
+  s.barkT = s.t
+  s.barkX = s.x
+  s.barkY = s.y
+  s.ev.bark += 1
+  const bx = Math.floor(s.x)
+  const by = Math.floor(s.y)
+  let best = -1
+  let bestD = BARK_R
+  let bestPath: number[] | null = null
+  for (let g = 0; g < level.guards.length; g++) {
+    const p = s.guards[g]
+    const d = Math.hypot(p.x - s.x, p.y - s.y)
+    if (d > bestD) continue
+    const path = cellPath(level, Math.floor(p.x), Math.floor(p.y), bx, by, s.penOpen)
+    if (!path) continue
+    best = g
+    bestD = d
+    bestPath = path
+  }
+  if (best < 0 || !bestPath) return -1
+  const p = s.guards[best]
+  const prev = s.lure[best]
+  s.lure[best] = {
+    mode: 'go',
+    pts: [p.x, p.y, ...bestPath],
+    i: 0,
+    // A re-bark keeps the ORIGINAL departure point (the route is where it
+    // must go back to).
+    ox: prev ? prev.ox : p.x,
+    oy: prev ? prev.oy : p.y,
+    tt: 0,
+    h0: p.h,
+  }
+  s.ev.heard += 1
+  return best
+}
+
+/** Advance a catcher one step: along its route (clock ticking), or along
+ * its lure (clock paused). Writes `s.guards[g]`. */
+function stepGuard(level: Level, s: RescueState, g: number): Pose {
+  const p = s.guards[g]
+  const L = s.lure[g]
+  if (!L) {
+    s.gclock[g] += STEP
+    return guardPose(level.guards[g], s.gclock[g], p)
+  }
+  if (L.mode === 'go' || L.mode === 'back') {
+    let left = GUARD_SPEED * STEP
+    while (left > 0 && L.i < L.pts.length / 2) {
+      const tx = L.pts[2 * L.i]
+      const ty = L.pts[2 * L.i + 1]
+      const d = Math.hypot(tx - p.x, ty - p.y)
+      if (d <= left) {
+        p.x = tx
+        p.y = ty
+        left -= d
+        L.i++
+      } else {
+        p.h = Math.atan2(ty - p.y, tx - p.x)
+        p.x += ((tx - p.x) / d) * left
+        p.y += ((ty - p.y) / d) * left
+        left = 0
+      }
+    }
+    p.v = GUARD_SPEED
+    if (L.i >= L.pts.length / 2) {
+      p.v = 0
+      if (L.mode === 'go') {
+        L.mode = 'look'
+        L.tt = 0
+        L.h0 = p.h
+      } else {
+        L.mode = 'turn'
+        L.tt = 0
+        L.h0 = p.h
+      }
+    }
+    return p
+  }
+  L.tt += STEP
+  if (L.mode === 'look') {
+    // Look around: a slow ±60° sweep about the arrival heading.
+    p.h = wrapAngle(L.h0 + Math.sin((L.tt / LURE_LOOK) * Math.PI * 2) * (Math.PI / 3))
+    p.v = 0
+    if (L.tt >= LURE_LOOK) {
+      // Walk back the way it came, ending exactly where it left its route.
+      const back: number[] = []
+      for (let i = L.pts.length - 4; i >= 2; i -= 2) back.push(L.pts[i], L.pts[i + 1])
+      back.push(L.ox, L.oy)
+      L.pts = back
+      L.i = 0
+      L.mode = 'back'
+    }
+    return p
+  }
+  // 'turn': ease back to the route's heading, then rejoin it.
+  const route = guardPose(level.guards[g], s.gclock[g], { x: 0, y: 0, h: 0, v: 0 })
+  const f = Math.min(1, L.tt / LURE_TURN)
+  p.h = wrapAngle(L.h0 + wrapAngle(route.h - L.h0) * f)
+  p.v = 0
+  if (f >= 1) {
+    s.lure[g] = null
+    guardPose(level.guards[g], s.gclock[g], p)
+  }
+  return p
+}
+
 /** Leave 'ready' — the clock and the catchers start on the first move. */
 export function start(s: RescueState): void {
   if (s.status === 'ready') s.status = 'play'
@@ -655,6 +842,7 @@ export function step(level: Level, s: RescueState, ix: number, iy: number): void
   if (s.status !== 'play') return
   s.t += STEP
   s.frames += 1
+  if (s.barkCd > 0) s.barkCd = Math.max(0, s.barkCd - STEP)
 
   // --- the dog: no inertia — speed is the stick, stop is instant.
   const ox = s.x
@@ -761,7 +949,7 @@ export function step(level: Level, s: RescueState, ix: number, iy: number): void
   let who = -1
   let by = -1
   for (let g = 0; g < level.guards.length; g++) {
-    const p = guardPose(level.guards[g], s.t, s.guards[g])
+    const p = stepGuard(level, s, g)
     if (Math.hypot(s.x - p.x, s.y - p.y) < BUMP_R) bump = g
     const d = s.hidden ? -1 : seenAt(level, p, s.x, s.y, CONE_RANGE, CONE_HALF, !s.penOpen)
     if (d >= 0) {
