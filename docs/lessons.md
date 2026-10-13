@@ -2494,3 +2494,14 @@ carried over; these are the new ones.
     short of the spot, outside touching range. Write the model check for
     each case (`182-puppy-modes`), because the two goals pull opposite
     ways and a tweak to one silently breaks the other.
+
+165. **When a solver is too slow for the device, ship its answers — and
+    test the shipped copy, not the solver.** Puppy Rescue's hint needed
+    the planner's route on tap, but the planner takes up to ~3.3 s per
+    level in node (more on a phone). The routes now ship in a GENERATED
+    file (`scripts/gen-puppy-hints.mjs` → `rescueHints.ts`, a compact
+    `x,y` / `w<t>` string per level). The trap is a stale copy after a
+    level is tuned, so the sweep replays each STORED route exactly as the
+    widget plays it and fails any that no longer reach 3★. Time the
+    expensive call on every input before deciding (here 25 levels: 8 ms
+    to 3.3 s) — the slowest case decides, not the typical one.

@@ -13,14 +13,18 @@ import { useLayoutEffect, useMemo, useRef } from 'react'
 import type { RefObject } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { BufferAttribute, BufferGeometry, Color, DoubleSide, Vector3 } from 'three'
-import type { Group, Mesh, MeshBasicMaterial, PerspectiveCamera } from 'three'
-import { WALL_HALF, coneRays, doorOpen, isAlert, type Level, type RescueState } from './rescueModel'
+import type { Group, Mesh, MeshBasicMaterial, MeshStandardMaterial, PerspectiveCamera } from 'three'
+import { WALL_HALF, coneRays, doorOpen, isAlert, type Level, type Mode, type RescueState } from './rescueModel'
 import { AlertMark, Blob, Bush, Cage, Catcher, Dog, GoalMarker, GoldKey, Padlock } from './puppyModels'
 import { HERO_COAT, PUP_COATS, newAnim } from './puppyLook'
 
 export interface SimView {
   level: Level
+  /** The mode the widget is set to (the hint replay itself runs Classic). */
+  mode: Mode
   s: RescueState
+  /** A 💡 Hint replay: the dog is drawn as a see-through ghost. */
+  ghost?: boolean
 }
 
 export interface PuppyRescue3DProps {
@@ -246,13 +250,27 @@ function ConeActor({ sim, g }: { sim: RefObject<SimView>; g: number }) {
   )
 }
 
-/** The hero dog. */
+/** The hero dog — a see-through ghost during a hint replay. */
 function HeroActor({ sim }: { sim: RefObject<SimView> }) {
   const ref = useRef<Group>(null)
   const anim = useMemo(newAnim, [])
+  const ghostShown = useRef(false)
   useFrame(({ clock }) => {
     const { level, s } = sim.current
     if (!ref.current) return
+    const ghost = sim.current.ghost === true
+    if (ghost !== ghostShown.current) {
+      ghostShown.current = ghost
+      ref.current.traverse((o) => {
+        const m = (o as Mesh).material as MeshStandardMaterial | undefined
+        if (!m || !('opacity' in m)) return
+        m.userData.baseOpacity ??= m.opacity
+        m.userData.baseTransparent ??= m.transparent
+        m.transparent = ghost || (m.userData.baseTransparent as boolean)
+        m.opacity = ghost ? 0.45 * (m.userData.baseOpacity as number) : (m.userData.baseOpacity as number)
+        m.needsUpdate = true
+      })
+    }
     ref.current.position.set(wx(level, s.x), 0, wz(level, s.y))
     ref.current.rotation.y = yawOf(s.h)
     anim.v = s.status === 'play' ? s.v : 0

@@ -21,6 +21,8 @@ import {
   FOLLOW_GAP,
   PEN_GAP,
   canStep,
+  decodeRoute,
+  encodeRoute,
   puppyCount,
   CELL_FRAMES,
   CONE_HALF,
@@ -36,11 +38,13 @@ import {
   parseLevel,
   routeInput,
   seenAt,
+  start,
   starsFor,
   step,
 } from './.bundle/rescueModel.js'
 import { LEVELS, TIERS } from './.bundle/rescueLevels.js'
 import { planLevel } from './.bundle/rescuePlanner.js'
+import { HINTS } from './.bundle/rescueHints.js'
 import { reporter } from './helpers.mjs'
 
 const { check, finish } = reporter('puppy-model')
@@ -467,6 +471,14 @@ const run = (level, s, ix, iy, frames) => {
   }
 }
 
+// ---------------------------------------------------- 6f. the hint codec
+{
+  const r = [{ x: 3.5, y: 8.5 }, { until: 10.4 }, { x: 0.5, y: 0.5 }]
+  const code = encodeRoute(r)
+  check('hint codec: encode → decode round-trips', code === '3,8 w10.4 0,0' && JSON.stringify(decodeRoute(code)) === JSON.stringify(r), code)
+  check('every shipped level has a stored hint and no stray ones', LEVELS.every((l) => typeof HINTS[l.id] === 'string') && Object.keys(HINTS).length === LEVELS.length)
+}
+
 // ---------------------------------------------- 7. THE SWEEP: every level
 {
   const ids = new Set()
@@ -507,6 +519,21 @@ const run = (level, s, ix, iy, frames) => {
       s.status === 'escaped' && starsFor(L, s) === 3 && !s.spotted,
       `${s.status} stars ${starsFor(L, s)} pups ${s.order.length}/${L.cages.length}`,
     )
+    // The stored 💡 Hint (rescueHints.ts) replays to 3★ exactly as the widget
+    // plays it: start, then routeInput every step. A missing or stale entry
+    // fails here — regenerate with `node scripts/gen-puppy-hints.mjs`.
+    const code = HINTS[spec.id]
+    const h = initialState(L)
+    if (code) {
+      const route = decodeRoute(code)
+      const hc = { i: 0 }
+      start(h)
+      for (let k = 0; k < 60 * 120 && h.status === 'play'; k++) {
+        const [ix, iy] = routeInput(h, route, hc)
+        step(L, h, ix, iy)
+      }
+    }
+    check(`${spec.id} stored hint replays to 3★`, !!code && h.status === 'escaped' && starsFor(L, h) === 3, code ? `${h.status} ${starsFor(L, h)}★` : 'no hint stored')
   }
 }
 

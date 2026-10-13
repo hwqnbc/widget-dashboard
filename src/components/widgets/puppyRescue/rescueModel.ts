@@ -1247,3 +1247,25 @@ export function routeInput(
   }
   return [0, -1]
 }
+
+/**
+ * Decode a stored route (the hint pack's compact form): space-separated
+ * steps, `x,y` = walk to that cell's centre, `w<t>` = stand still until game
+ * time t. `encodeRoute` is its inverse (used by `scripts/gen-puppy-hints.mjs`).
+ */
+export function decodeRoute(code: string): RouteStep[] {
+  return code
+    .split(' ')
+    .filter(Boolean)
+    .map((tok) => {
+      if (tok[0] === 'w') return { until: parseFloat(tok.slice(1)) }
+      const [x, y] = tok.split(',').map(Number)
+      return { x: x + 0.5, y: y + 0.5 }
+    })
+}
+
+export function encodeRoute(route: readonly RouteStep[]): string {
+  return route
+    .map((r) => ('until' in r ? `w${+r.until.toFixed(4)}` : `${Math.floor(r.x)},${Math.floor(r.y)}`))
+    .join(' ')
+}

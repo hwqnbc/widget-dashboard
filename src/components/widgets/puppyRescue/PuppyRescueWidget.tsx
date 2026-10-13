@@ -17,6 +17,7 @@ import {
 import SettingsIcon from '@mui/icons-material/Settings'
 import RestartIcon from '@mui/icons-material/RestartAlt'
 import PetsIcon from '@mui/icons-material/Pets'
+import LightbulbIcon from '@mui/icons-material/Lightbulb'
 import KeyIcon from '@mui/icons-material/Key'
 import VisibilityIcon from '@mui/icons-material/Visibility'
 import VisibilityOffIcon from '@mui/icons-material/VisibilityOff'
@@ -39,15 +40,20 @@ import {
   MODES,
   STEP,
   bark,
+  decodeRoute,
   initialState,
   isAlert,
   parseLevel,
   puppyCount,
+  routeInput,
+  start,
   starsFor,
   step,
   type Mode,
+  type RouteStep,
   type Status,
 } from './rescueModel'
+import { HINTS } from './rescueHints'
 import { LEVELS, MODE_LABEL, TIERS, TIER_LABEL, levelLabel, recordKey } from './rescueLevels'
 import {
   playAlert,
@@ -90,6 +96,8 @@ const MODE_TIP: Record<Mode, string> = {
   easy: 'Easy: a spotted puppy is netted back to its cage — only being seen YOURSELF is a catch.',
   arcade: 'Arcade: a catcher that spots you gives chase — outrun it or break its sight. Only a touch catches.',
 }
+/** The hint replay ends this long after the ghost escapes (ms). */
+const HINT_END_MS = 900
 /** How long the "Netted!" note stays up (ms). */
 const NET_MS = 1400
 
@@ -151,8 +159,12 @@ export default function PuppyRescueWidget({ id }: WidgetProps) {
 
   /** The live simulation — stepped by the loop below, read by the 3D view. */
   const simRef = useRef<SimView>(null as unknown as SimView)
-  if (!simRef.current || simRef.current.level !== level || simRef.current.s.mode !== mode)
-    simRef.current = { level, s: initialState(level, mode) }
+  if (!simRef.current || simRef.current.level !== level || simRef.current.mode !== mode)
+    simRef.current = { level, mode, s: initialState(level, mode) }
+  /** The 💡 Hint replay in progress: the stored route, its cursor, speed. */
+  const hintRef = useRef<{ route: RouteStep[]; c: { i: number }; speed: number } | null>(null)
+  const [hint, setHint] = useState(false)
+  const [hintSpeed, setHintSpeed] = useState(1)
 
   const [status, setStatus] = useState<Status>('ready')
   const [pups, setPups] = useState(0)
@@ -188,9 +200,12 @@ export default function PuppyRescueWidget({ id }: WidgetProps) {
   const bestRef = useRef(records.bestMs)
   bestRef.current = records.bestMs
 
-  /** Fresh attempt at the current level. */
+  /** Fresh attempt at the current level (also how a hint replay ends). */
   const restart = useCallback(() => {
-    simRef.current = { level, s: initialState(level, mode) }
+    simRef.current = { level, mode, s: initialState(level, mode) }
+    hintRef.current = null
+    barkReq.current = false
+    setHint(false)
     setStatus('ready')
     setPups(0)
     setSpotted(false)
@@ -214,8 +229,26 @@ export default function PuppyRescueWidget({ id }: WidgetProps) {
     setResult(null)
     setNetted(0)
     setChasing(false)
+    hintRef.current = null
+    setHint(false)
   }, [level, mode])
 
+  /** 💡 Hint: replay the level's stored 3-star route as a ghost run — the
+   * real sim (Classic rules, catchers exactly as in your run), fed by
+   * `routeInput` instead of the stick — then back to ready. */
+  const startHint = useCallback(() => {
+    const code = HINTS[level.spec.id]
+    if (!code) return
+    const s = initialState(level, 'classic')
+    start(s)
+    simRef.current = { level, mode, s, ghost: true }
+    hintRef.current = { route: decodeRoute(code), c: { i: 0 }, speed: 1 }
+    barkReq.current = false
+    setHintSpeed(1)
+    setHint(true)
+  }, [level, mode])
+  const restartRef = useRef(restart)
+  restartRef.current = restart
   // The "Netted!" note fades on its own.
   useEffect(() => {
     if (netted === 0) return
@@ -276,21 +309,30 @@ export default function PuppyRescueWidget({ id }: WidgetProps) {
         prevPups = s.order.length
         prevChasing = false
       }
+      const ghost = simRef.current.ghost === true
+      const H = ghost ? hintRef.current : null
       if (s.status === 'ready' || s.status === 'play') {
-        acc += dt
+        acc += dt * (H ? H.speed : 1)
         let n = 0
-        while (acc >= STEP && n < 8) {
-          const [ix, iy] = input()
-          if (barkReq.current) {
+        while (acc >= STEP && n < 16) {
+          if (H) {
+            // The hint replay: the stored route drives, the player doesn't.
             barkReq.current = false
-            bark(lv, s)
+            const [ix, iy] = routeInput(s, H.route, H.c)
+            step(lv, s, ix, iy)
+          } else {
+            const [ix, iy] = input()
+            if (barkReq.current) {
+              barkReq.current = false
+              bark(lv, s)
+            }
+            step(lv, s, ix, iy)
           }
-          step(lv, s, ix, iy)
           acc -= STEP
           n++
           if (s.status !== 'play' && s.status !== 'ready') break
         }
-        if (n === 8) acc = 0
+        if (n === 16) acc = 0
       } else acc = 0
 
       const root = rootRef.current
@@ -361,7 +403,14 @@ export default function PuppyRescueWidget({ id }: WidgetProps) {
         prevSpotted = s.spotted
         setSpotted(s.spotted)
       }
-      if (s.status !== prevStatus) {
+      if (s.status !== prevStatus && ghost) {
+        // A ghost run never records anything: it ends back at ready.
+        prevStatus = s.status
+        if (s.status === 'escaped' || s.status === 'caught')
+          window.setTimeout(() => {
+            if (simRef.current.s === s) restartRef.current()
+          }, HINT_END_MS)
+      } else if (s.status !== prevStatus) {
         prevStatus = s.status
         setStatus(s.status)
         if (s.status === 'caught') {
@@ -401,6 +450,7 @@ export default function PuppyRescueWidget({ id }: WidgetProps) {
         ds.lured = String(s.lure.reduce((m, l, g) => (l ? m | (1 << g) : m), 0))
         ds.chasing = String(s.lure.reduce((m, l, g) => (isAlert(l) ? m | (1 << g) : m), 0))
         ds.nets = String(s.ev.net)
+        ds.hint = ghost ? '1' : '0'
         ds.pen = s.penOpen ? '1' : '0'
         ds.meter = s.meter.toFixed(2)
         ds.spotted = s.spotted ? '1' : '0'
@@ -417,6 +467,10 @@ export default function PuppyRescueWidget({ id }: WidgetProps) {
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
       if (isTypingTarget(e.target)) return
+      if (e.key === 'Escape' && simRef.current.ghost) {
+        restartRef.current()
+        return
+      }
       if (e.key === ' ' || e.key === 'b' || e.key === 'B') {
         e.preventDefault()
         unlockAudio()
@@ -560,7 +614,7 @@ export default function PuppyRescueWidget({ id }: WidgetProps) {
 
       {/* The tip: a slim banner ABOVE the maze (never over it — the door and
           cages stay visible while you read), gone on the first move. */}
-      {status === 'ready' && (
+      {status === 'ready' && !hint && (
         <Box
           data-testid="puppy-tip"
           sx={{
@@ -619,6 +673,52 @@ export default function PuppyRescueWidget({ id }: WidgetProps) {
             <PuppyRescue3D sim={simRef} levelKey={`${spec.id}`} />
           </Suspense>
         </Box>
+
+        {hint && (
+          <Box
+            data-testid="puppy-hint-overlay"
+            onPointerDown={restart}
+            sx={{ position: 'absolute', inset: 0, cursor: 'pointer' }}
+          >
+            <Stack
+              direction="row"
+              spacing={1}
+              sx={{
+                position: 'absolute',
+                top: 8,
+                left: '50%',
+                transform: 'translateX(-50%)',
+                alignItems: 'center',
+                px: 1.25,
+                py: 0.25,
+                borderRadius: 2,
+                bgcolor: 'rgba(42,37,84,0.85)',
+                color: 'common.white',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              <Typography variant="body2" sx={{ fontWeight: 800 }}>
+                💡 Hint — tap to skip
+              </Typography>
+              <Button
+                size="small"
+                variant="outlined"
+                data-testid="puppy-hint-speed"
+                data-speed={hintSpeed}
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  const v = hintSpeed === 1 ? 2 : 1
+                  if (hintRef.current) hintRef.current.speed = v
+                  setHintSpeed(v)
+                }}
+                sx={{ minWidth: 0, py: 0, px: 0.75, color: 'common.white', borderColor: 'rgba(255,255,255,0.5)' }}
+              >
+                {hintSpeed === 1 ? '⏩ 2×' : '1×'}
+              </Button>
+            </Stack>
+          </Box>
+        )}
 
         {netted > 0 && status === 'play' && (
           <Box
@@ -751,9 +851,22 @@ export default function PuppyRescueWidget({ id }: WidgetProps) {
             {myBest ? ` · ${fmtTime(myBest)}` : ''}
           </Typography>
         </Stack>
-        <IconButton size="small" aria-label="Restart" data-testid="puppy-restart" onClick={restart}>
-          <RestartIcon fontSize="small" />
-        </IconButton>
+        <Stack direction="row" sx={{ alignItems: 'center' }}>
+          {status === 'ready' && !hint && HINTS[spec.id] && (
+            <Button
+              size="small"
+              data-testid="puppy-hint"
+              startIcon={<LightbulbIcon fontSize="small" />}
+              onClick={startHint}
+              sx={{ py: 0, minWidth: 0, textTransform: 'none', color: '#f5b301', fontWeight: 700 }}
+            >
+              Hint
+            </Button>
+          )}
+          <IconButton size="small" aria-label="Restart" data-testid="puppy-restart" onClick={restart}>
+            <RestartIcon fontSize="small" />
+          </IconButton>
+        </Stack>
       </Stack>
 
       {/* The fixed stick, in its own strip under the maze: it never moves,

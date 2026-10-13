@@ -468,7 +468,10 @@ no barks is bit-identical and every proof stands; 6 s cooldown); Round 5
 added **Easy / Arcade modes** beside Classic (Easy: a seen puppy nets the
 line from it back to the cages; Arcade: a full meter starts a 0.9× chase
 on the Bark lure seam — chase → search → back — caught only by touch;
-per-mode stars via `recordKey`, an escape in any mode unlocks).
+per-mode stars via `recordKey`, an escape in any mode unlocks); Round 6
+added the **💡 Hint** (a ghost replay of the level's proven route through
+the real sim — routes pre-computed into the GENERATED `rescueHints.ts` by
+`scripts/gen-puppy-hints.mjs`, every one re-proven 3★ by the e2e sweep).
 See `docs/map.md` for the Map page (the first page-level heavy feature —
 @arcgis/core lazy route chunk, free no-key `gray-vector`/`dark-gray-vector`
 basemaps following the theme toggle, 2D map / 3D globe switch, locate/pins/

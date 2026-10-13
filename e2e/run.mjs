@@ -239,6 +239,7 @@ const puppyBundle = spawnSync(
     'src/components/widgets/puppyRescue/rescueModel.ts',
     'src/components/widgets/puppyRescue/rescueLevels.ts',
     'src/components/widgets/puppyRescue/rescuePlanner.ts',
+    'src/components/widgets/puppyRescue/rescueHints.ts',
     '--bundle',
     '--format=esm',
     `--outdir=${join(here, '.bundle')}`,

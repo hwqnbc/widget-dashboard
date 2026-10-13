@@ -10,8 +10,9 @@
  * INFLATED catcher (longer, wider cone; bigger bodies; earlier cage pick-up),
  * so a route the planner calls safe stays safe in the continuous sim.
  *
- * Not imported by the widget — the e2e suite runs it for every level (and it
- * is the seam a future "show me how" hint would use).
+ * Not imported by the widget — the e2e suite runs it for every level, and
+ * `scripts/gen-puppy-hints.mjs` runs it offline to write the 💡 Hint pack
+ * (`rescueHints.ts`; too slow to run on a phone at tap time).
  */
 import {
   BUMP_R,
