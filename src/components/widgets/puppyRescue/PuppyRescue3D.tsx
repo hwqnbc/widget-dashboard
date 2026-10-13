@@ -17,6 +17,7 @@ import type { Group, Mesh, MeshBasicMaterial, MeshStandardMaterial, PerspectiveC
 import { WALL_HALF, coneRays, doorOpen, isAlert, type Level, type Mode, type RescueState } from './rescueModel'
 import { AlertMark, Blob, Bush, Cage, Catcher, Dog, GoalMarker, GoldKey, Padlock } from './puppyModels'
 import { HERO_COAT, PUP_COATS, newAnim } from './puppyLook'
+import { themeById, type PuppyTheme, type ThemeId } from './puppyThemes'
 
 export interface SimView {
   level: Level
@@ -31,6 +32,8 @@ export interface PuppyRescue3DProps {
   sim: RefObject<SimView>
   /** Re-mount key — the level id. */
   levelKey: string
+  /** Colour theme (floor, surround, pen patch, side light). */
+  theme: ThemeId
 }
 
 const WALL_H = 0.45
@@ -80,7 +83,14 @@ function CameraRig({ level }: { level: Level }) {
   return null
 }
 
-function Maze({ level }: { level: Level }) {
+/** The space around the maze follows the theme. */
+function ClearColor({ color }: { color: string }) {
+  const gl = useThree((s) => s.gl)
+  useLayoutEffect(() => gl.setClearColor(color), [gl, color])
+  return null
+}
+
+function Maze({ level, theme }: { level: Level; theme: PuppyTheme }) {
   const exitX = wx(level, level.exitCol + 0.5)
   const topZ = wz(level, 0)
   return (
@@ -88,11 +98,11 @@ function Maze({ level }: { level: Level }) {
       {/* floor + a strip of path beyond the door */}
       <mesh position={[0, -0.02, 0]}>
         <boxGeometry args={[level.cols, 0.04, level.rows]} />
-        <meshStandardMaterial color="#7b6cf2" roughness={0.95} />
+        <meshStandardMaterial color={theme.floor} roughness={0.95} />
       </mesh>
       <mesh position={[exitX, -0.02, topZ - 0.45]}>
         <boxGeometry args={[1, 0.04, 0.9]} />
-        <meshStandardMaterial color="#7b6cf2" roughness={0.95} />
+        <meshStandardMaterial color={theme.floor} roughness={0.95} />
       </mesh>
       {level.walls.map(([x1, y1, x2, y2], i) => {
         // The exit door's edge is drawn by <Door>, not as wall.
@@ -391,7 +401,7 @@ function KeyActor({ sim }: { sim: RefObject<SimView> }) {
 
 /** The padlock edge: lifts and shrinks away when opened; a ▼▼ over it
  * while the dog carries the key. The pen floor is tinted gold. */
-function LockActor({ sim }: { sim: RefObject<SimView> }) {
+function LockActor({ sim, theme }: { sim: RefObject<SimView>; theme: PuppyTheme }) {
   const lock = useRef<Group>(null)
   const marker = useRef<Group>(null)
   const { level } = sim.current
@@ -414,7 +424,7 @@ function LockActor({ sim }: { sim: RefObject<SimView> }) {
         j % 2 === 0 ? (
           <mesh key={j} position={[wx(level, Math.floor(p.x) + 0.5), 0.003, wz(level, p.y)]} rotation={[-Math.PI / 2, 0, 0]}>
             <planeGeometry args={[0.96, 0.96]} />
-            <meshBasicMaterial color="#9a86ff" transparent opacity={0.55} depthWrite={false} />
+            <meshBasicMaterial color={theme.pen} transparent opacity={0.55} depthWrite={false} />
           </mesh>
         ) : null,
       )}
@@ -453,22 +463,23 @@ function BarkRing({ sim }: { sim: RefObject<SimView> }) {
   )
 }
 
-export default function PuppyRescue3D({ sim, levelKey }: PuppyRescue3DProps) {
+export default function PuppyRescue3D({ sim, levelKey, theme: themeId }: PuppyRescue3DProps) {
   const { level } = sim.current
+  const theme = themeById[themeId]
   return (
     <Canvas
       frameloop="always"
       dpr={[1, 1.75]}
       camera={{ fov: 38, position: [0, 12, 8] }}
       style={{ width: '100%', height: '100%' }}
-      onCreated={({ gl }) => gl.setClearColor('#48d3f2')}
     >
+      <ClearColor color={theme.surround} />
       <ambientLight intensity={0.95} />
       <directionalLight position={[3, 10, 6]} intensity={1.4} />
-      <directionalLight position={[-6, 4, -4]} intensity={0.4} color="#bfe8ff" />
+      <directionalLight position={[-6, 4, -4]} intensity={0.4} color={theme.rim} />
       <CameraRig level={level} />
       <group key={levelKey}>
-        <Maze level={level} />
+        <Maze level={level} theme={theme} />
         <Door sim={sim} />
         {level.guards.map((_, g) => (
           <ConeActor key={`c${g}`} sim={sim} g={g} />
@@ -478,7 +489,7 @@ export default function PuppyRescue3D({ sim, levelKey }: PuppyRescue3DProps) {
             <Bush />
           </group>
         ))}
-        <LockActor sim={sim} />
+        <LockActor sim={sim} theme={theme} />
         <KeyActor sim={sim} />
         {[...level.cages, ...level.pen].map((_, i) => (
           <PuppyActor key={`p${i}`} sim={sim} i={i} />

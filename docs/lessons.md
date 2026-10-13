@@ -2505,3 +2505,13 @@ carried over; these are the new ones.
     widget plays it and fails any that no longer reach 3★. Time the
     expensive call on every input before deciding (here 25 levels: 8 ms
     to 3.3 s) — the slowest case decides, not the typical one.
+
+166. **Pick a game floor by what must read ON it, and test colours from a
+    screenshot, not the WebGL buffer.** Puppy Rescue's themes started
+    from a list of everything drawn on the floor (pink cones, white
+    walls, green bushes, gold key, orange dog), which ruled out green,
+    pink and pale floors and moved the requested yellow to the SURROUND.
+    In e2e, reading the canvas back (`drawImage` of a WebGL canvas) gave
+    `#000000`: without `preserveDrawingBuffer` the buffer is gone after
+    compositing. Sampling a 2×2 `page.screenshot({ clip })` decoded in the
+    page reads the real on-screen colour.

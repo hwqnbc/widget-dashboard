@@ -15,7 +15,8 @@ Round 4 added the **Bark lure**, an optional tool available in every level.
 Round 5 added **Easy and Arcade modes** beside Classic: a mode picker
 next to the level picker, each mode keeping its own stars and bests.
 Round 6 added the **💡 Hint**: a ghost replay of the level's proven 3-star
-route.
+route. Then came **colour themes**: five floor/surround sets in ⚙, with
+Sunshine (blue floor on yellow) the new default.
 
 ## Decisions (settled with the user before building)
 
@@ -82,6 +83,15 @@ route.
 | R6-2 | Does it cost anything? | **Free.** Watch as often as you like; stars are unaffected. |
 | R6-3 | Speed and controls | **Real time by default**, a ⏩ 2× toggle, tap anywhere on the maze (or Escape) to skip. |
 | defaults | Look and source | The button sits beside Restart, only while ready. The dog is a see-through ghost under a "💡 Hint — tap to skip" banner. The Classic route plays in every mode (it's never seen, so it works in Easy and Arcade too). Routes ship pre-computed: the planner takes up to ~3.3 s on Patrol 5 in node, too slow for a phone at tap time. |
+
+### Theme decisions (floor and surround colours)
+
+| # | Question | Decision |
+|---|---|---|
+| T-1 | Which sets? | **Sunshine (default)**, Toybox (the original violet-on-cyan look), Ocean, Night Watch, Sandbox. The user asked for a yellow option; yellow went AROUND the maze, since a yellow floor would swallow the gold key, the Bark ring, the orange dog and the white walls. Slate and Lavender Dream were proposed but not taken. |
+| T-2 | Default | **Sunshine**, for existing cards too (a card with no saved theme opens as Sunshine). |
+| T-3 | Where's the picker? | **The ⚙ menu, a row of swatch chips** split floor/surround. It applies instantly, even mid-run (looks only, no restart), and is saved per card. |
+| T-4 | The strip and tip banner | **Follow the theme**, using a deep shade of each floor. |
 
 **Detail I chose myself (not asked):** the door opens once the **first**
 puppy is freed. That way you can't skip a level with 0 puppies and still
@@ -267,6 +277,25 @@ cost of a star.
     `180-puppy-model` sweep replays every stored hint exactly as the widget
     does and fails a missing or stale one, so **re-run the generator after
     adding or tuning a level**.
+- **Themes.** `puppyThemes.ts` (pure data, shared by the widget and the
+  lazy 3D view) defines each theme's `floor`, `surround` (the canvas clear
+  colour via `<ClearColor>`, and the stage background shown before the
+  canvas loads), `strip` (the control strip, tip banner and hint banner)
+  and `strip2` (the Bark button's inner disc), plus two derived tints:
+  `pen` (the open pen's floor patch) and `rim` (the side light).
+
+  | Theme | Floor | Surround | Strip |
+  |---|---|---|---|
+  | Sunshine (default) | `#4a6fe3` | `#ffe066` | `#22357f` |
+  | Toybox | `#7b6cf2` | `#48d3f2` | `#2a2554` |
+  | Ocean | `#2f6fd6` | `#9be7ff` | `#173a73` |
+  | Night Watch | `#3b3a6b` | `#141a33` | `#0d1126` |
+  | Sandbox | `#c9a36a` | `#87ceeb` | `#5c4322` |
+
+  - **Fixed in every theme:** the cones, walls, door, bushes, key and
+    characters. A floor qualifies only if all of those still read on it:
+    mid-tone and cool or neutral, not green (bushes), pink or red (cones)
+    or pale (walls).
 - **The clock** (and the catchers) start on the first move. A level always
   opens in the same state, and you get time to read the tip.
 - **The tip** is a slim banner between the level picker and the maze, never
@@ -410,7 +439,7 @@ Times are the planner's optimum. A human takes longer.
 
 ## Persisted state
 
-- **Widget `data`:** `{ level, sound, unlockAll, stickSide, barkTipSeen, mode }`. That's only where you
+- **Widget `data`:** `{ level, sound, unlockAll, stickSide, barkTipSeen, mode, theme }`. That's only where you
   are and the settings.
 - **App-level records** (`records.puppyRescue`, survives removing the
   widget): `stars[key]` (best 1–3), `bestMs[key]` (fastest escape,
@@ -429,7 +458,8 @@ Times are the planner's optimum. A human takes longer.
 - **Root `puppy-root`:**
   - Rendered attributes: `data-level` (id), `data-level-index`,
     `data-unlocked` (count), `data-run`, `data-sound`, `data-stick`,
-    `data-mode` (classic|easy|arcade).
+    `data-mode` (classic|easy|arcade), `data-theme`
+    (sunshine|toybox|ocean|night|sandbox).
   - Live telemetry every 50 ms: `data-status` (ready|play|caught|escaped),
     `data-x`/`data-y` (map cells), `data-t`, `data-pups`, `data-meter`,
     `data-spotted`, `data-seeing` (catcher bitmask), `data-guards`
@@ -454,6 +484,8 @@ Times are the planner's optimum. A human takes longer.
     `data-chasing`), `puppy-hint` (the Hint button, while ready),
     `puppy-hint-overlay` (over the maze during a replay; a tap skips) and
     its `puppy-hint-speed` toggle (`data-speed` 1/2).
+  - ⚙ theme row: `puppy-theme` holding the `puppy-theme-<id>` chips
+    (`aria-pressed` on the current one).
   - Overlays: `puppy-netted` (`data-count`), `puppy-caught`, `puppy-escaped`
     (`data-stars`), `puppy-next`, `puppy-again`.
   - ⚙ menu items: `puppy-sound`, `puppy-unlock-all`,
@@ -465,7 +497,7 @@ Times are the planner's optimum. A human takes longer.
 npm run build && npm run lint
 npm run e2e puppy        # 180-puppy-model (pure + the level sweep), 181-puppy (live),
                          # 182-puppy-modes (pure Easy/Arcade), 183-puppy-modes-ui (live picker),
-                         # 184-puppy-hint (live hint replay)
+                         # 184-puppy-hint (live hint replay), 185-puppy-themes
 node scripts/gen-puppy-hints.mjs   # after adding/tuning a level: rewrite rescueHints.ts
 ```
 
@@ -552,6 +584,16 @@ Each item names the seam it builds on.
   search) — the stored routes only start from the start.
 - **Arcade/Easy-aware hints:** today the hint is the Classic route in every
   mode.
+
+**Themes**
+- **More sets:** Slate (`#5b6b7c` on `#dfe7ee`) and Lavender Dream
+  (`#9d8cf0` on `#f3eaff`) were proposed and not taken yet; Honey (a
+  mustard floor) needs the key outlined and a darker dog ring first.
+- **Theme the rest:** the hero's ground ring and the stick knob are still
+  fixed violet (most noticeable on Sandbox); walls and door could get a
+  per-theme tint too (a `walls` field, the same seam).
+- **Themed scenery outside the maze:** grass tufts, waves, stars, sand
+  ripples drawn on the surround.
 
 **Meta**
 - **A shelter screen** that fills with every puppy you've rescued, with

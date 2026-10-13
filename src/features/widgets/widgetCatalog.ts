@@ -335,7 +335,7 @@ export function defaultWidgetData(type: WidgetType): Record<string, unknown> {
     case 'puppyRescue':
       // Progress (stars, bests, unlocks) lives in the records slice; the
       // widget keeps only where you are and its settings.
-      return { level: 0, sound: true, unlockAll: false, stickSide: 'center', barkTipSeen: false, mode: 'classic' }
+      return { level: 0, sound: true, unlockAll: false, stickSide: 'center', barkTipSeen: false, mode: 'classic', theme: 'sunshine' }
     case 'modelViewer':
       // Bare string id — the model catalog itself lives in the lazy 3D chunk.
       return { model: 'legoSwatTruck', animate: true, autoRotate: false }

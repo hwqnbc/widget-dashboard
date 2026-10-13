@@ -54,6 +54,7 @@ import {
   type Status,
 } from './rescueModel'
 import { HINTS } from './rescueHints'
+import { DEFAULT_THEME, THEMES, coerceTheme, themeById, type ThemeId } from './puppyThemes'
 import { LEVELS, MODE_LABEL, TIERS, TIER_LABEL, levelLabel, recordKey } from './rescueLevels'
 import {
   playAlert,
@@ -143,6 +144,8 @@ export default function PuppyRescueWidget({ id }: WidgetProps) {
   const stickSide = useWidgetField<StickSide>(id, 'stickSide', 'center', coerceSide)
   const barkTipSeen = useWidgetField(id, 'barkTipSeen', false)
   const mode = useWidgetField<Mode>(id, 'mode', 'classic', coerceMode)
+  const themeId = useWidgetField<ThemeId>(id, 'theme', DEFAULT_THEME, coerceTheme)
+  const theme = themeById[themeId]
   const records = useAppSelector(selectPuppyRescueRecords)
   const setData = useCallback(
     (data: Record<string, unknown>) => dispatch(updateWidgetData({ id, data })),
@@ -541,6 +544,7 @@ export default function PuppyRescueWidget({ id }: WidgetProps) {
       data-sound={sound ? 'on' : 'off'}
       data-stick={stickSide}
       data-mode={mode}
+      data-theme={themeId}
       sx={{
         height: '100%',
         display: 'flex',
@@ -622,7 +626,7 @@ export default function PuppyRescueWidget({ id }: WidgetProps) {
             px: 1,
             py: 0.5,
             borderRadius: 1,
-            bgcolor: '#2a2554',
+            bgcolor: theme.strip,
             color: 'common.white',
             textAlign: 'center',
             lineHeight: 1.25,
@@ -660,7 +664,7 @@ export default function PuppyRescueWidget({ id }: WidgetProps) {
 
       <Box
         data-testid="puppy-stage"
-        sx={{ flex: 1, minHeight: 0, position: 'relative', borderRadius: 1, overflow: 'hidden', touchAction: 'none', bgcolor: '#48d3f2' }}
+        sx={{ flex: 1, minHeight: 0, position: 'relative', borderRadius: 1, overflow: 'hidden', touchAction: 'none', bgcolor: theme.surround }}
       >
         <Box data-testid="puppy-3d" sx={{ position: 'absolute', inset: 0 }}>
           <Suspense
@@ -670,7 +674,7 @@ export default function PuppyRescueWidget({ id }: WidgetProps) {
               </Box>
             }
           >
-            <PuppyRescue3D sim={simRef} levelKey={`${spec.id}`} />
+            <PuppyRescue3D sim={simRef} levelKey={`${spec.id}`} theme={themeId} />
           </Suspense>
         </Box>
 
@@ -692,7 +696,7 @@ export default function PuppyRescueWidget({ id }: WidgetProps) {
                 px: 1.25,
                 py: 0.25,
                 borderRadius: 2,
-                bgcolor: 'rgba(42,37,84,0.85)',
+                bgcolor: theme.strip,
                 color: 'common.white',
                 whiteSpace: 'nowrap',
               }}
@@ -882,7 +886,7 @@ export default function PuppyRescueWidget({ id }: WidgetProps) {
           justifyContent: stickSide === 'left' ? 'flex-start' : stickSide === 'right' ? 'flex-end' : 'center',
           px: 1,
           borderRadius: 1,
-          bgcolor: '#2a2554',
+          bgcolor: theme.strip,
           position: 'relative',
         }}
       >
@@ -927,7 +931,7 @@ export default function PuppyRescueWidget({ id }: WidgetProps) {
                 width: '100%',
                 height: '100%',
                 borderRadius: '50%',
-                bgcolor: '#3b3470',
+                bgcolor: theme.strip2,
                 color: 'common.white',
                 display: 'grid',
                 placeItems: 'center',
@@ -966,6 +970,31 @@ export default function PuppyRescueWidget({ id }: WidgetProps) {
               </ToggleButton>
             ))}
           </ToggleButtonGroup>
+        </MenuItem>
+        <MenuItem disableRipple sx={{ gap: 1 }} data-testid="puppy-theme">
+          <ListItemText>Theme</ListItemText>
+          <Stack direction="row" spacing={0.75}>
+            {THEMES.map((t) => (
+              <Box
+                key={t.id}
+                role="button"
+                aria-label={t.name}
+                aria-pressed={t.id === themeId}
+                title={t.name}
+                data-testid={`puppy-theme-${t.id}`}
+                onClick={() => setData({ theme: t.id })}
+                sx={{
+                  width: 26,
+                  height: 26,
+                  borderRadius: '50%',
+                  cursor: 'pointer',
+                  // Split chip: the floor over the surround.
+                  background: `linear-gradient(135deg, ${t.floor} 50%, ${t.surround} 50%)`,
+                  boxShadow: t.id === themeId ? '0 0 0 2px #fff, 0 0 0 4px #1976d2' : '0 0 0 1px rgba(0,0,0,0.25)',
+                }}
+              />
+            ))}
+          </Stack>
         </MenuItem>
         <MenuItem
           data-testid="puppy-reset-records"
