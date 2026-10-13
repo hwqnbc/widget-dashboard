@@ -2481,3 +2481,16 @@ carried over; these are the new ones.
     makes a run without barks bit-identical to before (a check asserts
     `gclock === t`). New interaction, zero proofs invalidated. Make the
     new verb optional and the planner never needs to model it.
+
+164. **A chaser that loses you must GUESS, and hiding must beat the
+    guess.** Puppy Rescue's first Arcade chaser walked to the last-seen
+    spot and searched there, so the dog that ducked round a corner was
+    safe a cell away, and the chase felt dumb. "Go one cell further in the
+    dog's last heading" fixed that (it peeks round the corner it saw you
+    take). The same guess would walk a chaser straight through a dog that
+    had just stopped in a bush, though, and touch still catches, so
+    bushes would be useless in a chase. The answer is one rule split on
+    WHY sight was lost: round a corner, guess ahead; into a bush, stop
+    short of the spot, outside touching range. Write the model check for
+    each case (`182-puppy-modes`), because the two goals pull opposite
+    ways and a tweak to one silently breaks the other.

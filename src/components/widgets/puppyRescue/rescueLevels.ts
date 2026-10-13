@@ -8,7 +8,7 @@
  * spotted) by the e2e suite, which runs `planLevel` and replays the route
  * through the real `step`. Map format: see `LevelSpec.map`.
  */
-import type { LevelSpec, Tier } from './rescueModel'
+import type { LevelSpec, Mode, Tier } from './rescueModel'
 
 export const TIERS: readonly Tier[] = ['sneak', 'patrol', 'sentry', 'key', 'hide']
 export const TIER_LABEL: Record<Tier, string> = {
@@ -887,3 +887,9 @@ export function levelLabel(index: number): string {
   const n = LEVELS.slice(0, index + 1).filter((l) => l.tier === spec.tier).length
   return `${TIER_LABEL[spec.tier]} ${n}`
 }
+
+export const MODE_LABEL: Record<Mode, string> = { classic: 'Classic', easy: 'Easy', arcade: 'Arcade' }
+
+/** The records key for a level in a mode: Classic keeps the bare level id
+ * (so pre-modes records ARE the Classic records); Easy/Arcade prefix it. */
+export const recordKey = (mode: Mode, id: string) => (mode === 'classic' ? id : `${mode}|${id}`)

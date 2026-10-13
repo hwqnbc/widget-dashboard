@@ -58,8 +58,10 @@ export interface TankBattleRecords {
   bestRoamMs: number
 }
 
-/** Puppy Rescue, keyed by level id (`"sneak:0"`). A level is escaped once
- * it has a `stars` entry (1–3) — that is also what unlocks the next one.
+/** Puppy Rescue, keyed by level id (`"sneak:0"`) for Classic and by
+ * `"<mode>|<id>"` (`"arcade|sneak:0"`) for Easy/Arcade — each mode keeps its
+ * own stars and bests. A level is escaped once it has a `stars` entry (1–3)
+ * in ANY mode — that is also what unlocks the next one.
  * Stars and time are independent bests: the 3-star run need not be the
  * fastest one. */
 export interface PuppyRescueRecords {

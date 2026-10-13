@@ -12,13 +12,15 @@ tiers. Round 2 added **sweeping sentries** and the **gold key → padlocked
 pen**, bringing the pack to 20 levels in four tiers. Round 3 added
 **hiding spots (bushes)** and a fifth tier, **Hide**, for 25 levels.
 Round 4 added the **Bark lure**, an optional tool available in every level.
+Round 5 added **Easy and Arcade modes** beside Classic: a mode picker
+next to the level picker, each mode keeping its own stars and bests.
 
 ## Decisions (settled with the user before building)
 
 | # | Question | Decision |
 |---|---|---|
 | 1 | How does the dog move? | **Free movement** with a **fixed joystick in its own strip under the maze** (any direction, full speed past a small dead zone; Left / Centre / Right in ⚙, default Centre), or arrows/WASD. Revised twice after play-testing; see *Touch control*. No inertia, so the dog stops when you let go, and corner assist slides it into gaps. |
-| 2 | What happens when you're spotted? | **Caught = retry in under a second** (Round 1). Easy mode (the netted puppy goes back to its cage) and Arcade mode (catchers chase, then search) come later as difficulty settings. |
+| 2 | What happens when you're spotted? | **Caught = retry in under a second** (Round 1). Easy mode (the netted puppy goes back to its cage) and Arcade mode (catchers chase, then search) shipped in Round 5; see *Modes*. |
 | 3 | 2D or 3D? | **3D only**, low-poly toy look like the screenshots, in a lazy three.js chunk. A 2D view is in the backlog. |
 | 4 | Camera | **Fixed portrait**: the whole maze is always visible from a tilted camera fitted to the card, with the exit at the top. Fullscreen prefers portrait. |
 | 5 | Round 1 scope | **Small and polished**: 10 levels, Sneak (static catchers) + Patrol (walkers). |
@@ -56,6 +58,18 @@ Round 4 added the **Bark lure**, an optional tool available in every level.
 | R4-2 | How often can you bark? | **Unlimited, with a 6 s cooldown**, shown as a filling ring on the button. Barking never counts as being spotted. |
 | R4-3 | Which levels? | **Every level, no new tier**, with a short first-use tip. |
 | defaults | Controls and feedback | The button sits opposite the stick in the strip (right when the stick is centred); **Space** or **B** also bark. Static catchers and sentries leave their post too. A woof, an expanding ring and a "?" over the drawn catcher. |
+
+### Round 5 decisions (Easy and Arcade modes)
+
+| # | Question | Decision |
+|---|---|---|
+| R5-1 | Scope | **Both modes in one round**, with Classic the default. Every proof is a Classic proof, and a Classic run is bit-identical to before. |
+| R5-2 | Easy: the meter fills on a puppy | **The net cuts the line:** that puppy and every one behind it go back to their cages, and the meter resets. The ones ahead stay with you. The dog itself being seen is still a catch. |
+| R5-3 | Arcade: chase speed | **0.9× the dog.** On "!", the catcher runs at the dog, follows to where it lost sight, searches about 3 s, then walks home. You can always pull away by keeping moving. Only a touch catches. |
+| R5-4 | Arcade: a catcher touches a puppy | **The Easy rule:** the line is netted from that puppy back; the chase goes on. Touching the dog is caught. |
+| R5-5 | Records | **Separate stars and bests per mode**; an escape in **any** mode unlocks the next level. Pre-mode records became the Classic records. |
+| R5-6 | Where's the picker? | **A Classic / Easy / Arcade dropdown beside the level picker** (the user asked for the recommendation). Switching restarts the level, confirm-guarded mid-run, and a HUD badge shows EASY / ARCADE (CHASE! while chased). |
+| defaults | Arcade details | A bush (standing still) hides you from a chaser too, so it searches beside you without touching. A bark can't draw a catcher that's already chasing. Only the catcher that spotted you chases. A red "!" and a sting on the chase. |
 
 **Detail I chose myself (not asked):** the door opens once the **first**
 puppy is freed. That way you can't skip a level with 0 puppies and still
@@ -181,6 +195,45 @@ cost of a star.
     barking with nowhere to go gets you netted.
   - **The solver never barks.** Bark only ever makes a level easier or
     faster.
+- **Modes (Round 5).** `RescueState.mode` (`initialState(level, mode)`,
+  default `'classic'`) changes only what happens when the meter fills, plus
+  touch in Arcade:
+  - **Classic:** a full meter on anyone is a catch. Everything the planner
+    proves is Classic.
+  - **Easy:** a full meter on a **puppy** calls `netFrom(level, s, j)`:
+    line slot `j` and everyone behind it go home and the meter resets
+    (`ev.net`). A caged puppy is caged again (walk back to free it); a pen
+    puppy sits back in the open pen (touch any pen spot and all of them
+    rejoin). Netting the whole line shuts the door again, since the door is
+    open while the line is non-empty. The dog seen is still a catch.
+  - **Arcade:** a full meter makes that catcher **chase** (`ev.chase`, the
+    meter resets for the others). The chase rides the Bark lure seam:
+    `lure[g].mode` runs `chase → search → back → turn`, with the route
+    clock paused throughout.
+    - **chase:** at `CHASE_SPEED` (0.9 × `DOG_SPEED`). It sees the dog in
+      **any** direction within `CHASE_SIGHT` (5 cells), but walls and a
+      bush still block. In sight it runs straight at the dog; out of sight
+      it takes the BFS cell path to the last-seen spot. It never crosses a
+      wall: a straight run needs clear sight, and moving from inside one
+      cell to the centre of an open neighbour stays inside the two.
+    - **Losing sight makes one guess.** Lost round a corner or out of range,
+      it heads **one cell further in the dog's last heading**, so it peeks
+      round the corner it saw you take. Lost to a bush, it stops
+      `CHASE_STOP` (0.8) short of the spot, outside touching range, so
+      hiding works.
+    - **search:** a ±90° look-around for `SEARCH_S` (3 s). A glimpse in its
+      normal cone restarts the chase. Then **back** along the shortest path
+      to where it left its route, and **turn** onto it.
+    - A chasing or searching catcher (`isAlert`) doesn't fill the meter and
+      ignores barks. Touching the dog is caught; touching a puppy nets the
+      line from it (`netFrom`).
+  - **Records:** `recordKey(mode, id)` gives the bare id for Classic (so
+    old records are the Classic ones) and `"easy|sneak:0"` /
+    `"arcade|sneak:0"` otherwise. The picker shows the current mode's
+    stars; `unlocked(i)` accepts an escape of level i−1 in any mode.
+  - **Feedback:** a "Netted! N puppies back in the cages" note and a
+    swish-whimper sfx; in Arcade a red "!" over the chaser, its cone hot, a
+    rising sting, and the HUD badge flashing **CHASE!**.
 - **The clock** (and the catchers) start on the first move. A level always
   opens in the same state, and you get time to read the tip.
 - **The tip** is a slim banner between the level picker and the maze, never
@@ -324,13 +377,14 @@ Times are the planner's optimum. A human takes longer.
 
 ## Persisted state
 
-- **Widget `data`:** `{ level, sound, unlockAll, stickSide, barkTipSeen }`. That's only where you
+- **Widget `data`:** `{ level, sound, unlockAll, stickSide, barkTipSeen, mode }`. That's only where you
   are and the settings.
 - **App-level records** (`records.puppyRescue`, survives removing the
-  widget): `stars[levelId]` (best 1–3), `bestMs[levelId]` (fastest escape,
-  0 = none) and `escapes` (lifetime tally).
-  - A level counts as escaped once it has a `stars` entry, which is also
-    what unlocks the next one.
+  widget): `stars[key]` (best 1–3), `bestMs[key]` (fastest escape,
+  0 = none) and `escapes` (lifetime tally). `key` is `recordKey(mode, id)`:
+  the level id for Classic, `"<mode>|<id>"` for Easy/Arcade.
+  - A level counts as escaped once it has a `stars` entry in any mode,
+    which is also what unlocks the next one.
   - Stars and time are independent bests.
   - Reset records lives in the ⚙ menu (confirm-guarded) and uses the shared
     `resetGameRecords('puppyRescue')`.
@@ -341,14 +395,17 @@ Times are the planner's optimum. A human takes longer.
 
 - **Root `puppy-root`:**
   - Rendered attributes: `data-level` (id), `data-level-index`,
-    `data-unlocked` (count), `data-run`, `data-sound`, `data-stick`.
+    `data-unlocked` (count), `data-run`, `data-sound`, `data-stick`,
+    `data-mode` (classic|easy|arcade).
   - Live telemetry every 50 ms: `data-status` (ready|play|caught|escaped),
     `data-x`/`data-y` (map cells), `data-t`, `data-pups`, `data-meter`,
     `data-spotted`, `data-seeing` (catcher bitmask), `data-guards`
     (x,y,h per catcher), `data-key` (carrying), `data-pen` (padlock open),
     `data-hidden` (still in a bush), `data-bark-cd` (cooldown seconds
-    left), `data-lured` (bitmask of catchers drawn by a bark).
-  - SFX counters: `data-sfx-freed`/`-alert`/`-caught`/`-escape`/`-key`/`-unlock`/`-hide`/`-bark`/`-heard`.
+    left), `data-lured` (bitmask of catchers drawn by a bark or chasing),
+    `data-chasing` (bitmask of catchers chasing or searching), `data-nets`
+    (times the line was netted).
+  - SFX counters: `data-sfx-freed`/`-alert`/`-caught`/`-escape`/`-key`/`-unlock`/`-hide`/`-bark`/`-heard`/`-net`/`-chase`.
 - **Hooks:**
   - Controls and readouts: `puppy-level` (NativeSelect; the `<select>` is
     inside), `puppy-count` (`data-pups`/`data-total`), `puppy-settings`,
@@ -358,8 +415,11 @@ Times are the planner's optimum. A human takes longer.
     icon, present while carrying), `puppy-hidden` (HUD hidden badge),
     `puppy-bark` (the Bark button in the strip; `data-ready` 1/0),
     `puppy-bark-tip` (the first-use line in the tip banner),
-    `puppy-tip` (the banner, while ready).
-  - Overlays: `puppy-caught`, `puppy-escaped`
+    `puppy-tip` (the banner, while ready), `puppy-mode` (NativeSelect),
+    `puppy-mode-tip` (the mode's line in the banner, Easy/Arcade only),
+    `puppy-mode-badge` (HUD, Easy/Arcade only; `data-mode`,
+    `data-chasing`).
+  - Overlays: `puppy-netted` (`data-count`), `puppy-caught`, `puppy-escaped`
     (`data-stars`), `puppy-next`, `puppy-again`.
   - ⚙ menu items: `puppy-sound`, `puppy-unlock-all`,
     `puppy-stick-left`/`-center`/`-right`, `puppy-reset-records`.
@@ -368,7 +428,8 @@ Times are the planner's optimum. A human takes longer.
 
 ```bash
 npm run build && npm run lint
-npm run e2e puppy        # 180-puppy-model (pure + the level sweep), 181-puppy (live)
+npm run e2e puppy        # 180-puppy-model (pure + the level sweep), 181-puppy (live),
+                         # 182-puppy-modes (pure Easy/Arcade), 183-puppy-modes-ui (live picker)
 ```
 
 ## Future work (enhancement backlog)
@@ -408,11 +469,16 @@ Each item names the seam it builds on.
   works. Doors are edges toggled by a pressure plate.
 
 **Modes and settings**
-- **Easy mode:** a seen puppy is netted back into its cage instead of a
-  full catch (`step`'s catch branch, by `caughtWho`).
-- **Arcade mode:** on "!", the catcher chases at about 1.05× the dog's
-  speed, using BFS to the last-seen cell, searches for about 3 s, then
-  returns to its track. Caught only on contact.
+- ~~**Easy mode.**~~ Shipped in Round 5; see *Modes*.
+- ~~**Arcade mode.**~~ Shipped in Round 5 at 0.9× (not 1.05×); see *Modes*.
+- **Arcade alarm:** a chaser shouts, and every catcher within earshot heads
+  for the last-seen spot too (`startChase` on more than one catcher, keyed
+  off the Bark hearing range).
+- **Arcade-tuned levels:** a small tier built around chases (long loops
+  to outrun round, bushes at the corners). The Classic proofs don't cover
+  Arcade, so these would need a chase-aware check, or play-testing only.
+- **Per-mode star totals in the picker header** across all modes, and a
+  "★ in all three modes" badge per level.
 - **Par-time challenges:** a fourth, optional "speedy" badge from the
   planner's optimum × a slack factor.
 - **Seeded endless levels or a daily level:** generate walls, then place

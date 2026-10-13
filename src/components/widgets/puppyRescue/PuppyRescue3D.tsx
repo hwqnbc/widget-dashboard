@@ -14,7 +14,7 @@ import type { RefObject } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { BufferAttribute, BufferGeometry, Color, DoubleSide, Vector3 } from 'three'
 import type { Group, Mesh, MeshBasicMaterial, PerspectiveCamera } from 'three'
-import { WALL_HALF, coneRays, doorOpen, type Level, type RescueState } from './rescueModel'
+import { WALL_HALF, coneRays, doorOpen, isAlert, type Level, type RescueState } from './rescueModel'
 import { AlertMark, Blob, Bush, Cage, Catcher, Dog, GoalMarker, GoldKey, Padlock } from './puppyModels'
 import { HERO_COAT, PUP_COATS, newAnim } from './puppyLook'
 
@@ -153,7 +153,8 @@ function Door({ sim }: { sim: RefObject<SimView> }) {
   )
 }
 
-/** One catcher: walks its track, swings its net on a catch, wears "?"/"!". */
+/** One catcher: walks its track, swings its net on a catch, wears "?"/"!"
+ * — a red "!" while it chases (Arcade), "?" while searching or lured. */
 function CatcherActor({ sim, g }: { sim: RefObject<SimView>; g: number }) {
   const ref = useRef<Group>(null)
   const mark = useRef<Group>(null)
@@ -168,6 +169,8 @@ function CatcherActor({ sim, g }: { sim: RefObject<SimView>; g: number }) {
     ref.current.position.set(wx(level, p.x), 0, wz(level, p.y))
     ref.current.rotation.y = yawOf(p.h)
     const caught = s.status === 'caught' && s.caughtBy === g
+    const L = s.lure[g]
+    const chase = s.status === 'play' && L !== null && L.mode === 'chase'
     anim.v = s.status === 'play' ? p.v : 0
     anim.swing = caught ? Math.min(1, anim.swing + dt * 4) : 0
     const seeing = (s.seeing >> g) & 1
@@ -176,11 +179,11 @@ function CatcherActor({ sim, g }: { sim: RefObject<SimView>; g: number }) {
     if (mark.current) {
       mark.current.visible = caught || ((seeing === 1 || lured) && s.status === 'play')
       mark.current.quaternion.copy(camera.quaternion)
-      const k = caught ? 1.3 : 0.8 + s.meter * 0.6
+      const k = caught ? 1.3 : chase ? 1.25 : isAlert(L) ? 1.1 : 0.8 + s.meter * 0.6
       mark.current.scale.setScalar(k)
     }
-    if (q.current) q.current.visible = !caught
-    if (x.current) x.current.visible = caught
+    if (q.current) q.current.visible = !caught && !chase
+    if (x.current) x.current.visible = caught || chase
   })
   return (
     <group ref={ref}>
@@ -230,7 +233,8 @@ function ConeActor({ sim, g }: { sim: RefObject<SimView>; g: number }) {
     geom.computeBoundingSphere()
     const m = mesh.current?.material as MeshBasicMaterial | undefined
     if (m) {
-      const hot = ((s.seeing >> g) & 1) === 1 || (s.status === 'caught' && s.caughtBy === g)
+      const hot =
+        ((s.seeing >> g) & 1) === 1 || (s.status === 'caught' && s.caughtBy === g) || (s.status === 'play' && isAlert(s.lure[g]))
       m.color.copy(hot ? CONE_HOT : CONE_IDLE)
       m.opacity = hot ? 0.62 : 0.42
     }

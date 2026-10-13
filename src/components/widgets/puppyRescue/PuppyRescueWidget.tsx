@@ -34,9 +34,34 @@ import { lazyWithReload } from '../../../utils/lazyWithReload'
 import { unlockAudio } from '../droneSim/webAudio'
 import VirtualJoystick from '../droneSim/VirtualJoystick'
 import ConfirmDialog from '../ConfirmDialog'
-import { BARK_COOLDOWN, STEP, bark, initialState, parseLevel, puppyCount, starsFor, step, type Status } from './rescueModel'
-import { LEVELS, TIERS, TIER_LABEL, levelLabel } from './rescueLevels'
-import { playAlert, playBark, playCaught, playDoor, playEscape, playFreed, playKey, playRustle, playUnlock } from './rescueSounds'
+import {
+  BARK_COOLDOWN,
+  MODES,
+  STEP,
+  bark,
+  initialState,
+  isAlert,
+  parseLevel,
+  puppyCount,
+  starsFor,
+  step,
+  type Mode,
+  type Status,
+} from './rescueModel'
+import { LEVELS, MODE_LABEL, TIERS, TIER_LABEL, levelLabel, recordKey } from './rescueLevels'
+import {
+  playAlert,
+  playBark,
+  playCaught,
+  playChase,
+  playDoor,
+  playEscape,
+  playFreed,
+  playKey,
+  playNet,
+  playRustle,
+  playUnlock,
+} from './rescueSounds'
 import type { SimView } from './PuppyRescue3D'
 
 /** three.js stays in its own lazy chunk. */
@@ -56,6 +81,17 @@ const STICK_SIZE = 76
 type StickSide = 'left' | 'center' | 'right'
 const coerceSide = (v: unknown): StickSide | undefined =>
   v === 'left' || v === 'center' || v === 'right' ? v : undefined
+
+const coerceMode = (v: unknown): Mode | undefined => (MODES.includes(v as Mode) ? (v as Mode) : undefined)
+
+/** One line on the tip banner saying what the mode changes. */
+const MODE_TIP: Record<Mode, string> = {
+  classic: '',
+  easy: 'Easy: a spotted puppy is netted back to its cage — only being seen YOURSELF is a catch.',
+  arcade: 'Arcade: a catcher that spots you gives chase — outrun it or break its sight. Only a touch catches.',
+}
+/** How long the "Netted!" note stays up (ms). */
+const NET_MS = 1400
 
 const coerceLevel = (v: unknown): number | undefined =>
   Number.isInteger(v) && (v as number) >= 0 && (v as number) < LEVELS.length ? (v as number) : undefined
@@ -98,6 +134,7 @@ export default function PuppyRescueWidget({ id }: WidgetProps) {
   const unlockAll = useWidgetField(id, 'unlockAll', false)
   const stickSide = useWidgetField<StickSide>(id, 'stickSide', 'center', coerceSide)
   const barkTipSeen = useWidgetField(id, 'barkTipSeen', false)
+  const mode = useWidgetField<Mode>(id, 'mode', 'classic', coerceMode)
   const records = useAppSelector(selectPuppyRescueRecords)
   const setData = useCallback(
     (data: Record<string, unknown>) => dispatch(updateWidgetData({ id, data })),
@@ -106,11 +143,16 @@ export default function PuppyRescueWidget({ id }: WidgetProps) {
 
   const spec = LEVELS[levelIdx]
   const level = useMemo(() => parseLevel(spec), [spec])
-  const unlocked = (i: number) => unlockAll || i === 0 || (records.stars[LEVELS[i - 1].id] ?? 0) >= 1
+  /** Stars for level i in the current mode. */
+  const starsOf = (i: number) => records.stars[recordKey(mode, LEVELS[i].id)] ?? 0
+  /** An escape in ANY mode unlocks the next level (Easy is a real on-ramp). */
+  const unlocked = (i: number) =>
+    unlockAll || i === 0 || MODES.some((m) => (records.stars[recordKey(m, LEVELS[i - 1].id)] ?? 0) >= 1)
 
   /** The live simulation — stepped by the loop below, read by the 3D view. */
   const simRef = useRef<SimView>(null as unknown as SimView)
-  if (!simRef.current || simRef.current.level !== level) simRef.current = { level, s: initialState(level) }
+  if (!simRef.current || simRef.current.level !== level || simRef.current.s.mode !== mode)
+    simRef.current = { level, s: initialState(level, mode) }
 
   const [status, setStatus] = useState<Status>('ready')
   const [pups, setPups] = useState(0)
@@ -121,6 +163,11 @@ export default function PuppyRescueWidget({ id }: WidgetProps) {
   const [result, setResult] = useState<Result | null>(null)
   const [menuEl, setMenuEl] = useState<HTMLElement | null>(null)
   const [resetConfirm, setResetConfirm] = useState(false)
+  /** A mode switch asked for mid-run, waiting on the confirm. */
+  const [modeAsk, setModeAsk] = useState<Mode | null>(null)
+  /** "Netted!" note: how many puppies the last net sent home (0 = hidden). */
+  const [netted, setNetted] = useState(0)
+  const [chasing, setChasing] = useState(false)
   const [run, setRun] = useState(0)
 
   const rootRef = useRef<HTMLDivElement>(null)
@@ -143,7 +190,7 @@ export default function PuppyRescueWidget({ id }: WidgetProps) {
 
   /** Fresh attempt at the current level. */
   const restart = useCallback(() => {
-    simRef.current = { level, s: initialState(level) }
+    simRef.current = { level, s: initialState(level, mode) }
     setStatus('ready')
     setPups(0)
     setSpotted(false)
@@ -151,10 +198,12 @@ export default function PuppyRescueWidget({ id }: WidgetProps) {
     setHidden(false)
     setCaughtWho(-1)
     setResult(null)
+    setNetted(0)
+    setChasing(false)
     setRun((r) => r + 1)
-  }, [level])
+  }, [level, mode])
 
-  // A level change starts fresh (the render above already swapped the sim).
+  // A level or mode change starts fresh (the render above swapped the sim).
   useEffect(() => {
     setStatus('ready')
     setPups(0)
@@ -163,7 +212,16 @@ export default function PuppyRescueWidget({ id }: WidgetProps) {
     setHidden(false)
     setCaughtWho(-1)
     setResult(null)
-  }, [level])
+    setNetted(0)
+    setChasing(false)
+  }, [level, mode])
+
+  // The "Netted!" note fades on its own.
+  useEffect(() => {
+    if (netted === 0) return
+    const t = window.setTimeout(() => setNetted(0), NET_MS)
+    return () => window.clearTimeout(t)
+  }, [netted])
 
   // Caught: show it, then straight back to the start.
   useEffect(() => {
@@ -179,7 +237,9 @@ export default function PuppyRescueWidget({ id }: WidgetProps) {
     let last = performance.now()
     let acc = 0
     let lastPub = 0
-    let seen = { freed: 0, alert: 0, door: 0, key: 0, unlock: 0, hide: 0, bark: 0, heard: 0 }
+    let seen = { freed: 0, alert: 0, door: 0, key: 0, unlock: 0, hide: 0, bark: 0, heard: 0, net: 0, chase: 0 }
+    let prevPups = 0
+    let prevChasing = false
     let lastRing = -1
     let prevHidden = false
     let prevKey = false
@@ -213,6 +273,8 @@ export default function PuppyRescueWidget({ id }: WidgetProps) {
         prevHidden = s.hidden
         prevStatus = s.status
         prevSpotted = s.spotted
+        prevPups = s.order.length
+        prevChasing = false
       }
       if (s.status === 'ready' || s.status === 'play') {
         acc += dt
@@ -239,6 +301,24 @@ export default function PuppyRescueWidget({ id }: WidgetProps) {
         if (root) root.dataset.sfxFreed = String(Number(root.dataset.sfxFreed ?? 0) + 1)
       }
       if (s.ev.door !== seen.door && sfx) playDoor()
+      if (s.ev.net !== seen.net) {
+        if (sfx) playNet()
+        setNetted(Math.max(1, prevPups - s.order.length))
+        if (root) root.dataset.sfxNet = String(Number(root.dataset.sfxNet ?? 0) + 1)
+      }
+      if (s.ev.chase !== seen.chase) {
+        if (sfx) playChase()
+        if (root) root.dataset.sfxChase = String(Number(root.dataset.sfxChase ?? 0) + 1)
+      }
+      if (s.order.length !== prevPups) {
+        prevPups = s.order.length
+        setPups(s.order.length)
+      }
+      const anyChase = s.status === 'play' && s.lure.some(isAlert)
+      if (anyChase !== prevChasing) {
+        prevChasing = anyChase
+        setChasing(anyChase)
+      }
       if (s.ev.key !== seen.key) {
         if (sfx) playKey()
         if (root) root.dataset.sfxKey = String(Number(root.dataset.sfxKey ?? 0) + 1)
@@ -291,7 +371,8 @@ export default function PuppyRescueWidget({ id }: WidgetProps) {
         } else if (s.status === 'escaped') {
           const stars = starsFor(lv, s)
           const ms = Math.round(s.t * 1000)
-          const prev = bestRef.current[lv.spec.id] ?? 0
+          const key = recordKey(s.mode, lv.spec.id)
+          const prev = bestRef.current[key] ?? 0
           setResult({
             stars,
             ms,
@@ -300,7 +381,7 @@ export default function PuppyRescueWidget({ id }: WidgetProps) {
             spotted: s.spotted,
             newBest: prev === 0 || ms < prev,
           })
-          dispatch(recordRescueEscape({ key: lv.spec.id, stars, ms }))
+          dispatch(recordRescueEscape({ key, stars, ms }))
           if (sfx) playEscape()
           if (root) root.dataset.sfxEscape = String(Number(root.dataset.sfxEscape ?? 0) + 1)
         }
@@ -318,6 +399,8 @@ export default function PuppyRescueWidget({ id }: WidgetProps) {
         ds.hidden = s.hidden ? '1' : '0'
         ds.barkCd = s.barkCd.toFixed(2)
         ds.lured = String(s.lure.reduce((m, l, g) => (l ? m | (1 << g) : m), 0))
+        ds.chasing = String(s.lure.reduce((m, l, g) => (isAlert(l) ? m | (1 << g) : m), 0))
+        ds.nets = String(s.ev.net)
         ds.pen = s.penOpen ? '1' : '0'
         ds.meter = s.meter.toFixed(2)
         ds.spotted = s.spotted ? '1' : '0'
@@ -375,9 +458,15 @@ export default function PuppyRescueWidget({ id }: WidgetProps) {
     if (i === levelIdx) restart()
     else setData({ level: i })
   }
+  /** Switching rules restarts the level — confirm-guarded mid-run. */
+  const pickMode = (m: Mode) => {
+    if (m === mode) return
+    if (status === 'play') setModeAsk(m)
+    else setData({ mode: m })
+  }
 
-  const myStars = records.stars[spec.id] ?? 0
-  const myBest = records.bestMs[spec.id] ?? 0
+  const myStars = starsOf(levelIdx)
+  const myBest = records.bestMs[recordKey(mode, spec.id)] ?? 0
   const next = levelIdx + 1 < LEVELS.length ? levelIdx + 1 : -1
   const total = puppyCount(level)
   const unlockedCount = LEVELS.reduce((n, _, i) => n + (unlocked(i) ? 1 : 0), 0)
@@ -397,6 +486,7 @@ export default function PuppyRescueWidget({ id }: WidgetProps) {
       data-run={run}
       data-sound={sound ? 'on' : 'off'}
       data-stick={stickSide}
+      data-mode={mode}
       sx={{
         height: '100%',
         display: 'flex',
@@ -418,19 +508,32 @@ export default function PuppyRescueWidget({ id }: WidgetProps) {
         >
           {TIERS.map((tier) => {
             const idx = LEVELS.map((l, i) => (l.tier === tier ? i : -1)).filter((i) => i >= 0)
-            const got = idx.reduce((n, i) => n + (records.stars[LEVELS[i].id] ?? 0), 0)
+            const got = idx.reduce((n, i) => n + starsOf(i), 0)
             return (
               <optgroup key={tier} label={`${TIER_LABEL[tier]} · ★${got}/${idx.length * 3}`}>
                 {idx.map((i) => (
                   <option key={i} value={i} disabled={!unlocked(i)}>
                     {unlocked(i)
-                      ? `${levelLabel(i)} · ${LEVELS[i].name} ${starText(records.stars[LEVELS[i].id] ?? 0)}`
+                      ? `${levelLabel(i)} · ${LEVELS[i].name} ${starText(starsOf(i))}`
                       : `🔒 ${levelLabel(i)}`}
                   </option>
                 ))}
               </optgroup>
             )
           })}
+        </NativeSelect>
+        <NativeSelect
+          value={mode}
+          onChange={(e) => pickMode(e.target.value as Mode)}
+          data-testid="puppy-mode"
+          inputProps={{ 'aria-label': 'Mode' }}
+          sx={{ flexShrink: 0, fontSize: 14 }}
+        >
+          {MODES.map((m) => (
+            <option key={m} value={m}>
+              {MODE_LABEL[m]}
+            </option>
+          ))}
         </NativeSelect>
         {hidden && (
           <Box
@@ -483,6 +586,16 @@ export default function PuppyRescueWidget({ id }: WidgetProps) {
               {spec.tip}
             </Typography>
           )}
+          {mode !== 'classic' && (
+            <Typography
+              data-testid="puppy-mode-tip"
+              variant="caption"
+              component="div"
+              sx={{ color: mode === 'easy' ? '#7ee787' : '#ff8a80', lineHeight: 1.3 }}
+            >
+              {MODE_TIP[mode]}
+            </Typography>
+          )}
           {!barkTipSeen && (
             <Typography data-testid="puppy-bark-tip" variant="caption" component="div" sx={{ color: '#ffd60a', lineHeight: 1.3 }}>
               New: BARK (or Space) lures the nearest catcher over — then sneak past. Recharges in {BARK_COOLDOWN} s.
@@ -507,6 +620,30 @@ export default function PuppyRescueWidget({ id }: WidgetProps) {
           </Suspense>
         </Box>
 
+        {netted > 0 && status === 'play' && (
+          <Box
+            data-testid="puppy-netted"
+            data-count={netted}
+            sx={{
+              position: 'absolute',
+              top: 8,
+              left: '50%',
+              transform: 'translateX(-50%)',
+              px: 1.25,
+              py: 0.25,
+              borderRadius: 2,
+              bgcolor: 'rgba(0,0,0,0.65)',
+              color: 'common.white',
+              pointerEvents: 'none',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            <Typography variant="body2" sx={{ fontWeight: 800 }}>
+              Netted! {netted === 1 ? '1 puppy' : `${netted} puppies`} back in the cage{netted === 1 ? '' : 's'}
+            </Typography>
+          </Box>
+        )}
+
         {status === 'caught' && (
           <Box
             data-testid="puppy-caught"
@@ -516,7 +653,13 @@ export default function PuppyRescueWidget({ id }: WidgetProps) {
               <Typography variant="h6" sx={{ fontWeight: 900 }}>
                 Caught!
               </Typography>
-              <Typography variant="body2">{caughtWho >= 0 ? 'A catcher spotted a puppy.' : 'A catcher spotted you.'}</Typography>
+              <Typography variant="body2">
+                {caughtWho >= 0
+                  ? 'A catcher spotted a puppy.'
+                  : mode === 'arcade'
+                    ? 'A catcher caught up with you.'
+                    : 'A catcher spotted you.'}
+              </Typography>
             </Box>
           </Box>
         )}
@@ -532,6 +675,11 @@ export default function PuppyRescueWidget({ id }: WidgetProps) {
               <Typography variant="h6" sx={{ fontWeight: 900 }}>
                 Escaped!
               </Typography>
+              {mode !== 'classic' && (
+                <Typography variant="caption" sx={{ display: 'block', color: 'text.secondary', fontWeight: 700 }}>
+                  {MODE_LABEL[mode]} mode
+                </Typography>
+              )}
               <Typography sx={{ fontSize: 30, lineHeight: 1.1, color: '#f5b301' }} data-testid="puppy-stars">
                 {starText(result.stars)}
               </Typography>
@@ -576,6 +724,28 @@ export default function PuppyRescueWidget({ id }: WidgetProps) {
           >
             {spotted ? <VisibilityIcon fontSize="small" /> : <VisibilityOffIcon fontSize="small" />}
           </Box>
+          {mode !== 'classic' && (
+            <Box
+              data-testid="puppy-mode-badge"
+              data-mode={mode}
+              data-chasing={chasing ? '1' : '0'}
+              title={chasing ? 'Being chased!' : `${MODE_LABEL[mode]} mode`}
+              sx={{
+                px: 0.75,
+                borderRadius: 1,
+                fontSize: 11,
+                fontWeight: 900,
+                letterSpacing: 0.5,
+                lineHeight: '18px',
+                color: 'common.white',
+                bgcolor: mode === 'easy' ? '#2e7d32' : '#d32f2f',
+                animation: chasing ? 'puppyChase 0.5s ease-in-out infinite alternate' : 'none',
+                '@keyframes puppyChase': { from: { opacity: 1 }, to: { opacity: 0.45 } },
+              }}
+            >
+              {chasing ? 'CHASE!' : MODE_LABEL[mode].toUpperCase()}
+            </Box>
+          )}
           <Typography variant="body2" noWrap sx={{ color: 'text.secondary' }}>
             {starText(myStars)}
             {myBest ? ` · ${fmtTime(myBest)}` : ''}
@@ -705,6 +875,18 @@ export default function PuppyRescueWidget({ id }: WidgetProps) {
           dispatch(resetGameRecords('puppyRescue'))
         }}
         onCancel={() => setResetConfirm(false)}
+      />
+      <ConfirmDialog
+        open={modeAsk !== null}
+        title={`Switch to ${modeAsk ? MODE_LABEL[modeAsk] : ''}?`}
+        message="Changing the rules restarts this level."
+        confirmLabel="Switch and restart"
+        cancelLabel="Keep playing"
+        onConfirm={() => {
+          if (modeAsk) setData({ mode: modeAsk })
+          setModeAsk(null)
+        }}
+        onCancel={() => setModeAsk(null)}
       />
     </Box>
   )

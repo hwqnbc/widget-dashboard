@@ -62,3 +62,16 @@ export function playBark(): void {
   tone({ freq: 420, dur: 0.14, type: 'square', gain: 0.2, sweepTo: 180 })
   tone({ freq: 380, dur: 0.12, type: 'square', gain: 0.16, sweepTo: 170, delay: 0.17 })
 }
+
+/** Netted (Easy/Arcade): a net swish, then a sad little two-note whimper. */
+export function playNet(): void {
+  noise({ dur: 0.16, gain: 0.25, cutoff: 2200 })
+  tone({ freq: 700, dur: 0.14, type: 'triangle', gain: 0.18, sweepTo: 520, delay: 0.12 })
+  tone({ freq: 560, dur: 0.2, type: 'triangle', gain: 0.16, sweepTo: 400, delay: 0.27 })
+}
+
+/** Arcade: a chase begins — a sharp rising "!" sting. */
+export function playChase(): void {
+  tone({ freq: 520, dur: 0.08, type: 'square', gain: 0.16, sweepTo: 880 })
+  tone({ freq: 880, dur: 0.16, type: 'square', gain: 0.16, sweepTo: 1320, delay: 0.09 })
+}

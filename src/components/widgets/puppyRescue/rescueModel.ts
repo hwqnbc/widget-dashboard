@@ -59,6 +59,15 @@ export const BARK_R = 4
 export const BARK_COOLDOWN = 6
 export const LURE_LOOK = 2
 const LURE_TURN = 0.4
+/** Arcade chase: a catcher that fills the meter runs at 0.9× the dog (so
+ * the dog can always pull away), keeps sight of it in ANY direction within
+ * `CHASE_SIGHT` (walls and bushes still block), and having lost it, walks
+ * to the last-seen spot — stopping `CHASE_STOP` short, outside touching
+ * range, so a dog hidden right there is safe — then searches `SEARCH_S`. */
+export const CHASE_SPEED = DOG_SPEED * 0.9
+export const CHASE_SIGHT = 5
+export const SEARCH_S = 3
+const CHASE_STOP = 0.8
 /** Sentry defaults: sweep rate (°/s) and the pause at each end (s). */
 export const SWEEP_RATE = 45
 export const SWEEP_PAUSE = 0.6
@@ -73,6 +82,17 @@ const TRAIL_STEP = 0.04
 const ESCAPE_Y = 0.55
 
 /* ------------------------------------------------------------------ level */
+
+/**
+ * Rules for a run. Classic: a full "?" meter on anyone is a catch (the
+ * planner proves every level under these). Easy: a full meter on a PUPPY
+ * nets it and everyone behind it back to their cages instead — only the
+ * dog itself being seen is a catch. Arcade: a full meter makes that
+ * catcher CHASE; only touch catches the dog, and a touch on a puppy nets
+ * the line from it back. A Classic run is bit-identical to before modes.
+ */
+export type Mode = 'classic' | 'easy' | 'arcade'
+export const MODES: readonly Mode[] = ['classic', 'easy', 'arcade']
 
 export type Tier = 'sneak' | 'patrol' | 'sentry' | 'key' | 'hide'
 
@@ -481,12 +501,17 @@ export interface Events {
   /** Barks made, and barks that drew a catcher. */
   bark: number
   heard: number
+  /** Easy/Arcade: times part of the line was netted back to its cages. */
+  net: number
+  /** Arcade: chases started (a catcher's meter filled). */
+  chase: number
 }
 
-/** A catcher drawn off its route by a bark. Its route clock is paused
- * while it's away, so it resumes exactly where it left. */
+/** A catcher drawn off its route by a bark — or, in Arcade, chasing. Its
+ * route clock is paused while it's away, so it resumes exactly where it
+ * left. A chase runs chase → search → back → turn. */
 export interface Lure {
-  mode: 'go' | 'look' | 'back' | 'turn'
+  mode: 'go' | 'look' | 'back' | 'turn' | 'chase' | 'search'
   /** Waypoints (flat x,y) of the current walk, and the next one's index. */
   pts: number[]
   i: number
@@ -497,9 +522,21 @@ export interface Lure {
    * the turn starts from. */
   tt: number
   h0: number
+  /** Chase: where the dog was last seen, and its heading then. */
+  lx: number
+  ly: number
+  lh: number
+  /** Chase: sight lost (the guess is made once), and lost to a bush — then
+   * it stops short of the spot instead of walking onto it. */
+  lost: boolean
+  short: boolean
 }
 
+/** Chasing or searching — the catcher is past "?" and on to "!". */
+export const isAlert = (L: Lure | null) => L !== null && (L.mode === 'chase' || L.mode === 'search')
+
 export interface RescueState {
+  mode: Mode
   t: number
   frames: number
   x: number
@@ -548,8 +585,9 @@ export interface RescueState {
   ev: Events
 }
 
-export function initialState(level: Level): RescueState {
+export function initialState(level: Level, mode: Mode = 'classic'): RescueState {
   const s: RescueState = {
+    mode,
     t: 0,
     frames: 0,
     x: level.start.x,
@@ -578,7 +616,7 @@ export function initialState(level: Level): RescueState {
     status: 'ready',
     caughtBy: -1,
     caughtWho: -1,
-    ev: { freed: 0, alert: 0, door: 0, key: 0, unlock: 0, hide: 0, bark: 0, heard: 0 },
+    ev: { freed: 0, alert: 0, door: 0, key: 0, unlock: 0, hide: 0, bark: 0, heard: 0, net: 0, chase: 0 },
   }
   level.guards.forEach((g, i) => guardPose(g, 0, s.guards[i]))
   return s
@@ -729,6 +767,8 @@ export function bark(level: Level, s: RescueState): number {
   let bestD = BARK_R
   let bestPath: number[] | null = null
   for (let g = 0; g < level.guards.length; g++) {
+    // A catcher already chasing (or searching) isn't fooled by a bark.
+    if (isAlert(s.lure[g])) continue
     const p = s.guards[g]
     const d = Math.hypot(p.x - s.x, p.y - s.y)
     if (d > bestD) continue
@@ -751,6 +791,11 @@ export function bark(level: Level, s: RescueState): number {
     oy: prev ? prev.oy : p.y,
     tt: 0,
     h0: p.h,
+    lx: 0,
+    ly: 0,
+    lh: 0,
+    lost: false,
+    short: false,
   }
   s.ev.heard += 1
   return best
@@ -765,6 +810,7 @@ function stepGuard(level: Level, s: RescueState, g: number): Pose {
     s.gclock[g] += STEP
     return guardPose(level.guards[g], s.gclock[g], p)
   }
+  if (L.mode === 'chase') return stepChase(level, s, p, L)
   if (L.mode === 'go' || L.mode === 'back') {
     let left = GUARD_SPEED * STEP
     while (left > 0 && L.i < L.pts.length / 2) {
@@ -799,6 +845,25 @@ function stepGuard(level: Level, s: RescueState, g: number): Pose {
     return p
   }
   L.tt += STEP
+  if (L.mode === 'search') {
+    // Look around where the dog vanished; a glimpse (the normal cone) and
+    // the chase is back on. Then home along the shortest way.
+    p.h = wrapAngle(L.h0 + Math.sin((L.tt / SEARCH_S) * Math.PI * 3) * (Math.PI / 2))
+    p.v = 0
+    if (!s.hidden && seenAt(level, p, s.x, s.y, CONE_RANGE, CONE_HALF, !s.penOpen) >= 0) {
+      L.mode = 'chase'
+      L.lx = s.x
+      L.ly = s.y
+      L.lh = s.h
+      L.lost = false
+    } else if (L.tt >= SEARCH_S) {
+      const home = cellPath(level, Math.floor(p.x), Math.floor(p.y), Math.floor(L.ox), Math.floor(L.oy), s.penOpen)
+      L.pts = [...(home ?? []), L.ox, L.oy]
+      L.i = 0
+      L.mode = 'back'
+    }
+    return p
+  }
   if (L.mode === 'look') {
     // Look around: a slow ±60° sweep about the arrival heading.
     p.h = wrapAngle(L.h0 + Math.sin((L.tt / LURE_LOOK) * Math.PI * 2) * (Math.PI / 3))
@@ -824,6 +889,113 @@ function stepGuard(level: Level, s: RescueState, g: number): Pose {
     guardPose(level.guards[g], s.gclock[g], p)
   }
   return p
+}
+
+/** Arcade: a catcher's meter filled — it gives chase from (lx, ly). */
+function startChase(s: RescueState, g: number, lx: number, ly: number, lh: number): void {
+  const p = s.guards[g]
+  const prev = s.lure[g]
+  s.lure[g] = {
+    mode: 'chase',
+    pts: [],
+    i: 0,
+    // Keep the ORIGINAL departure point if a bark had already drawn it off.
+    ox: prev ? prev.ox : p.x,
+    oy: prev ? prev.oy : p.y,
+    tt: 0,
+    h0: p.h,
+    lx,
+    ly,
+    lh,
+    lost: false,
+    short: false,
+  }
+  s.ev.chase += 1
+}
+
+/** Can a chasing catcher still see the dog? Any direction, within
+ * `CHASE_SIGHT`, walls and a bush (standing still) block. */
+const chaseSees = (level: Level, s: RescueState, p: Pose) =>
+  !s.hidden && Math.hypot(s.x - p.x, s.y - p.y) <= CHASE_SIGHT && lineOfSight(level, p.x, p.y, s.x, s.y, !s.penOpen)
+
+/** One chase step: straight at the dog while it's in sight, else through
+ * the maze (cell BFS) to where it was last seen, then search. Never passes
+ * through a wall: a straight run needs clear sight, and a move from inside
+ * one cell to the centre of an open neighbour stays inside the two.
+ *
+ * Losing sight makes ONE guess: lost round a corner (or out of range), it
+ * heads one cell on in the dog's last direction — so it peeks round the
+ * corner it saw you take; lost to a bush, it stops `CHASE_STOP` short of
+ * the spot, outside touching range — hiding works. */
+function stepChase(level: Level, s: RescueState, p: Pose, L: Lure): Pose {
+  const sees = chaseSees(level, s, p)
+  if (sees) {
+    L.lx = s.x
+    L.ly = s.y
+    L.lh = s.h
+    L.lost = false
+  } else if (!L.lost) {
+    L.lost = true
+    L.short = s.hidden
+    if (!s.hidden) {
+      const fx = Math.floor(L.lx)
+      const fy = Math.floor(L.ly)
+      const c = Math.cos(L.lh)
+      const d = Math.sin(L.lh)
+      const dx = Math.abs(c) >= Math.abs(d) ? Math.sign(c) : 0
+      const dy = dx === 0 ? Math.sign(d) : 0
+      if (canStep(level, fx, fy, dx, dy, s.penOpen)) {
+        L.lx = fx + dx + 0.5
+        L.ly = fy + dy + 0.5
+      }
+    }
+  }
+  if (!sees && Math.hypot(L.lx - p.x, L.ly - p.y) <= (L.short ? CHASE_STOP : 1e-6)) {
+    L.mode = 'search'
+    L.tt = 0
+    L.h0 = p.h
+    p.v = 0
+    return p
+  }
+  let tx = L.lx
+  let ty = L.ly
+  const cx = Math.floor(p.x)
+  const cy = Math.floor(p.y)
+  const gx = Math.floor(L.lx)
+  const gy = Math.floor(L.ly)
+  if (!sees && (cx !== gx || cy !== gy)) {
+    const path = cellPath(level, cx, cy, gx, gy, s.penOpen)
+    if (!path || path.length < 4) {
+      L.mode = 'search'
+      L.tt = 0
+      L.h0 = p.h
+      p.v = 0
+      return p
+    }
+    tx = path[2]
+    ty = path[3]
+  }
+  const d = Math.hypot(tx - p.x, ty - p.y)
+  // Lost to a bush, in the last-seen cell: stop CHASE_STOP short of it.
+  const room = sees || !L.short || cx !== gx || cy !== gy ? d : Math.max(0, d - CHASE_STOP)
+  const move = Math.min(CHASE_SPEED * STEP, room)
+  if (d > 1e-9) {
+    p.h = Math.atan2(ty - p.y, tx - p.x)
+    p.x += ((tx - p.x) / d) * move
+    p.y += ((ty - p.y) / d) * move
+  }
+  p.v = CHASE_SPEED
+  return p
+}
+
+/** Easy/Arcade: the net — line slot `j` and every puppy behind it go home
+ * (a caged puppy back in its cage; a pen puppy back in the open pen). */
+function netFrom(level: Level, s: RescueState, j: number): void {
+  for (const idx of s.order.splice(j)) if (idx < level.cages.length) s.freed[idx] = false
+  s.px.length = s.order.length
+  s.py.length = s.order.length
+  s.ph.length = s.order.length
+  s.ev.net += 1
 }
 
 /** Leave 'ready' — the clock and the catchers start on the first move. */
@@ -926,6 +1098,21 @@ export function step(level: Level, s: RescueState, ix: number, iy: number): void
     if (s.order.length === 0) s.ev.door += 1
     for (let j = 0; j < level.pen.length; j++) s.order.push(level.cages.length + j)
     s.ev.freed += 1
+  } else if (s.penOpen && s.mode !== 'classic') {
+    // Netted pen puppies wait in the open pen: touch one to call them all.
+    let near = false
+    let missing = false
+    for (let j = 0; j < level.pen.length; j++) {
+      if (s.order.includes(level.cages.length + j)) continue
+      missing = true
+      if (Math.hypot(s.x - level.pen[j].x, s.y - level.pen[j].y) < CAGE_R) near = true
+    }
+    if (missing && near) {
+      if (s.order.length === 0) s.ev.door += 1
+      for (let j = 0; j < level.pen.length; j++)
+        if (!s.order.includes(level.cages.length + j)) s.order.push(level.cages.length + j)
+      s.ev.freed += 1
+    }
   }
 
   // --- the puppy line
@@ -951,6 +1138,23 @@ export function step(level: Level, s: RescueState, ix: number, iy: number): void
   for (let g = 0; g < level.guards.length; g++) {
     const p = stepGuard(level, s, g)
     if (Math.hypot(s.x - p.x, s.y - p.y) < BUMP_R) bump = g
+  }
+  if (s.mode === 'arcade' && bump < 0) {
+    // A catcher's touch on a puppy nets the line from that puppy back.
+    let cut = nf
+    for (const p of s.guards)
+      for (let j = 0; j < cut; j++)
+        if (Math.hypot(s.px[j] - p.x, s.py[j] - p.y) < BUMP_R) {
+          cut = j
+          break
+        }
+    if (cut < nf) netFrom(level, s, cut)
+  }
+  const nl = s.order.length
+  for (let g = 0; g < level.guards.length; g++) {
+    // A chasing/searching catcher is past "?" — it doesn't fill the meter.
+    if (isAlert(s.lure[g])) continue
+    const p = s.guards[g]
     const d = s.hidden ? -1 : seenAt(level, p, s.x, s.y, CONE_RANGE, CONE_HALF, !s.penOpen)
     if (d >= 0) {
       seeing |= 1 << g
@@ -960,7 +1164,7 @@ export function step(level: Level, s: RescueState, ix: number, iy: number): void
         by = g
       }
     }
-    for (let j = 0; j < nf; j++) {
+    for (let j = 0; j < nl; j++) {
       const dj = seenAt(level, p, s.px[j], s.py[j], CONE_RANGE, CONE_HALF, !s.penOpen)
       if (dj >= 0) {
         seeing |= 1 << g
@@ -987,10 +1191,19 @@ export function step(level: Level, s: RescueState, ix: number, iy: number): void
     const fill = FILL_NEAR + (FILL_FAR - FILL_NEAR) * Math.min(1, nearest / CONE_RANGE)
     s.meter = Math.min(1, s.meter + STEP / fill)
     if (s.meter >= 1) {
-      s.status = 'caught'
-      s.caughtBy = by
-      s.caughtWho = who
-      return
+      if (s.mode === 'arcade') {
+        // "!" — that catcher gives chase; the meter is free for the others.
+        startChase(s, by, who < 0 ? s.x : s.px[who], who < 0 ? s.y : s.py[who], who < 0 ? s.h : s.ph[who])
+        s.meter = 0
+      } else if (s.mode === 'easy' && who >= 0) {
+        netFrom(level, s, who)
+        s.meter = 0
+      } else {
+        s.status = 'caught'
+        s.caughtBy = by
+        s.caughtWho = who
+        return
+      }
     }
   } else {
     s.meter = Math.max(0, s.meter - STEP / DRAIN_S)
