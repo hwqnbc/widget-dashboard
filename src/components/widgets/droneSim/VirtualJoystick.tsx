@@ -29,6 +29,8 @@ export interface VirtualJoystickProps {
    * automatic (Wing Flyer's Trainer throttle). Off by default.
    */
   lockY?: boolean
+  /** Knob colour (default: the app's primary colour). */
+  knobColor?: string
 }
 
 /**
@@ -47,6 +49,7 @@ export default function VirtualJoystick({
   latchY = false,
   latchRef,
   lockY = false,
+  knobColor,
 }: VirtualJoystickProps) {
   const theme = useTheme()
   const hitAreaRef = useRef<HTMLDivElement>(null)
@@ -283,7 +286,7 @@ export default function VirtualJoystick({
             width: knobSize,
             height: knobSize,
             borderRadius: '50%',
-            bgcolor: alpha(theme.palette.primary.main, 0.9),
+            bgcolor: alpha(knobColor ?? theme.palette.primary.main, 0.9),
             boxShadow: 2,
           }}
         />

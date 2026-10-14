@@ -16,7 +16,9 @@ Round 5 added **Easy and Arcade modes** beside Classic: a mode picker
 next to the level picker, each mode keeping its own stars and bests.
 Round 6 added the **💡 Hint**: a ghost replay of the level's proven 3-star
 route. Then came **colour themes**: five floor/surround sets in ⚙, with
-Sunshine (blue floor on yellow) the new default.
+Sunshine (blue floor on yellow) the new default. Then **pick your dog**:
+six hero coats in ⚙ (two with real markings), and the dog's ground ring and
+the stick knob now follow the theme.
 
 ## Decisions (settled with the user before building)
 
@@ -30,7 +32,7 @@ Sunshine (blue floor on yellow) the new default.
 | 6 | Stars | ★ escaped · ★ every puppy · ★ **never spotted** (the "?" meter never started). The best time per level is kept separately. |
 | 7 | Level picking | **Unlock in order** (escaping level n opens n+1), plus an **Unlock all levels** switch in the ⚙ menu. |
 | 8 | Name | **Puppy Rescue** |
-| 9 | Hero | One orange/tan pup; freed puppies come in 4 coat colours. "Pick your dog" is in the backlog. |
+| 9 | Hero | One orange/tan pup; freed puppies come in 4 coat colours. Six pickable dogs came later; see *Pick your dog*. |
 | 10 | Catchers | A new chunky model: dark round body, white collar, hat, red-handled net. |
 
 ### Round 2 decisions (sentries, key and pen)
@@ -92,6 +94,15 @@ Sunshine (blue floor on yellow) the new default.
 | T-2 | Default | **Sunshine**, for existing cards too (a card with no saved theme opens as Sunshine). |
 | T-3 | Where's the picker? | **The ⚙ menu, a row of swatch chips** split floor/surround. It applies instantly, even mid-run (looks only, no restart), and is saved per card. |
 | T-4 | The strip and tip banner | **Follow the theme**, using a deep shade of each floor. |
+
+### Pick-your-dog decisions
+
+| # | Question | Decision |
+|---|---|---|
+| D-1 | What's on offer? | **Six dogs, colours plus real markings** (the user asked for the recommendation): Ginger (the original), Golden, Dalmatian (spots), Husky, Black & Tan, Chocolate. Accessories were not taken. |
+| D-2 | The picker | **A row of coat chips in ⚙ next to Theme**, applied live (even mid-run, no restart), saved per card. |
+| D-3 | The violet leftovers | **Follow the theme:** the hero's ground ring takes the theme's deep `strip` shade, and the stick knob a bright per-theme `knob` accent. |
+| defaults | | Ginger stays the default, so existing cards look the same. Rescued puppies keep their own four coats; the hero is bigger and wears the ring. The hint ghost wears your dog. |
 
 **Detail I chose myself (not asked):** the door opens once the **first**
 puppy is freed. That way you can't skip a level with 0 puppies and still
@@ -296,6 +307,20 @@ cost of a star.
     characters. A floor qualifies only if all of those still read on it:
     mid-tone and cool or neutral, not green (bushes), pink or red (cones)
     or pale (walls).
+- **Pick your dog.** `DOGS` in `puppyLook.ts` (`dogById`, `coerceDog`,
+  default `ginger`) gives each dog a `Coat`. Beyond `body`/`ears`/`snout`,
+  a coat may set optional markings, each a few extra matte boxes or
+  spheres on the same low-poly `Dog`: `paws` (socks), `belly`, `mask`,
+  `spots` (Dalmatian, half-sunk squashed spheres), `brows`, `eyes`,
+  `saddle` (a back and head cap) and `tailTip`.
+  - **Designed for the camera:** the fixed camera mostly sees the dog's
+    back, and at the start it faces away. So face-only markings (a husky
+    mask, tan eyebrows) were invisible in the first screenshots, and Husky
+    became a white dog with a grey **saddle** and cap, and Black & Tan got
+    a tan **tail tip** and socks on top of its tan muzzle.
+  - The ⚙ chips paint each coat (spots as dots, a saddle as a split). The
+    hero `Dog` is keyed by the dog id so a switch remounts it; the ghost
+    look is re-applied if that happens during a hint replay.
 - **The clock** (and the catchers) start on the first move. A level always
   opens in the same state, and you get time to read the tip.
 - **The tip** is a slim banner between the level picker and the maze, never
@@ -439,7 +464,7 @@ Times are the planner's optimum. A human takes longer.
 
 ## Persisted state
 
-- **Widget `data`:** `{ level, sound, unlockAll, stickSide, barkTipSeen, mode, theme }`. That's only where you
+- **Widget `data`:** `{ level, sound, unlockAll, stickSide, barkTipSeen, mode, theme, dog }`. That's only where you
   are and the settings.
 - **App-level records** (`records.puppyRescue`, survives removing the
   widget): `stars[key]` (best 1–3), `bestMs[key]` (fastest escape,
@@ -459,7 +484,8 @@ Times are the planner's optimum. A human takes longer.
   - Rendered attributes: `data-level` (id), `data-level-index`,
     `data-unlocked` (count), `data-run`, `data-sound`, `data-stick`,
     `data-mode` (classic|easy|arcade), `data-theme`
-    (sunshine|toybox|ocean|night|sandbox).
+    (sunshine|toybox|ocean|night|sandbox), `data-dog`
+    (ginger|golden|dalmatian|husky|blacktan|chocolate).
   - Live telemetry every 50 ms: `data-status` (ready|play|caught|escaped),
     `data-x`/`data-y` (map cells), `data-t`, `data-pups`, `data-meter`,
     `data-spotted`, `data-seeing` (catcher bitmask), `data-guards`
@@ -485,7 +511,8 @@ Times are the planner's optimum. A human takes longer.
     `puppy-hint-overlay` (over the maze during a replay; a tap skips) and
     its `puppy-hint-speed` toggle (`data-speed` 1/2).
   - ⚙ theme row: `puppy-theme` holding the `puppy-theme-<id>` chips
-    (`aria-pressed` on the current one).
+    (`aria-pressed` on the current one), and `puppy-dog` holding the
+    `puppy-dog-<id>` chips (same).
   - Overlays: `puppy-netted` (`data-count`), `puppy-caught`, `puppy-escaped`
     (`data-stars`), `puppy-next`, `puppy-again`.
   - ⚙ menu items: `puppy-sound`, `puppy-unlock-all`,
@@ -497,7 +524,7 @@ Times are the planner's optimum. A human takes longer.
 npm run build && npm run lint
 npm run e2e puppy        # 180-puppy-model (pure + the level sweep), 181-puppy (live),
                          # 182-puppy-modes (pure Easy/Arcade), 183-puppy-modes-ui (live picker),
-                         # 184-puppy-hint (live hint replay), 185-puppy-themes
+                         # 184-puppy-hint (live hint replay), 185-puppy-themes, 186-puppy-dogs
 node scripts/gen-puppy-hints.mjs   # after adding/tuning a level: rewrite rescueHints.ts
 ```
 
@@ -589,17 +616,20 @@ Each item names the seam it builds on.
 - **More sets:** Slate (`#5b6b7c` on `#dfe7ee`) and Lavender Dream
   (`#9d8cf0` on `#f3eaff`) were proposed and not taken yet; Honey (a
   mustard floor) needs the key outlined and a darker dog ring first.
-- **Theme the rest:** the hero's ground ring and the stick knob are still
-  fixed violet (most noticeable on Sandbox); walls and door could get a
-  per-theme tint too (a `walls` field, the same seam).
+- ~~**Theme the ring and stick.**~~ Shipped with Pick your dog.
+- **Theme the walls and door:** a per-theme tint (a `walls` field, the
+  same seam).
 - **Themed scenery outside the maze:** grass tufts, waves, stars, sand
   ripples drawn on the surround.
 
 **Meta**
 - **A shelter screen** that fills with every puppy you've rescued, with
   coins for rooms and outfits (the store game's loop).
-- **Pick your dog:** breeds or coats in ⚙, using the `Coat` palette that
-  already exists.
+- ~~**Pick your dog.**~~ Shipped; see *Pick your dog*.
+- **Accessories:** a collar or bandana colour, or a hat (proposed in the
+  dog round, not taken) — one more optional `Coat` field each.
+- **Unlockable dogs:** earn a coat by starring a tier (records already
+  hold every star).
 - **Two Devices co-op:** each player controls a dog with separate puppy
   lines (netplay `pos` messages, like the maze race).
 - **A level editor:** the ASCII map plus catcher specs, validated live by

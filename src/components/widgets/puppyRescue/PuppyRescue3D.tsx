@@ -9,14 +9,14 @@
  * the map) is world +z (toward the camera). Fixed tilted camera fitted to
  * the whole maze at any aspect — every catcher and cone is always in view.
  */
-import { useLayoutEffect, useMemo, useRef } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef } from 'react'
 import type { RefObject } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { BufferAttribute, BufferGeometry, Color, DoubleSide, Vector3 } from 'three'
 import type { Group, Mesh, MeshBasicMaterial, MeshStandardMaterial, PerspectiveCamera } from 'three'
 import { WALL_HALF, coneRays, doorOpen, isAlert, type Level, type Mode, type RescueState } from './rescueModel'
 import { AlertMark, Blob, Bush, Cage, Catcher, Dog, GoalMarker, GoldKey, Padlock } from './puppyModels'
-import { HERO_COAT, PUP_COATS, newAnim } from './puppyLook'
+import { PUP_COATS, dogById, newAnim, type DogId } from './puppyLook'
 import { themeById, type PuppyTheme, type ThemeId } from './puppyThemes'
 
 export interface SimView {
@@ -32,8 +32,10 @@ export interface PuppyRescue3DProps {
   sim: RefObject<SimView>
   /** Re-mount key — the level id. */
   levelKey: string
-  /** Colour theme (floor, surround, pen patch, side light). */
+  /** Colour theme (floor, surround, pen patch, side light, dog ring). */
   theme: ThemeId
+  /** The hero dog's look. */
+  dog: DogId
 }
 
 const WALL_H = 0.45
@@ -261,10 +263,14 @@ function ConeActor({ sim, g }: { sim: RefObject<SimView>; g: number }) {
 }
 
 /** The hero dog — a see-through ghost during a hint replay. */
-function HeroActor({ sim }: { sim: RefObject<SimView> }) {
+function HeroActor({ sim, dog, ring }: { sim: RefObject<SimView>; dog: DogId; ring: string }) {
   const ref = useRef<Group>(null)
   const anim = useMemo(newAnim, [])
   const ghostShown = useRef(false)
+  // A new dog mounts with opaque materials: re-apply the ghost look if needed.
+  useEffect(() => {
+    ghostShown.current = false
+  }, [dog])
   useFrame(({ clock }) => {
     const { level, s } = sim.current
     if (!ref.current) return
@@ -291,9 +297,9 @@ function HeroActor({ sim }: { sim: RefObject<SimView> }) {
   })
   return (
     <group ref={ref}>
-      <Blob r={0.36} ring />
+      <Blob r={0.36} ring ringColor={ring} />
       <group scale={1.35}>
-        <Dog coat={HERO_COAT} anim={anim} />
+        <Dog key={dog} coat={dogById[dog].coat} anim={anim} />
       </group>
     </group>
   )
@@ -463,7 +469,7 @@ function BarkRing({ sim }: { sim: RefObject<SimView> }) {
   )
 }
 
-export default function PuppyRescue3D({ sim, levelKey, theme: themeId }: PuppyRescue3DProps) {
+export default function PuppyRescue3D({ sim, levelKey, theme: themeId, dog }: PuppyRescue3DProps) {
   const { level } = sim.current
   const theme = themeById[themeId]
   return (
@@ -497,7 +503,7 @@ export default function PuppyRescue3D({ sim, levelKey, theme: themeId }: PuppyRe
         {level.guards.map((_, g) => (
           <CatcherActor key={`g${g}`} sim={sim} g={g} />
         ))}
-        <HeroActor sim={sim} />
+        <HeroActor sim={sim} dog={dog} ring={theme.strip} />
         <BarkRing sim={sim} />
       </group>
     </Canvas>

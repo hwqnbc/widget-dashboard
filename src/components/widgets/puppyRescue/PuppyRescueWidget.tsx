@@ -55,6 +55,7 @@ import {
 } from './rescueModel'
 import { HINTS } from './rescueHints'
 import { DEFAULT_THEME, THEMES, coerceTheme, themeById, type ThemeId } from './puppyThemes'
+import { DEFAULT_DOG, DOGS, coerceDog, type Coat, type DogId } from './puppyLook'
 import { LEVELS, MODE_LABEL, TIERS, TIER_LABEL, levelLabel, recordKey } from './rescueLevels'
 import {
   playAlert,
@@ -102,6 +103,15 @@ const HINT_END_MS = 900
 /** How long the "Netted!" note stays up (ms). */
 const NET_MS = 1400
 
+/** A dog chip's paint: the coat, plus a hint of its markings. */
+const coatChip = (c: Coat): string => {
+  if (c.spots)
+    return `radial-gradient(circle at 30% 35%, ${c.spots} 0 3px, transparent 3.5px), radial-gradient(circle at 68% 60%, ${c.spots} 0 3.5px, transparent 4px), radial-gradient(circle at 40% 78%, ${c.spots} 0 2.5px, transparent 3px), ${c.body}`
+  if (c.saddle) return `linear-gradient(180deg, ${c.saddle} 50%, ${c.body} 50%)`
+  const mark = c.tailTip ?? c.ears
+  return `linear-gradient(180deg, ${c.body} 55%, ${mark} 55%)`
+}
+
 const coerceLevel = (v: unknown): number | undefined =>
   Number.isInteger(v) && (v as number) >= 0 && (v as number) < LEVELS.length ? (v as number) : undefined
 
@@ -146,6 +156,7 @@ export default function PuppyRescueWidget({ id }: WidgetProps) {
   const mode = useWidgetField<Mode>(id, 'mode', 'classic', coerceMode)
   const themeId = useWidgetField<ThemeId>(id, 'theme', DEFAULT_THEME, coerceTheme)
   const theme = themeById[themeId]
+  const dog = useWidgetField<DogId>(id, 'dog', DEFAULT_DOG, coerceDog)
   const records = useAppSelector(selectPuppyRescueRecords)
   const setData = useCallback(
     (data: Record<string, unknown>) => dispatch(updateWidgetData({ id, data })),
@@ -545,6 +556,7 @@ export default function PuppyRescueWidget({ id }: WidgetProps) {
       data-stick={stickSide}
       data-mode={mode}
       data-theme={themeId}
+      data-dog={dog}
       sx={{
         height: '100%',
         display: 'flex',
@@ -674,7 +686,7 @@ export default function PuppyRescueWidget({ id }: WidgetProps) {
               </Box>
             }
           >
-            <PuppyRescue3D sim={simRef} levelKey={`${spec.id}`} theme={themeId} />
+            <PuppyRescue3D sim={simRef} levelKey={`${spec.id}`} theme={themeId} dog={dog} />
           </Suspense>
         </Box>
 
@@ -890,7 +902,14 @@ export default function PuppyRescueWidget({ id }: WidgetProps) {
           position: 'relative',
         }}
       >
-        <VirtualJoystick size={STICK_SIZE} label="MOVE" testId="puppy-stick" onChange={onStick} sx={{ py: 0.75 }} />
+        <VirtualJoystick
+          size={STICK_SIZE}
+          label="MOVE"
+          testId="puppy-stick"
+          onChange={onStick}
+          knobColor={theme.knob}
+          sx={{ py: 0.75 }}
+        />
         {/* Bark: opposite the stick. The ring fills as it recharges. */}
         <Box
           sx={{
@@ -991,6 +1010,30 @@ export default function PuppyRescueWidget({ id }: WidgetProps) {
                   // Split chip: the floor over the surround.
                   background: `linear-gradient(135deg, ${t.floor} 50%, ${t.surround} 50%)`,
                   boxShadow: t.id === themeId ? '0 0 0 2px #fff, 0 0 0 4px #1976d2' : '0 0 0 1px rgba(0,0,0,0.25)',
+                }}
+              />
+            ))}
+          </Stack>
+        </MenuItem>
+        <MenuItem disableRipple sx={{ gap: 1 }} data-testid="puppy-dog">
+          <ListItemText>Dog</ListItemText>
+          <Stack direction="row" spacing={0.75}>
+            {DOGS.map((d) => (
+              <Box
+                key={d.id}
+                role="button"
+                aria-label={d.name}
+                aria-pressed={d.id === dog}
+                title={d.name}
+                data-testid={`puppy-dog-${d.id}`}
+                onClick={() => setData({ dog: d.id })}
+                sx={{
+                  width: 26,
+                  height: 26,
+                  borderRadius: '50%',
+                  cursor: 'pointer',
+                  background: coatChip(d.coat),
+                  boxShadow: d.id === dog ? '0 0 0 2px #fff, 0 0 0 4px #1976d2' : '0 0 0 1px rgba(0,0,0,0.25)',
                 }}
               />
             ))}

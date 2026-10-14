@@ -23,14 +23,16 @@ export interface PuppyTheme {
   pen: string
   /** The soft side light's tint. */
   rim: string
+  /** The movement stick's knob (a bright accent that reads on the strip). */
+  knob: string
 }
 
 export const THEMES: readonly PuppyTheme[] = [
-  { id: 'sunshine', name: 'Sunshine', floor: '#4a6fe3', surround: '#ffe066', strip: '#22357f', strip2: '#2f45a0', pen: '#8fa6f0', rim: '#fff1b8' },
-  { id: 'toybox', name: 'Toybox', floor: '#7b6cf2', surround: '#48d3f2', strip: '#2a2554', strip2: '#3b3470', pen: '#9a86ff', rim: '#bfe8ff' },
-  { id: 'ocean', name: 'Ocean', floor: '#2f6fd6', surround: '#9be7ff', strip: '#173a73', strip2: '#22508f', pen: '#6f9be6', rim: '#d4f5ff' },
-  { id: 'night', name: 'Night Watch', floor: '#3b3a6b', surround: '#141a33', strip: '#0d1126', strip2: '#1c2340', pen: '#5d5ba0', rim: '#7a86c9' },
-  { id: 'sandbox', name: 'Sandbox', floor: '#c9a36a', surround: '#87ceeb', strip: '#5c4322', strip2: '#77593a', pen: '#dcbf8e', rim: '#cfeefa' },
+  { id: 'sunshine', name: 'Sunshine', floor: '#4a6fe3', surround: '#ffe066', strip: '#22357f', strip2: '#2f45a0', pen: '#8fa6f0', rim: '#fff1b8', knob: '#ffd54a' },
+  { id: 'toybox', name: 'Toybox', floor: '#7b6cf2', surround: '#48d3f2', strip: '#2a2554', strip2: '#3b3470', pen: '#9a86ff', rim: '#bfe8ff', knob: '#8f7cf7' },
+  { id: 'ocean', name: 'Ocean', floor: '#2f6fd6', surround: '#9be7ff', strip: '#173a73', strip2: '#22508f', pen: '#6f9be6', rim: '#d4f5ff', knob: '#5aa9ff' },
+  { id: 'night', name: 'Night Watch', floor: '#3b3a6b', surround: '#141a33', strip: '#0d1126', strip2: '#1c2340', pen: '#5d5ba0', rim: '#7a86c9', knob: '#8b89d6' },
+  { id: 'sandbox', name: 'Sandbox', floor: '#c9a36a', surround: '#87ceeb', strip: '#5c4322', strip2: '#77593a', pen: '#dcbf8e', rim: '#cfeefa', knob: '#e2c08a' },
 ]
 
 export const DEFAULT_THEME: ThemeId = 'sunshine'

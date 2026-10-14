@@ -82,6 +82,7 @@ for (const [id, t] of Object.entries(THEMES)) {
   await page.keyboard.down('ArrowUp')
   await page.waitForTimeout(250)
   await page.keyboard.up('ArrowUp')
+  await page.waitForTimeout(150) // let the stop reach the 50 ms telemetry
   const run0 = await ds('run')
   const y0 = parseFloat(await ds('y'))
   check('(a run is under way)', (await ds('status')) === 'play')

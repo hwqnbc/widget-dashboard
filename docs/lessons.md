@@ -2515,3 +2515,12 @@ carried over; these are the new ones.
     `#000000`: without `preserveDrawingBuffer` the buffer is gone after
     compositing. Sampling a 2×2 `page.screenshot({ clip })` decoded in the
     page reads the real on-screen colour.
+
+167. **Design a model's distinguishing marks for the camera that will
+    actually see it.** Puppy Rescue's first Husky (grey with a white face
+    mask) and Black & Tan (tan eyebrows and muzzle) looked like plain
+    grey and plain black dogs in game: the fixed camera sees the dog from
+    above and behind, and at the start it faces away. A white dog with a
+    grey back saddle, and a tan tail tip, read at a glance. Screenshot each
+    variant FROM THE GAME CAMERA before calling a look done; a showcase
+    view would have hidden the problem.

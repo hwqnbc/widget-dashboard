@@ -28,6 +28,23 @@ function trot(phase: number, v: number) {
  * trot in diagonal pairs (the shared leg-gait rig's hip-pivot convention,
  * on four legs). `sitting` folds the back legs (a caged puppy).
  */
+/** Dalmatian spots, half-sunk into the body / head box faces and squashed
+ * flat along each face's normal: [x, y, z, scaleX, scaleY, scaleZ]. */
+const BODY_SPOTS: [number, number, number, number, number, number][] = [
+  [0.04, 0.34, 0.08, 1, 0.35, 1],
+  [-0.05, 0.34, -0.06, 1.2, 0.35, 1],
+  [0.03, 0.34, -0.14, 0.8, 0.35, 0.8],
+  [0.12, 0.27, 0.04, 0.35, 1, 1],
+  [0.12, 0.2, -0.1, 0.35, 0.8, 0.8],
+  [-0.12, 0.25, 0.1, 0.35, 0.9, 0.9],
+  [-0.12, 0.21, -0.12, 0.35, 1, 1.1],
+]
+const HEAD_SPOTS: [number, number, number, number, number, number][] = [
+  [0.06, 0.12, -0.03, 1, 0.35, 1],
+  [-0.05, 0.12, 0.05, 0.8, 0.35, 0.8],
+  [0.13, 0.03, -0.06, 0.35, 0.9, 0.9],
+]
+
 export function Dog({
   coat,
   anim,
@@ -74,11 +91,36 @@ export function Dog({
           <boxGeometry args={[0.24, 0.2, 0.36]} />
           {mat(coat.body)}
         </mesh>
+        {coat.saddle && (
+          <mesh position={[0, 0.342, -0.01]}>
+            <boxGeometry args={[0.2, 0.008, 0.3]} />
+            {mat(coat.saddle)}
+          </mesh>
+        )}
+        {coat.belly && (
+          <mesh position={[0, 0.137, 0]}>
+            <boxGeometry args={[0.2, 0.012, 0.3]} />
+            {mat(coat.belly)}
+          </mesh>
+        )}
+        {coat.spots &&
+          BODY_SPOTS.map(([x, y, z, sx, sy, sz], i) => (
+            <mesh key={i} position={[x, y, z]} scale={[sx, sy, sz]}>
+              <sphereGeometry args={[0.034, 8, 6]} />
+              {mat(coat.spots!)}
+            </mesh>
+          ))}
         <group ref={tail} position={[0, 0.31, -0.18]}>
           <mesh position={[0, 0.06, -0.05]} rotation={[0.8, 0, 0]}>
             <boxGeometry args={[0.05, 0.05, 0.16]} />
             {mat(coat.ears)}
           </mesh>
+          {coat.tailTip && (
+            <mesh position={[0, 0.115, -0.105]} rotation={[0.8, 0, 0]}>
+              <boxGeometry args={[0.056, 0.056, 0.05]} />
+              {mat(coat.tailTip)}
+            </mesh>
+          )}
         </group>
       </group>
       {hips.map((p, i) => (
@@ -94,6 +136,12 @@ export function Dog({
             <boxGeometry args={[0.07, 0.15, 0.07]} />
             {mat(coat.body)}
           </mesh>
+          {coat.paws && (
+            <mesh position={[0, -0.125, 0]}>
+              <boxGeometry args={[0.076, 0.05, 0.076]} />
+              {mat(coat.paws)}
+            </mesh>
+          )}
         </group>
       ))}
       <group position={[0, sitting ? 0.46 : 0.4, sitting ? 0.16 : 0.2]}>
@@ -109,14 +157,40 @@ export function Dog({
           <sphereGeometry args={[0.03, 8, 6]} />
           {mat('#1d1b22')}
         </mesh>
+        {coat.saddle && (
+          <mesh position={[0, 0.122, -0.03]}>
+            <boxGeometry args={[0.2, 0.006, 0.17]} />
+            {mat(coat.saddle)}
+          </mesh>
+        )}
+        {coat.mask && (
+          <mesh position={[0, -0.015, 0.122]}>
+            <boxGeometry args={[0.2, 0.13, 0.006]} />
+            {mat(coat.mask)}
+          </mesh>
+        )}
         <mesh position={[-0.065, 0.04, 0.122]}>
           <sphereGeometry args={[0.025, 8, 6]} />
-          {mat('#1d1b22')}
+          {mat(coat.eyes ?? '#1d1b22')}
         </mesh>
         <mesh position={[0.065, 0.04, 0.122]}>
           <sphereGeometry args={[0.025, 8, 6]} />
-          {mat('#1d1b22')}
+          {mat(coat.eyes ?? '#1d1b22')}
         </mesh>
+        {coat.brows &&
+          [-0.065, 0.065].map((x) => (
+            <mesh key={x} position={[x, 0.085, 0.121]}>
+              <sphereGeometry args={[0.017, 8, 6]} />
+              {mat(coat.brows!)}
+            </mesh>
+          ))}
+        {coat.spots &&
+          HEAD_SPOTS.map(([x, y, z, sx, sy, sz], i) => (
+            <mesh key={i} position={[x, y, z]} scale={[sx, sy, sz]}>
+              <sphereGeometry args={[0.03, 8, 6]} />
+              {mat(coat.spots!)}
+            </mesh>
+          ))}
         <mesh position={[-0.15, -0.02, 0]} rotation={[0, 0, 0.25]}>
           <boxGeometry args={[0.06, 0.2, 0.12]} />
           {mat(coat.ears)}
@@ -303,12 +377,12 @@ export function AlertMark({ kind }: { kind: 'q' | 'x' }) {
 }
 
 /** A soft dark disc under a figure (no real shadows — low-spec). */
-export function Blob({ r = 0.22, ring = false }: { r?: number; ring?: boolean }) {
+export function Blob({ r = 0.22, ring = false, ringColor = '#4a3fb8' }: { r?: number; ring?: boolean; ringColor?: string }) {
   const ref = useRef<Mesh>(null)
   return (
     <mesh ref={ref} position={[0, 0.006, 0]} rotation={[-Math.PI / 2, 0, 0]}>
       <circleGeometry args={[r, 20]} />
-      <meshBasicMaterial color={ring ? '#4a3fb8' : '#000000'} transparent opacity={ring ? 0.7 : 0.22} depthWrite={false} />
+      <meshBasicMaterial color={ring ? ringColor : '#000000'} transparent opacity={ring ? 0.7 : 0.22} depthWrite={false} />
     </mesh>
   )
 }
