@@ -115,6 +115,13 @@ plates** and a sixth tier, **Doors**, for 30 levels.
 | defaults | | A **Doors** tier after Hide (levels 26–30). Doors may start open or shut. Catcher tracks never cross a door, no plate sits beside its own door, and puppies follow the trail through a doorway even after it shuts. The planner carries door bits; the sweep proves each Doors level needs its plates; the new levels get stored hints. |
 | changed in build | Colours | The middle colour was planned as **blue**, but blue plates and doors nearly vanished on the Sunshine and Ocean floors, so it became **yellow** (same ● symbol). Open doors were planned to sink out of sight; they stop at floor level instead, so you can see where they'll shut. |
 
+### Follow-up: catchers and shut doors
+
+| # | Question | Decision |
+|---|---|---|
+| F-1 | A door shuts across a lured or chasing catcher's way | **Re-route, or wait at the door if there's no other way** (trapped until it opens, then home and back on its route exactly). |
+| defaults | | It re-checks at each doorway and sets off the instant a way opens; one mid-doorway finishes stepping through; it applies to every off-route walk (bark go/back, chase, homing); a trapped catcher still sees and catches; hint replays and proofs are unaffected (they never bark or chase). |
+
 **Detail I chose myself (not asked):** the door opens once the **first**
 puppy is freed. That way you can't skip a level with 0 puppies and still
 unlock the next one, but you can still escape without every puppy, at the
@@ -343,9 +350,19 @@ cost of a star.
   - **A shut door is a wall** for the dog (`resolve`), for `canStep`
     (grid edge value 3 + `hDoor`/`vDoor` index) and for sight
     (`lineOfSight`/`seenAt`/`rayLength`/`coneRays` take `sw`), so the cones
-    are clipped by shut doors live. Catcher BFS paths (bark, chase) respect
-    door states when planned; a lure walk already under way doesn't re-plan
-    if a door shuts mid-walk.
+    are clipped by shut doors live.
+  - **Catchers respect doors (follow-up to Round 7).** A catcher off its
+    route (walking to a bark, back from it, chasing, or homing after a
+    search) checks each doorway before it reaches it (`doorBlocks`). If the
+    door is shut it re-plans around it (`replanWalk`, a BFS under the live
+    door state); if there's no way round it is **trapped**: it waits
+    beside the door, facing it and looking side to side with its cone on
+    (`Lure.stuck`), route clock still paused, and sets off the moment a
+    way opens. One already in the doorway (within 0.3 of the edge) steps
+    through rather than sticking in the door. So luring a catcher into a
+    room and shutting the door holds it there. Found in play: the first
+    Round 7 build planned a lure walk once and walked it through shut
+    doors.
   - **Load-time rules** (`parseLevel` throws): every door has a plate of
     its colour; no plate sits right beside a door of its own colour (it
     could slam on the dog); no catcher track crosses a door (tracks stay
@@ -541,7 +558,8 @@ Times are the planner's optimum. A human takes longer.
     `data-chasing` (bitmask of catchers chasing or searching), `data-nets`
     (times the line was netted), `data-hint` (1 while a hint replay runs),
     `data-doors` (one char per door in map order: 1 open, 0 shut),
-    `data-plates` (plate presses this run).
+    `data-plates` (plate presses this run), `data-trapped` (bitmask of
+    catchers waiting at a shut door).
   - SFX counters: `data-sfx-freed`/`-alert`/`-caught`/`-escape`/`-key`/`-unlock`/`-hide`/`-bark`/`-heard`/`-net`/`-chase`/`-plate`.
 - **Hooks:**
   - Controls and readouts: `puppy-level` (NativeSelect; the `<select>` is

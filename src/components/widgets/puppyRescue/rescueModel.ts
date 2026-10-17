@@ -631,6 +631,9 @@ export interface Lure {
    * it stops short of the spot instead of walking onto it. */
   lost: boolean
   short: boolean
+  /** go/back: a shut door blocks the way and there's no way round — it
+   * waits beside the door (route clock still paused) until one opens. */
+  stuck: boolean
 }
 
 /** Chasing or searching — the catcher is past "?" and on to "!". */
@@ -921,9 +924,41 @@ export function bark(level: Level, s: RescueState): number {
     lh: 0,
     lost: false,
     short: false,
+    stuck: false,
   }
   s.ev.heard += 1
   return best
+}
+
+/** Would walking from `p` to waypoint (tx, ty) cross a SHUT door it hasn't
+ * reached yet? A catcher already in the doorway (within 0.3 of the edge)
+ * steps on through rather than being caught in the door. */
+function doorBlocks(level: Level, s: RescueState, p: Pose, tx: number, ty: number): boolean {
+  const ax = Math.floor(p.x)
+  const ay = Math.floor(p.y)
+  const bx = Math.floor(tx)
+  const by = Math.floor(ty)
+  if (ax === bx && ay === by) return false
+  const dx = Math.sign(bx - ax)
+  const dy = dx === 0 ? Math.sign(by - ay) : 0
+  if (canStep(level, ax, ay, dx, dy, s.penOpen, s.sw)) return false
+  const edge = dx !== 0 ? Math.max(ax, bx) : Math.max(ay, by)
+  return Math.abs((dx !== 0 ? p.x : p.y) - edge) > 0.3
+}
+
+/** Re-plan a go/back walk from where the catcher stands to the walk's end,
+ * around shut doors. False when there's no way (it's trapped). */
+function replanWalk(level: Level, s: RescueState, p: Pose, L: Lure): boolean {
+  const n = L.pts.length
+  const ex = L.pts[n - 2]
+  const ey = L.pts[n - 1]
+  const path = cellPath(level, Math.floor(p.x), Math.floor(p.y), Math.floor(ex), Math.floor(ey), s.penOpen, s.sw)
+  if (!path) return false
+  const last = path.length - 2
+  if (Math.abs(path[last] - ex) > 1e-9 || Math.abs(path[last + 1] - ey) > 1e-9) path.push(ex, ey)
+  L.pts = path
+  L.i = 0
+  return true
 }
 
 /** Advance a catcher one step: along its route (clock ticking), or along
@@ -941,6 +976,18 @@ function stepGuard(level: Level, s: RescueState, g: number): Pose {
     while (left > 0 && L.i < L.pts.length / 2) {
       const tx = L.pts[2 * L.i]
       const ty = L.pts[2 * L.i + 1]
+      if (doorBlocks(level, s, p, tx, ty)) {
+        // A door shut across the walk: re-plan around it, or wait beside it.
+        if (!replanWalk(level, s, p, L)) {
+          L.stuck = true
+          L.tt += STEP
+          p.h = wrapAngle(Math.atan2(ty - p.y, tx - p.x) + Math.sin(L.tt * 2.2) * 0.6)
+          p.v = 0
+          return p
+        }
+        continue
+      }
+      L.stuck = false
       const d = Math.hypot(tx - p.x, ty - p.y)
       if (d <= left) {
         p.x = tx
@@ -1034,6 +1081,7 @@ function startChase(s: RescueState, g: number, lx: number, ly: number, lh: numbe
     lh,
     lost: false,
     short: false,
+    stuck: false,
   }
   s.ev.chase += 1
 }

@@ -535,6 +535,133 @@ const run = (level, s, ix, iy, frames) => {
     bad(base.map((r, i) => (i === 7 ? '|r D . .|' : r)), [{ path: [[1, 0], [1, 2]] }]))
 }
 
+// ------------------------- 6h. catchers respect doors (trapped / re-route)
+{
+  // A room (rows 2-3) whose only way out is the red door at (2,2) — open at
+  // the start; the catcher's post is outside at (4,1). `gap` adds a second
+  // exit far left at (0,2) for the re-route check, and a bush at (4,0) for
+  // the dog to hide in while it watches.
+  const room = (gap, guards) =>
+    parseLevel({
+      id: 'trap',
+      tier: 'doors',
+      name: 'trap',
+      map: [
+        '+-+-+E+-+-+',
+        gap ? '|r . . . B|' : '|r . . . .|',
+        '+ + + + + +',
+        '|. . . . .|',
+        gap ? '+ +-+r+-+-+' : '+-+-+r+-+-+',
+        '|. . . . .|',
+        '+ + + + + +',
+        '|. . D . .|',
+        '+-+-+-+-+-+',
+      ],
+      guards,
+    })
+  const doorSeg = [2, 2, 3, 2]
+  const crossesDoor = (ax, ay, bx, by) => {
+    // Did a move from (ax,ay) to (bx,by) pass the door's span across y = 2?
+    if ((ay - 2) * (by - 2) > 0 || ay === by) return false
+    const x = ax + ((bx - ax) * (2 - ay)) / (by - ay)
+    return x > doorSeg[0] && x < doorSeg[2]
+  }
+  const lureIn = (L) => {
+    const s = initialState(L)
+    s.status = 'play'
+    step(L, s, 0, 0)
+    bark(L, s)
+    let n = 0
+    let moved = false
+    let ox = s.guards[0].x
+    let oy = s.guards[0].y
+    s.viaDoor = false
+    while (s.lure[0]?.mode !== 'look' && s.status === 'play' && n++ < 600) {
+      step(L, s, 0, 0)
+      if (crossesDoor(ox, oy, s.guards[0].x, s.guards[0].y)) s.viaDoor = true
+      ox = s.guards[0].x
+      oy = s.guards[0].y
+      if (!moved && s.guards[0].x < 3.4) {
+        // Once it has left its post, slip out behind it (top-right), out of
+        // its way and its cone.
+        moved = true
+        s.x = 4.5
+        s.y = 0.5
+        s.cell = 4
+        s.trail = [4.5, 0.5]
+      }
+    }
+    s.sw ^= 1 // shut the door behind it (what the plate does)
+    return s
+  }
+  {
+    const L = room(false, [{ path: [[4, 1]], facing: 0 }])
+    const s = lureIn(L)
+    check('(the barked catcher walked into the room, through the door)', s.viaDoor && s.guards[0].y > 2 && s.lure[0]?.mode === 'look')
+    let leaked = false
+    let px = s.guards[0].x
+    let py = s.guards[0].y
+    for (let i = 0; i < 600; i++) {
+      step(L, s, 0, 0)
+      const g = s.guards[0]
+      if (g.y < 2 || crossesDoor(px, py, g.x, g.y)) leaked = true
+      px = g.x
+      py = g.y
+    }
+    check('door shut behind a lured catcher: it is trapped (waits, never passes the door)',
+      !leaked && s.lure[0]?.stuck === true && s.status === 'play' && s.guards[0].v === 0)
+    const tTrapped = s.gclock[0]
+    s.sw ^= 1 // open the door again
+    let n = 0
+    while (s.lure[0] && n++ < 1200) step(L, s, 0, 0)
+    const p = s.guards[0]
+    check('door opened: it walks home and resumes its post exactly',
+      !s.lure[0] && Math.abs(p.x - 4.5) < 1e-9 && Math.abs(p.y - 1.5) < 1e-9 && Math.abs(p.h - facingToRad(0)) < 1e-9)
+    check('…its route clock stayed paused while trapped', Math.abs(s.gclock[0] - tTrapped) < 1e-9 && s.gclock[0] < s.t - 10)
+  }
+  {
+    const L = room(true, [{ path: [[4, 1]], facing: 0 }])
+    const s = lureIn(L)
+    let leaked = false
+    let stuck = false
+    let px = s.guards[0].x
+    let py = s.guards[0].y
+    let n = 0
+    while (s.lure[0] && n++ < 1200) {
+      step(L, s, 0, 0)
+      const g = s.guards[0]
+      if (crossesDoor(px, py, g.x, g.y)) leaked = true
+      if (s.lure[0]?.stuck) stuck = true
+      px = g.x
+      py = g.y
+    }
+    check('with a second exit it re-routes round the shut door and gets home',
+      s.viaDoor && !leaked && !stuck && !s.lure[0] && Math.abs(s.guards[0].x - 4.5) < 1e-9 && Math.abs(s.guards[0].y - 1.5) < 1e-9,
+      `leaked ${leaked} stuck ${stuck} status ${s.status} lure ${s.lure[0]?.mode} at ${s.guards[0].x.toFixed(2)},${s.guards[0].y.toFixed(2)}`)
+  }
+  {
+    // Arcade: a chaser looking down through the open door; shut it mid-chase.
+    const L = room(false, [{ path: [[2, 0]], facing: 180 }])
+    const s = initialState(L, 'arcade')
+    s.status = 'play'
+    let n = 0
+    while (s.ev.chase === 0 && n++ < 200) step(L, s, 0, 0)
+    s.sw ^= 1
+    let leaked = false
+    let px = s.guards[0].x
+    let py = s.guards[0].y
+    for (let i = 0; i < 900; i++) {
+      step(L, s, 0, 0)
+      const g = s.guards[0]
+      if (g.y > 2.05 || crossesDoor(px, py, g.x, g.y)) leaked = true
+      px = g.x
+      py = g.y
+    }
+    check('Arcade: a door shut on a chase stops the chaser at it — the dog behind it is safe',
+      s.ev.chase === 1 && !leaked && s.status === 'play')
+  }
+}
+
 // ---------------------------------------------------- 6f. the hint codec
 {
   const r = [{ x: 3.5, y: 8.5 }, { until: 10.4 }, { x: 0.5, y: 0.5 }]

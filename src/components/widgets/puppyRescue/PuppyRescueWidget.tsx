@@ -470,6 +470,7 @@ export default function PuppyRescueWidget({ id }: WidgetProps) {
         ds.lured = String(s.lure.reduce((m, l, g) => (l ? m | (1 << g) : m), 0))
         ds.chasing = String(s.lure.reduce((m, l, g) => (isAlert(l) ? m | (1 << g) : m), 0))
         ds.nets = String(s.ev.net)
+        ds.trapped = String(s.lure.reduce((m, l, g) => (l?.stuck ? m | (1 << g) : m), 0))
         ds.hint = ghost ? '1' : '0'
         // One char per door, in map order: 1 open, 0 shut.
         ds.doors = lv.doors.map((_, k) => (doorIsOpen(lv, k, s.sw) ? '1' : '0')).join('')

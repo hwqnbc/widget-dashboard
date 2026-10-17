@@ -2534,3 +2534,13 @@ carried over; these are the new ones.
     sight looked like plain floor, though stepping on a plate could shut
     it; it now stops at a coloured floor strip. Toggle state belongs on
     screen in BOTH states.
+
+169. **A path planned once is a promise the world can break: re-check it
+    at each step that can change.** Puppy Rescue's lured catchers planned
+    their walk with BFS when lured, then followed the point list blindly,
+    so after Round 7 added doors, a player who lured one into a room and
+    shut the door watched it walk through. The fix re-checks the next
+    doorway before reaching it, re-plans under the live door state, and
+    WAITS when no path exists, which also turned a bug into a mechanic
+    (trapping). When a world gains mutable obstacles, audit every cached
+    path and walk, not just the planner.

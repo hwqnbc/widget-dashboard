@@ -478,8 +478,9 @@ hero coats in ⚙ — `DOGS` in `puppyLook.ts`, optional `Coat` markings such
 as spots/saddle/tail tip on the same low-poly `Dog`); Round 7 added
 **doors and pressure plates** (toggle by colour — red ▲ / yellow ● / green
 ■, `RescueState.sw` bits, shut doors block movement and sight, the planner
-carries the bits and proves each Doors level needs its plates) — 30 levels
-in six tiers.
+carries the bits and proves each Doors level needs its plates; an
+off-route catcher re-routes round a shut door or waits at it, trapped) —
+30 levels in six tiers.
 See `docs/map.md` for the Map page (the first page-level heavy feature —
 @arcgis/core lazy route chunk, free no-key `gray-vector`/`dark-gray-vector`
 basemaps following the theme toggle, 2D map / 3D globe switch, locate/pins/
