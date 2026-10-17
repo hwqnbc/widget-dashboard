@@ -2524,3 +2524,13 @@ carried over; these are the new ones.
     grey back saddle, and a tan tail tip, read at a glance. Screenshot each
     variant FROM THE GAME CAMERA before calling a look done; a showcase
     view would have hidden the problem.
+
+168. **Check every new game colour against every theme, and never hide
+    state the player must plan around.** Puppy Rescue's doors were going
+    to be red, BLUE and green, but blue plates and door bars nearly
+    vanished on the Sunshine and Ocean floors, which are themselves blue.
+    A palette that predates the themes has to be re-checked against all
+    of them (yellow replaced blue). Likewise an open door that sank out of
+    sight looked like plain floor, though stepping on a plate could shut
+    it; it now stops at a coloured floor strip. Toggle state belongs on
+    screen in BOTH states.

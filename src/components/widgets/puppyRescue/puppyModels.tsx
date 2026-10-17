@@ -13,7 +13,7 @@ import { useFrame } from '@react-three/fiber'
 import type { Group, Mesh } from 'three'
 import { DoubleSide } from 'three'
 import { GAIT_RATE, GAIT_STRIDE } from '../characters/shared/legGait'
-import type { Anim, Coat } from './puppyLook'
+import { DOOR_HEX, DOOR_SIDES, type Anim, type Coat } from './puppyLook'
 
 const mat = (color: string) => <meshStandardMaterial color={color} roughness={0.85} />
 
@@ -440,6 +440,53 @@ export function Padlock({ horiz }: { horiz: boolean }) {
         <circleGeometry args={[0.035, 10]} />
         <meshStandardMaterial color="#3b2a00" />
       </mesh>
+    </group>
+  )
+}
+
+/** A plate/door symbol: a flat white ▲ / ● / ■ (circle geometry with 3, 24
+ * or 4 sides), lying in its parent's XY plane. */
+function DoorSymbol({ c, r = 0.09 }: { c: number; r?: number }) {
+  const sides = DOOR_SIDES[c]
+  return (
+    <mesh rotation={[0, 0, sides === 4 ? Math.PI / 4 : sides === 3 ? Math.PI / 2 : 0]}>
+      <circleGeometry args={[sides === 4 ? r * 1.2 : r, sides]} />
+      <meshBasicMaterial color="#ffffff" />
+    </mesh>
+  )
+}
+
+/** A door: a coloured panel filling one wall edge, its symbol on both
+ * faces. The scene sinks it into the floor when open. `horiz`: the edge runs
+ * along x (else along z). */
+export function DoorBar({ c, horiz }: { c: number; horiz: boolean }) {
+  return (
+    <group rotation={[0, horiz ? 0 : Math.PI / 2, 0]}>
+      <mesh position={[0, 0.22, 0]}>
+        <boxGeometry args={[0.98, 0.44, 0.1]} />
+        <meshStandardMaterial color={DOOR_HEX[c]} roughness={0.55} />
+      </mesh>
+      <group position={[0, 0.24, 0.052]}>
+        <DoorSymbol c={c} />
+      </group>
+      <group position={[0, 0.24, -0.052]} rotation={[0, Math.PI, 0]}>
+        <DoorSymbol c={c} />
+      </group>
+    </group>
+  )
+}
+
+/** A pressure plate: a coloured square pad with its white symbol. */
+export function Plate({ c }: { c: number }) {
+  return (
+    <group>
+      <mesh position={[0, 0.02, 0]}>
+        <boxGeometry args={[0.62, 0.04, 0.62]} />
+        <meshStandardMaterial color={DOOR_HEX[c]} roughness={0.6} />
+      </mesh>
+      <group position={[0, 0.041, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <DoorSymbol c={c} r={0.14} />
+      </group>
     </group>
   )
 }

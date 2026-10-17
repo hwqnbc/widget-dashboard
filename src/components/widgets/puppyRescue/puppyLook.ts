@@ -67,3 +67,8 @@ export const PUP_COATS: Coat[] = [
   { body: '#3a3740', ears: '#1f1d24', snout: '#f2efe9' },
 ]
 
+/** Plate / door colours by colour index (red ▲, yellow ●, green ■ — the
+ * symbol repeats the colour so it never relies on colour alone), and the
+ * symbol's polygon side count (a circle geometry with 3 / 24 / 4 sides). */
+export const DOOR_HEX = ['#e53935', '#ffc107', '#2e9e44'] as const
+export const DOOR_SIDES = [3, 24, 4] as const

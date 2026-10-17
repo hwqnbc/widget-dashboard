@@ -94,7 +94,10 @@ const ESCAPE_Y = 0.55
 export type Mode = 'classic' | 'easy' | 'arcade'
 export const MODES: readonly Mode[] = ['classic', 'easy', 'arcade']
 
-export type Tier = 'sneak' | 'patrol' | 'sentry' | 'key' | 'hide'
+export type Tier = 'sneak' | 'patrol' | 'sentry' | 'key' | 'hide' | 'doors'
+
+/** Plate / door colours, by index: red ▲, yellow ●, green ■. */
+export const DOOR_COLOURS = ['r', 'y', 'g'] as const
 
 export interface GuardSpec {
   /** Waypoints in CELL coords (the catcher walks between cell centres). One
@@ -127,10 +130,13 @@ export interface LevelSpec {
    * ASCII map, (2·rows+1) lines of (2·cols+1) chars. Odd/odd chars are cells
    * (`.` floor, `D` dog start, `C` a caged puppy, `K` the gold key, `P` a
    * pen cell holding `PEN_PER_CELL` pen puppies, `B` a bush — standing
-   * still in one hides the dog); chars between them are
-   * edges (`-`, `|` or `#` wall, `L` the padlock — a wall until opened with
-   * the key, anything else open); even/even chars are posts (ignored —
-   * write `+`). One `E` on the top border is the exit door.
+   * still in one hides the dog, `r`/`y`/`g` a pressure plate of that
+   * colour); chars between them are edges (`-`, `|` or `#` wall, `L` the
+   * padlock — a wall until opened with the key, `R`/`Y`/`G` a door of that
+   * colour SHUT at the start, `r`/`y`/`g` one OPEN at the start, anything
+   * else open); even/even chars are posts (ignored — write `+`). One `E`
+   * on the top border is the exit door. Stepping onto a plate flips every
+   * door of its colour.
    */
   map: string[]
   guards: GuardSpec[]
@@ -184,6 +190,34 @@ export interface Level {
   lock: { seg: Seg; sight: Seg; x: number; y: number; horiz: boolean; ex: number; ey: number } | null
   exitCol: number
   guards: GuardTrack[]
+  /** Doors (toggled by plates of their colour `c`). Grid edges holding a
+   * door carry 3 in hWall/vWall, and the door's index in hDoor/vDoor. */
+  doors: Door[]
+  hDoor: Int16Array
+  vDoor: Int16Array
+  /** Pressure plates, and `plate[cell]` = colour or -1. */
+  plates: { x: number; y: number; c: number }[]
+  plate: Int8Array
+}
+
+export interface Door {
+  /** Colour index (`DOOR_COLOURS`). */
+  c: number
+  /** Open at the start. */
+  open0: boolean
+  seg: Seg
+  sight: Seg
+  horiz: boolean
+  /** Centre (map coords). */
+  x: number
+  y: number
+}
+
+/** Is door k open, given the plate switch bits `sw` (bit c = colour c
+ * flipped an odd number of times)? */
+export const doorIsOpen = (level: Level, k: number, sw: number) => {
+  const d = level.doors[k]
+  return d.open0 !== (((sw >> d.c) & 1) === 1)
 }
 
 /** Map heading: degrees (0 = up, clockwise) → radians in map coords. */
@@ -204,6 +238,17 @@ export function parseLevel(spec: LevelSpec): Level {
   const vWall = new Uint8Array(rows * (cols + 1))
   let exitCol = -1
   let lock: Level['lock'] = null
+  const hDoor = new Int16Array((rows + 1) * cols).fill(-1)
+  const vDoor = new Int16Array(rows * (cols + 1)).fill(-1)
+  const doors: Door[] = []
+  const addDoor = (ch: string, horiz: boolean, ex: number, ey: number) => {
+    const c = DOOR_COLOURS.indexOf(ch.toLowerCase() as (typeof DOOR_COLOURS)[number])
+    const seg: Seg = horiz ? [ex, ey, ex + 1, ey] : [ex, ey, ex, ey + 1]
+    const sight: Seg = horiz ? [ex - WALL_HALF, ey, ex + 1 + WALL_HALF, ey] : [ex, ey - WALL_HALF, ex, ey + 1 + WALL_HALF]
+    doors.push({ c, open0: ch === ch.toLowerCase(), seg, sight, horiz, x: horiz ? ex + 0.5 : ex, y: horiz ? ey : ey + 0.5 })
+    return doors.length - 1
+  }
+  const isDoor = (ch: string) => 'rygRYG'.includes(ch)
   const setLock = (horiz: boolean, ex: number, ey: number) => {
     if (lock) throw new Error(`${spec.id}: one padlock per level`)
     const seg: Seg = horiz ? [ex, ey, ex + 1, ey] : [ex, ey, ex, ey + 1]
@@ -222,6 +267,10 @@ export function parseLevel(spec: LevelSpec): Level {
         hWall[y * cols + x] = 2
         setLock(true, x, y)
       }
+      if (isDoor(c)) {
+        hWall[y * cols + x] = 3
+        hDoor[y * cols + x] = addDoor(c, true, x, y)
+      }
     }
   for (let y = 0; y < rows; y++)
     for (let x = 0; x <= cols; x++) {
@@ -231,6 +280,10 @@ export function parseLevel(spec: LevelSpec): Level {
         vWall[y * (cols + 1) + x] = 2
         setLock(false, x, y)
       }
+      if (isDoor(c)) {
+        vWall[y * (cols + 1) + x] = 3
+        vDoor[y * (cols + 1) + x] = addDoor(c, false, x, y)
+      }
     }
   if (exitCol < 0) throw new Error(`${spec.id}: no exit`)
   let start: { x: number; y: number } | null = null
@@ -239,12 +292,19 @@ export function parseLevel(spec: LevelSpec): Level {
   const bush = new Uint8Array(rows * cols)
   const bushes: { x: number; y: number }[] = []
   let key: { x: number; y: number } | null = null
+  const plate = new Int8Array(rows * cols).fill(-1)
+  const plates: { x: number; y: number; c: number }[] = []
   for (let y = 0; y < rows; y++)
     for (let x = 0; x < cols; x++) {
       const c = lines[2 * y + 1][2 * x + 1]
       if (c === 'D') start = { x: x + 0.5, y: y + 0.5 }
       else if (c === 'C') cages.push({ x: x + 0.5, y: y + 0.5 })
       else if (c === 'K') key = { x: x + 0.5, y: y + 0.5 }
+      else if (c === 'r' || c === 'y' || c === 'g') {
+        const ci = DOOR_COLOURS.indexOf(c)
+        plate[y * cols + x] = ci
+        plates.push({ x: x + 0.5, y: y + 0.5, c: ci })
+      }
       else if (c === 'B') {
         bush[y * cols + x] = 1
         bushes.push({ x: x + 0.5, y: y + 0.5 })
@@ -285,6 +345,29 @@ export function parseLevel(spec: LevelSpec): Level {
   const sight: Seg[] = walls.map(([x1, y1, x2, y2]) =>
     x1 === x2 ? [x1, y1 - WALL_HALF, x2, y2 + WALL_HALF] : [x1 - WALL_HALF, y1, x2 + WALL_HALF, y2],
   )
+  // Doors: every one needs a plate of its colour, no plate sits right beside
+  // a door of its own colour (it could slam on the dog), and no catcher's
+  // track crosses a door (tracks stay pure functions of time).
+  for (const d of doors) {
+    if (!plates.some((pl) => pl.c === d.c)) throw new Error(`${spec.id}: a ${DOOR_COLOURS[d.c]} door has no plate`)
+    for (const pl of plates) {
+      if (pl.c !== d.c) continue
+      const px = pl.x - 0.5
+      const py = pl.y - 0.5
+      const beside = d.horiz
+        ? d.seg[0] === px && (d.seg[1] === py || d.seg[1] === py + 1)
+        : d.seg[1] === py && (d.seg[0] === px || d.seg[0] === px + 1)
+      if (beside) throw new Error(`${spec.id}: a ${DOOR_COLOURS[d.c]} plate sits beside its own door`)
+    }
+  }
+  for (const g of spec.guards)
+    for (let i = 1; i < g.path.length + (g.loop ? 1 : 0); i++) {
+      const [ax, ay] = g.path[i - 1]
+      const [bx, by] = g.path[i % g.path.length]
+      for (const d of doors)
+        if (crosses(ax + 0.5, ay + 0.5, bx + 0.5, by + 0.5, d.seg))
+          throw new Error(`${spec.id}: a catcher's track crosses a door`)
+    }
   return {
     spec,
     cols,
@@ -302,24 +385,26 @@ export function parseLevel(spec: LevelSpec): Level {
     bushes,
     exitCol,
     guards: spec.guards.map(buildTrack),
+    doors,
+    hDoor,
+    vDoor,
+    plates,
+    plate,
   }
 }
 
 /** True when the edge between cell (x,y) and its neighbour (dx,dy) is open.
- * The padlock edge is open only once the pen is (`penOpen`). */
-export function canStep(level: Level, x: number, y: number, dx: number, dy: number, penOpen = false): boolean {
+ * The padlock edge is open only once the pen is (`penOpen`); a door edge
+ * when its door is open under the plate bits `sw`. */
+export function canStep(level: Level, x: number, y: number, dx: number, dy: number, penOpen = false, sw = 0): boolean {
   const { cols, rows } = level
   const nx = x + dx
   const ny = y + dy
   if (nx < 0 || ny < 0 || nx >= cols || ny >= rows) return false
-  const e =
-    dx === 1
-      ? level.vWall[y * (cols + 1) + x + 1]
-      : dx === -1
-        ? level.vWall[y * (cols + 1) + x]
-        : dy === 1
-          ? level.hWall[(y + 1) * cols + x]
-          : level.hWall[y * cols + x]
+  const vert = dx !== 0
+  const i = vert ? y * (cols + 1) + x + (dx === 1 ? 1 : 0) : (y + (dy === 1 ? 1 : 0)) * cols + x
+  const e = vert ? level.vWall[i] : level.hWall[i]
+  if (e === 3) return doorIsOpen(level, vert ? level.vDoor[i] : level.hDoor[i], sw)
   return e === 0 || (e === 2 && penOpen)
 }
 
@@ -418,9 +503,11 @@ function crosses(px: number, py: number, qx: number, qy: number, s: Seg): boolea
 
 /** Clear line of sight between two points (no wall run in between). The
  * padlock blocks it while `shut`. */
-export function lineOfSight(level: Level, ax: number, ay: number, bx: number, by: number, shut = true): boolean {
+export function lineOfSight(level: Level, ax: number, ay: number, bx: number, by: number, shut = true, sw = 0): boolean {
   for (const s of level.sight) if (crosses(ax, ay, bx, by, s)) return false
   if (shut && level.lock && crosses(ax, ay, bx, by, level.lock.sight)) return false
+  for (let k = 0; k < level.doors.length; k++)
+    if (!doorIsOpen(level, k, sw) && crosses(ax, ay, bx, by, level.doors[k].sight)) return false
   return true
 }
 
@@ -437,13 +524,14 @@ export function seenAt(
   range = CONE_RANGE,
   half = CONE_HALF,
   shut = true,
+  sw = 0,
 ): number {
   const dx = px - g.x
   const dy = py - g.y
   const d = Math.hypot(dx, dy)
   if (d > range) return -1
   if (d > 1e-6 && Math.abs(wrapAngle(Math.atan2(dy, dx) - g.h)) > half) return -1
-  return lineOfSight(level, g.x, g.y, px, py, shut) ? d : -1
+  return lineOfSight(level, g.x, g.y, px, py, shut, sw) ? d : -1
 }
 
 /** Distance along ray (ox,oy)+t·(dx,dy) to the first wall, capped at `max`. */
@@ -455,12 +543,23 @@ export function rayLength(
   dy: number,
   max: number,
   shut = true,
+  sw = 0,
 ): number {
   let best = max
   const n = level.sight.length
-  for (let i = 0; i <= n; i++) {
-    const seg = i < n ? level.sight[i] : shut && level.lock ? level.lock.sight : null
-    if (!seg) break
+  const nd = level.doors.length
+  for (let i = 0; i <= n + nd; i++) {
+    const seg =
+      i < n
+        ? level.sight[i]
+        : i === n
+          ? shut && level.lock
+            ? level.lock.sight
+            : null
+          : doorIsOpen(level, i - n - 1, sw)
+            ? null
+            : level.doors[i - n - 1].sight
+    if (!seg) continue
     const [ax, ay, bx, by] = seg
     const ex = bx - ax
     const ey = by - ay
@@ -475,11 +574,11 @@ export function rayLength(
 
 /** Fill `out` (length n) with ray lengths fanning across the cone — the
  * view draws the wedge from these, clipped by walls exactly like `seenAt`. */
-export function coneRays(level: Level, g: Pose, out: Float32Array, shut = true): Float32Array {
+export function coneRays(level: Level, g: Pose, out: Float32Array, shut = true, sw = 0): Float32Array {
   const n = out.length
   for (let i = 0; i < n; i++) {
     const a = g.h - CONE_HALF + (2 * CONE_HALF * i) / (n - 1)
-    out[i] = rayLength(level, g.x, g.y, Math.cos(a), Math.sin(a), CONE_RANGE, shut)
+    out[i] = rayLength(level, g.x, g.y, Math.cos(a), Math.sin(a), CONE_RANGE, shut, sw)
   }
   return out
 }
@@ -503,6 +602,8 @@ export interface Events {
   heard: number
   /** Easy/Arcade: times part of the line was netted back to its cages. */
   net: number
+  /** Plates pressed (each flips its colour's doors). */
+  plate: number
   /** Arcade: chases started (a catcher's meter filled). */
   chase: number
 }
@@ -557,6 +658,10 @@ export interface RescueState {
   hidden: boolean
   /** The padlock is open: its edge no longer blocks, the pen has joined. */
   penOpen: boolean
+  /** Plate switch bits: bit c flips every door of colour c (`doorIsOpen`). */
+  sw: number
+  /** The dog's current cell (a plate fires on ENTERING its cell). */
+  cell: number
   /** Puppy positions/facings, parallel to `order`. */
   px: number[]
   py: number[]
@@ -600,6 +705,8 @@ export function initialState(level: Level, mode: Mode = 'classic'): RescueState 
     hasKey: false,
     hidden: false,
     penOpen: false,
+    sw: 0,
+    cell: Math.floor(level.start.y) * level.cols + Math.floor(level.start.x),
     px: [],
     py: [],
     ph: [],
@@ -616,7 +723,7 @@ export function initialState(level: Level, mode: Mode = 'classic'): RescueState 
     status: 'ready',
     caughtBy: -1,
     caughtWho: -1,
-    ev: { freed: 0, alert: 0, door: 0, key: 0, unlock: 0, hide: 0, bark: 0, heard: 0, net: 0, chase: 0 },
+    ev: { freed: 0, alert: 0, door: 0, key: 0, unlock: 0, hide: 0, bark: 0, heard: 0, net: 0, chase: 0, plate: 0 },
   }
   level.guards.forEach((g, i) => guardPose(g, 0, s.guards[i]))
   return s
@@ -677,14 +784,24 @@ export function pointBack(
 
 /** Push a circle at (x,y) radius r out of every wall capsule (and the
  * padlock edge while it's `shut`). */
-function resolve(level: Level, p: { x: number; y: number }, r: number, shut: boolean): void {
+function resolve(level: Level, p: { x: number; y: number }, r: number, shut: boolean, sw: number): void {
   const rr = r + WALL_HALF
   const nw = level.walls.length
+  const nd = level.doors.length
   for (let iter = 0; iter < 3; iter++) {
     let moved = false
-    for (let i = 0; i <= nw; i++) {
-      const seg = i < nw ? level.walls[i] : shut && level.lock ? level.lock.seg : null
-      if (!seg) break
+    for (let i = 0; i <= nw + nd; i++) {
+      const seg =
+        i < nw
+          ? level.walls[i]
+          : i === nw
+            ? shut && level.lock
+              ? level.lock.seg
+              : null
+            : doorIsOpen(level, i - nw - 1, sw)
+              ? null
+              : level.doors[i - nw - 1].seg
+      if (!seg) continue
       const [ax, ay, bx, by] = seg
       const ex = bx - ax
       const ey = by - ay
@@ -720,7 +837,15 @@ const scratchB = { x: 0, y: 0, h: 0 }
 /* ------------------------------------------------------------------ bark */
 
 /** Cell path (centres, flat) from cell a to cell b by BFS, or null. */
-function cellPath(level: Level, ax: number, ay: number, bx: number, by: number, penOpen: boolean): number[] | null {
+function cellPath(
+  level: Level,
+  ax: number,
+  ay: number,
+  bx: number,
+  by: number,
+  penOpen: boolean,
+  sw: number,
+): number[] | null {
   const { cols, rows } = level
   const start = ay * cols + ax
   const goal = by * cols + bx
@@ -733,7 +858,7 @@ function cellPath(level: Level, ax: number, ay: number, bx: number, by: number, 
     const x = c % cols
     const y = (c - x) / cols
     for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
-      if (!canStep(level, x, y, dx, dy, penOpen)) continue
+      if (!canStep(level, x, y, dx, dy, penOpen, sw)) continue
       const n = (y + dy) * cols + x + dx
       if (prev[n] !== -2) continue
       prev[n] = c
@@ -772,7 +897,7 @@ export function bark(level: Level, s: RescueState): number {
     const p = s.guards[g]
     const d = Math.hypot(p.x - s.x, p.y - s.y)
     if (d > bestD) continue
-    const path = cellPath(level, Math.floor(p.x), Math.floor(p.y), bx, by, s.penOpen)
+    const path = cellPath(level, Math.floor(p.x), Math.floor(p.y), bx, by, s.penOpen, s.sw)
     if (!path) continue
     best = g
     bestD = d
@@ -850,14 +975,14 @@ function stepGuard(level: Level, s: RescueState, g: number): Pose {
     // the chase is back on. Then home along the shortest way.
     p.h = wrapAngle(L.h0 + Math.sin((L.tt / SEARCH_S) * Math.PI * 3) * (Math.PI / 2))
     p.v = 0
-    if (!s.hidden && seenAt(level, p, s.x, s.y, CONE_RANGE, CONE_HALF, !s.penOpen) >= 0) {
+    if (!s.hidden && seenAt(level, p, s.x, s.y, CONE_RANGE, CONE_HALF, !s.penOpen, s.sw) >= 0) {
       L.mode = 'chase'
       L.lx = s.x
       L.ly = s.y
       L.lh = s.h
       L.lost = false
     } else if (L.tt >= SEARCH_S) {
-      const home = cellPath(level, Math.floor(p.x), Math.floor(p.y), Math.floor(L.ox), Math.floor(L.oy), s.penOpen)
+      const home = cellPath(level, Math.floor(p.x), Math.floor(p.y), Math.floor(L.ox), Math.floor(L.oy), s.penOpen, s.sw)
       L.pts = [...(home ?? []), L.ox, L.oy]
       L.i = 0
       L.mode = 'back'
@@ -916,7 +1041,7 @@ function startChase(s: RescueState, g: number, lx: number, ly: number, lh: numbe
 /** Can a chasing catcher still see the dog? Any direction, within
  * `CHASE_SIGHT`, walls and a bush (standing still) block. */
 const chaseSees = (level: Level, s: RescueState, p: Pose) =>
-  !s.hidden && Math.hypot(s.x - p.x, s.y - p.y) <= CHASE_SIGHT && lineOfSight(level, p.x, p.y, s.x, s.y, !s.penOpen)
+  !s.hidden && Math.hypot(s.x - p.x, s.y - p.y) <= CHASE_SIGHT && lineOfSight(level, p.x, p.y, s.x, s.y, !s.penOpen, s.sw)
 
 /** One chase step: straight at the dog while it's in sight, else through
  * the maze (cell BFS) to where it was last seen, then search. Never passes
@@ -944,7 +1069,7 @@ function stepChase(level: Level, s: RescueState, p: Pose, L: Lure): Pose {
       const d = Math.sin(L.lh)
       const dx = Math.abs(c) >= Math.abs(d) ? Math.sign(c) : 0
       const dy = dx === 0 ? Math.sign(d) : 0
-      if (canStep(level, fx, fy, dx, dy, s.penOpen)) {
+      if (canStep(level, fx, fy, dx, dy, s.penOpen, s.sw)) {
         L.lx = fx + dx + 0.5
         L.ly = fy + dy + 0.5
       }
@@ -964,7 +1089,7 @@ function stepChase(level: Level, s: RescueState, p: Pose, L: Lure): Pose {
   const gx = Math.floor(L.lx)
   const gy = Math.floor(L.ly)
   if (!sees && (cx !== gx || cy !== gy)) {
-    const path = cellPath(level, cx, cy, gx, gy, s.penOpen)
+    const path = cellPath(level, cx, cy, gx, gy, s.penOpen, s.sw)
     if (!path || path.length < 4) {
       L.mode = 'search'
       L.tt = 0
@@ -1032,7 +1157,7 @@ export function step(level: Level, s: RescueState, ix: number, iy: number): void
     for (let k = 0; k < n; k++) {
       scratchP.x += (ix / mag) * (dist / n)
       scratchP.y += (iy / mag) * (dist / n)
-      resolve(level, scratchP, DOG_R, !s.penOpen)
+      resolve(level, scratchP, DOG_R, !s.penOpen, s.sw)
     }
     // Corner assist: mostly-blocked along the main axis → slide toward the
     // cell-centre line of the cross axis, so a turn into a gap just works.
@@ -1045,14 +1170,14 @@ export function step(level: Level, s: RescueState, ix: number, iy: number): void
         const off = c - scratchP.y
         if (Math.abs(off) < ASSIST && Math.abs(off) > 1e-4) {
           scratchP.y += Math.sign(off) * Math.min(Math.abs(off), want)
-          resolve(level, scratchP, DOG_R, !s.penOpen)
+          resolve(level, scratchP, DOG_R, !s.penOpen, s.sw)
         }
       } else {
         const c = Math.floor(scratchP.x) + 0.5
         const off = c - scratchP.x
         if (Math.abs(off) < ASSIST && Math.abs(off) > 1e-4) {
           scratchP.x += Math.sign(off) * Math.min(Math.abs(off), want)
-          resolve(level, scratchP, DOG_R, !s.penOpen)
+          resolve(level, scratchP, DOG_R, !s.penOpen, s.sw)
         }
       }
     }
@@ -1066,6 +1191,17 @@ export function step(level: Level, s: RescueState, ix: number, iy: number): void
   if (Math.hypot(s.x - s.trail[tn - 2], s.y - s.trail[tn - 1]) >= TRAIL_STEP) {
     s.trail.push(s.x, s.y)
     if (s.trail.length > 4000) s.trail.splice(0, 2000)
+  }
+
+  // --- pressure plates: entering a plate's cell flips its colour's doors
+  const cellNow = Math.floor(s.y) * level.cols + Math.floor(s.x)
+  if (cellNow !== s.cell) {
+    s.cell = cellNow
+    const pc = level.plate[cellNow]
+    if (pc >= 0) {
+      s.sw ^= 1 << pc
+      s.ev.plate += 1
+    }
   }
 
   // --- cages
@@ -1155,7 +1291,7 @@ export function step(level: Level, s: RescueState, ix: number, iy: number): void
     // A chasing/searching catcher is past "?" — it doesn't fill the meter.
     if (isAlert(s.lure[g])) continue
     const p = s.guards[g]
-    const d = s.hidden ? -1 : seenAt(level, p, s.x, s.y, CONE_RANGE, CONE_HALF, !s.penOpen)
+    const d = s.hidden ? -1 : seenAt(level, p, s.x, s.y, CONE_RANGE, CONE_HALF, !s.penOpen, s.sw)
     if (d >= 0) {
       seeing |= 1 << g
       if (d < nearest) {
@@ -1165,7 +1301,7 @@ export function step(level: Level, s: RescueState, ix: number, iy: number): void
       }
     }
     for (let j = 0; j < nl; j++) {
-      const dj = seenAt(level, p, s.px[j], s.py[j], CONE_RANGE, CONE_HALF, !s.penOpen)
+      const dj = seenAt(level, p, s.px[j], s.py[j], CONE_RANGE, CONE_HALF, !s.penOpen, s.sw)
       if (dj >= 0) {
         seeing |= 1 << g
         if (dj < nearest) {

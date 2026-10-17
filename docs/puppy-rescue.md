@@ -18,7 +18,8 @@ Round 6 added the **💡 Hint**: a ghost replay of the level's proven 3-star
 route. Then came **colour themes**: five floor/surround sets in ⚙, with
 Sunshine (blue floor on yellow) the new default. Then **pick your dog**:
 six hero coats in ⚙ (two with real markings), and the dog's ground ring and
-the stick knob now follow the theme.
+the stick knob now follow the theme. Round 7 added **doors and pressure
+plates** and a sixth tier, **Doors**, for 30 levels.
 
 ## Decisions (settled with the user before building)
 
@@ -103,6 +104,16 @@ the stick knob now follow the theme.
 | D-2 | The picker | **A row of coat chips in ⚙ next to Theme**, applied live (even mid-run, no restart), saved per card. |
 | D-3 | The violet leftovers | **Follow the theme:** the hero's ground ring takes the theme's deep `strip` shade, and the stick knob a bright per-theme `knob` accent. |
 | defaults | | Ginger stays the default, so existing cards look the same. Rescued puppies keep their own four coats; the hero is bigger and wears the ring. The hint ghost wears your dog. |
+
+### Round 7 decisions (doors and switches)
+
+| # | Question | Decision |
+|---|---|---|
+| R7-1 | What does a plate do? | **Toggle** (the user asked for the recommendation): each step on flips its doors open↔shut, and they stay flipped. Shut doors block movement AND catchers' sight. |
+| R7-2 | Who triggers a plate? | **Only the dog**, once per step on; the puppy line crosses plates harmlessly. |
+| R7-3 | Showing which plate works which door | **Colour-coding plus a symbol**: red ▲, yellow ●, green ■ on plates and door bars. Bars rise when shut and sink to a floor strip when open. |
+| defaults | | A **Doors** tier after Hide (levels 26–30). Doors may start open or shut. Catcher tracks never cross a door, no plate sits beside its own door, and puppies follow the trail through a doorway even after it shuts. The planner carries door bits; the sweep proves each Doors level needs its plates; the new levels get stored hints. |
+| changed in build | Colours | The middle colour was planned as **blue**, but blue plates and doors nearly vanished on the Sunshine and Ocean floors, so it became **yellow** (same ● symbol). Open doors were planned to sink out of sight; they stop at floor level instead, so you can see where they'll shut. |
 
 **Detail I chose myself (not asked):** the door opens once the **first**
 puppy is freed. That way you can't skip a level with 0 puppies and still
@@ -321,6 +332,29 @@ cost of a star.
   - The ⚙ chips paint each coat (spots as dots, a saddle as a split). The
     hero `Dog` is keyed by the dog id so a switch remounts it; the ghost
     look is re-applied if that happens during a hint replay.
+- **Doors and plates (Round 7).** Map chars: a cell `r`/`y`/`g` is a
+  pressure plate; an edge `R`/`Y`/`G` is a door of that colour shut at the
+  start, `r`/`y`/`g` one open at the start.
+  - **Toggle by colour.** `RescueState.sw` holds one bit per colour.
+    Entering a plate's cell (`s.cell` changes to it) flips that colour's
+    bit, so every door of the colour flips (`doorIsOpen(level, k, sw)` =
+    its start state XOR the bit). Standing or shuffling on a plate never
+    re-fires; stepping off and on again does (`ev.plate`).
+  - **A shut door is a wall** for the dog (`resolve`), for `canStep`
+    (grid edge value 3 + `hDoor`/`vDoor` index) and for sight
+    (`lineOfSight`/`seenAt`/`rayLength`/`coneRays` take `sw`), so the cones
+    are clipped by shut doors live. Catcher BFS paths (bark, chase) respect
+    door states when planned; a lure walk already under way doesn't re-plan
+    if a door shuts mid-walk.
+  - **Load-time rules** (`parseLevel` throws): every door has a plate of
+    its colour; no plate sits right beside a door of its own colour (it
+    could slam on the dog); no catcher track crosses a door (tracks stay
+    pure functions of time). Puppies never collide, so they follow the
+    trail through a doorway even after it shuts.
+  - **Look:** a coloured pad with a white ▲/●/■ (`Plate`, it dips while
+    the dog stands on it); a coloured bar with the symbol on both faces
+    (`DoorBar`), raised when shut and sunk to a floor strip when open; a
+    click-clunk sfx on each press.
 - **The clock** (and the catchers) start on the first move. A level always
   opens in the same state, and you get time to read the tip.
 - **The tip** is a slim banner between the level picker and the maze, never
@@ -390,6 +424,13 @@ puzzles ship as a pack). Every level is **proven** escapable with 3 stars:
 - When every catcher is static, nothing depends on the clock, so the search
   is a plain BFS with a global visited set. That takes milliseconds,
   against about a second for patrol levels.
+- **Round 7: doors in the search.** The mask gains three plate bits
+  (`SW`, one per colour). A move INTO a plate's cell flips its bit; the
+  move's samples use the old door state before the edge crossing, the new
+  one after it, and BOTH near it (f in 0.4–0.6), the safe direction.
+  `canStep` and every exposure check take the node's door state.
+  `planLevel(…, noPlates)` freezes the doors, and the sweep proves each
+  Doors level **needs** its plates: all five are unsolvable without.
 - **Round 3: bushes in the search.** A *wait* action in a bush cell hides
   the dog for that whole step; every move sample counts as visible. That
   matches the game, where the frame the dog arrives it's still moving.
@@ -459,6 +500,11 @@ the start.
 | Hide 3 · Two Hedges | `hide:2` | two corridor walkers in a row, two bushes | 19.2 s | 8.4 s |
 | Hide 4 · Garden Pen | `hide:3` | corridor walker + bush; key at the bottom, pen by the door | 16.4 s | 9.2 s |
 | Hide 5 · Hide and Seek | `hide:4` | two walkers, two bushes, cage + key + pen of 4 | 30.4 s | 13.6 s |
+| Doors 1 · First Switch | `doors:0` | red plate opens the red door to the cage; an idle catcher | 4.8 s | 4.8 s |
+| Doors 2 · One Opens, One Shuts | `doors:1` | one yellow plate swaps two yellow doors (right cage first); corridor walker | 12.4 s | 11.2 s |
+| Doors 3 · Close the Door | `doors:2` | a static catcher watches the only crossing; shut the open red door on its sight | 6.4 s | 6.4 s |
+| Doors 4 · Red and Yellow | `doors:3` | red then yellow, two cages, a walker on the yellow door's row | 14.4 s | 13.2 s |
+| Doors 5 · Master Switch | `doors:4` | cage, key behind an open green door, the green plate opens the way up and shuts the way back; walker + sentry | 9.2 s | 9.2 s |
 
 Times are the planner's optimum. A human takes longer.
 
@@ -493,8 +539,10 @@ Times are the planner's optimum. A human takes longer.
     `data-hidden` (still in a bush), `data-bark-cd` (cooldown seconds
     left), `data-lured` (bitmask of catchers drawn by a bark or chasing),
     `data-chasing` (bitmask of catchers chasing or searching), `data-nets`
-    (times the line was netted), `data-hint` (1 while a hint replay runs).
-  - SFX counters: `data-sfx-freed`/`-alert`/`-caught`/`-escape`/`-key`/`-unlock`/`-hide`/`-bark`/`-heard`/`-net`/`-chase`.
+    (times the line was netted), `data-hint` (1 while a hint replay runs),
+    `data-doors` (one char per door in map order: 1 open, 0 shut),
+    `data-plates` (plate presses this run).
+  - SFX counters: `data-sfx-freed`/`-alert`/`-caught`/`-escape`/`-key`/`-unlock`/`-hide`/`-bark`/`-heard`/`-net`/`-chase`/`-plate`.
 - **Hooks:**
   - Controls and readouts: `puppy-level` (NativeSelect; the `<select>` is
     inside), `puppy-count` (`data-pups`/`data-total`), `puppy-settings`,
@@ -524,7 +572,8 @@ Times are the planner's optimum. A human takes longer.
 npm run build && npm run lint
 npm run e2e puppy        # 180-puppy-model (pure + the level sweep), 181-puppy (live),
                          # 182-puppy-modes (pure Easy/Arcade), 183-puppy-modes-ui (live picker),
-                         # 184-puppy-hint (live hint replay), 185-puppy-themes, 186-puppy-dogs
+                         # 184-puppy-hint (live hint replay), 185-puppy-themes, 186-puppy-dogs,
+                         # 187-puppy-doors
 node scripts/gen-puppy-hints.mjs   # after adding/tuning a level: rewrite rescueHints.ts
 ```
 
@@ -561,8 +610,17 @@ Each item names the seam it builds on.
   state in the node.
 - **Treat throw:** throw a treat to a spot instead of barking from where
   you stand (lure at a distance), on the same `lure` seam.
-- **Round 4: waypoint loops, doors and switches.** `loop: true` already
-  works. Doors are edges toggled by a pressure plate.
+- ~~**Doors and switches.**~~ Shipped in Round 7 as toggle plates; see
+  *Doors and plates*. (`loop: true` patrols still work, unused.)
+- **Timed doors:** a plate opens its doors for N seconds (Round 7 option
+  B). The planner has time in its state already; the open question is a
+  door shutting halfway through the puppy line.
+- **Hold plates and pushable crates:** a door open only while something
+  sits on its plate (option C) — a movable object in the sim and in the
+  planner's state.
+- **Catchers that use doors:** a walker whose route passes a door would
+  wait at it while shut. That breaks "a pose is a pure function of time",
+  so it needs the per-catcher clock trick from the Bark lure.
 
 **Modes and settings**
 - ~~**Easy mode.**~~ Shipped in Round 5; see *Modes*.

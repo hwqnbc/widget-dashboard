@@ -14,8 +14,8 @@ import type { RefObject } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { BufferAttribute, BufferGeometry, Color, DoubleSide, Vector3 } from 'three'
 import type { Group, Mesh, MeshBasicMaterial, MeshStandardMaterial, PerspectiveCamera } from 'three'
-import { WALL_HALF, coneRays, doorOpen, isAlert, type Level, type Mode, type RescueState } from './rescueModel'
-import { AlertMark, Blob, Bush, Cage, Catcher, Dog, GoalMarker, GoldKey, Padlock } from './puppyModels'
+import { WALL_HALF, coneRays, doorIsOpen, doorOpen, isAlert, type Level, type Mode, type RescueState } from './rescueModel'
+import { AlertMark, Blob, Bush, Cage, Catcher, Dog, DoorBar, GoalMarker, GoldKey, Padlock, Plate } from './puppyModels'
 import { PUP_COATS, dogById, newAnim, type DogId } from './puppyLook'
 import { themeById, type PuppyTheme, type ThemeId } from './puppyThemes'
 
@@ -236,7 +236,7 @@ function ConeActor({ sim, g }: { sim: RefObject<SimView>; g: number }) {
     const { level, s } = sim.current
     const p = s.guards[g]
     if (!p) return
-    coneRays(level, p, rays, !s.penOpen)
+    coneRays(level, p, rays, !s.penOpen, s.sw)
     const pos = geom.attributes.position as BufferAttribute
     const ox = wx(level, p.x)
     const oz = wz(level, p.y)
@@ -446,6 +446,48 @@ function LockActor({ sim, theme }: { sim: RefObject<SimView>; theme: PuppyTheme 
   )
 }
 
+/** A coloured door: raised while shut; while open it sinks to floor level,
+ * leaving a coloured strip that shows where it will shut. */
+function DoorActor({ sim, k }: { sim: RefObject<SimView>; k: number }) {
+  const ref = useRef<Group>(null)
+  const { level } = sim.current
+  const d = level.doors[k]
+  const shown = useRef(d.open0 ? 0 : 1)
+  useFrame((_, dt) => {
+    const { s } = sim.current
+    const want = doorIsOpen(level, k, s.sw) ? 0 : 1
+    shown.current += (want - shown.current) * (1 - Math.exp(-12 * Math.min(dt, 0.1)))
+    if (ref.current) {
+      ref.current.position.y = (shown.current - 1) * 0.42
+    }
+  })
+  return (
+    <group position={[wx(level, d.x), 0, wz(level, d.y)]}>
+      <group ref={ref}>
+        <DoorBar c={d.c} horiz={d.horiz} />
+      </group>
+    </group>
+  )
+}
+
+/** A pressure plate: dips while the dog stands on it. */
+function PlateActor({ sim, i }: { sim: RefObject<SimView>; i: number }) {
+  const ref = useRef<Group>(null)
+  const { level } = sim.current
+  const pl = level.plates[i]
+  const cell = Math.floor(pl.y) * level.cols + Math.floor(pl.x)
+  useFrame(() => {
+    if (ref.current) ref.current.position.y = sim.current.s.cell === cell ? -0.025 : 0
+  })
+  return (
+    <group position={[wx(level, pl.x), 0, wz(level, pl.y)]}>
+      <group ref={ref}>
+        <Plate c={pl.c} />
+      </group>
+    </group>
+  )
+}
+
 /** The bark: a yellow ring expanding from where the dog barked. */
 function BarkRing({ sim }: { sim: RefObject<SimView> }) {
   const ref = useRef<Mesh>(null)
@@ -496,6 +538,12 @@ export default function PuppyRescue3D({ sim, levelKey, theme: themeId, dog }: Pu
           </group>
         ))}
         <LockActor sim={sim} theme={theme} />
+        {level.plates.map((_, i) => (
+          <PlateActor key={`pl${i}`} sim={sim} i={i} />
+        ))}
+        {level.doors.map((_, k) => (
+          <DoorActor key={`d${k}`} sim={sim} k={k} />
+        ))}
         <KeyActor sim={sim} />
         {[...level.cages, ...level.pen].map((_, i) => (
           <PuppyActor key={`p${i}`} sim={sim} i={i} />

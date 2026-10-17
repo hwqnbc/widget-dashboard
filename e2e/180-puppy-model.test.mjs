@@ -22,6 +22,7 @@ import {
   PEN_GAP,
   canStep,
   decodeRoute,
+  doorIsOpen,
   encodeRoute,
   puppyCount,
   CELL_FRAMES,
@@ -471,6 +472,69 @@ const run = (level, s, ix, iy, frames) => {
   }
 }
 
+// --------------------------------------------- 6g. doors and plates
+{
+  // A red door (shut) across the middle; a red plate below it; a yellow door
+  // open at the start on the right, and a yellow plate. Doors are indexed
+  // horizontal edges first, so red is door 0 and yellow door 1.
+  const L = parseLevel({
+    id: 'doors',
+    tier: 'doors',
+    name: 'doors',
+    map: [
+      '+-+-+E+-+-+',
+      '|C . . . .|',
+      '+ + + + + +',
+      '|. . . .y.|',
+      '+-+-+R+-+-+',
+      '|. . . . .|',
+      '+ + + + + +',
+      '|r . . . y|',
+      '+ + + + + +',
+      '|. . D . .|',
+      '+-+-+-+-+-+',
+    ],
+    guards: [],
+  })
+  check('doors and plates parse (colour, start state, cells)',
+    L.doors.length === 2 && L.doors[0].c === 0 && !L.doors[0].open0 && L.doors[1].c === 1 && L.doors[1].open0 &&
+      L.plates.length === 2 && L.plate[3 * 5 + 0] === 0 && L.plate[3 * 5 + 4] === 1)
+  check('a shut door blocks a step; the open one does not', !canStep(L, 2, 2, 0, -1, false, 0) && canStep(L, 3, 1, 1, 0, false, 0))
+  check('pressing (sw bit) flips both ways: red opens, and the yellow door shuts',
+    canStep(L, 2, 2, 0, -1, false, 1) && doorIsOpen(L, 0, 1) && doorIsOpen(L, 1, 1) && !canStep(L, 3, 1, 1, 0, false, 2))
+  check('a shut door blocks sight, an open one does not', !lineOfSight(L, 2.5, 2.9, 2.5, 1.1, true, 0) && lineOfSight(L, 2.5, 2.9, 2.5, 1.1, true, 1))
+  const s = initialState(L)
+  s.status = 'play'
+  run(L, s, 0, -1, CELL_FRAMES * 3)
+  check('walking into the shut door stops the dog', Math.abs(s.y - (2 + DOG_R + 0.07)) < 1e-6 && s.ev.plate === 0, s.y.toFixed(3))
+  s.x = 1.5
+  s.y = 3.5
+  s.cell = 3 * 5 + 1
+  s.trail = [1.5, 3.5]
+  run(L, s, -1, 0, CELL_FRAMES)
+  check('stepping onto the red plate flips its door: open', s.ev.plate === 1 && s.sw === 1 && doorIsOpen(L, 0, s.sw))
+  run(L, s, 0, 0, 60)
+  run(L, s, 0, 1, 6)
+  run(L, s, 0, -1, 6)
+  check('standing (or shuffling) on it does not flip it again', s.ev.plate === 1 && s.sw === 1)
+  run(L, s, 1, 0, CELL_FRAMES)
+  run(L, s, -1, 0, CELL_FRAMES)
+  check('stepping off and back on flips it again: shut', s.ev.plate === 2 && s.sw === 0 && !doorIsOpen(L, 0, s.sw))
+  const bad = (map, guards = []) => {
+    try {
+      parseLevel({ id: 'bad', tier: 'doors', name: '', map, guards })
+      return false
+    } catch {
+      return true
+    }
+  }
+  const base = ['+-+-+E+-+', '|. . . .|', '+ + + + +', '|. . . .|', '+-+R+-+-+', '|. . . .|', '+ + + + +', '|. D . .|', '+-+-+-+-+']
+  check('a door without a plate of its colour is rejected', bad(base))
+  check('a plate right beside its own door is rejected', bad(base.map((r, i) => (i === 5 ? '|. r . .|' : r))))
+  check('a catcher track crossing a door is rejected',
+    bad(base.map((r, i) => (i === 7 ? '|r D . .|' : r)), [{ path: [[1, 0], [1, 2]] }]))
+}
+
 // ---------------------------------------------------- 6f. the hint codec
 {
   const r = [{ x: 3.5, y: 8.5 }, { until: 10.4 }, { x: 0.5, y: 0.5 }]
@@ -508,6 +572,11 @@ const run = (level, s, ix, iy, frames) => {
     for (let k = 0; k < 60 * 120 && (s.status === 'ready' || s.status === 'play'); k++) {
       const [ix, iy] = routeInput(s, plan.route, c)
       step(L, s, ix, iy)
+    }
+    if (spec.tier === 'doors') {
+      const noPlates = planLevel(L, 90, false, true)
+      check(`${spec.id} genuinely needs its plates`, !noPlates || noPlates.time >= plan.time + 3,
+        noPlates ? `${noPlates.time.toFixed(1)}s with the doors frozen` : 'unsolvable with the doors frozen')
     }
     if (spec.tier === 'hide') {
       const noBush = planLevel(L, 90, true)

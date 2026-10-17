@@ -41,6 +41,7 @@ import {
   STEP,
   bark,
   decodeRoute,
+  doorIsOpen,
   initialState,
   isAlert,
   parseLevel,
@@ -67,6 +68,7 @@ import {
   playFreed,
   playKey,
   playNet,
+  playPlate,
   playRustle,
   playUnlock,
 } from './rescueSounds'
@@ -284,7 +286,7 @@ export default function PuppyRescueWidget({ id }: WidgetProps) {
     let last = performance.now()
     let acc = 0
     let lastPub = 0
-    let seen = { freed: 0, alert: 0, door: 0, key: 0, unlock: 0, hide: 0, bark: 0, heard: 0, net: 0, chase: 0 }
+    let seen = { freed: 0, alert: 0, door: 0, key: 0, unlock: 0, hide: 0, bark: 0, heard: 0, net: 0, chase: 0, plate: 0 }
     let prevPups = 0
     let prevChasing = false
     let lastRing = -1
@@ -361,6 +363,10 @@ export default function PuppyRescueWidget({ id }: WidgetProps) {
         if (sfx) playNet()
         setNetted(Math.max(1, prevPups - s.order.length))
         if (root) root.dataset.sfxNet = String(Number(root.dataset.sfxNet ?? 0) + 1)
+      }
+      if (s.ev.plate !== seen.plate) {
+        if (sfx) playPlate()
+        if (root) root.dataset.sfxPlate = String(Number(root.dataset.sfxPlate ?? 0) + 1)
       }
       if (s.ev.chase !== seen.chase) {
         if (sfx) playChase()
@@ -465,6 +471,9 @@ export default function PuppyRescueWidget({ id }: WidgetProps) {
         ds.chasing = String(s.lure.reduce((m, l, g) => (isAlert(l) ? m | (1 << g) : m), 0))
         ds.nets = String(s.ev.net)
         ds.hint = ghost ? '1' : '0'
+        // One char per door, in map order: 1 open, 0 shut.
+        ds.doors = lv.doors.map((_, k) => (doorIsOpen(lv, k, s.sw) ? '1' : '0')).join('')
+        ds.plates = String(s.ev.plate)
         ds.pen = s.penOpen ? '1' : '0'
         ds.meter = s.meter.toFixed(2)
         ds.spotted = s.spotted ? '1' : '0'

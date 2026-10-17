@@ -75,3 +75,10 @@ export function playChase(): void {
   tone({ freq: 520, dur: 0.08, type: 'square', gain: 0.16, sweepTo: 880 })
   tone({ freq: 880, dur: 0.16, type: 'square', gain: 0.16, sweepTo: 1320, delay: 0.09 })
 }
+
+/** A pressure plate: a soft click, then the doors' heavy clunk. */
+export function playPlate(): void {
+  noise({ dur: 0.04, gain: 0.2, cutoff: 3000 })
+  tone({ freq: 180, dur: 0.18, type: 'square', gain: 0.13, sweepTo: 120, delay: 0.08 })
+  noise({ dur: 0.08, gain: 0.22, cutoff: 900, delay: 0.1 })
+}
