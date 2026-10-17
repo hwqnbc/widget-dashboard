@@ -125,6 +125,7 @@ import { insertIndexFor, nearestOnPath, pathDistanceThresholdMeters } from './ro
 import { nightRing, sunDate } from './terminatorModel'
 import SunControl from './SunControl'
 import PsiTrend from './PsiTrend'
+import WeatherOutlook from './WeatherOutlook'
 import TrafficControl, { TrafficDialog, type TrafficStatus } from './TrafficControl'
 import { fetchTrafficCameras } from './trafficApi'
 import { CCTV_ICON, type TrafficCam } from './trafficModel'
@@ -515,6 +516,7 @@ export default function MapPageBody() {
     title: string
     lines: string[]
     region?: string
+    outlook?: boolean
   } | null>(null)
   const hazeDataRef = useRef(hazeData)
   hazeDataRef.current = hazeData
@@ -1027,6 +1029,7 @@ export default function MapPageBody() {
             setEnvInfo({
               title: area.name,
               lines: [`${forecastEmoji(area.forecast)} ${area.forecast}`, '2-hour forecast (NEA)'],
+              outlook: true,
             })
             return
           }
@@ -1951,6 +1954,7 @@ export default function MapPageBody() {
             </Typography>
           ))}
           {envInfo?.region && <PsiTrend region={envInfo.region} />}
+          {envInfo?.outlook && <WeatherOutlook />}
         </DialogContent>
         <DialogActions>
           <Button data-testid="map-env-close" onClick={() => setEnvInfo(null)}>

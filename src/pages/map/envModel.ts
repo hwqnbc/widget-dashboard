@@ -341,3 +341,83 @@ export const WEATHER_ICONS: Record<WeatherIconKind, string> = {
   ),
   other: svgUri('<circle cx="12.5" cy="12.5" r="5.5" fill="#fbc02d"/>' + CLOUD(5, '#b0bec5')),
 }
+
+/* ---------------------------------------------------------------- outlook */
+
+/** The island-wide next-24-h outlook (`24-hour-weather-forecast` →
+ * `items[0].general`): one forecast string plus temperature / humidity /
+ * wind ranges. Humidity and wind are optional — a row missing them still
+ * shows the forecast + temperature. */
+export interface Outlook24h {
+  forecast: string
+  tempLow: number
+  tempHigh: number
+  humidity?: { low: number; high: number }
+  wind?: { low: number; high: number; direction: string }
+}
+
+const finitePair = (raw: unknown): { low: number; high: number } | undefined => {
+  const p = raw as { low?: unknown; high?: unknown }
+  const low = Number(p?.low)
+  const high = Number(p?.high)
+  return Number.isFinite(low) && Number.isFinite(high) ? { low, high } : undefined
+}
+
+/** Defensive parse of the 24-hour forecast's `general` block; null when the
+ * forecast text or temperature range is missing (nothing worth showing). */
+export function parseOutlook24(json: unknown): Outlook24h | null {
+  const env = json as { items?: { general?: unknown }[] }
+  const g = (Array.isArray(env?.items) ? env.items[0]?.general : undefined) as
+    | {
+        forecast?: unknown
+        temperature?: unknown
+        relative_humidity?: unknown
+        wind?: { speed?: unknown; direction?: unknown }
+      }
+    | undefined
+  const forecast = typeof g?.forecast === 'string' ? g.forecast : ''
+  const temp = finitePair(g?.temperature)
+  if (!forecast || !temp) return null
+  const out: Outlook24h = { forecast, tempLow: temp.low, tempHigh: temp.high }
+  const humidity = finitePair(g?.relative_humidity)
+  if (humidity) out.humidity = humidity
+  const speed = finitePair(g?.wind?.speed)
+  const direction = typeof g?.wind?.direction === 'string' ? g.wind.direction : ''
+  if (speed && direction) out.wind = { ...speed, direction }
+  return out
+}
+
+/** One tile of the 4-day strip. `day` is the short weekday label. */
+export interface DayOutlook {
+  date: string
+  day: string
+  forecast: string
+  tempLow: number
+  tempHigh: number
+}
+
+/** `YYYY-MM-DD` → short weekday label ('Sat'); parsed at local noon so a
+ * timezone offset can never shift the weekday. Unparseable → the raw date. */
+export function dayShort(dateIso: string): string {
+  const d = new Date(`${dateIso}T12:00:00`)
+  return Number.isNaN(d.getTime()) ? dateIso : d.toLocaleDateString('en-US', { weekday: 'short' })
+}
+
+/** Defensive parse of the 4-day forecast (`items[0].forecasts`): rows
+ * missing a date, forecast text or temperature range are skipped; output
+ * sorted by date (the feed is usually ordered, but it's not guaranteed). */
+export function parseOutlook4d(json: unknown): DayOutlook[] {
+  const env = json as { items?: { forecasts?: unknown }[] }
+  const rows = Array.isArray(env?.items) ? env.items[0]?.forecasts : undefined
+  if (!Array.isArray(rows)) return []
+  const out: DayOutlook[] = []
+  for (const raw of rows) {
+    const f = raw as { date?: unknown; forecast?: unknown; temperature?: unknown }
+    const date = typeof f?.date === 'string' ? f.date : ''
+    const forecast = typeof f?.forecast === 'string' ? f.forecast : ''
+    const temp = finitePair(f?.temperature)
+    if (!date || !forecast || !temp) continue
+    out.push({ date, day: dayShort(date), forecast, tempLow: temp.low, tempHigh: temp.high })
+  }
+  return out.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))
+}

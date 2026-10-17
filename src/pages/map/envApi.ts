@@ -2,8 +2,12 @@ import {
   lastHours,
   parseForecast,
   parseHourly,
+  parseOutlook24,
+  parseOutlook4d,
   parsePm25,
   parsePsi,
+  type DayOutlook,
+  type Outlook24h,
   type PsiRegion,
   type TrendPoint,
   type WeatherArea,
@@ -15,6 +19,8 @@ import {
 const PSI_URL = 'https://api.data.gov.sg/v1/environment/psi'
 const PM25_URL = 'https://api.data.gov.sg/v1/environment/pm25'
 const FORECAST_2H_URL = 'https://api.data.gov.sg/v1/environment/2-hour-weather-forecast'
+const FORECAST_24H_URL = 'https://api.data.gov.sg/v1/environment/24-hour-weather-forecast'
+const FORECAST_4D_URL = 'https://api.data.gov.sg/v1/environment/4-day-weather-forecast'
 
 export async function fetchPsi(signal?: AbortSignal): Promise<PsiRegion[]> {
   const res = await fetch(PSI_URL, { signal })
@@ -70,5 +76,42 @@ export async function fetchPsiTrend(region: string, signal?: AbortSignal): Promi
     pm25: lastHours(pm25Days.flatMap((j) => parseHourly(j, 'pm25_one_hourly', region))),
   }
   trendCache.set(region, { at: Date.now(), data })
+  return data
+}
+
+export interface OutlookData {
+  day: Outlook24h | null
+  days: DayOutlook[]
+}
+
+let outlookCache: { at: number; data: OutlookData } | null = null
+
+/**
+ * The island-wide outlook for the weather dialog: the 24-hour forecast's
+ * `general` block + the 4-day strip, fetched in parallel. Each feed fails
+ * soft (a dead 4-day feed still shows the 24-h outlook and vice versa);
+ * cached 10 min — one fetch serves every area's dialog.
+ */
+export async function fetchOutlook(signal?: AbortSignal): Promise<OutlookData> {
+  if (outlookCache && Date.now() - outlookCache.at < TREND_TTL_MS) return outlookCache.data
+  const get = async (url: string) => {
+    const res = await fetch(url, { signal })
+    if (!res.ok) throw new Error(`outlook: HTTP ${res.status}`)
+    return res.json() as Promise<unknown>
+  }
+  const soft = async <T>(work: Promise<T>, empty: T): Promise<T> => {
+    try {
+      return await work
+    } catch (err) {
+      if (signal?.aborted) throw err
+      return empty
+    }
+  }
+  const [day, days] = await Promise.all([
+    soft(get(FORECAST_24H_URL).then(parseOutlook24), null),
+    soft(get(FORECAST_4D_URL).then(parseOutlook4d), [] as DayOutlook[]),
+  ])
+  const data: OutlookData = { day, days }
+  if (day != null || days.length > 0) outlookCache = { at: Date.now(), data }
   return data
 }

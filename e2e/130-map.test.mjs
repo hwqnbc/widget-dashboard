@@ -36,7 +36,10 @@
  *    atlases cannot draw; offline: STRIP toggles fetch once — 5 regions /
  *    3 areas — quick re-toggles don't refetch, the persisted haze toggle
  *    refetches after reload; online: an idle tap — no tool — on the
- *    view-center weather marker opens the forecast dialog, and a tap on
+ *    view-center weather marker opens the forecast dialog with the
+ *    island-wide outlook (24-h general block + sorted 4-day strip from
+ *    their own mocked feeds; pure parseOutlook24/parseOutlook4d units),
+ *    and a tap on
  *    the view-center PSI bubble opens the region dialog with the 24-h
  *    trend sparkline — `?date=` day payloads via date-aware mocks, pure
  *    parseHourly/lastHours/sparklinePath units),
@@ -97,12 +100,15 @@ import {
   updatedLabel,
 } from './.bundle/trafficModel.js'
 import {
+  dayShort,
   forecastEmoji,
   forecastIconKind,
   lastHours,
   mergePm25,
   parseForecast,
   parseHourly,
+  parseOutlook24,
+  parseOutlook4d,
   parsePm25,
   parsePsi,
   psiBand,
@@ -405,6 +411,52 @@ await page.route('**/environment/2-hour-weather-forecast**', (route) => {
     status: 200,
     contentType: 'application/json',
     body: JSON.stringify(forecastFixture()),
+  })
+})
+// Island-wide outlook feeds (the weather dialog's 24-h general block +
+// 4-day strip). The 4-day fixture arrives unsorted with one temperature-less
+// row — the parser must sort and skip.
+const outlook24Fixture = () => ({
+  items: [
+    {
+      general: {
+        forecast: 'Thundery Showers',
+        relative_humidity: { low: 55, high: 95 },
+        temperature: { low: 24, high: 33 },
+        wind: { speed: { low: 10, high: 20 }, direction: 'NE' },
+      },
+    },
+  ],
+})
+const outlook4dFixture = () => ({
+  items: [
+    {
+      forecasts: [
+        { date: '2026-10-20', forecast: 'Morning showers.', temperature: { low: 23, high: 31 } },
+        { date: '2026-10-18', forecast: 'Partly cloudy.', temperature: { low: 24, high: 33 } },
+        { date: '2026-10-21', forecast: 'Afternoon thundery showers.', temperature: { low: 25, high: 34 } },
+        { date: '2026-10-19', forecast: 'Fair (Day).', temperature: { low: 24, high: 32 } },
+        { date: '2026-10-22', forecast: 'No temperature — skipped.' },
+      ],
+    },
+  ],
+})
+let outlook24Calls = 0
+let outlook4dCalls = 0
+await page.route('**/environment/24-hour-weather-forecast**', (route) => {
+  outlook24Calls += 1
+  return route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify(outlook24Fixture()),
+  })
+})
+await page.route('**/environment/4-day-weather-forecast**', (route) => {
+  outlook4dCalls += 1
+  return route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify(outlook4dFixture()),
   })
 })
 
@@ -1095,6 +1147,41 @@ await page.route('**/environment/2-hour-weather-forecast**', (route) => {
       forecastEmoji('Fair (Night)') === '🌙' &&
       forecastEmoji('Fair (Day)') === '☀️' &&
       forecastEmoji('Mystery') === '🌤️',
+  )
+  // Island-wide outlook parsers (24-h general block + 4-day strip).
+  const o24 = parseOutlook24(outlook24Fixture())
+  check(
+    '24-h outlook parse: forecast + temp/humidity/wind ranges',
+    o24?.forecast === 'Thundery Showers' &&
+      o24.tempLow === 24 &&
+      o24.tempHigh === 33 &&
+      o24.humidity?.low === 55 &&
+      o24.humidity?.high === 95 &&
+      o24.wind?.direction === 'NE' &&
+      o24.wind?.high === 20,
+  )
+  check(
+    '24-h outlook parse: junk / temp-less envelopes yield null',
+    parseOutlook24(null) === null &&
+      parseOutlook24({ items: [{}] }) === null &&
+      parseOutlook24({ items: [{ general: { forecast: 'Fair' } }] }) === null,
+  )
+  const days4 = parseOutlook4d(outlook4dFixture())
+  check(
+    '4-day outlook parse: sorts by date, skips temperature-less rows',
+    days4.length === 4 &&
+      days4[0].date === '2026-10-18' &&
+      days4[3].date === '2026-10-21' &&
+      days4[1].forecast === 'Fair (Day).' &&
+      days4[3].tempHigh === 34 &&
+      days4.every((d) => d.day === dayShort(d.date) && d.day.length >= 3),
+  )
+  check(
+    '4-day outlook parse: junk envelopes yield []; dayShort falls back on junk dates',
+    parseOutlook4d(null).length === 0 &&
+      parseOutlook4d({ items: [{}] }).length === 0 &&
+      dayShort('2026-10-18') === 'Sun' &&
+      dayShort('junk') === 'junk',
   )
   // 1-h PM2.5 feed + merge (the PSI feed only carries 24-h values).
   const oneHr = parsePm25(pm25Fixture())
@@ -2847,6 +2934,28 @@ check(
         ((await page.locator('[data-testid="map-env-dialog"]').textContent()) ?? '').includes(
           'Thundery Showers',
         ),
+      )
+      // The dialog also fetches the island-wide outlook (24-h general +
+      // 4-day strip) from its two mocked feeds.
+      await page.waitForFunction(
+        () =>
+          document
+            .querySelector('[data-testid="map-weather-outlook"]')
+            ?.getAttribute('data-status') === 'ready',
+        { timeout: 10000 },
+      )
+      const outlookEl = page.locator('[data-testid="map-weather-outlook"]')
+      const outlookText = (await outlookEl.textContent()) ?? ''
+      check(
+        'weather dialog shows the 24-h outlook + 4-day strip',
+        (await outlookEl.getAttribute('data-days')) === '4' &&
+          outlookText.includes('next 24 h') &&
+          outlookText.includes('24–33 °C') &&
+          outlookText.includes('wind NE 10–20 km/h') &&
+          outlookText.includes('25–34°') &&
+          outlook24Calls === 1 &&
+          outlook4dCalls === 1,
+        `days=${await outlookEl.getAttribute('data-days')} calls=${outlook24Calls}/${outlook4dCalls}`,
       )
       await page.locator('[data-testid="map-env-close"]').click()
       await page.waitForTimeout(500)

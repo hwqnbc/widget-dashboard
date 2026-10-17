@@ -213,7 +213,23 @@ on it works without a backend server or API key.
   `parseHourly` → `lastHours` dedupe, newest 24) gives a rolling window —
   the smooth rolling 24-h PSI drawn solid, the spiky 1-h PM2.5 dashed,
   paths from the pure `sparklinePath` (no chart library) with a per-series now/min/max legend (`seriesStats`) and hourly gridlines + hh:00 labels (`trendTicks` — the "roughly when"), cached 10 min
-  per region in `envApi`. Long-range history (2014→) exists only as
+  per region in `envApi`. A weather tap's dialog likewise loads the
+  **island-wide outlook** (`WeatherOutlook.tsx`, testid
+  `map-weather-outlook` with `data-status`/`data-days`): the 24-hour
+  forecast's `general` block (forecast text + temp / humidity / wind
+  ranges, pure `parseOutlook24` — null without text + temperature) above a
+  **4-day strip** of weekday tiles (emoji + temp range, full forecast as
+  the tile tooltip; pure `parseOutlook4d` sorts by date and skips
+  temperature-less rows, `dayShort` derives the weekday at local noon so a
+  timezone offset can't shift it), from
+  `/v1/environment/24-hour-weather-forecast` and
+  `/v1/environment/4-day-weather-forecast` (same free keyless family).
+  Each feed fails soft — one dead feed still shows the other — and the
+  pair is fetched once and cached 10 min (`fetchOutlook`), island-wide so
+  every area's dialog shares it. There is **no NEA PSI-forecast endpoint**
+  (the haze "outlook" on NEA's site is non-API text) — this weather
+  outlook is the forecast NEA actually publishes.
+  Long-range history (2014→) exists only as
   data.gov.sg CSV datasets — deliberately not pulled by the page. Data is transient; toggling on
   fetches when missing or older than 5 minutes — toggle off/on is the
   refresh gesture. Parsers are defensive (junk → 0 markers, status
@@ -536,10 +552,11 @@ two.
   feed updates ~every 20 s; an interval on the existing `loadTraffic`),
   and other data.gov.sg transport feeds behind the same pattern (carpark
   availability, taxi availability — each is one parser + one layer).
-  ~~Haze PSI~~ and ~~2-hour weather~~ — shipped as overlay switches (see
-  the NEA environment bullet); remaining NEA ideas: 24-hour / 4-day
-  forecasts in the weather dialog, air temperature / rainfall station
-  layers, auto-refresh while a layer is on.
+  ~~Haze PSI~~ and ~~2-hour weather~~ — shipped as overlay switches, and
+  ~~24-hour / 4-day forecasts in the weather dialog~~ — shipped as the
+  dialog's island-wide outlook (see the NEA environment bullet);
+  remaining NEA ideas: air temperature / rainfall station layers,
+  auto-refresh while a layer is on.
 - **Live USGS earthquakes overlay** — `GeoJSONLayer` on the public CORS feed
   (`earthquake.usgs.gov/.../all_day.geojson`), magnitude-scaled renderer +
   popups; toggle in the control strip.
