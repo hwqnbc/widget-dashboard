@@ -21,6 +21,10 @@ import {
   FOLLOW_GAP,
   PEN_GAP,
   canStep,
+  CAM_HALF,
+  CAM_RANGE,
+  camOn,
+  camPose,
   decodeRoute,
   doorIsOpen,
   encodeRoute,
@@ -662,6 +666,126 @@ const run = (level, s, ix, iy, frames) => {
   }
 }
 
+// ------------------------------------------------- 6i. security cameras
+{
+  // A camera on the left wall of (0,3) looking right along row 3; a red
+  // plate at (0,0) switches it. An open 7×7 room.
+  const cam = (extra = {}, guards = []) =>
+    parseLevel({
+      id: 'cam',
+      tier: 'cameras',
+      name: 'cam',
+      map: [
+        '+-+-+-+E+-+-+-+',
+        '|r . . . . . .|',
+        '+ + + + + + + +',
+        '|. . . . . . .|',
+        '+ + + + + + + +',
+        '|. . . . . . .|',
+        '+ + + + + + + +',
+        '|. . . . . . .|',
+        '+ + + + + + + +',
+        '|. . . . . . .|',
+        '+ + + + + + + +',
+        '|C . . . . . .|',
+        '+ + + + + + + +',
+        '|. . . D . . .|',
+        '+-+-+-+-+-+-+-+',
+      ],
+      guards,
+      cameras: [{ cell: [0, 3], facing: 90, colour: 'r', ...extra }],
+    })
+  const L = cam()
+  const c = L.cams[0]
+  check('a camera parses: mounted on the wall behind its cell, colour, on', c.c === 0 && c.on0 && Math.abs(c.mx - 0.12) < 1e-9 && Math.abs(c.my - 3.5) < 1e-9)
+  const pose = { x: c.mx, y: c.my, h: 0, v: 0 }
+  check('its beam is longer than a catcher\'s cone (sees 4.5 cells ahead)', seenAt(L, pose, 4.6, 3.5, CAM_RANGE, CAM_HALF) > CONE_RANGE)
+  check('…and narrower (not 25° off-axis, which a catcher would see)',
+    seenAt(L, pose, c.mx + 3 * Math.cos(0.436), 3.5 + 3 * Math.sin(0.436), CAM_RANGE, CAM_HALF) < 0 &&
+      seenAt(L, pose, c.mx + 3 * Math.cos(0.436), 3.5 + 3 * Math.sin(0.436), CONE_RANGE, CONE_HALF) > 0)
+  check('a plate of its colour switches it off (and back)', camOn(L, 0, 0) && !camOn(L, 0, 1) && camOn(cam({ off: true }), 0, 1))
+  // Classic: in the beam → the meter fills → caught by the camera.
+  {
+    const s = initialState(L)
+    s.status = 'play'
+    s.x = 3.5
+    s.y = 3.5
+    s.cell = 3 * 7 + 3
+    s.trail = [3.5, 3.5]
+    let n = 0
+    while (s.status === 'play' && n++ < 120) step(L, s, 0, 0)
+    check('Classic: standing in the beam fills the meter → caught by the camera',
+      s.status === 'caught' && s.caughtCam === 0 && s.caughtBy === -1 && s.caughtWho === -1)
+  }
+  // No body: walking right through the camera's cell is fine.
+  {
+    const L2 = cam({ facing: 0 }) // looking up at the wall: sees nothing below
+    const s = initialState(L2)
+    s.status = 'play'
+    s.x = 1.5
+    s.y = 3.5
+    s.cell = 3 * 7 + 1
+    s.trail = [1.5, 3.5]
+    run(L2, s, -1, 0, CELL_FRAMES * 2)
+    check('no body: walking under a camera is not a catch', s.status === 'play' && s.x < 0.6)
+  }
+  // Switched off by its plate: no beam, no meter.
+  {
+    const s = initialState(L)
+    s.status = 'play'
+    s.x = 3.5
+    s.y = 3.5
+    s.cell = 3 * 7 + 3
+    s.trail = [3.5, 3.5]
+    s.sw = 1
+    run(L, s, 0, 0, 120)
+    check('switched off: it sees nothing (no meter)', s.status === 'play' && s.camSeeing === 0 && s.meter === 0)
+  }
+  // Easy: a puppy in the beam is netted, not a catch.
+  {
+    const s = initialState(L, 'easy')
+    s.status = 'play'
+    s.freed = [true]
+    s.order = [0]
+    s.x = 3.5
+    s.y = 2.4 // above the beam (row 2)
+    s.cell = 2 * 7 + 3
+    s.trail = [3.5, 3.6, 3.5, 2.4] // the puppy trails down into row 3
+    let n = 0
+    while (s.ev.net === 0 && s.status === 'play' && n++ < 120) step(L, s, 0, 0)
+    check('Easy: the camera spots a puppy → it is netted, no catch', s.ev.net === 1 && s.status === 'play' && s.order.length === 0)
+  }
+  // Arcade: the alarm sends the nearest catcher; with none, the meter resets.
+  {
+    const La = cam({}, [{ path: [[6, 5]], facing: 0 }])
+    const s = initialState(La, 'arcade')
+    s.status = 'play'
+    s.x = 3.5
+    s.y = 3.5
+    s.cell = 3 * 7 + 3
+    s.trail = [3.5, 3.5]
+    let n = 0
+    while (s.ev.chase === 0 && s.status === 'play' && n++ < 120) step(La, s, 0, 0)
+    check('Arcade: a full camera meter sends the nearest catcher to chase', s.ev.chase === 1 && s.lure[0]?.mode === 'chase' && s.status === 'play')
+    const s2 = initialState(L, 'arcade')
+    s2.status = 'play'
+    s2.x = 3.5
+    s2.y = 3.5
+    s2.cell = 3 * 7 + 3
+    s2.trail = [3.5, 3.5]
+    run(L, s2, 0, 0, 120)
+    check('…with no catcher in the level, it is never a catch (the meter just resets)', s2.status === 'play' && s2.ev.chase === 0)
+  }
+  check('a camera wired to a colour with no plate is rejected', (() => {
+    try {
+      parseLevel({ id: 'bad', tier: 'cameras', name: '', map: ['+E+-+', '|. .|', '+ + +', '|D .|', '+-+-+'], guards: [], cameras: [{ cell: [1, 0], facing: 180, colour: 'g' }] })
+      return false
+    } catch {
+      return true
+    }
+  })())
+}
+
 // ---------------------------------------------------- 6f. the hint codec
 {
   const r = [{ x: 3.5, y: 8.5 }, { until: 10.4 }, { x: 0.5, y: 0.5 }]
@@ -687,7 +811,9 @@ const run = (level, s, ix, iy, frames) => {
     const offWalls = spec.guards.every((g) =>
       g.path.every((p, i) => i === 0 || lineOfSight(L, g.path[i - 1][0] + 0.5, g.path[i - 1][1] + 0.5, p[0] + 0.5, p[1] + 0.5)),
     )
-    const startHidden = L.guards.every((tr) => seenAt(L, guardPose(tr, 0, {}), L.start.x, L.start.y) < 0)
+    const startHidden =
+      L.guards.every((tr) => seenAt(L, guardPose(tr, 0, {}), L.start.x, L.start.y) < 0) &&
+      L.cams.every((_, k) => !camOn(L, k, 0) || seenAt(L, camPose(L, k, 0, {}), L.start.x, L.start.y, CAM_RANGE, CAM_HALF) < 0)
     check(`${spec.id} catchers walk clear of walls; the start is unseen`, offWalls && startHidden)
     const plan = planLevel(L)
     if (!plan) {
@@ -700,7 +826,7 @@ const run = (level, s, ix, iy, frames) => {
       const [ix, iy] = routeInput(s, plan.route, c)
       step(L, s, ix, iy)
     }
-    if (spec.tier === 'doors') {
+    if (spec.tier === 'doors' || (spec.tier === 'cameras' && L.plates.length > 0)) {
       const noPlates = planLevel(L, 90, false, true)
       check(`${spec.id} genuinely needs its plates`, !noPlates || noPlates.time >= plan.time + 3,
         noPlates ? `${noPlates.time.toFixed(1)}s with the doors frozen` : 'unsolvable with the doors frozen')

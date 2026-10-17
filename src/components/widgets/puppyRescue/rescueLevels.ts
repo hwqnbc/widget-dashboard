@@ -10,7 +10,7 @@
  */
 import type { LevelSpec, Mode, Tier } from './rescueModel'
 
-export const TIERS: readonly Tier[] = ['sneak', 'patrol', 'sentry', 'key', 'hide', 'doors']
+export const TIERS: readonly Tier[] = ['sneak', 'patrol', 'sentry', 'key', 'hide', 'doors', 'cameras']
 export const TIER_LABEL: Record<Tier, string> = {
   sneak: 'Sneak',
   patrol: 'Patrol',
@@ -18,6 +18,7 @@ export const TIER_LABEL: Record<Tier, string> = {
   key: 'Key & Pen',
   hide: 'Hide',
   doors: 'Doors',
+  cameras: 'Cameras',
 }
 
 export const LEVELS: readonly LevelSpec[] = [
@@ -1004,6 +1005,132 @@ export const LEVELS: readonly LevelSpec[] = [
     guards: [
       { path: [[0, 1], [6, 1]], pause: 0.8 },
       { path: [[0, 4]], facing: 0, sweep: 120 },
+    ],
+  },
+  {
+    id: 'cameras:0',
+    tier: 'cameras',
+    name: "Searchlight",
+    tip: "A camera sweeps the room. Dart under the beam between passes.",
+    map: [
+      '+-+-+E+-+-+',
+      '|. . . . .|',
+      '+ + + + + +',
+      '|. . . . .|',
+      '+ + + + + +',
+      '|. . . . .|',
+      '+ + + + + +',
+      '|C . . . .|',
+      '+ + + + + +',
+      '|. . . . .|',
+      '+ + + + + +',
+      '|. . D . .|',
+      '+-+-+-+-+-+',
+    ],
+    guards: [],
+    cameras: [
+      { cell: [4, 1], facing: 225, sweep: 120, rate: 30, pause: 1.2 },
+    ],
+  },
+  {
+    id: 'cameras:1',
+    tier: 'cameras',
+    name: "Lights Out",
+    tip: "Step on the red plate to switch the red camera off.",
+    map: [
+      '+-+-+E+-+-+',
+      '|. . . . .|',
+      '+-+-+ +-+-+',
+      '|C . . . .|',
+      '+ + + + + +',
+      '|. . . . .|',
+      '+-+-+-+ +-+',
+      '|. . . . .|',
+      '+ + + + + +',
+      '|r . D . .|',
+      '+-+-+-+-+-+',
+    ],
+    guards: [],
+    cameras: [
+      { cell: [4, 1], facing: 270, colour: 'r' },
+    ],
+  },
+  {
+    id: 'cameras:2',
+    tier: 'cameras',
+    name: "Trade-off",
+    tip: "Red switches the camera off — and shuts the red door. Find another way.",
+    map: [
+      '+-+-+-+E+-+-+-+',
+      '|. . . . . . .|',
+      '+-+-+-+ +-+-+-+',
+      '|C . . . . . .|',
+      '+ + + + + + + +',
+      '|. . . . . . .|',
+      '+ +-+-+r+-+-+-+',
+      '|. . . . . . .|',
+      '+ + + + + + + +',
+      '|. r . D . . .|',
+      '+-+-+-+-+-+-+-+',
+    ],
+    guards: [],
+    cameras: [
+      { cell: [6, 1], facing: 270, colour: 'r' },
+    ],
+  },
+  {
+    id: 'cameras:3',
+    tier: 'cameras',
+    name: "Two Beams",
+    tip: "Both cameras must be off to cross. Mind the walker up top.",
+    map: [
+      '+-+-+-+E+-+-+-+',
+      '|. . . . . . .|',
+      '+ + + + + + + +',
+      '|C . . . . . C|',
+      '+-+-+ + + +-+-+',
+      '|. . . . . . .|',
+      '+ + + + + + + +',
+      '|. . . . . . .|',
+      '+ + + + + + + +',
+      '|. . . . . . .|',
+      '+ + + + + + + +',
+      '|r . . D . . y|',
+      '+-+-+-+-+-+-+-+',
+    ],
+    guards: [
+      { path: [[0, 0], [6, 0]], pause: 0.8 },
+    ],
+    cameras: [
+      { cell: [0, 2], facing: 90, colour: 'r' },
+      { cell: [6, 2], facing: 270, colour: 'y' },
+    ],
+  },
+  {
+    id: 'cameras:4',
+    tier: 'cameras',
+    name: "Control Room",
+    tip: "Red opens the exit — and switches the red camera ON. Free the puppy first!",
+    map: [
+      '+-+-+-+E+-+-+-+',
+      '|. . . . . . .|',
+      '+ + + + + + + +',
+      '|. . . . . . .|',
+      '+-+-+-+R+-+-+-+',
+      '|C . . . . . B|',
+      '+ + + + + + + +',
+      '|. . . . . . .|',
+      '+ + + + + + + +',
+      '|. . . . . . .|',
+      '+ + + + + + + +',
+      '|r . . D . . .|',
+      '+-+-+-+-+-+-+-+',
+    ],
+    guards: [
+      { path: [[0, 0], [6, 0]], pause: 0.8 },
+    ],
+    cameras: [
+      { cell: [0, 3], facing: 90, sweep: 60, rate: 30, pause: 1, colour: 'r', off: true },
     ],
   },
   // </levels>

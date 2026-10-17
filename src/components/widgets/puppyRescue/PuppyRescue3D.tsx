@@ -14,8 +14,20 @@ import type { RefObject } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { BufferAttribute, BufferGeometry, Color, DoubleSide, Vector3 } from 'three'
 import type { Group, Mesh, MeshBasicMaterial, MeshStandardMaterial, PerspectiveCamera } from 'three'
-import { WALL_HALF, coneRays, doorIsOpen, doorOpen, isAlert, type Level, type Mode, type RescueState } from './rescueModel'
-import { AlertMark, Blob, Bush, Cage, Catcher, Dog, DoorBar, GoalMarker, GoldKey, Padlock, Plate } from './puppyModels'
+import {
+  CAM_HALF,
+  CAM_RANGE,
+  WALL_HALF,
+  camOn,
+  coneRays,
+  doorIsOpen,
+  doorOpen,
+  isAlert,
+  type Level,
+  type Mode,
+  type RescueState,
+} from './rescueModel'
+import { AlertMark, Blob, Bush, Cage, Catcher, Dog, DoorBar, GoalMarker, GoldKey, Padlock, Plate, SecurityCamera } from './puppyModels'
 import { PUP_COATS, dogById, newAnim, type DogId } from './puppyLook'
 import { themeById, type PuppyTheme, type ThemeId } from './puppyThemes'
 
@@ -43,6 +55,8 @@ const ELEVATION = (62 * Math.PI) / 180
 const RAYS = 33
 const CONE_IDLE = new Color('#ff5c8a')
 const CONE_HOT = new Color('#ff1f3d')
+const BEAM_IDLE = new Color('#d9ccff')
+const BEAM_HOT = new Color('#ff3df0')
 
 /** Map → world. */
 const wx = (level: Level, x: number) => x - level.cols / 2
@@ -259,6 +273,66 @@ function ConeActor({ sim, g }: { sim: RefObject<SimView>; g: number }) {
     <mesh ref={mesh} geometry={geom} renderOrder={1}>
       <meshBasicMaterial color={CONE_IDLE} transparent opacity={0.42} depthWrite={false} side={DoubleSide} />
     </mesh>
+  )
+}
+
+/** A security camera: the bracket and head (yawed to its beam, drooped when
+ * off) and the floor beam, clipped by walls with the detection's own rays,
+ * gone while switched off, hot while it sees someone. */
+function CamActor({ sim, k }: { sim: RefObject<SimView>; k: number }) {
+  const head = useRef<Group>(null)
+  const mesh = useRef<Mesh>(null)
+  const { level } = sim.current
+  const cam = level.cams[k]
+  const rays = useMemo(() => new Float32Array(RAYS), [])
+  const geom = useMemo(() => {
+    const geo = new BufferGeometry()
+    geo.setAttribute('position', new BufferAttribute(new Float32Array((RAYS + 1) * 3), 3))
+    const idx: number[] = []
+    for (let i = 1; i < RAYS; i++) idx.push(0, i + 1, i)
+    geo.setIndex(idx)
+    return geo
+  }, [])
+  const droop = useRef(cam.on0 ? 0 : 1)
+  useFrame((_, dt) => {
+    const { s } = sim.current
+    const p = s.cams[k]
+    if (!p) return
+    const on = camOn(level, k, s.sw)
+    droop.current += ((on ? 0 : 1) - droop.current) * (1 - Math.exp(-10 * Math.min(dt, 0.1)))
+    if (head.current) {
+      head.current.rotation.y = yawOf(p.h)
+      head.current.rotation.x = 0.25 + droop.current * 0.9
+    }
+    if (mesh.current) mesh.current.visible = on
+    if (!on) return
+    coneRays(level, p, rays, !s.penOpen, s.sw, CAM_RANGE, CAM_HALF)
+    const pos = geom.attributes.position as BufferAttribute
+    const ox = wx(level, p.x)
+    const oz = wz(level, p.y)
+    pos.setXYZ(0, ox, 0.014, oz)
+    for (let i = 0; i < RAYS; i++) {
+      const a = p.h - CAM_HALF + 2 * CAM_HALF * (i / (RAYS - 1))
+      pos.setXYZ(i + 1, ox + Math.cos(a) * rays[i], 0.014, oz + Math.sin(a) * rays[i])
+    }
+    pos.needsUpdate = true
+    geom.computeBoundingSphere()
+    const m = mesh.current?.material as MeshBasicMaterial | undefined
+    if (m) {
+      const hot = ((s.camSeeing >> k) & 1) === 1 || (s.status === 'caught' && s.caughtCam === k)
+      m.color.copy(hot ? BEAM_HOT : BEAM_IDLE)
+      m.opacity = hot ? 0.6 : 0.4
+    }
+  })
+  return (
+    <>
+      <group position={[wx(level, cam.mx), 0, wz(level, cam.my)]}>
+        <SecurityCamera c={cam.c} head={head} />
+      </group>
+      <mesh ref={mesh} geometry={geom} renderOrder={1}>
+        <meshBasicMaterial color={BEAM_IDLE} transparent opacity={0.4} depthWrite={false} side={DoubleSide} />
+      </mesh>
+    </>
   )
 }
 
@@ -543,6 +617,9 @@ export default function PuppyRescue3D({ sim, levelKey, theme: themeId, dog }: Pu
         ))}
         {level.doors.map((_, k) => (
           <DoorActor key={`d${k}`} sim={sim} k={k} />
+        ))}
+        {level.cams.map((_, k) => (
+          <CamActor key={`cam${k}`} sim={sim} k={k} />
         ))}
         <KeyActor sim={sim} />
         {[...level.cages, ...level.pen].map((_, i) => (

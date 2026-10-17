@@ -68,6 +68,13 @@ export const CHASE_SPEED = DOG_SPEED * 0.9
 export const CHASE_SIGHT = 5
 export const SEARCH_S = 3
 const CHASE_STOP = 0.8
+/** Security cameras: a longer, narrower beam than a catcher's cone (5
+ * cells, 40° wide), mounted this far back from the cell centre (on the wall
+ * behind it), sweeping at this default rate (°/s). */
+export const CAM_RANGE = 5
+export const CAM_HALF = (20 * Math.PI) / 180
+const CAM_MOUNT = 0.38
+export const CAM_RATE = 40
 /** Sentry defaults: sweep rate (°/s) and the pause at each end (s). */
 export const SWEEP_RATE = 45
 export const SWEEP_PAUSE = 0.6
@@ -94,7 +101,7 @@ const ESCAPE_Y = 0.55
 export type Mode = 'classic' | 'easy' | 'arcade'
 export const MODES: readonly Mode[] = ['classic', 'easy', 'arcade']
 
-export type Tier = 'sneak' | 'patrol' | 'sentry' | 'key' | 'hide' | 'doors'
+export type Tier = 'sneak' | 'patrol' | 'sentry' | 'key' | 'hide' | 'doors' | 'cameras'
 
 /** Plate / door colours, by index: red ▲, yellow ●, green ■. */
 export const DOOR_COLOURS = ['r', 'y', 'g'] as const
@@ -119,6 +126,23 @@ export interface GuardSpec {
   loop?: boolean
 }
 
+/** A security camera: a bodyless sweeping beam (see `CAM_RANGE`). */
+export interface CameraSpec {
+  /** Its cell (it hangs on the wall behind the cell, opposite `facing`). */
+  cell: [number, number]
+  /** Facing in degrees (0 = up the map); with `sweep`, the arc's centre. */
+  facing: number
+  /** Sweep across this arc (total °); omit for a fixed camera. */
+  sweep?: number
+  rate?: number
+  pause?: number
+  phase?: number
+  /** Wired to the plates of this colour (each press flips it on↔off). */
+  colour?: 'r' | 'y' | 'g'
+  /** Starts switched off. */
+  off?: boolean
+}
+
 export interface LevelSpec {
   /** Stable record key, e.g. `sneak:0` — the pack is append-only. */
   id: string
@@ -140,6 +164,7 @@ export interface LevelSpec {
    */
   map: string[]
   guards: GuardSpec[]
+  cameras?: CameraSpec[]
 }
 
 /** A wall run: (x1,y1)→(x2,y2), axis-aligned, merged across cells. */
@@ -198,6 +223,36 @@ export interface Level {
   /** Pressure plates, and `plate[cell]` = colour or -1. */
   plates: { x: number; y: number; c: number }[]
   plate: Int8Array
+  /** Security cameras. */
+  cams: Cam[]
+}
+
+export interface Cam {
+  /** Sweep timeline (a sentry track on the cell centre). */
+  track: GuardTrack
+  /** Colour index wired to it, or -1 (always in its start state). */
+  c: number
+  /** On at the start. */
+  on0: boolean
+  /** The mount point — the beam's origin. */
+  mx: number
+  my: number
+}
+
+/** Is camera k switched on under plate bits `sw`? */
+export const camOn = (level: Level, k: number, sw: number) => {
+  const c = level.cams[k]
+  return c.c < 0 ? c.on0 : c.on0 !== (((sw >> c.c) & 1) === 1)
+}
+
+/** Camera k's beam pose at time t: the mount point, the sweep's heading. */
+export function camPose(level: Level, k: number, t: number, out: Pose): Pose {
+  const c = level.cams[k]
+  guardPose(c.track, t, out)
+  out.x = c.mx
+  out.y = c.my
+  out.v = 0
+  return out
 }
 
 export interface Door {
@@ -360,6 +415,20 @@ export function parseLevel(spec: LevelSpec): Level {
       if (beside) throw new Error(`${spec.id}: a ${DOOR_COLOURS[d.c]} plate sits beside its own door`)
     }
   }
+  const cams: Cam[] = (spec.cameras ?? []).map((cs) => {
+    const [x, y] = cs.cell
+    if (x < 0 || y < 0 || x >= cols || y >= rows) throw new Error(`${spec.id}: a camera is off the map`)
+    const c = cs.colour ? DOOR_COLOURS.indexOf(cs.colour) : -1
+    if (c >= 0 && !plates.some((pl) => pl.c === c)) throw new Error(`${spec.id}: a ${cs.colour} camera has no plate`)
+    const h = facingToRad(cs.facing)
+    return {
+      track: buildTrack({ path: [cs.cell], facing: cs.facing, sweep: cs.sweep, sweepRate: cs.rate ?? CAM_RATE, pause: cs.pause, phase: cs.phase }),
+      c,
+      on0: !cs.off,
+      mx: x + 0.5 - Math.cos(h) * CAM_MOUNT,
+      my: y + 0.5 - Math.sin(h) * CAM_MOUNT,
+    }
+  })
   for (const g of spec.guards)
     for (let i = 1; i < g.path.length + (g.loop ? 1 : 0); i++) {
       const [ax, ay] = g.path[i - 1]
@@ -390,6 +459,7 @@ export function parseLevel(spec: LevelSpec): Level {
     vDoor,
     plates,
     plate,
+    cams,
   }
 }
 
@@ -574,11 +644,19 @@ export function rayLength(
 
 /** Fill `out` (length n) with ray lengths fanning across the cone — the
  * view draws the wedge from these, clipped by walls exactly like `seenAt`. */
-export function coneRays(level: Level, g: Pose, out: Float32Array, shut = true, sw = 0): Float32Array {
+export function coneRays(
+  level: Level,
+  g: Pose,
+  out: Float32Array,
+  shut = true,
+  sw = 0,
+  range = CONE_RANGE,
+  half = CONE_HALF,
+): Float32Array {
   const n = out.length
   for (let i = 0; i < n; i++) {
-    const a = g.h - CONE_HALF + (2 * CONE_HALF * i) / (n - 1)
-    out[i] = rayLength(level, g.x, g.y, Math.cos(a), Math.sin(a), CONE_RANGE, shut, sw)
+    const a = g.h - half + (2 * half * i) / (n - 1)
+    out[i] = rayLength(level, g.x, g.y, Math.cos(a), Math.sin(a), range, shut, sw)
   }
   return out
 }
@@ -681,6 +759,10 @@ export interface RescueState {
   barkY: number
   /** Bit i set: catcher i sees someone this frame. */
   seeing: number
+  /** Camera beam poses (mount point + heading), and bit k set: camera k
+   * sees someone this frame. */
+  cams: Pose[]
+  camSeeing: number
   /** "?" meter 0..1; 1 = caught. */
   meter: number
   /** The meter ever started filling (costs the "never spotted" star). */
@@ -690,6 +772,8 @@ export interface RescueState {
    * otherwise the index into the puppy line. */
   caughtBy: number
   caughtWho: number
+  /** The camera that made the catch (-1 none — then `caughtBy` says who). */
+  caughtCam: number
   ev: Events
 }
 
@@ -721,14 +805,18 @@ export function initialState(level: Level, mode: Mode = 'classic'): RescueState 
     barkX: 0,
     barkY: 0,
     seeing: 0,
+    cams: level.cams.map(() => ({ x: 0, y: 0, h: 0, v: 0 })),
+    camSeeing: 0,
     meter: 0,
     spotted: false,
     status: 'ready',
     caughtBy: -1,
     caughtWho: -1,
+    caughtCam: -1,
     ev: { freed: 0, alert: 0, door: 0, key: 0, unlock: 0, hide: 0, bark: 0, heard: 0, net: 0, chase: 0, plate: 0 },
   }
   level.guards.forEach((g, i) => guardPose(g, 0, s.guards[i]))
+  level.cams.forEach((_, k) => camPose(level, k, 0, s.cams[k]))
   return s
 }
 
@@ -1361,6 +1449,42 @@ export function step(level: Level, s: RescueState, ix: number, iy: number): void
     }
   }
   s.seeing = seeing
+  // Meter fill time for the most urgent sighting (near fills faster). With
+  // catchers only this is exactly the old nearest-distance fill.
+  const fillFor = (d: number, range: number) => FILL_NEAR + (FILL_FAR - FILL_NEAR) * Math.min(1, d / range)
+  let fill = seeing ? fillFor(nearest, CONE_RANGE) : Infinity
+  // --- security cameras: bodyless beams, on/off by plate colour
+  let camSeeing = 0
+  let camBy = -1
+  for (let k = 0; k < level.cams.length; k++) {
+    const p = camPose(level, k, s.t, s.cams[k])
+    if (!camOn(level, k, s.sw)) continue
+    const d = s.hidden ? -1 : seenAt(level, p, s.x, s.y, CAM_RANGE, CAM_HALF, !s.penOpen, s.sw)
+    if (d >= 0) {
+      camSeeing |= 1 << k
+      const f = fillFor(d, CAM_RANGE)
+      if (f < fill) {
+        fill = f
+        who = -1
+        by = -1
+        camBy = k
+      }
+    }
+    for (let j = 0; j < nl; j++) {
+      const dj = seenAt(level, p, s.px[j], s.py[j], CAM_RANGE, CAM_HALF, !s.penOpen, s.sw)
+      if (dj >= 0) {
+        camSeeing |= 1 << k
+        const f = fillFor(dj, CAM_RANGE)
+        if (f < fill) {
+          fill = f
+          who = j
+          by = -1
+          camBy = k
+        }
+      }
+    }
+  }
+  s.camSeeing = camSeeing
   if (bump >= 0) {
     s.meter = 1
     s.spotted = true
@@ -1369,15 +1493,29 @@ export function step(level: Level, s: RescueState, ix: number, iy: number): void
     s.caughtWho = -1
     return
   }
-  if (seeing) {
+  if (seeing || camSeeing) {
     if (s.meter === 0) s.ev.alert += 1
     s.spotted = true
-    const fill = FILL_NEAR + (FILL_FAR - FILL_NEAR) * Math.min(1, nearest / CONE_RANGE)
     s.meter = Math.min(1, s.meter + STEP / fill)
     if (s.meter >= 1) {
       if (s.mode === 'arcade') {
-        // "!" — that catcher gives chase; the meter is free for the others.
-        startChase(s, by, who < 0 ? s.x : s.px[who], who < 0 ? s.y : s.py[who], who < 0 ? s.h : s.ph[who])
+        // "!" — that catcher gives chase (a camera's alarm sends the nearest
+        // free catcher to the spot); the meter is free for the others.
+        const sx = who < 0 ? s.x : s.px[who]
+        const sy = who < 0 ? s.y : s.py[who]
+        let chaser = by
+        if (camBy >= 0) {
+          let best = Infinity
+          for (let g = 0; g < level.guards.length; g++) {
+            if (isAlert(s.lure[g])) continue
+            const dg = Math.hypot(s.guards[g].x - sx, s.guards[g].y - sy)
+            if (dg < best) {
+              best = dg
+              chaser = g
+            }
+          }
+        }
+        if (chaser >= 0) startChase(s, chaser, sx, sy, who < 0 ? s.h : s.ph[who])
         s.meter = 0
       } else if (s.mode === 'easy' && who >= 0) {
         netFrom(level, s, who)
@@ -1386,6 +1524,7 @@ export function step(level: Level, s: RescueState, ix: number, iy: number): void
         s.status = 'caught'
         s.caughtBy = by
         s.caughtWho = who
+        s.caughtCam = camBy
         return
       }
     }

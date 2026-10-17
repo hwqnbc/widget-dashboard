@@ -17,12 +17,16 @@
 import {
   BUMP_R,
   CAGE_R,
+  CAM_HALF,
+  CAM_RANGE,
   CELL_FRAMES,
   CONE_HALF,
   CONE_RANGE,
   KEY_R,
   LOCK_R,
   STEP,
+  camOn,
+  camPose,
   canStep,
   gapOf,
   guardPose,
@@ -72,7 +76,25 @@ export interface Plan {
 }
 
 /** Seen by any catcher (inflated), as the planner judges it. */
-function exposed(level: Level, poses: Pose[], x: number, y: number, shut: boolean, sw: number): boolean {
+function exposed(level: Level, poses: Pose[], x: number, y: number, shut: boolean, sw: number, cams: Pose[]): boolean {
+  // Cameras: the same inflated test against their longer, narrower beams.
+  if (cams.length) {
+    const CR = CAM_RANGE + M_RANGE
+    const CH = CAM_HALF + M_HALF
+    for (let k = 0; k < cams.length; k++) {
+      if (!camOn(level, k, sw)) continue
+      const p = cams[k]
+      if (Math.hypot(x - p.x, y - p.y) - M_BODY > CR) continue
+      if (
+        seenAt(level, p, x, y, CR, CH, shut, sw) >= 0 ||
+        seenAt(level, p, x + M_BODY, y, CR, CH, shut, sw) >= 0 ||
+        seenAt(level, p, x - M_BODY, y, CR, CH, shut, sw) >= 0 ||
+        seenAt(level, p, x, y + M_BODY, CR, CH, shut, sw) >= 0 ||
+        seenAt(level, p, x, y - M_BODY, CR, CH, shut, sw) >= 0
+      )
+        return true
+    }
+  }
   const R = CONE_RANGE + M_RANGE
   const H = CONE_HALF + M_HALF
   for (const p of poses) {
@@ -119,6 +141,9 @@ export function planLevel(level: Level, maxTime = 90, noHide = false, noPlates =
   const poseBuf: Pose[][] = Array.from({ length: SAMPLES + 1 }, () =>
     guards.map(() => ({ x: 0, y: 0, h: 0, v: 0 })),
   )
+  const camBuf: Pose[][] = Array.from({ length: SAMPLES + 1 }, () =>
+    level.cams.map(() => ({ x: 0, y: 0, h: 0, v: 0 })),
+  )
   const trail: number[] = []
   const pb = { x: 0, y: 0, h: 0 }
 
@@ -140,7 +165,7 @@ export function planLevel(level: Level, maxTime = 90, noHide = false, noPlates =
 
   // All catchers static: nothing depends on the clock, so a state reached
   // once never needs revisiting (the search becomes a plain BFS).
-  const timeless = guards.every((g) => g.legs.length === 1)
+  const timeless = guards.every((g) => g.legs.length === 1) && level.cams.every((c) => c.track.legs.length === 1)
   const visited = new Set<number>()
   let layer = new Map<number, Node>()
   layer.set(startCell * space, { cell: startCell, mask: 0, ord: [], parent: null, act: 4 })
@@ -148,8 +173,10 @@ export function planLevel(level: Level, maxTime = 90, noHide = false, noPlates =
   const maxK = Math.ceil(maxTime / TAU)
   for (let k = 0; k < maxK; k++) {
     const t0 = k * TAU
-    for (let i = 0; i <= SAMPLES; i++)
+    for (let i = 0; i <= SAMPLES; i++) {
       guards.forEach((g, gi) => guardPose(g, t0 + (i / SAMPLES) * TAU, poseBuf[i][gi]))
+      level.cams.forEach((_, ci) => camPose(level, ci, t0 + (i / SAMPLES) * TAU, camBuf[i][ci]))
+    }
     const next = new Map<number, Node>()
     for (const node of layer.values()) {
       const x0 = node.cell % cols
@@ -200,11 +227,12 @@ export function planLevel(level: Level, maxTime = 90, noHide = false, noPlates =
           }
           const shut = !(mask & PEN)
           const poses = poseBuf[i]
+          const camPoses = camBuf[i]
           // Door state at this sample: before the press, after it, or (near
           // the edge crossing) both — whichever is seen counts.
           const sws = sw1 === sw0 ? [sw0] : f < 0.4 ? [sw0] : f > 0.6 ? [sw1] : [sw0, sw1]
           for (const p of poses) if (Math.hypot(x - p.x, y - p.y) < BUMP_R + M_BUMP) ok = false
-          if (!ok || (!dogHidden && sws.some((w) => exposed(level, poses, x, y, shut, w)))) {
+          if (!ok || (!dogHidden && sws.some((w) => exposed(level, poses, x, y, shut, w, camPoses)))) {
             ok = false
             break
           }
@@ -212,7 +240,7 @@ export function planLevel(level: Level, maxTime = 90, noHide = false, noPlates =
           for (let j = 0; j < ord.length; j++) {
             back += gapOf(level, ord[j])
             pointBack(trail, trail.length, x, y, back, pb)
-            if (sws.some((w) => exposed(level, poses, pb.x, pb.y, shut, w))) {
+            if (sws.some((w) => exposed(level, poses, pb.x, pb.y, shut, w, camPoses))) {
               ok = false
               break
             }

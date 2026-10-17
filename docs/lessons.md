@@ -2544,3 +2544,14 @@ carried over; these are the new ones.
     WAITS when no path exists, which also turned a bug into a mechanic
     (trapping). When a world gains mutable obstacles, audit every cached
     path and walk, not just the planner.
+
+170. **Safety margins don't scale: a fixed margin eats a narrow sensor
+    alive, so search parameters instead of hand-tuning.** Puppy Rescue's
+    planner inflates every cone by +4° and +0.3 cells. On a catcher's
+    37.5° cone that is ~10 %; on a camera's 20° beam it is 20 %, so the
+    sweep gaps a player can actually use vanished for the planner and
+    every hand-placed sweeping camera came out "unsolvable". A small grid
+    (cell × facing × sweep × rate × pause, each run through the real
+    planner) found settings that are tight but provable in seconds. When a
+    proof margin is absolute, check what fraction of each new hazard it
+    takes.

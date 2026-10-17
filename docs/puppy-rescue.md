@@ -19,7 +19,8 @@ route. Then came **colour themes**: five floor/surround sets in ⚙, with
 Sunshine (blue floor on yellow) the new default. Then **pick your dog**:
 six hero coats in ⚙ (two with real markings), and the dog's ground ring and
 the stick knob now follow the theme. Round 7 added **doors and pressure
-plates** and a sixth tier, **Doors**, for 30 levels.
+plates** and a sixth tier, **Doors**, for 30 levels. Round 8 added
+**security cameras** and a seventh tier, **Cameras**, for 35 levels.
 
 ## Decisions (settled with the user before building)
 
@@ -121,6 +122,15 @@ plates** and a sixth tier, **Doors**, for 30 levels.
 |---|---|---|
 | F-1 | A door shuts across a lured or chasing catcher's way | **Re-route, or wait at the door if there's no other way** (trapped until it opens, then home and back on its route exactly). |
 | defaults | | It re-checks at each doorway and sets off the instant a way opens; one mid-doorway finishes stepping through; it applies to every off-route walk (bark go/back, chase, homing); a trapped catcher still sees and catches; hint replays and proofs are unaffected (they never bark or chase). |
+
+### Round 8 decisions (security cameras)
+
+| # | Question | Decision |
+|---|---|---|
+| R8-1 | Seen by a camera | **Like a catcher's cone:** the same "?" meter, with the mode's usual result (Classic caught, Easy a puppy netted, Arcade the nearest catcher chases to the spot). |
+| R8-2 | Plates | **The same toggle as doors, shared by colour:** a plate flips every door AND camera of its colour, on↔off. |
+| R8-3 | Cone shape | **Longer and narrower** than a catcher's (5 cells, 40°), a steady sweep, a pale violet beam, gone while switched off. |
+| defaults | | A **Cameras** tier after Doors (levels 31–35). A camera hangs on the wall behind its cell, may start on or off, wears its colour band + symbol (none = always on); no body; walls and shut doors block it; barks don't touch it. Arcade with no catcher: the meter just resets. Proven 3★ with stored hints, and every Cameras level with plates must need them. |
 
 **Detail I chose myself (not asked):** the door opens once the **first**
 puppy is freed. That way you can't skip a level with 0 puppies and still
@@ -372,6 +382,30 @@ cost of a star.
     the dog stands on it); a coloured bar with the symbol on both faces
     (`DoorBar`), raised when shut and sunk to a floor strip when open; a
     click-clunk sfx on each press.
+- **Security cameras (Round 8).** `LevelSpec.cameras`: `{ cell, facing,
+  sweep?, rate?, pause?, phase?, colour?, off? }`. Parsed into `Level.cams`
+  (a sentry `GuardTrack` on the cell, a colour index or -1, the start state,
+  and a mount point `CAM_MOUNT` 0.38 back from the cell centre, against the
+  wall behind it).
+  - **Beam:** `CAM_RANGE` 5, `CAM_HALF` 20° (a catcher: 3.5, 37.5°),
+    default sweep `CAM_RATE` 40°/s. `camPose(level, k, t)` is a pure
+    function of the GAME clock (cameras are never lured), so the planner
+    and the sim agree.
+  - **Switching:** `camOn(level, k, sw)` = start state XOR its colour's
+    plate bit (always the start state when uncoloured), the same bits as
+    doors.
+  - **Detection:** after the catchers, each live camera tests the dog (not
+    when hidden in a bush) and every puppy with `seenAt(…, CAM_RANGE,
+    CAM_HALF)`; walls and shut doors block. All sightings feed ONE meter,
+    filled at the most urgent sighting's rate (`fillFor(d, range)`, near
+    fills faster), which with catchers alone is exactly the old fill, so
+    every earlier proof stands. `s.camSeeing` bits, `s.caughtCam` on a
+    camera catch ("A camera spotted you."). Arcade: the alarm sends the
+    nearest catcher that isn't already chasing; with none, the meter resets.
+  - **Look:** a white camera head on a wall bracket (`SecurityCamera`),
+    yawed to the beam, drooping when off, with its colour band and symbol;
+    the beam a pale violet wedge (hot pink while it sees someone), clipped
+    by the same rays as detection (`coneRays` takes a range and half-angle).
 - **The clock** (and the catchers) start on the first move. A level always
   opens in the same state, and you get time to read the tip.
 - **The tip** is a slim banner between the level picker and the maze, never
@@ -441,6 +475,13 @@ puzzles ship as a pack). Every level is **proven** escapable with 3 stars:
 - When every catcher is static, nothing depends on the clock, so the search
   is a plain BFS with a global visited set. That takes milliseconds,
   against about a second for patrol levels.
+- **Round 8: cameras in the search.** `exposed` also tests every live
+  camera (per the node's plate bits) with the same margins (+0.3 range,
+  +4°, body points) against its beam at each sample time; a level with a
+  sweeping camera is never `timeless`. A fixed +4° is proportionally much
+  bigger on a 20° beam than on a 37.5° cone, so the first sweeping-camera
+  drafts were unsolvable; a parameter grid (cell × facing × sweep × rate ×
+  pause) found tight but provable settings for Searchlight.
 - **Round 7: doors in the search.** The mask gains three plate bits
   (`SW`, one per colour). A move INTO a plate's cell flips its bit; the
   move's samples use the old door state before the edge crossing, the new
@@ -522,6 +563,11 @@ the start.
 | Doors 3 · Close the Door | `doors:2` | a static catcher watches the only crossing; shut the open red door on its sight | 6.4 s | 6.4 s |
 | Doors 4 · Red and Yellow | `doors:3` | red then yellow, two cages, a walker on the yellow door's row | 14.4 s | 13.2 s |
 | Doors 5 · Master Switch | `doors:4` | cage, key behind an open green door, the green plate opens the way up and shuts the way back; walker + sentry | 9.2 s | 9.2 s |
+| Cameras 1 · Searchlight | `cameras:0` | one always-on camera sweeping 120° at 30°/s over the room — pure timing | 10.4 s | 3.6 s (no camera) |
+| Cameras 2 · Lights Out | `cameras:1` | a red camera watches the cage row; the red plate switches it off | 5.6 s | 5.6 s |
+| Cameras 3 · Trade-off | `cameras:2` | red kills the camera AND shuts the red shortcut door — take the long way | 4.0 s | 4.0 s |
+| Cameras 4 · Two Beams | `cameras:3` | red + yellow cameras sweep the crossing row; both plates first; a walker up top | 12.8 s | 10.8 s |
+| Cameras 5 · Control Room | `cameras:4` | the red plate opens the exit but switches a sweeping camera ON — free the puppy first; a walker | 9.2 s | 9.2 s |
 
 Times are the planner's optimum. A human takes longer.
 
@@ -559,7 +605,8 @@ Times are the planner's optimum. A human takes longer.
     (times the line was netted), `data-hint` (1 while a hint replay runs),
     `data-doors` (one char per door in map order: 1 open, 0 shut),
     `data-plates` (plate presses this run), `data-trapped` (bitmask of
-    catchers waiting at a shut door).
+    catchers waiting at a shut door), `data-cams` (one char per camera: 1
+    on, 0 off), `data-cam-seeing` (bitmask of cameras seeing someone).
   - SFX counters: `data-sfx-freed`/`-alert`/`-caught`/`-escape`/`-key`/`-unlock`/`-hide`/`-bark`/`-heard`/`-net`/`-chase`/`-plate`.
 - **Hooks:**
   - Controls and readouts: `puppy-level` (NativeSelect; the `<select>` is
@@ -591,7 +638,7 @@ npm run build && npm run lint
 npm run e2e puppy        # 180-puppy-model (pure + the level sweep), 181-puppy (live),
                          # 182-puppy-modes (pure Easy/Arcade), 183-puppy-modes-ui (live picker),
                          # 184-puppy-hint (live hint replay), 185-puppy-themes, 186-puppy-dogs,
-                         # 187-puppy-doors
+                         # 187-puppy-doors, 188-puppy-cameras
 node scripts/gen-puppy-hints.mjs   # after adding/tuning a level: rewrite rescueHints.ts
 ```
 
@@ -662,8 +709,15 @@ Each item names the seam it builds on.
   indicators.
 
 **Enemies and obstacles**
-- **Security cameras:** static sweeping cones that raise an alarm, making
-  every catcher look toward the camera.
+- ~~**Security cameras.**~~ Shipped in Round 8 (cone-like, plate-switched);
+  see *Security cameras*.
+- **Camera alarm mode** (Round 8 option B): a full camera meter makes every
+  catcher turn to the spot for a few seconds instead of a catch — needs the
+  per-catcher clock trick, so those levels would be play-tested only.
+- **Cameras on rails:** a camera sliding along a wall (a walking track for
+  the mount point) — still a pure function of time, so still provable.
+- **Laser tripwires:** a thin always-on beam across a corridor, switched by
+  plates like cameras.
 - **Guard dog:** hears you within a radius, through walls, while you move.
 - **Searchlights:** a moving circle instead of a cone.
 - **Animal-control van:** scenery by the entrance, maybe a timed sweep

@@ -8,7 +8,7 @@
  *
  * Lives in the lazy 3D chunk — never import this from the widget shell.
  */
-import { useRef } from 'react'
+import { useRef, type Ref } from 'react'
 import { useFrame } from '@react-three/fiber'
 import type { Group, Mesh } from 'three'
 import { DoubleSide } from 'three'
@@ -471,6 +471,42 @@ export function DoorBar({ c, horiz }: { c: number; horiz: boolean }) {
       </group>
       <group position={[0, 0.24, -0.052]} rotation={[0, Math.PI, 0]}>
         <DoorSymbol c={c} />
+      </group>
+    </group>
+  )
+}
+
+/** A security camera on a wall bracket, lens toward +Z. `c`: its plate
+ * colour (a band + symbol), or -1 for an always-on camera. The scene yaws
+ * the head to the beam and droops it when switched off. */
+export function SecurityCamera({ c, head }: { c: number; head: Ref<Group> }) {
+  return (
+    <group>
+      {/* bracket post */}
+      <mesh position={[0, 0.3, -0.05]}>
+        <boxGeometry args={[0.06, 0.6, 0.06]} />
+        <meshStandardMaterial color="#5b6170" roughness={0.7} />
+      </mesh>
+      <group ref={head} position={[0, 0.62, 0]}>
+        <mesh position={[0, 0, 0.05]}>
+          <boxGeometry args={[0.18, 0.15, 0.3]} />
+          <meshStandardMaterial color="#eceef2" roughness={0.6} />
+        </mesh>
+        <mesh position={[0, 0, 0.21]} rotation={[Math.PI / 2, 0, 0]}>
+          <cylinderGeometry args={[0.06, 0.07, 0.05, 14]} />
+          <meshStandardMaterial color="#2b2f3a" roughness={0.4} />
+        </mesh>
+        {c >= 0 && (
+          <>
+            <mesh position={[0, 0.081, 0.05]}>
+              <boxGeometry args={[0.185, 0.012, 0.3]} />
+              <meshStandardMaterial color={DOOR_HEX[c]} roughness={0.6} />
+            </mesh>
+            <group position={[0, 0.089, 0.05]} rotation={[-Math.PI / 2, 0, 0]}>
+              <DoorSymbol c={c} r={0.05} />
+            </group>
+          </>
+        )}
       </group>
     </group>
   )

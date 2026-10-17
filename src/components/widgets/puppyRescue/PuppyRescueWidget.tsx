@@ -40,6 +40,7 @@ import {
   MODES,
   STEP,
   bark,
+  camOn,
   decodeRoute,
   doorIsOpen,
   initialState,
@@ -188,6 +189,7 @@ export default function PuppyRescueWidget({ id }: WidgetProps) {
   const [hasKey, setHasKey] = useState(false)
   const [hidden, setHidden] = useState(false)
   const [caughtWho, setCaughtWho] = useState(-1)
+  const [caughtCam, setCaughtCam] = useState(false)
   const [result, setResult] = useState<Result | null>(null)
   const [menuEl, setMenuEl] = useState<HTMLElement | null>(null)
   const [resetConfirm, setResetConfirm] = useState(false)
@@ -435,6 +437,7 @@ export default function PuppyRescueWidget({ id }: WidgetProps) {
         setStatus(s.status)
         if (s.status === 'caught') {
           setCaughtWho(s.caughtWho)
+          setCaughtCam(s.caughtCam >= 0)
           if (sfx) playCaught()
           if (root) root.dataset.sfxCaught = String(Number(root.dataset.sfxCaught ?? 0) + 1)
         } else if (s.status === 'escaped') {
@@ -475,6 +478,9 @@ export default function PuppyRescueWidget({ id }: WidgetProps) {
         // One char per door, in map order: 1 open, 0 shut.
         ds.doors = lv.doors.map((_, k) => (doorIsOpen(lv, k, s.sw) ? '1' : '0')).join('')
         ds.plates = String(s.ev.plate)
+        // One char per camera: 1 on, 0 off; and which see someone.
+        ds.cams = lv.cams.map((_, k) => (camOn(lv, k, s.sw) ? '1' : '0')).join('')
+        ds.camSeeing = String(s.camSeeing)
         ds.pen = s.penOpen ? '1' : '0'
         ds.meter = s.meter.toFixed(2)
         ds.spotted = s.spotted ? '1' : '0'
@@ -780,7 +786,11 @@ export default function PuppyRescueWidget({ id }: WidgetProps) {
                 Caught!
               </Typography>
               <Typography variant="body2">
-                {caughtWho >= 0
+                {caughtCam
+                  ? caughtWho >= 0
+                    ? 'A camera spotted a puppy.'
+                    : 'A camera spotted you.'
+                  : caughtWho >= 0
                   ? 'A catcher spotted a puppy.'
                   : mode === 'arcade'
                     ? 'A catcher caught up with you.'
