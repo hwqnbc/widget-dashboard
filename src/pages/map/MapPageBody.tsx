@@ -134,6 +134,7 @@ import {
   forecastEmoji,
   forecastIconKind,
   mergePm25,
+  nearestRegion,
   psiBand,
   psiBubble,
   WEATHER_ICONS,
@@ -516,7 +517,7 @@ export default function MapPageBody() {
     title: string
     lines: string[]
     region?: string
-    outlook?: boolean
+    outlookRegion?: string
   } | null>(null)
   const hazeDataRef = useRef(hazeData)
   hazeDataRef.current = hazeData
@@ -1029,7 +1030,7 @@ export default function MapPageBody() {
             setEnvInfo({
               title: area.name,
               lines: [`${forecastEmoji(area.forecast)} ${area.forecast}`, '2-hour forecast (NEA)'],
-              outlook: true,
+              outlookRegion: nearestRegion(area.lon, area.lat),
             })
             return
           }
@@ -1954,7 +1955,7 @@ export default function MapPageBody() {
             </Typography>
           ))}
           {envInfo?.region && <PsiTrend region={envInfo.region} />}
-          {envInfo?.outlook && <WeatherOutlook />}
+          {envInfo?.outlookRegion && <WeatherOutlook region={envInfo.outlookRegion} />}
         </DialogContent>
         <DialogActions>
           <Button data-testid="map-env-close" onClick={() => setEnvInfo(null)}>

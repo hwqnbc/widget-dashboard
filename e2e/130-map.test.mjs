@@ -37,8 +37,11 @@
  *    3 areas — quick re-toggles don't refetch, the persisted haze toggle
  *    refetches after reload; online: an idle tap — no tool — on the
  *    view-center weather marker opens the forecast dialog with the
- *    island-wide outlook (24-h general block + sorted 4-day strip from
- *    their own mocked feeds; pure parseOutlook24/parseOutlook4d units),
+ *    island-wide outlook (24-h general block, the tapped area's nearest
+ *    NEA region by Morning/Afternoon/Night period + the All-regions table,
+ *    sorted 4-day strip — from their own mocked feeds; pure
+ *    parseOutlook24/parseOutlookPeriods/periodLabel/nearestRegion/
+ *    parseOutlook4d units),
  *    and a tap on
  *    the view-center PSI bubble opens the region dialog with the 24-h
  *    trend sparkline — `?date=` day payloads via date-aware mocks, pure
@@ -107,8 +110,11 @@ import {
   mergePm25,
   parseForecast,
   parseHourly,
+  nearestRegion,
   parseOutlook24,
   parseOutlook4d,
+  parseOutlookPeriods,
+  periodLabel,
   parsePm25,
   parsePsi,
   psiBand,
@@ -425,6 +431,25 @@ const outlook24Fixture = () => ({
         temperature: { low: 24, high: 33 },
         wind: { speed: { low: 10, high: 20 }, direction: 'NE' },
       },
+      // Regional breakdown, deliberately out of order with one junk period:
+      // the parser must sort by start and skip it. `central` gets distinct
+      // phrases per period so the dialog row is checkable whichever region
+      // the live view center falls nearest to.
+      periods: [
+        {
+          time: { start: '2026-10-17T18:00:00+08:00', end: '2026-10-18T06:00:00+08:00' },
+          regions: { west: 'Fair (Night)', east: 'Partly Cloudy (Night)', central: 'Fair (Night)', south: 'Fair (Night)', north: 'Cloudy' },
+        },
+        {
+          time: { start: '2026-10-17T12:00:00+08:00', end: '2026-10-17T18:00:00+08:00' },
+          regions: { west: 'Thundery Showers', east: 'Partly Cloudy (Day)', central: 'Thundery Showers', south: 'Light Rain', north: 'Thundery Showers' },
+        },
+        { time: { start: 'junk' }, regions: { west: 'Cloudy' } },
+        {
+          time: { start: '2026-10-18T06:00:00+08:00', end: '2026-10-18T12:00:00+08:00' },
+          regions: { west: 'Partly Cloudy (Day)', east: 'Fair (Day)', central: 'Partly Cloudy (Day)', south: 'Fair (Day)', north: 'Partly Cloudy (Day)' },
+        },
+      ],
     },
   ],
 })
@@ -1165,6 +1190,41 @@ await page.route('**/environment/4-day-weather-forecast**', (route) => {
     parseOutlook24(null) === null &&
       parseOutlook24({ items: [{}] }) === null &&
       parseOutlook24({ items: [{ general: { forecast: 'Fair' } }] }) === null,
+  )
+  const periods = parseOutlookPeriods(outlook24Fixture())
+  check(
+    'regional periods parse: sorted by start, junk skipped, labelled from the +08:00 wall clock',
+    periods.length === 3 &&
+      periods.map((p) => p.label).join(',') === 'Afternoon,Night,Morning' &&
+      periods.map((p) => p.day).join(',') === 'Sat,Sat,Sun' &&
+      periods[0].regions.east === 'Partly Cloudy (Day)' &&
+      Object.keys(periods[1].regions).length === 5,
+    periods.map((p) => `${p.label}/${p.day}`).join(' '),
+  )
+  check(
+    'periodLabel buckets by start hour (5–11 Morning, 12–17 Afternoon, else Night)',
+    periodLabel('2026-10-17T06:00:00+08:00') === 'Morning' &&
+      periodLabel('2026-10-17T11:59:00+08:00') === 'Morning' &&
+      periodLabel('2026-10-17T12:00:00+08:00') === 'Afternoon' &&
+      periodLabel('2026-10-17T18:00:00+08:00') === 'Night' &&
+      periodLabel('2026-10-17T00:00:00+08:00') === 'Night' &&
+      periodLabel('junk') === 'Later',
+  )
+  check(
+    'regional periods parse: junk envelopes / region-less periods yield []',
+    parseOutlookPeriods(null).length === 0 &&
+      parseOutlookPeriods({ items: [{}] }).length === 0 &&
+      parseOutlookPeriods({
+        items: [{ periods: [{ time: { start: '2026-10-17T06:00:00+08:00', end: 'x' }, regions: {} }] }],
+      }).length === 0,
+  )
+  check(
+    'nearestRegion picks the NEA region by label point',
+    nearestRegion(103.69, 1.34) === 'west' &&
+      nearestRegion(103.96, 1.36) === 'east' &&
+      nearestRegion(103.85, 1.28) === 'south' &&
+      nearestRegion(103.82, 1.44) === 'north' &&
+      nearestRegion(103.82, 1.36) === 'central',
   )
   const days4 = parseOutlook4d(outlook4dFixture())
   check(
@@ -2956,6 +3016,31 @@ check(
           outlook24Calls === 1 &&
           outlook4dCalls === 1,
         `days=${await outlookEl.getAttribute('data-days')} calls=${outlook24Calls}/${outlook4dCalls}`,
+      )
+      // Beside it: the tapped area's NEA region by period, and the
+      // All-regions table behind its expander.
+      const wantRegion = nearestRegion(envCenter.lon, envCenter.lat)
+      const regionRow = page.locator('[data-testid="map-weather-outlook-region"]')
+      const regionText = (await regionRow.textContent()) ?? ''
+      check(
+        'weather dialog shows the tapped area’s region by period',
+        (await regionRow.getAttribute('data-region')) === wantRegion &&
+          (await regionRow.getAttribute('data-periods')) === '3' &&
+          /Afternoon.*Night.*Morning/.test(regionText),
+        `region=${await regionRow.getAttribute('data-region')} want=${wantRegion} text=${regionText}`,
+      )
+      check(
+        'all-regions table starts collapsed',
+        (await page.locator('[data-testid="map-weather-outlook-all"]').count()) === 0,
+      )
+      await page.locator('[data-testid="map-weather-outlook-all-toggle"]').click()
+      await page.waitForSelector('[data-testid="map-weather-outlook-all"]', { timeout: 5000 })
+      const allRows = page.locator('[data-testid="map-weather-outlook-all"] tbody tr')
+      check(
+        'all-regions table lists 5 regions × 3 periods',
+        (await allRows.count()) === 5 &&
+          (await allRows.first().locator('td').count()) === 4 &&
+          (await page.locator('[data-testid="map-weather-outlook-all"] thead th').count()) === 4,
       )
       await page.locator('[data-testid="map-env-close"]').click()
       await page.waitForTimeout(500)

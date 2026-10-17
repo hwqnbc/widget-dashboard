@@ -217,16 +217,31 @@ on it works without a backend server or API key.
   **island-wide outlook** (`WeatherOutlook.tsx`, testid
   `map-weather-outlook` with `data-status`/`data-days`): the 24-hour
   forecast's `general` block (forecast text + temp / humidity / wind
-  ranges, pure `parseOutlook24` — null without text + temperature) above a
-  **4-day strip** of weekday tiles (emoji + temp range, full forecast as
+  ranges, pure `parseOutlook24` — null without text + temperature);
+  **beside it, the tapped area's region by period** — the same response's
+  `periods[]` (pure `parseOutlookPeriods`: each block's `time.start/end`
+  + a forecast phrase per region, sorted, junk skipped), drawn as
+  Morning / Afternoon / Night tiles for the NEA region nearest the area
+  (`nearestRegion` over the five published label points in
+  `NEA_REGIONS` — west/east/central/south/north, the PSI regions — so it
+  works with the haze layer off; testid `map-weather-outlook-region` with
+  `data-region`/`data-periods`). `periodLabel` reads the start hour from
+  the ISO string's OWN +08:00 wall clock (5–11 Morning, 12–17 Afternoon,
+  else Night) so a viewer's browser timezone can't relabel Singapore's
+  day; each tile also carries its weekday because a 24-h window can hold
+  two Afternoons. An **All regions** expander
+  (`map-weather-outlook-all-toggle`) opens the full 5 × period table
+  (`map-weather-outlook-all`, the tapped region highlighted). Below sits a
+  **4-day strip** ("next 4 days") of weekday tiles (emoji + temp range, full forecast as
   the tile tooltip; pure `parseOutlook4d` sorts by date and skips
   temperature-less rows, `dayShort` derives the weekday at local noon so a
   timezone offset can't shift it), from
   `/v1/environment/24-hour-weather-forecast` and
   `/v1/environment/4-day-weather-forecast` (same free keyless family).
   Each feed fails soft — one dead feed still shows the other — and the
-  pair is fetched once and cached 10 min (`fetchOutlook`), island-wide so
-  every area's dialog shares it. There is **no NEA PSI-forecast endpoint**
+  pair is fetched once and cached 10 min (`fetchOutlook`; the regional
+  periods ride in the 24-hour response, no extra request), so every
+  area's dialog shares it. There is **no NEA PSI-forecast endpoint**
   (the haze "outlook" on NEA's site is non-API text) — this weather
   outlook is the forecast NEA actually publishes.
   Long-range history (2014→) exists only as

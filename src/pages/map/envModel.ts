@@ -421,3 +421,79 @@ export function parseOutlook4d(json: unknown): DayOutlook[] {
   }
   return out.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))
 }
+
+/* ------------------------------------------------------ regional periods */
+
+/** NEA's five forecast/PSI regions at their published label locations —
+ * the same points the PSI feed's `region_metadata` carries, held here so
+ * the weather dialog can pick a region without the haze feed being on. */
+export const NEA_REGIONS: readonly { name: string; lon: number; lat: number }[] = [
+  { name: 'west', lon: 103.7, lat: 1.35735 },
+  { name: 'east', lon: 103.94, lat: 1.35735 },
+  { name: 'central', lon: 103.82, lat: 1.35735 },
+  { name: 'south', lon: 103.82, lat: 1.29587 },
+  { name: 'north', lon: 103.82, lat: 1.41803 },
+]
+
+/** The NEA region whose label point is nearest (planar — the island is
+ * ~50 km wide, so degrees are fine for ranking). */
+export function nearestRegion(lon: number, lat: number): string {
+  let best = NEA_REGIONS[0].name
+  let bestD = Infinity
+  for (const r of NEA_REGIONS) {
+    const d = (r.lon - lon) ** 2 + (r.lat - lat) ** 2
+    if (d < bestD) {
+      bestD = d
+      best = r.name
+    }
+  }
+  return best
+}
+
+/** One block of the 24-hour forecast's regional breakdown. */
+export interface ForecastPeriod {
+  start: string
+  end: string
+  label: string
+  day: string
+  regions: Record<string, string>
+}
+
+/**
+ * Period start → 'Morning' / 'Afternoon' / 'Night', read from the ISO
+ * string's OWN wall clock (NEA stamps +08:00): the forecast is about
+ * Singapore's day, so a viewer's browser timezone must not relabel it.
+ * Start hour 5–11 Morning, 12–17 Afternoon, otherwise Night.
+ */
+export function periodLabel(startIso: string): string {
+  const m = /T(\d{2}):/.exec(startIso)
+  const h = m ? Number(m[1]) : NaN
+  if (!Number.isFinite(h)) return 'Later'
+  if (h >= 5 && h < 12) return 'Morning'
+  if (h >= 12 && h < 18) return 'Afternoon'
+  return 'Night'
+}
+
+/** Defensive parse of the 24-hour forecast's `periods`: each needs a start,
+ * an end and at least one region string; output sorted by start. */
+export function parseOutlookPeriods(json: unknown): ForecastPeriod[] {
+  const env = json as { items?: { periods?: unknown }[] }
+  const rows = Array.isArray(env?.items) ? env.items[0]?.periods : undefined
+  if (!Array.isArray(rows)) return []
+  const out: ForecastPeriod[] = []
+  for (const raw of rows) {
+    const p = raw as { time?: { start?: unknown; end?: unknown }; regions?: unknown }
+    const start = typeof p?.time?.start === 'string' ? p.time.start : ''
+    const end = typeof p?.time?.end === 'string' ? p.time.end : ''
+    if (!start || !end || Number.isNaN(Date.parse(start))) continue
+    const regions: Record<string, string> = {}
+    if (p.regions && typeof p.regions === 'object') {
+      for (const [k, v] of Object.entries(p.regions as Record<string, unknown>)) {
+        if (typeof v === 'string' && v) regions[k] = v
+      }
+    }
+    if (Object.keys(regions).length === 0) continue
+    out.push({ start, end, label: periodLabel(start), day: dayShort(start.slice(0, 10)), regions })
+  }
+  return out.sort((a, b) => Date.parse(a.start) - Date.parse(b.start))
+}

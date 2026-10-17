@@ -2564,3 +2564,14 @@ carried over; these are the new ones.
     shows about 0.8 of a column's width on screen) gives a tall card a
     tall room. Re-lay out only when the shape changes by a visible step
     (rounded aspect), not on every pixel of a resize.
+
+172. **Label a feed's times from its own clock, not the viewer's.** NEA's
+    24-hour forecast stamps its periods `…T12:00:00+08:00`. Turning that
+    into "Afternoon" with `new Date(iso).getHours()` uses the BROWSER's
+    timezone, so a viewer abroad (or a UTC e2e container) would see
+    Singapore's afternoon labelled "Morning". The forecast is about
+    Singapore's day, so `periodLabel` reads the hour straight out of the
+    ISO string's wall-clock digits. It's also deterministic in node tests
+    with no `TZ` pinning. Use `Date.parse` only to sort or compare
+    instants; read the wall-clock digits when the label belongs to the
+    feed's place. (Map page, docs/map.md weather outlook.)

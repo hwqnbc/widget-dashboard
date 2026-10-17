@@ -4,9 +4,11 @@ import {
   parseHourly,
   parseOutlook24,
   parseOutlook4d,
+  parseOutlookPeriods,
   parsePm25,
   parsePsi,
   type DayOutlook,
+  type ForecastPeriod,
   type Outlook24h,
   type PsiRegion,
   type TrendPoint,
@@ -81,14 +83,16 @@ export async function fetchPsiTrend(region: string, signal?: AbortSignal): Promi
 
 export interface OutlookData {
   day: Outlook24h | null
+  periods: ForecastPeriod[]
   days: DayOutlook[]
 }
 
 let outlookCache: { at: number; data: OutlookData } | null = null
 
 /**
- * The island-wide outlook for the weather dialog: the 24-hour forecast's
- * `general` block + the 4-day strip, fetched in parallel. Each feed fails
+ * The outlook for the weather dialog: the 24-hour forecast's island-wide
+ * `general` block and its per-region `periods` (one response), plus the
+ * 4-day strip, fetched in parallel. Each feed fails
  * soft (a dead 4-day feed still shows the 24-h outlook and vice versa);
  * cached 10 min — one fetch serves every area's dialog.
  */
@@ -107,11 +111,16 @@ export async function fetchOutlook(signal?: AbortSignal): Promise<OutlookData> {
       return empty
     }
   }
-  const [day, days] = await Promise.all([
-    soft(get(FORECAST_24H_URL).then(parseOutlook24), null),
+  const [next24, days] = await Promise.all([
+    soft(
+      get(FORECAST_24H_URL).then((j) => ({ day: parseOutlook24(j), periods: parseOutlookPeriods(j) })),
+      { day: null, periods: [] as ForecastPeriod[] },
+    ),
     soft(get(FORECAST_4D_URL).then(parseOutlook4d), [] as DayOutlook[]),
   ])
-  const data: OutlookData = { day, days }
-  if (day != null || days.length > 0) outlookCache = { at: Date.now(), data }
+  const data: OutlookData = { ...next24, days }
+  if (data.day != null || data.periods.length > 0 || days.length > 0) {
+    outlookCache = { at: Date.now(), data }
+  }
   return data
 }
