@@ -2555,3 +2555,12 @@ carried over; these are the new ones.
     planner) found settings that are tight but provable in seconds. When a
     proof margin is absolute, check what fraction of each new hazard it
     takes.
+
+171. **Lay a crowd out for the container it will appear in.** Puppy
+    Rescue's shelter room first used a squarish grid; in the tall
+    portrait card the tilted camera fitted its WIDTH, leaving 70 tiny
+    puppies in a band with empty space above and below. Sizing the grid's
+    columns from the canvas aspect (measured: a row of the tilted room
+    shows about 0.8 of a column's width on screen) gives a tall card a
+    tall room. Re-lay out only when the shape changes by a visible step
+    (rounded aspect), not on every pixel of a resize.

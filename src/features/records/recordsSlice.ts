@@ -69,6 +69,13 @@ export interface PuppyRescueRecords {
   bestMs: Record<string, number>
   /** Lifetime escapes, repeats included. */
   escapes: number
+  /** The shelter: per record key, a bitmask of the level's puppies ever
+   * brought out of the door (bit = puppy index). Optional — saves from
+   * before the shelter lack it (a ≥2★ escape then counts every puppy). */
+  pups?: Record<string, number>
+  /** Per record key, the puppies already shown in the shelter (the rest
+   * wear a ✨ as new arrivals). */
+  pupsSeen?: Record<string, number>
 }
 
 /** Wing Flyer Landing missions, keyed by mission id (`"first"`). Stars
@@ -238,7 +245,7 @@ const recordsSlice = createSlice({
     },
 
     /** A Puppy Rescue escape: stars max, time min-nonzero, tally +1. */
-    recordRescueEscape(state, action: PayloadAction<{ key: string; stars: number; ms: number }>) {
+    recordRescueEscape(state, action: PayloadAction<{ key: string; stars: number; ms: number; pups?: number }>) {
       const { key } = action.payload
       const stars = Math.max(1, Math.min(3, Math.floor(num(action.payload.stars, 1))))
       const ms = Math.round(num(action.payload.ms))
@@ -246,6 +253,19 @@ const recordsSlice = createSlice({
       r.escapes += 1
       r.stars[key] = Math.max(r.stars[key] ?? 0, stars)
       if (ms > 0) r.bestMs[key] = minNonzero(r.bestMs[key] ?? 0, ms)
+      const pups = Math.floor(num(action.payload.pups, 0))
+      if (pups > 0) {
+        r.pups ??= {}
+        r.pups[key] = (r.pups[key] ?? 0) | pups
+      }
+    },
+
+    /** The shelter was opened: these puppies (per record key) are no
+     * longer new arrivals. */
+    markRescueShelterSeen(state, action: PayloadAction<Record<string, number>>) {
+      const r = ensure(state, 'puppyRescue')
+      r.pupsSeen ??= {}
+      for (const [key, mask] of Object.entries(action.payload)) r.pupsSeen[key] = (r.pupsSeen[key] ?? 0) | Math.floor(num(mask, 0))
     },
 
     /** A Wing Flyer mission landed and judged: stars max; the badge follows
@@ -340,6 +360,7 @@ export const {
   recordStrikeWave,
   recordTankClear,
   recordRescueEscape,
+  markRescueShelterSeen,
   absorbMazeRecords,
   absorbArrowsRecords,
   absorbDroneSimRecords,

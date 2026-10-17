@@ -21,6 +21,8 @@ six hero coats in ⚙ (two with real markings), and the dog's ground ring and
 the stick knob now follow the theme. Round 7 added **doors and pressure
 plates** and a sixth tier, **Doors**, for 30 levels. Round 8 added
 **security cameras** and a seventh tier, **Cameras**, for 35 levels.
+Then the **shelter**: a cosy 3D room per mode that fills with every puppy
+you've rescued.
 
 ## Decisions (settled with the user before building)
 
@@ -131,6 +133,16 @@ plates** and a sixth tier, **Doors**, for 30 levels. Round 8 added
 | R8-2 | Plates | **The same toggle as doors, shared by colour:** a plate flips every door AND camera of its colour, on↔off. |
 | R8-3 | Cone shape | **Longer and narrower** than a catcher's (5 cells, 40°), a steady sweep, a pale violet beam, gone while switched off. |
 | defaults | | A **Cameras** tier after Doors (levels 31–35). A camera hangs on the wall behind its cell, may start on or off, wears its colour band + symbol (none = always on); no body; walls and shut doors block it; barks don't touch it. Arcade with no catcher: the meter just resets. Proven 3★ with stored hints, and every Cameras level with plates must need them. |
+
+### Shelter decisions
+
+| # | Question | Decision |
+|---|---|---|
+| S-1 | What it counts | **Every distinct puppy rescued:** each level's puppies are adopted the first time each gets out of the door; replays never inflate it. |
+| S-2 | Look | **Both** (the user switched from the room alone): a cosy 3D room of adopted puppies with an "N / total" counter and a per-tier line, plus a **Levels** grid (rescued puppies in their coats, missing ones grey; tap an unfinished, unlocked level to go there). |
+| S-3 | Opening it | **A 🏠 button in the top row** (hidden mid-run and during a hint) **plus "🏠 +N new friends in the shelter!"** on the escape card when an escape adopts someone. |
+| S-4 | Difficulty modes | **Three separate shelters**, one per mode, switched by the mode picker (asked about after the first recap). |
+| defaults | | A partial escape adopts only the puppies brought out. Saves from before the shelter count any ≥2★ level in full. Hint replays never adopt. The room takes the theme's colours; puppies keep the coat they wore in their level; new arrivals wear a ✨ on the next visit. Reset records clears all three. |
 
 **Detail I chose myself (not asked):** the door opens once the **first**
 puppy is freed. That way you can't skip a level with 0 puppies and still
@@ -406,6 +418,23 @@ cost of a star.
     yawed to the beam, drooping when off, with its colour band and symbol;
     the beam a pale violet wedge (hot pink while it sees someone), clipped
     by the same rays as detection (`coneRays` takes a range and half-angle).
+- **The shelter.** `shelterModel.ts` (pure): a level's puppies are bit
+  indices (cage i = bit i, pen puppy j = bit cages + j). The records slice
+  keeps `pups[recordKey(mode, id)]`, the OR of every escape's
+  `escapedMask(s)` (the line at the door), so each mode has its own
+  shelter. `adoptedMask` counts a level in full when its record has ≥2★
+  (every puppy out), which is how saves from before the shelter carry
+  over. `shelterSummary(rec, mode)` gives the total, the adopted count, the
+  per-tier counts and, per level, the `fresh` puppies (adopted but not in
+  `pupsSeen`); `newlyAdopted` gives an escape's "+N".
+  - **Opening** (`PuppyShelter`, an overlay over the whole card) snapshots
+    the summary, so the ✨s survive its own `markRescueShelterSeen`
+    dispatch, and pauses the game loop underneath (no step, no bark).
+  - **The room** (`PuppyShelter3D`, its own lazy chunk) lays the puppies
+    out on a seeded-jitter grid sized to the CARD'S aspect (a tall card
+    gets a tall room, so 70+ puppies still read), with low walls, a
+    theme-coloured rug, three beds and a bowl. Every third puppy sits; the
+    rest trot slow circles round their spot.
 - **The clock** (and the catchers) start on the first move. A level always
   opens in the same state, and you get time to read the tip.
 - **The tip** is a slim banner between the level picker and the maze, never
@@ -577,7 +606,8 @@ Times are the planner's optimum. A human takes longer.
   are and the settings.
 - **App-level records** (`records.puppyRescue`, survives removing the
   widget): `stars[key]` (best 1–3), `bestMs[key]` (fastest escape,
-  0 = none) and `escapes` (lifetime tally). `key` is `recordKey(mode, id)`:
+  0 = none), `escapes` (lifetime tally), and the shelter's `pups` /
+  `pupsSeen` bitmasks (optional; see *The shelter*). `key` is `recordKey(mode, id)`:
   the level id for Classic, `"<mode>|<id>"` for Easy/Arcade.
   - A level counts as escaped once it has a `stars` entry in any mode,
     which is also what unlocks the next one.
@@ -626,6 +656,14 @@ Times are the planner's optimum. A human takes longer.
   - ⚙ theme row: `puppy-theme` holding the `puppy-theme-<id>` chips
     (`aria-pressed` on the current one), and `puppy-dog` holding the
     `puppy-dog-<id>` chips (same).
+  - The shelter: `puppy-shelter-btn` (🏠, while not playing),
+    `puppy-shelter-new` (`data-new`, on the escape card), the overlay
+    `puppy-shelter` (`data-mode`, `data-adopted`, `data-total`,
+    `data-fresh`, `data-view` room|levels) with `puppy-shelter-count`,
+    `puppy-shelter-close`, `puppy-shelter-view`, `puppy-shelter-tiers`,
+    `puppy-shelter-room` / `puppy-shelter-grid`, and the grid's
+    `puppy-shelter-level-<i>` cards (`data-adopted`, `data-total`,
+    `data-locked`).
   - Overlays: `puppy-netted` (`data-count`), `puppy-caught`, `puppy-escaped`
     (`data-stars`), `puppy-next`, `puppy-again`.
   - ⚙ menu items: `puppy-sound`, `puppy-unlock-all`,
@@ -638,7 +676,7 @@ npm run build && npm run lint
 npm run e2e puppy        # 180-puppy-model (pure + the level sweep), 181-puppy (live),
                          # 182-puppy-modes (pure Easy/Arcade), 183-puppy-modes-ui (live picker),
                          # 184-puppy-hint (live hint replay), 185-puppy-themes, 186-puppy-dogs,
-                         # 187-puppy-doors, 188-puppy-cameras
+                         # 187-puppy-doors, 188-puppy-cameras, 189-puppy-shelter
 node scripts/gen-puppy-hints.mjs   # after adding/tuning a level: rewrite rescueHints.ts
 ```
 
@@ -753,8 +791,13 @@ Each item names the seam it builds on.
   ripples drawn on the surround.
 
 **Meta**
-- **A shelter screen** that fills with every puppy you've rescued, with
-  coins for rooms and outfits (the store game's loop).
+- ~~**A shelter screen.**~~ Shipped; see *The shelter*.
+- **Shelter coins:** puppies earn coins for room upgrades, toys and
+  outfits (the store game's loop), on the same `pups` records.
+- **Name your puppies:** tap one in the room to name it (a per-key name map
+  in the records).
+- **Puppy reactions:** tap a puppy in the room to make it hop and yip
+  (the existing `hop` anim + `playFreed`).
 - ~~**Pick your dog.**~~ Shipped; see *Pick your dog*.
 - **Accessories:** a collar or bandana colour, or a hat (proposed in the
   dog round, not taken) — one more optional `Coat` field each.

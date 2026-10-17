@@ -18,6 +18,7 @@ import SettingsIcon from '@mui/icons-material/Settings'
 import RestartIcon from '@mui/icons-material/RestartAlt'
 import PetsIcon from '@mui/icons-material/Pets'
 import LightbulbIcon from '@mui/icons-material/Lightbulb'
+import HomeIcon from '@mui/icons-material/Home'
 import KeyIcon from '@mui/icons-material/Key'
 import VisibilityIcon from '@mui/icons-material/Visibility'
 import VisibilityOffIcon from '@mui/icons-material/VisibilityOff'
@@ -58,6 +59,8 @@ import {
 import { HINTS } from './rescueHints'
 import { DEFAULT_THEME, THEMES, coerceTheme, themeById, type ThemeId } from './puppyThemes'
 import { DEFAULT_DOG, DOGS, coerceDog, type Coat, type DogId } from './puppyLook'
+import PuppyShelter from './PuppyShelter'
+import { escapedMask, newlyAdopted } from './shelterModel'
 import { LEVELS, MODE_LABEL, TIERS, TIER_LABEL, levelLabel, recordKey } from './rescueLevels'
 import {
   playAlert,
@@ -147,6 +150,8 @@ interface Result {
   total: number
   spotted: boolean
   newBest: boolean
+  /** Puppies this escape adopted into the mode's shelter for the first time. */
+  newPups: number
 }
 
 export default function PuppyRescueWidget({ id }: WidgetProps) {
@@ -193,6 +198,10 @@ export default function PuppyRescueWidget({ id }: WidgetProps) {
   const [result, setResult] = useState<Result | null>(null)
   const [menuEl, setMenuEl] = useState<HTMLElement | null>(null)
   const [resetConfirm, setResetConfirm] = useState(false)
+  const [shelterOpen, setShelterOpen] = useState(false)
+  /** The shelter covers the game: nothing steps while it's open. */
+  const shelterRef = useRef(false)
+  shelterRef.current = shelterOpen
   /** A mode switch asked for mid-run, waiting on the confirm. */
   const [modeAsk, setModeAsk] = useState<Mode | null>(null)
   /** "Netted!" note: how many puppies the last net sent home (0 = hidden). */
@@ -217,6 +226,8 @@ export default function PuppyRescueWidget({ id }: WidgetProps) {
   soundRef.current = sound
   const bestRef = useRef(records.bestMs)
   bestRef.current = records.bestMs
+  const recordsRef = useRef(records)
+  recordsRef.current = records
 
   /** Fresh attempt at the current level (also how a hint replay ends). */
   const restart = useCallback(() => {
@@ -329,7 +340,10 @@ export default function PuppyRescueWidget({ id }: WidgetProps) {
       }
       const ghost = simRef.current.ghost === true
       const H = ghost ? hintRef.current : null
-      if (s.status === 'ready' || s.status === 'play') {
+      if (shelterRef.current) {
+        acc = 0
+        barkReq.current = false
+      } else if (s.status === 'ready' || s.status === 'play') {
         acc += dt * (H ? H.speed : 1)
         let n = 0
         while (acc >= STEP && n < 16) {
@@ -445,6 +459,8 @@ export default function PuppyRescueWidget({ id }: WidgetProps) {
           const ms = Math.round(s.t * 1000)
           const key = recordKey(s.mode, lv.spec.id)
           const prev = bestRef.current[key] ?? 0
+          const escaped = escapedMask(s)
+          const li = LEVELS.indexOf(lv.spec)
           setResult({
             stars,
             ms,
@@ -452,8 +468,9 @@ export default function PuppyRescueWidget({ id }: WidgetProps) {
             total: puppyCount(lv),
             spotted: s.spotted,
             newBest: prev === 0 || ms < prev,
+            newPups: li >= 0 ? newlyAdopted(recordsRef.current, s.mode, li, escaped) : 0,
           })
-          dispatch(recordRescueEscape({ key, stars, ms }))
+          dispatch(recordRescueEscape({ key, stars, ms, pups: escaped }))
           if (sfx) playEscape()
           if (root) root.dataset.sfxEscape = String(Number(root.dataset.sfxEscape ?? 0) + 1)
         }
@@ -575,6 +592,7 @@ export default function PuppyRescueWidget({ id }: WidgetProps) {
       data-dog={dog}
       sx={{
         height: '100%',
+        position: 'relative',
         display: 'flex',
         flexDirection: 'column',
         gap: 0.5,
@@ -639,6 +657,11 @@ export default function PuppyRescueWidget({ id }: WidgetProps) {
             {pups}/{total}
           </Typography>
         </Stack>
+        {status !== 'play' && !hint && (
+          <IconButton size="small" aria-label="Shelter" data-testid="puppy-shelter-btn" onClick={() => setShelterOpen(true)}>
+            <HomeIcon fontSize="small" sx={{ color: '#b5763f' }} />
+          </IconButton>
+        )}
         <IconButton size="small" aria-label="Settings" data-testid="puppy-settings" onClick={(e) => setMenuEl(e.currentTarget)}>
           <SettingsIcon fontSize="small" />
         </IconButton>
@@ -830,6 +853,17 @@ export default function PuppyRescueWidget({ id }: WidgetProps) {
                 {fmtTime(result.ms)}
                 {result.newBest ? ' · New best!' : myBest ? ` · Best ${fmtTime(myBest)}` : ''}
               </Typography>
+              {result.newPups > 0 && (
+                <Button
+                  size="small"
+                  data-testid="puppy-shelter-new"
+                  data-new={result.newPups}
+                  onClick={() => setShelterOpen(true)}
+                  sx={{ mt: 0.5, textTransform: 'none', fontWeight: 800, color: '#b5763f' }}
+                >
+                  🏠 +{result.newPups} new {result.newPups === 1 ? 'friend' : 'friends'} in the shelter!
+                </Button>
+              )}
               <Stack direction="row" spacing={1} sx={{ justifyContent: 'center', mt: 1 }}>
                 <Button size="small" variant="outlined" data-testid="puppy-again" onClick={restart}>
                   Again
@@ -985,6 +1019,20 @@ export default function PuppyRescueWidget({ id }: WidgetProps) {
           </Typography>
         </Box>
       </Box>
+
+      {shelterOpen && (
+        <PuppyShelter
+          mode={mode}
+          records={records}
+          theme={themeId}
+          unlocked={unlocked}
+          onClose={() => setShelterOpen(false)}
+          onPick={(i) => {
+            setShelterOpen(false)
+            goTo(i)
+          }}
+        />
+      )}
 
       <Menu anchorEl={menuEl} open={menuEl !== null} onClose={() => setMenuEl(null)}>
         <MenuItem onClick={() => setData({ sound: !sound })} data-testid="puppy-sound">

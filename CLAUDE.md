@@ -482,7 +482,9 @@ carries the bits and proves each Doors level needs its plates; an
 off-route catcher re-routes round a shut door or waits at it, trapped);
 Round 8 added **security cameras** (bodyless sweeping beams, 5 cells ×
 40°, feeding the same meter, switched by the same plate bits as doors) —
-35 levels in seven tiers.
+35 levels in seven tiers; then the **shelter** (one per mode: a lazy 3D
+room of every puppy ever rescued plus a level grid, from `pups` bitmasks in
+`records.puppyRescue` via the pure `shelterModel`).
 See `docs/map.md` for the Map page (the first page-level heavy feature —
 @arcgis/core lazy route chunk, free no-key `gray-vector`/`dark-gray-vector`
 basemaps following the theme toggle, 2D map / 3D globe switch, locate/pins/
